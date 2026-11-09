@@ -34,10 +34,11 @@ TASKS = dict(
     plot=('plot', 'plot'),
     migrate=('migrate', 'migrate'),
 ) | {name: ('prep', name) for name in (
-    'prep_gauss_hermite_moments', 'prep_lsf_muse', 'prep_pixel_brightness',
+    'prep_gauss_hermite_moments', 'prep_lsf_kmos3d', 'prep_lsf_muse',
+    'prep_lsf_resolving_power', 'prep_pixel_brightness',
     'prep_pixel_moments', 'prep_pixel_spectra', 'prep_psf_casa_beams',
-    'prep_psf_muse', 'prep_region_moments', 'prep_region_spectra',
-    'prep_slit_spectra')}
+    'prep_psf_kmos3d', 'prep_psf_muse', 'prep_region_moments',
+    'prep_region_spectra', 'prep_slit_spectra')}
 
 
 def run(task: str, options: Mapping[str, Any], lenient: bool = False) -> None:

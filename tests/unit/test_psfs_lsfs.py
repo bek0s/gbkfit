@@ -175,9 +175,9 @@ def test_images_in_sums_and_convolutions_have_their_own_files():
             lsf_sum['lsfs'][1]['lsfs'][0]['file']] == [
         'out_term0_lsf.fits', 'out_term1_term0_lsf.fits']
     loaded = psf_parser.load(psf_sum)
-    np.testing.assert_array_equal(loaded._psfs[0]._data, psf_a._data)
+    np.testing.assert_array_equal(loaded._terms[0]._data, psf_a._data)
     np.testing.assert_array_equal(
-        loaded._psfs[1]._psfs[0]._data, psf_b._data)
+        loaded._terms[1]._terms[0]._data, psf_b._data)
 
 
 def test_kernels_of_too_heavy_wings_are_an_error():
@@ -315,7 +315,8 @@ def test_image_psf_on_a_non_square_grid():
 
 
 @pytest.mark.parametrize('lsf', [
-    LSFGauss(kms(10)), LSFGGauss(kms(10), 0.5), LSFLorentz(kms(10)), LSFMoffat(kms(10), 1.5)])
+    LSFGauss(kms(10)), LSFGGauss(kms(10), 0.5), LSFLorentz(kms(10)),
+    LSFMoffat(kms(10), 1.5)])
 def test_analytic_lsfs_are_symmetric(lsf):
     # Cut at the same distance on both sides, also when the array is much
     # wider than the cut (as in the FFT convolution)
@@ -371,7 +372,8 @@ def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
     (lambda: PSFGGauss(1, -1), "option 'beta' must be greater than 0"),
     (lambda: PSFMoffat(1, 1), "option 'beta' must be greater than 1"),
     (lambda: LSFLorentz(kms(-1)), "option 'gamma' must be greater than 0"),
-    (lambda: LSFMoffat(kms(1), 0.5), "option 'beta' must be greater than 0.5")])
+    (lambda: LSFMoffat(kms(1), 0.5),
+     "option 'beta' must be greater than 0.5")])
 def test_invalid_profiles_are_rejected(make, message):
     with pytest.raises(ValueError, match=message):
         make()
@@ -456,7 +458,8 @@ def test_lsf_hanning():
 
 
 @pytest.mark.parametrize('lsf', [
-    LSFGauss(kms(4.0)), LSFGGauss(kms(4.0), 1.5), LSFLorentz(kms(4.0)), LSFMoffat(kms(4.0), 2.5),
+    LSFGauss(kms(4.0)), LSFGGauss(kms(4.0), 1.5), LSFLorentz(kms(4.0)),
+    LSFMoffat(kms(4.0), 2.5),
     LSFImage(np.array([1.0, 3.0, 4.0, 3.0, 1.0]), kms(2.0)),
     LSFSum([LSFGauss(kms(4.0)), LSFLorentz(kms(6.0))], [1, 2]),
     LSFConvolution([LSFGauss(kms(4.0)), LSFMoffat(kms(3.0), 2.5)])])
@@ -527,7 +530,8 @@ def test_psf_beam_from_a_header(tmp_path):
     from gbkfit.instrument import PSFGauss
     header = fits.Header(dict(BMAJ=3 / 3600, BMIN=1.5 / 3600, BPA=30.0))
     fits.writeto(tmp_path / 'cube.fits', np.zeros((2, 2)), header)
-    beam = psf_parser.load(dict(type='gauss', file=str(tmp_path / 'cube.fits')))
+    beam = psf_parser.load(
+        dict(type='gauss', file=str(tmp_path / 'cube.fits')))
     assert isinstance(beam, PSFGauss)
     gauss = PSFGauss(3 / np.sqrt(8 * np.log(2)), 0.5, 30)
     for rota in (0, 20):

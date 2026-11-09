@@ -6,7 +6,7 @@ configurations of version 5.
 from collections.abc import MutableMapping
 from typing import Any
 
-from .rules import Change, Rule, flow, items
+from .rules import Change, Rule, flow
 
 
 __all__ = [
@@ -28,9 +28,11 @@ class TableFiles(Rule):
         return 6
 
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        # (in any section: the tables of observations, and those of the
+        # pieces of PSFs and LSFs of projects)
         changes = []
-        for path, item in items(config, 'observations'):
-            changes += self._walk(item, path)
+        for key, value in config.items():
+            changes += self._walk(value, [key])
         return changes
 
     def _walk(self, value: Any, path: list[str | int]) -> list[Change]:

@@ -739,18 +739,21 @@ def test_the_moments_of_the_gauss_hermite_series_of_a_table():
 def test_psf_of_muse(tmp_path, keywords):
     import astropy.units as u
     from gbkfit.instrument import psf_parser
+    # (in the primary header of the cube, which has no array: its cube is
+    # in the HDU after it)
     path = tmp_path / 'cube.fits'
-    fits.writeto(path, np.zeros((2, 2, 2)), fits.Header(keywords))
+    fits.HDUList([
+        fits.PrimaryHDU(header=fits.Header(keywords)),
+        fits.ImageHDU(np.zeros((2, 2, 2)), name='DATA')]).writeto(path)
     prep.prep_psf_muse(str(path), str(tmp_path))
     table = str(tmp_path / 'prep_psf.ecsv')
     psf = psf_parser.load(dict(
         type='moffat',
-        alpha=dict(file=table, points='wavelength', column='alpha'),
+        fwhm=dict(file=table, points='wavelength', column='fwhm'),
         beta=dict(file=table, points='wavelength', column='beta')))
     moffat = psf.at(7000 * u.AA)
-    alpha, beta = moffat.dump()['alpha'], moffat.dump()['beta']
-    assert beta == pytest.approx(2.5)
-    assert 2 * alpha * np.sqrt(2 ** (1 / beta) - 1) == pytest.approx(0.8)
+    assert moffat.dump()['beta'] == pytest.approx(2.5)
+    assert moffat.dump()['fwhm'] == pytest.approx(0.8)
 
 
 def test_lsf_of_muse(tmp_path):
@@ -1077,3 +1080,69 @@ def test_nirspec_msa_rectified_spectra_of_a_source_in_a_slitlet():
         if exposure.weight() > 0:
             np.testing.assert_allclose(
                 exposure.image_offset(), np.negative(exposure.sky_offset()))
+
+
+def test_lsf_of_resolving_powers(tmp_path):
+    # A Gaussian of a FWHM of c / R km/s of the light, at the points of the
+    # table (of a CSV file, whose points have no unit of their own)
+    import astropy.units as u
+    from gbkfit.instrument import lsf_parser
+    path = tmp_path / 'r.csv'
+    path.write_text('wave,R\n1.0,2000\n2.0,3000\n')
+    with pytest.raises(ValueError, match="'wave', has no unit"):
+        prep.prep_lsf_resolving_power(str(path), 'wave', 'R', None, None,
+                                      str(tmp_path))
+    prep.prep_lsf_resolving_power(
+        str(path), 'wave', 'R', points_unit='um', output_dir=str(tmp_path))
+    lsf = lsf_parser.load(dict(type='gauss', fwhm=dict(
+        file=str(tmp_path / 'prep_lsf.ecsv'), points='wave',
+        column='fwhm')))
+    assert u.isclose(lsf.at(1.5 * u.um)._scale * np.sqrt(8 * np.log(2)),
+                     (299792.458 / 2000 + 299792.458 / 3000) / 2 * u.km / u.s)
+    # (a resolving power is a number)
+    import astropy.table
+    wrong = tmp_path / 'r.ecsv'
+    astropy.table.QTable(dict(
+        wave=[1.0, 2.0] * u.um, R=[1.0, 2.0] * u.AA)).write(wrong)
+    with pytest.raises(ValueError, match="'R', has a unit"):
+        prep.prep_lsf_resolving_power(
+            str(wrong), 'wave', 'R', output_dir=str(tmp_path))
+
+
+def kmos3d_file(path):
+    """A cube of KMOS3D: its keywords of the resolving power and the PSF."""
+    primary = fits.PrimaryHDU(header=fits.Header({
+        'ESO K3D RES ORDER': 1, 'ESO K3D RES COEFF0': 1000.0,
+        'ESO K3D RES COEFF1': 1500.0}))
+    cube = fits.ImageHDU(np.zeros((11, 3, 3)), fits.Header(dict(
+        CTYPE3='WAVE', CUNIT3='um', CRVAL3=2.0, CDELT3=0.05, CRPIX3=1)),
+        name='X flux')
+    psf = fits.ImageHDU(np.zeros((5, 5)), fits.Header({
+        'ESO K3D PSF MOFFAT FWHM_MAJ': 0.5, 'ESO K3D PSF MOFFAT FWHM_MIN': 0.4,
+        'ESO K3D PSF MOFFAT BETA': 2.5, 'ESO K3D PSF MOFFAT PA': 30.0}),
+        name='X PSF')
+    fits.HDUList([primary, cube, psf]).writeto(path)
+
+
+def test_psf_and_lsf_of_kmos3d(tmp_path):
+    # The PSF: the Moffat its header fits, by its FWHM; the LSF: of the
+    # resolving power, a polynomial of the wavelength in micron
+    import astropy.units as u
+    import ruamel.yaml
+    from gbkfit.instrument import lsf_parser, psf_parser
+    path = tmp_path / 'cube.fits'
+    kmos3d_file(path)
+    prep.prep_psf_kmos3d(str(path), str(tmp_path / 'psf'))
+    with open(tmp_path / 'psf' / 'prep_psf.yaml') as f:
+        options = dict(ruamel.yaml.YAML(typ='safe').load(f))
+    assert options == dict(
+        type='moffat', fwhm=0.5, beta=2.5, ratio=pytest.approx(0.8),
+        posa=30.0)
+    psf_parser.load(options)
+    prep.prep_lsf_kmos3d(str(path), str(tmp_path / 'lsf'))
+    lsf = lsf_parser.load(dict(type='gauss', fwhm=dict(
+        file=str(tmp_path / 'lsf' / 'prep_lsf.ecsv'), points='wavelength',
+        column='fwhm')))
+    # (R = 1000 + 1500 x 2.2 at 2.2 micron)
+    assert u.isclose(lsf.at(2.2 * u.um)._scale * np.sqrt(8 * np.log(2)),
+                     299792.458 / 4300 * u.km / u.s)

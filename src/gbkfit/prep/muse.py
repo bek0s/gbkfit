@@ -28,7 +28,8 @@ def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
     """
     Return the PSF of a MUSE cube (from the keywords of its header: the
     modes MOFFAT1 and 2 of MPDAF, its first field) as a table of the
-    options alpha and beta of a Moffat PSF against wavelength.
+    options fwhm and beta of a Moffat PSF against wavelength (see
+    PSFMoffat.from_fwhm).
 
     Raises
     ------
@@ -61,10 +62,9 @@ def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
         beta = np.polyval([
             header[f'{key}B{k:02d}']
             for k in range(header[f'{key}BNC'])], x)
-    alpha = fwhm / (2 * np.sqrt(2 ** (1 / beta) - 1))
     u = astropy.units
     return astropy.table.QTable(dict(
-        wavelength=wavelengths * u.Angstrom, alpha=alpha * u.arcsec,
+        wavelength=wavelengths * u.Angstrom, fwhm=fwhm * u.arcsec,
         beta=beta * u.dimensionless_unscaled))
 
 

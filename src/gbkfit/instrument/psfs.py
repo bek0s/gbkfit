@@ -23,12 +23,12 @@ from annotated_types import Gt, Le
 
 from gbkfit.config import (
     DataFile, TypedParser, Unit, Varying, check_options, split_data_file)
-from gbkfit.grid import Coords, VelocityConvention
+from gbkfit.grid import Coords
 from gbkfit.io import (
     Beam, header_beam, model_header, parse_wcs, read_header, read_image,
     write_data, write_image)
 import gbkfit.math
-from . import _detail, varying
+from . import _detail
 from ._detail import MIN_EXTENT, WING_FLUX
 
 
@@ -783,7 +783,7 @@ class PSFImage(PSF):
         return data / np.sum(data)
 
 
-class PSFSum(PSF):
+class PSFSum(_detail.SpreadFunctionTerms, PSF):
     """
     A sum of PSFs (e.g. a double Gaussian, or a Gaussian core with Moffat
     wings), each with its fraction of the light.
@@ -811,43 +811,27 @@ class PSFSum(PSF):
         return dict(
             type=self.type(),
             psfs=_detail.dump_terms(
-                psf_parser, self._psfs, prefix, dump_path, overwrite),
+                psf_parser, self._terms, prefix, dump_path, overwrite),
             weights=self._weights.tolist())
 
     def __init__(self, psfs: Sequence[PSF], weights: Sequence[float]):
         check_options(PSFSum.__init__, locals())
-        self._psfs = tuple(psfs)
+        self._terms = tuple(psfs)
         self._weights = _detail.sum_weights(
-            weights, len(self._psfs), "a sum of PSFs")
+            weights, len(self._terms), "a sum of PSFs")
 
     def _beam_area_impl(self) -> float:
         # (its terms, each of an integral of 1, peak at 1 over their beam
         # areas)
         return float(np.sum(self._weights) / sum(
             weight / psf.beam_area()
-            for weight, psf in zip(self._weights, self._psfs)))
+            for weight, psf in zip(self._weights, self._terms)))
 
-    def varies(self) -> bool:
-        return any(psf.varies() for psf in self._psfs)
-
-    def at(
-            self,
-            points: u.Quantity,
-            convention: VelocityConvention | None = None
-    ) -> 'PSF | list[PSF]':
-        if not self.varies():
-            return super().at(points, convention)
-        return varying.per_point(points, lambda points_: [
-            PSFSum(psfs, self._weights) for psfs in
-            _detail.terms_at(self._psfs, points_, convention)])
-
-    def velocity_range(
-            self, convention: VelocityConvention | None = None
-    ) -> tuple[float, float]:
-        return _detail.terms_velocity_range(self._psfs, convention)
+    def _of_terms(self, terms: Sequence[PSF]) -> 'PSFSum':
+        return PSFSum(terms, self._weights)
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
-        sizes = np.array([psf._size_impl(step) for psf in self._psfs])
+        sizes = np.array([psf._size_impl(step) for psf in self._terms])
         return tuple(sizes.max(axis=0).tolist())
 
     def _asarray_impl(
@@ -860,10 +844,10 @@ class PSFSum(PSF):
         # Each term holds its fraction of the light on the same grid
         return sum(
             weight * psf.asarray(step, size, offset, rota)
-            for weight, psf in zip(self._weights, self._psfs))
+            for weight, psf in zip(self._weights, self._terms))
 
 
-class PSFConvolution(PSF):
+class PSFConvolution(_detail.SpreadFunctionTerms, PSF):
     """
     The convolution of PSFs: e.g. the PSF of an adaptive optics system
     and the seeing, or a PSF and the response of the pixels.
@@ -889,37 +873,21 @@ class PSFConvolution(PSF):
         return dict(
             type=self.type(),
             psfs=_detail.dump_terms(
-                psf_parser, self._psfs, prefix, dump_path, overwrite))
+                psf_parser, self._terms, prefix, dump_path, overwrite))
 
     def __init__(self, psfs: Sequence[PSF]):
         check_options(PSFConvolution.__init__, locals())
         if not psfs:
             raise ValueError("a convolution of PSFs needs at least one PSF")
-        self._psfs = tuple(psfs)
+        self._terms = tuple(psfs)
 
-    def varies(self) -> bool:
-        return any(psf.varies() for psf in self._psfs)
-
-    def at(
-            self,
-            points: u.Quantity,
-            convention: VelocityConvention | None = None
-    ) -> 'PSF | list[PSF]':
-        if not self.varies():
-            return super().at(points, convention)
-        return varying.per_point(points, lambda points_: [
-            PSFConvolution(psfs) for psfs in
-            _detail.terms_at(self._psfs, points_, convention)])
-
-    def velocity_range(
-            self, convention: VelocityConvention | None = None
-    ) -> tuple[float, float]:
-        return _detail.terms_velocity_range(self._psfs, convention)
+    def _of_terms(self, terms: Sequence[PSF]) -> 'PSFConvolution':
+        return PSFConvolution(terms)
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         # The sum of the (odd) sizes of the terms, less one for each
         # convolution
-        sizes = np.array([psf.size(step) for psf in self._psfs])
+        sizes = np.array([psf.size(step) for psf in self._terms])
         return tuple((sizes.sum(axis=0) - len(sizes) + 1).tolist())
 
     def _asarray_impl(
@@ -930,7 +898,7 @@ class PSFConvolution(PSF):
             rota: float
     ) -> np.ndarray:
         data = np.ones((1, 1))
-        for psf in self._psfs:
+        for psf in self._terms:
             data = scipy.signal.convolve(
                 data, psf.asarray(step, rota=rota), method='auto')
         return _detail.embed(data / data.sum(), size, offset)

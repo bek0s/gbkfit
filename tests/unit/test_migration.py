@@ -700,3 +700,19 @@ def test_gaussian_beams_are_gaussians():
     assert config['mock']['noise']['spatial_correlation']['type'] == 'gauss'
     assert len([c for c in changes if c.message == "gauss_beam -> gauss"]) \
         == 3
+
+
+def test_tables_of_pieces_of_projects_have_their_hdu_in_their_file(tmp_path):
+    # (a table of a piece of an LSF of a project of version 5)
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(
+        dict(format=project.FORMAT, version=5),
+        tmp_path / 'study' / project.MARKER)
+    yaml.dump(
+        dict(type='gauss', sigma=dict(
+            file='lsf.fits', hdu=1, points='wavelength', column='sigma',
+            units=dict(sigma='km/s'))),
+        tmp_path / 'study' / 'lsfs' / 'muse.yaml')
+    migration.migrate_project(study.path)
+    assert study.piece('lsf', 'muse')['sigma']['file'] == dict(
+        file='lsf.fits', hdu=1)

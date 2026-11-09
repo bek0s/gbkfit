@@ -42,7 +42,7 @@ from gbkfit.config import (
     check_options, split_data_file)
 from gbkfit.grid import Grid, VelocityConvention
 from gbkfit.io import parse_wcs, read_image, write_image
-from . import _detail, varying
+from . import _detail
 from ._detail import MIN_EXTENT, WING_FLUX
 
 
@@ -749,7 +749,7 @@ class LSFImage(LSF):
         return data / np.sum(data)
 
 
-class LSFSum(LSF):
+class LSFSum(_detail.SpreadFunctionTerms, LSF):
     """
     A sum of LSFs (e.g. a double Gaussian), each with its fraction of the
     light.
@@ -777,36 +777,20 @@ class LSFSum(LSF):
         return dict(
             type=self.type(),
             lsfs=_detail.dump_terms(
-                lsf_parser, self._lsfs, prefix, dump_path, overwrite),
+                lsf_parser, self._terms, prefix, dump_path, overwrite),
             weights=self._weights.tolist())
 
     def __init__(self, lsfs: Sequence[LSF], weights: Sequence[float]):
         check_options(LSFSum.__init__, locals())
-        self._lsfs = tuple(lsfs)
+        self._terms = tuple(lsfs)
         self._weights = _detail.sum_weights(
-            weights, len(self._lsfs), "a sum of LSFs")
+            weights, len(self._terms), "a sum of LSFs")
 
-    def varies(self) -> bool:
-        return any(lsf.varies() for lsf in self._lsfs)
-
-    def at(
-            self,
-            points: u.Quantity,
-            convention: VelocityConvention | None = None
-    ) -> 'LSF | list[LSF]':
-        if not self.varies():
-            return super().at(points, convention)
-        return varying.per_point(points, lambda points_: [
-            LSFSum(lsfs, self._weights) for lsfs in
-            _detail.terms_at(self._lsfs, points_, convention)])
-
-    def velocity_range(
-            self, convention: VelocityConvention | None = None
-    ) -> tuple[float, float]:
-        return _detail.terms_velocity_range(self._lsfs, convention)
+    def _of_terms(self, terms: Sequence[LSF]) -> 'LSFSum':
+        return LSFSum(terms, self._weights)
 
     def _size_impl(self, step: float, channel: Channel) -> float:
-        return max(lsf._size_impl(step, channel) for lsf in self._lsfs)
+        return max(lsf._size_impl(step, channel) for lsf in self._terms)
 
     def _asarray_impl(
             self, step: float, channel: Channel, size: int, offset: int
@@ -814,10 +798,10 @@ class LSFSum(LSF):
         # Each term holds its fraction of the light on the same grid
         return sum(
             weight * lsf.on(channel).asarray(step, size, offset)
-            for weight, lsf in zip(self._weights, self._lsfs))
+            for weight, lsf in zip(self._weights, self._terms))
 
 
-class LSFConvolution(LSF):
+class LSFConvolution(_detail.SpreadFunctionTerms, LSF):
     """
     The convolution of LSFs: e.g. the LSF of an instrument and the
     Hanning smoothing of the channels of the data (hanning).
@@ -843,44 +827,28 @@ class LSFConvolution(LSF):
         return dict(
             type=self.type(),
             lsfs=_detail.dump_terms(
-                lsf_parser, self._lsfs, prefix, dump_path, overwrite))
+                lsf_parser, self._terms, prefix, dump_path, overwrite))
 
     def __init__(self, lsfs: Sequence[LSF]):
         check_options(LSFConvolution.__init__, locals())
         if not lsfs:
             raise ValueError("a convolution of LSFs needs at least one LSF")
-        self._lsfs = tuple(lsfs)
+        self._terms = tuple(lsfs)
 
-    def varies(self) -> bool:
-        return any(lsf.varies() for lsf in self._lsfs)
-
-    def at(
-            self,
-            points: u.Quantity,
-            convention: VelocityConvention | None = None
-    ) -> 'LSF | list[LSF]':
-        if not self.varies():
-            return super().at(points, convention)
-        return varying.per_point(points, lambda points_: [
-            LSFConvolution(lsfs) for lsfs in
-            _detail.terms_at(self._lsfs, points_, convention)])
-
-    def velocity_range(
-            self, convention: VelocityConvention | None = None
-    ) -> tuple[float, float]:
-        return _detail.terms_velocity_range(self._lsfs, convention)
+    def _of_terms(self, terms: Sequence[LSF]) -> 'LSFConvolution':
+        return LSFConvolution(terms)
 
     def _size_impl(self, step: float, channel: Channel) -> float:
         # The sum of the (odd) sizes of the terms, less one for each
         # convolution
-        sizes = [lsf.on(channel).size(step) for lsf in self._lsfs]
+        sizes = [lsf.on(channel).size(step) for lsf in self._terms]
         return sum(sizes) - len(sizes) + 1
 
     def _asarray_impl(
             self, step: float, channel: Channel, size: int, offset: int
     ) -> np.ndarray:
         data = np.ones(1)
-        for lsf in self._lsfs:
+        for lsf in self._terms:
             data = np.convolve(data, lsf.on(channel).asarray(step))
         return _detail.embed(data / data.sum(), (size,), (offset,))
 

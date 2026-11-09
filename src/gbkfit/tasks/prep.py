@@ -18,7 +18,9 @@ from collections.abc import Sequence
 from typing import Literal
 
 import astropy.table
+import astropy.units
 import astropy.wcs
+import ruamel.yaml
 import numpy as np
 import numpy.typing as npt
 from astropy.io import fits
@@ -36,11 +38,14 @@ from gbkfit.prep import FitsArrays
 __all__ = [
     'output_files',
     'prep_gauss_hermite_moments',
+    'prep_lsf_kmos3d',
     'prep_lsf_muse',
+    'prep_lsf_resolving_power',
     'prep_pixel_brightness',
     'prep_pixel_moments',
     'prep_pixel_spectra',
     'prep_psf_casa_beams',
+    'prep_psf_kmos3d',
     'prep_psf_muse',
     'prep_region_moments',
     'prep_region_spectra',
@@ -299,10 +304,10 @@ def prep_pixel_spectra(
     velocities of an axis that does not state it, spectral_type the type
     of an axis whose header gives one that FITS does not define,
     error_kind what the file of the errors holds, and mask_kind what the
-    mask marks (see FitsArrays.read); the prepared errors are standard deviations. With noise_error, the errors are the noise
-    of each channel of the cropped cube, from its negative values (see
-    prep.noise_errors; see output_files for the names of the prepared
-    files).
+    mask marks (see FitsArrays.read); the prepared errors are standard
+    deviations. With noise_error, the errors are the noise of each channel
+    of the cropped cube, from its negative values (see prep.noise_errors;
+    see output_files for the names of the prepared files).
 
     Raises
     ------
@@ -657,16 +662,17 @@ def prep_psf_muse(
 ) -> None:
     """
     Write the PSF of a MUSE cube (from its header) as a table of the
-    options alpha and beta of a Moffat PSF against wavelength (see
+    options fwhm and beta of a Moffat PSF against wavelength (see
     gbkfit.prep.muse_psf_table).
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
-    # (MUSE writes its PSF in the primary header of its cubes)
+    # (MUSE writes its PSF in the primary header of its cubes, of no
+    # array: a header of keywords, not that of data)
     filename = _write_table(
-        prep.muse_psf_table(read_header((file, 0))), output_dir, 'psf')
+        prep.muse_psf_table(fits.getheader(file, 0)), output_dir, 'psf')
     _log.info(
         f"the PSF is in {filename}; use it as psf: {{type: moffat, "
-        f"alpha: {{file: {filename}, points: wavelength, column: alpha}}, "
+        f"fwhm: {{file: {filename}, points: wavelength, column: fwhm}}, "
         f"beta: {{file: {filename}, points: wavelength, column: beta}}}}")
 
 
@@ -683,6 +689,93 @@ def prep_lsf_muse(
     _log.info(
         f"the LSF is in {filename}; use it as lsf: {{type: gauss, "
         f"fwhm: {{file: {filename}, points: wavelength, column: fwhm}}}}")
+
+
+def prep_lsf_resolving_power(
+        file: DataFile,
+        points: str,
+        column: str,
+        points_unit: str | None = None,
+        format_: str | None = None,
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
+) -> None:
+    """
+    Write the LSF of an instrument of the resolving powers of a table
+    file (e.g. of its curve of R against wavelength, as of JWST NIRSpec),
+    a Gaussian, as a table of its FWHM against the points (see
+    gbkfit.prep.resolving_power_table).
+
+    The points are those of a column of wavelengths, frequencies or
+    velocities; their unit is that of the column, or points_unit if it
+    has none (e.g. of a CSV file).
+    """
+    table = read_table(file, format_)
+    point_values = read_column(table, points, points_unit)
+    if point_values.unit == astropy.units.dimensionless_unscaled:
+        raise ValueError(
+            f"the column of the points, {points!r}, has no unit; give it "
+            f"(points_unit)")
+    power = read_column(table, column, None)
+    if power.unit != astropy.units.dimensionless_unscaled:
+        raise ValueError(
+            f"the column of the resolving powers, {column!r}, has a unit "
+            f"({gbkfit.units.format_unit(power.unit)}): a resolving power "
+            f"is a number")
+    output_dir = _output_dir(output_dir, output_dir_mode)
+    filename = _write_table(prep.resolving_power_table(
+        point_values, power.value, points), output_dir, 'lsf')
+    _log.info(
+        f"the LSF is in {filename}; use it as lsf: {{type: gauss, fwhm: "
+        f"{{file: {filename}, points: {points}, column: fwhm}}}}")
+
+
+def prep_lsf_kmos3d(
+        file: str,
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
+) -> None:
+    """
+    Write the LSF of a cube of KMOS3D (from the resolving power of its
+    primary header) as a table of its FWHM against wavelength (see
+    gbkfit.prep.kmos3d_lsf_table).
+    """
+    output_dir = _output_dir(output_dir, output_dir_mode)
+    # (KMOS3D writes its resolving power in the primary header, of no
+    # array, and its cube of the flux in the HDU after it)
+    table = prep.kmos3d_lsf_table(
+        fits.getheader(file, 0), read_header((file, 1)))
+    filename = _write_table(table, output_dir, 'lsf')
+    _log.info(
+        f"the LSF is in {filename}; use it as lsf: {{type: gauss, fwhm: "
+        f"{{file: {filename}, points: wavelength, column: fwhm}}}}")
+
+
+def prep_psf_kmos3d(
+        file: str,
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
+) -> None:
+    """
+    Write the PSF of a cube of KMOS3D, the Moffat fitted to the image of
+    its PSF (see gbkfit.prep.kmos3d_psf), as the configuration of the PSF
+    (prep_psf.yaml, e.g. a piece of the PSFs of a project).
+    """
+    # (KMOS3D writes the image of the PSF in an HDU of its own, named for
+    # the object, e.g. 'U3_10584 PSF')
+    with fits.open(file) as hdus:
+        headers = [x.header for x in hdus if x.name.endswith(' PSF')]
+    if not headers:
+        raise ValueError(
+            f"{file}: there is no image of the PSF (an HDU named *PSF)")
+    psf = prep.kmos3d_psf(headers[0])
+    output_dir = _output_dir(output_dir, output_dir_mode)
+    filename = os.path.join(output_dir, 'prep_psf.yaml')
+    with open(filename, 'w') as f:
+        ruamel.yaml.YAML().dump(psf, f)
+    options = ', '.join(f'{key}: {value:.6g}' if isinstance(value, float)
+                        else f'{key}: {value}' for key, value in psf.items())
+    _log.info(f"the PSF is in {filename}; use it as psf: {{{options}}}")
 
 
 def prep_psf_casa_beams(

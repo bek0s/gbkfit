@@ -95,30 +95,6 @@ def sum_weights(
     return weights / weights.sum()
 
 
-def terms_at(
-        terms: Sequence[_Term],
-        points: u.Quantity,
-        convention: VelocityConvention | None
-) -> list[list[_Term]]:
-    """
-    Return the terms of a sum or a convolution (PSFs or LSFs) at each of
-    the points of the spectral axis (1D): a list of terms per point.
-    """
-    per_term = [term.at(points, convention) for term in terms]
-    return [list(terms_) for terms_ in zip(*per_term)]
-
-
-def terms_velocity_range(
-        terms: Sequence[_Term], convention: VelocityConvention | None
-) -> tuple[float, float]:
-    """
-    Return the range of velocities that the terms of a sum or a
-    convolution are known at (see PSF.velocity_range).
-    """
-    ranges = [term.velocity_range(convention) for term in terms]
-    return max(r[0] for r in ranges), min(r[1] for r in ranges)
-
-
 def dump_terms(
         parser: TypedParser,
         terms: Sequence[_Term],
@@ -301,6 +277,43 @@ class GivenOptions(SpreadFunction):
             name: gbkfit.units.format_quantity(value)
             if isinstance(value, u.Quantity) else value
             for name, value in self._given.items()}
+
+
+class SpreadFunctionTerms(SpreadFunction):
+    """
+    A PSF or an LSF of terms of its family (a sum or a convolution, of
+    _terms): it varies where any of them does, and at each point of the
+    spectral axis it is that of their terms there.
+    """
+
+    _terms: tuple[SpreadFunction, ...]
+
+    @abc.abstractmethod
+    def _of_terms(self, terms: Sequence[SpreadFunction]) -> SpreadFunction:
+        """The same of other terms (e.g. those at a point; see at)."""
+
+    def varies(self) -> bool:
+        return any(term.varies() for term in self._terms)
+
+    def at(
+            self,
+            points: u.Quantity,
+            convention: VelocityConvention | None = None
+    ) -> 'SpreadFunction | list[SpreadFunction]':
+        if not self.varies():
+            return super().at(points, convention)
+
+        def at_points(points_: u.Quantity) -> list[SpreadFunction]:
+            per_term = [term.at(points_, convention) for term in self._terms]
+            return [self._of_terms(terms) for terms in zip(*per_term)]
+        return varying.per_point(points, at_points)
+
+    def velocity_range(
+            self, convention: VelocityConvention | None = None
+    ) -> tuple[float, float]:
+        # (where all of the terms are known)
+        ranges = [term.velocity_range(convention) for term in self._terms]
+        return max(r[0] for r in ranges), min(r[1] for r in ranges)
 
 
 class VaryingSpreadFunction(SpreadFunction):

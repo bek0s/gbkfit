@@ -500,6 +500,35 @@ def _make_parser() -> argparse.ArgumentParser:
     parsers_prep.add_parser(
         'lsf_muse', parents=[parser_common_output, parser_common],
         help="the LSF of MUSE (Bacon et al. 2017), as a table")
+    parser_prep_psf_kmos3d = parsers_prep.add_parser(
+        'psf_kmos3d', parents=[parser_common_output, parser_common],
+        help="the PSF of a KMOS3D cube (the Moffat of its header), as a "
+             "configuration")
+    parser_prep_psf_kmos3d.add_argument('cube', type=str, help="the cube")
+    parser_prep_lsf_kmos3d = parsers_prep.add_parser(
+        'lsf_kmos3d', parents=[parser_common_output, parser_common],
+        help="the LSF of a KMOS3D cube (of the resolving power of its "
+             "header), as a table")
+    parser_prep_lsf_kmos3d.add_argument('cube', type=str, help="the cube")
+    parser_prep_resolving_power = parsers_prep.add_parser(
+        'lsf_resolving_power', parents=[parser_common_output, parser_common],
+        help="the LSF of a table of resolving powers (e.g. of R against "
+             "wavelength), as a table of its FWHM")
+    parser_prep_resolving_power.add_argument(
+        'table', type=str, help="the table")
+    parser_prep_resolving_power.add_argument(
+        '--points', type=str, required=True,
+        help="the column of the points (wavelengths, frequencies or "
+             "velocities)")
+    parser_prep_resolving_power.add_argument(
+        '--column', type=str, required=True,
+        help="the column of the resolving powers")
+    parser_prep_resolving_power.add_argument(
+        '--points-unit', type=str,
+        help="the unit of the points, if their column has none")
+    parser_prep_resolving_power.add_argument(
+        '--format', type=str,
+        help="the format of the table, if astropy cannot tell it")
     parser_prep_beams = parsers_prep.add_parser(
         'psf_casa_beams', parents=[parser_common_output, parser_common],
         help="the beams of the channels of a CASA cube, as a table")
@@ -630,8 +659,12 @@ def _run_prep(args: argparse.Namespace) -> None:
         options = dict(
             file=args.table, columns=args.columns, errors=args.errors,
             format_=args.format)
-    elif task in ('psf_muse', 'psf_casa_beams'):
+    elif task in ('psf_muse', 'psf_casa_beams', 'psf_kmos3d', 'lsf_kmos3d'):
         options = dict(file=args.cube)
+    elif task == 'lsf_resolving_power':
+        options = dict(
+            file=args.table, points=args.points, column=args.column,
+            points_unit=args.points_unit, format_=args.format)
     else:
         options = {}
     if task in ('slit_spectra', 'pixel_spectra', 'region_spectra'):
