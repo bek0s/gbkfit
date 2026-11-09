@@ -324,4 +324,4 @@ class RegionsApertures(Regions):
 
 regions_parser = TypedParser(Regions, [
     RegionsApertures,
-    RegionsBins])
+    RegionsBins], family='regions')

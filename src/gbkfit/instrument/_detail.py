@@ -16,7 +16,6 @@ import astropy.units as u
 import numpy as np
 import scipy.ndimage
 
-import gbkfit.math
 import gbkfit.units
 from gbkfit.config import (
     TypedSerializable, Unit, config_path, constructor_of, dump_quantity,
@@ -24,6 +23,7 @@ from gbkfit.config import (
     varying_options)
 from gbkfit.grid import VelocityConvention
 from gbkfit.io import write_image
+from gbkfit.utils import numutils
 from .varying import SpectralPoints, SpectralTable, as_points, merged_points
 
 
@@ -58,7 +58,7 @@ def odd_size(kernel: 'SpreadFunction', *size: float) -> tuple[int, ...]:
         raise RuntimeError(
             f"{type(kernel).__name__}: its wings are too heavy for an array "
             f"to hold {1 - WING_FLUX:.0%} of its flux")
-    return tuple(int(gbkfit.math.roundu_odd(x)) for x in size)
+    return tuple(int(numutils.roundu_odd(x)) for x in size)
 
 
 def check_odd_centre(
@@ -69,7 +69,7 @@ def check_odd_centre(
     LSF (desc) is odd: its centre, at size // 2 + offset, is then at the
     centre of the array, as the FFT convolution takes it.
     """
-    if any(gbkfit.math.is_even(n + o) for n, o in zip(size, offset)):
+    if any(numutils.is_even(n + o) for n, o in zip(size, offset)):
         sums = ', '.join(f"{n} + {o}" for n, o in zip(size, offset))
         raise RuntimeError(
             f"invalid {desc} size: each size + offset must be odd; they are "

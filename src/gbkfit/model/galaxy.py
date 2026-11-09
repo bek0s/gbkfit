@@ -14,10 +14,10 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils
-from .components._component_set import ComponentSet, ComponentSetPlan
-from .components._functions import GalaxyFunctions
+from ._component_set import ComponentSet, ComponentSetPlan
+from ._functions import GalaxyFunctions
 from .components._stage import GalaxyStage
-from .components._transfer import TransferMember
+from ._transfer import TransferMember
 from .components._units import DataUnit
 from .components.base import Component, DepthAxis, OpacityCubes
 from .components.cones import Cone
@@ -45,7 +45,7 @@ component_parser = TypedParser(Component, [
     Cone,
     Spheroid,
     Point,
-    Particles])
+    Particles], family='component')
 
 
 class Galaxy(Serializable):

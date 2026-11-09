@@ -611,4 +611,4 @@ def _correlated(
 
 
 noise_parser = TypedParser(
-    Noise, [NoiseGauss, NoiseStudentT, NoisePoisson])
+    Noise, [NoiseGauss, NoiseStudentT, NoisePoisson], family='noise')

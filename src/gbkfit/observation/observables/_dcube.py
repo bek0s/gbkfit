@@ -9,12 +9,12 @@ import numpy as np
 from gbkfit.grid import (
     Coords, Grid, GridData, VelocityConvention, make_convention, make_medium,
     make_rest)
-import gbkfit.math
 import gbkfit.units
 from gbkfit.driver import DeviceArray, Driver, DriverFFT
 from gbkfit.instrument import (
     LSF, Channel, ChannelLSF, LSFPoint, PSF, PSFPoint, PrimaryBeam)
 from gbkfit.model import Extras
+from gbkfit.utils import numutils
 
 
 _log = logging.getLogger(__name__)
@@ -197,7 +197,7 @@ def _varying_kernels(
     if psf is not None:
         # (like the PSF/LSF cube of DCubePlan: an even size puts the centre
         # one pixel before the middle)
-        offset = gbkfit.math.is_odd(size[:2]) - 1
+        offset = numutils.is_odd(size[:2]) - 1
         psfs = psf.at(velocities * _KMS, convention) if psf.varies() \
             else [psf]
         psf_images = np.stack([
@@ -251,7 +251,7 @@ def _kernel_cube(dcube: 'DCube', grid_hi: Grid) -> np.ndarray:
     """
     psf, lsf = dcube.psf(), dcube.axis_lsf()
     size, step = grid_hi.size, grid_hi.coords.step
-    offset = gbkfit.math.is_odd(size) - 1
+    offset = numutils.is_odd(size) - 1
     psf_args = (step[:2], size[:2], offset[:2], dcube.rota())
     lsf_args = (step[2], size[2], offset[2])
     # (rolled before their product, which is then the only cube made)

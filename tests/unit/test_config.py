@@ -14,7 +14,7 @@ import pytest
 from annotated_types import Gt, Le
 
 from gbkfit.config import (
-    ConfigError, DataFile, Problem, Serializable, TypedParser,
+    ConfigError, ConfigProblem, DataFile, Serializable, TypedParser,
     TypedSerializable, Unit, UnknownNamesError, check_name, check_options,
     collect_problems, config_path, describe_type, describe_unknown,
     error_location, error_message, item_prefixes, matches_type,
@@ -360,15 +360,15 @@ def test_problems_have_the_paths_of_the_blocks_around():
             warn("a warning")
             raise ConfigError("an error")
     assert problems == [
-        Problem('warning', ['galaxies', 0], "a warning"),
-        Problem('error', ['galaxies', 0], "an error")]
+        ConfigProblem('warning', ['galaxies', 0], "a warning"),
+        ConfigProblem('error', ['galaxies', 0], "an error")]
 
 
 def test_problems_are_errors_of_any_type(caplog):
     # A bug, or an error of a constructor, with its type and its path
     with collect_problems() as problems, config_path('galaxies', 0):
         raise ValueError("rnmax must be greater than rnmin")
-    assert problems == [Problem(
+    assert problems == [ConfigProblem(
         'error', ['galaxies', 0],
         "ValueError: rnmax must be greater than rnmin")]
     assert "Traceback" in caplog.text

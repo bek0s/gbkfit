@@ -25,7 +25,7 @@ import gbkfit.model
 import gbkfit.observation
 import gbkfit.params
 import gbkfit.instrument
-from gbkfit.config.catalogue import family_of
+from gbkfit.config import family_of
 from gbkfit.model.components import traits
 from gbkfit.config import option_types
 from gbkfit.utils import funcutils

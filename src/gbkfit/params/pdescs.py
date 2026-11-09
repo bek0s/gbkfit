@@ -428,7 +428,7 @@ class ParamVectorDesc(ParamDesc):
 
 pdesc_parser = TypedParser(ParamDesc, [
     ParamScalarDesc,
-    ParamVectorDesc])
+    ParamVectorDesc], family='pdesc')
 
 
 def default_values(

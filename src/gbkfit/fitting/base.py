@@ -771,4 +771,4 @@ def _versions(libraries: tuple[str, ...]) -> dict[str, str]:
     return versions
 
 
-fitter_parser = TypedParser(Fitter)
+fitter_parser = TypedParser(Fitter, family='fitter')

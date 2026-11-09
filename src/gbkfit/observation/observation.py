@@ -416,4 +416,4 @@ class Observation(TypedSerializable, abc.ABC):
         return {}
 
 
-observation_parser = TypedParser(Observation)
+observation_parser = TypedParser(Observation, family='observation')

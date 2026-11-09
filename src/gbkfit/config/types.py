@@ -42,7 +42,6 @@ __all__ = [
     'describe_type',
     'is_asdf_file',
     'is_quantity',
-    'is_varying',
     'matches_type',
     'option_types',
     'split_data_file',
@@ -51,7 +50,8 @@ __all__ = [
     'union_members',
     'unit_kinds_of',
     'unit_of',
-    'varying_options'
+    'varying_options',
+    'varying_table'
 ]
 
 
@@ -165,10 +165,12 @@ class Choices:
 class Varying:
     """
     The marker of an option that can vary along the spectral axis, e.g.
-    ``Annotated[float, Gt(0), Unit('arcsec'), Varying()]``: given as a
-    value, or as a table of values (see gbkfit.instrument.SpectralTable,
-    and PSF.varying).
+    ``Annotated[float, Gt(0), Unit('arcsec'), Varying(SpectralTable)]``:
+    given as a value, or as a table of values, of its class (table; see
+    gbkfit.instrument.SpectralTable, and PSF.varying).
     """
+
+    table: type
 
 
 @dataclasses.dataclass(frozen=True)
@@ -635,14 +637,17 @@ def is_quantity(type_: Any) -> bool:
         for x in union_members(type_))
 
 
-def is_varying(type_: Any) -> bool:
+def varying_table(type_: Any) -> type | None:
     """
-    Return whether an option of a type annotation can vary along the
-    spectral axis (its Varying marker; see Varying).
+    Return the class of the tables of the values of an option of a type
+    annotation that can vary along the spectral axis (of its Varying
+    marker; see Varying), or None if it cannot.
     """
     type_ = _without_none(type_)
-    return typing.get_origin(type_) is Annotated and any(
-        isinstance(x, Varying) for x in type_.__metadata__)
+    if typing.get_origin(type_) is not Annotated:
+        return None
+    return next((
+        x.table for x in type_.__metadata__ if isinstance(x, Varying)), None)
 
 
 def varying_options(func: Callable) -> tuple[str, ...]:
@@ -652,4 +657,4 @@ def varying_options(func: Callable) -> tuple[str, ...]:
     """
     return tuple(
         name for name, type_ in option_types(func).items()
-        if is_varying(type_))
+        if varying_table(type_) is not None)

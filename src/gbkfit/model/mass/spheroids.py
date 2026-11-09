@@ -49,7 +49,7 @@ spheroid_profile_parser = TypedParser(SpheroidProfile, [
     ProfileZhao,
     ProfileDekelZhao,
     ProfileCoreNFW,
-    ProfileNFWTruncated])
+    ProfileNFWTruncated], family='spheroid_profile')
 
 class DarkFraction(Serializable):
     """

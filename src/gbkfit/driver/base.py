@@ -15,7 +15,7 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.config import ConfigError, TypedParser, TypedSerializable
-import gbkfit.math
+from gbkfit.utils import numutils
 
 if TYPE_CHECKING:
     import cupy
@@ -137,8 +137,8 @@ class DriverFFT(abc.ABC):
         threshold = self._fft_shape_threshold
         new_shape = []
         for dim in shape:
-            dim_po2 = gbkfit.math.roundu_po2(dim)
-            dim_mul = gbkfit.math.roundu_multiple(dim, threshold)
+            dim_po2 = numutils.roundu_po2(dim)
+            dim_mul = numutils.roundu_multiple(dim, threshold)
             dim_new = dim_po2 if dim_po2 <= threshold else dim_mul
             new_shape.append(dim_new)
         return np.array(new_shape)
@@ -749,7 +749,7 @@ class Driver(TypedSerializable, abc.ABC):
         """
 
 
-driver_parser = TypedParser(Driver)
+driver_parser = TypedParser(Driver, family='driver')
 
 
 def driver_by_name(

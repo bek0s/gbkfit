@@ -68,8 +68,8 @@ def config_group(config):
     An ObservationGroup of the galaxies and observations of a config,
     loaded as gbkfit.load loads them.
     """
-    from gbkfit import setup
-    return setup._load_observation_group(config)
+    from gbkfit.setup import _config
+    return _config._load_observation_group(config)
 
 
 def config_group_plan(config):
@@ -77,11 +77,11 @@ def config_group_plan(config):
     A plan of the ObservationGroup of a config (see config_group) on its
     drivers, as gbkfit.load loads it.
     """
-    from gbkfit import setup
+    from gbkfit.setup import _config
     group = config_group(config)
     from gbkfit.driver.drivers.host import DriverHost
-    return group.plan(*setup._load_placement(
-        config, group, setup._load_drivers(config), DriverHost()))
+    return group.plan(*_config._load_placement(
+        config, group, _config._load_drivers(config), DriverHost()))
 
 
 def located_message(error):

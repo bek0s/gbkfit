@@ -13,6 +13,7 @@ from typing import Any
 import ruamel.yaml
 
 import gbkfit
+from gbkfit.config import FORMAT_VERSION
 import gbkfit.project
 
 from .workspace import Workspace
@@ -75,7 +76,7 @@ class Galaxies:
         description = None
         for observation in _OBSERVATIONS:
             description = gbkfit.describe(dict(
-                version=gbkfit.project.FORMAT_VERSION, root=root,
+                version=FORMAT_VERSION, root=root,
                 driver=dict(type='host'), galaxies=[dict(galaxy)],
                 observations=[observation], params=dict(properties={})))
             if description.group is not None:

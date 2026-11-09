@@ -20,13 +20,13 @@ from gbkfit.config import (
 
 
 __all__ = [
-    'Aperture',
-    'ApertureShutters',
-    'aperture_parser'
+    'SlitlessAperture',
+    'SlitlessApertureShutters',
+    'slitless_aperture_parser'
 ]
 
 
-class Aperture(TypedSerializable, abc.ABC):
+class SlitlessAperture(TypedSerializable, abc.ABC):
     """
     An aperture in front of a disperser: open rectangles along the axes
     of the image (see the module).
@@ -84,7 +84,7 @@ class Aperture(TypedSerializable, abc.ABC):
         return index, ((lo + hi) / 2)[open_], widths[open_]
 
 
-class ApertureShutters(Aperture):
+class SlitlessApertureShutters(SlitlessAperture):
     """
     A column of shutters along y (along the slit, across the dispersion),
     each open over a rectangle of a size, one pitch from the next. The
@@ -134,7 +134,7 @@ class ApertureShutters(Aperture):
             count: Annotated[int, Ge(1)] = 1,
             centre: Annotated[Sequence[float], Unit('arcsec')] = (0, 0)
     ):
-        check_options(ApertureShutters.__init__, locals())
+        check_options(SlitlessApertureShutters.__init__, locals())
         size = tuple(float(value) for value in size)
         if len(size) != 2 or not min(size) > 0:
             raise ValueError(
@@ -160,4 +160,5 @@ class ApertureShutters(Aperture):
             y + offsets - length / 2, y + offsets + length / 2])
 
 
-aperture_parser = TypedParser(Aperture, [ApertureShutters])
+slitless_aperture_parser = TypedParser(
+    SlitlessAperture, [SlitlessApertureShutters], family='slitless_aperture')

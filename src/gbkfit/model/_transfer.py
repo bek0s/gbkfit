@@ -15,15 +15,16 @@ import gbkfit.units
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ModelEvaluationError, ParamValues
-from ..extras import Extras
 from ._component_plans import ComponentPlans
-from ._units import DataUnit
-from .base import ComponentState, DepthAxis, NativeGrid, OpacityCubes
-from .lines import Band
+from .components._units import DataUnit
+from .components.base import (
+    ComponentState, DepthAxis, NativeGrid, OpacityCubes)
+from .components.lines import Band
+from .extras import Extras
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
-    from .base import Component, ComponentPlan
+    from .components.base import Component, ComponentPlan
 
 
 __all__ = [

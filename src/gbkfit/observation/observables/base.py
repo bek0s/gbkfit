@@ -680,4 +680,4 @@ class ObservablePlan(abc.ABC):
         pass
 
 
-observable_parser = TypedParser(Observable)
+observable_parser = TypedParser(Observable, family='observable')

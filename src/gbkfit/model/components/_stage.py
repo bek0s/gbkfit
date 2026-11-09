@@ -20,7 +20,7 @@ from ..gravity import GravityField
 from ..mass import MassContext, MassModel
 
 if TYPE_CHECKING:
-    from ._component_set import ComponentSet
+    from .._component_set import ComponentSet
     from .base import ComponentStage, ComponentState
 
 

@@ -467,7 +467,7 @@ class JeansEquilibrium(Equilibrium):
 equilibrium_parser = TypedParser(Equilibrium, [
     CentralEquilibrium,
     SelfGravitatingEquilibrium,
-    JeansEquilibrium])
+    JeansEquilibrium], family='equilibrium')
 
 
 class ThinDiskTraitsKinematics(TypedSerializable):
@@ -647,10 +647,12 @@ density_parser = BasicParser(Density)
 thin_density_parser = BasicParser(ThinDensity)
 
 thin_disk_kinematics_parser = TypedParser(
-    ThinDiskTraitsKinematics, [ThinDiskTraitsKinematics])
+    ThinDiskTraitsKinematics, [ThinDiskTraitsKinematics],
+    family='thin_disk_kinematics')
 
 thick_disk_kinematics_parser = TypedParser(
-    ThickDiskTraitsKinematics, [ThickDiskTraitsKinematics])
+    ThickDiskTraitsKinematics, [ThickDiskTraitsKinematics],
+    family='thick_disk_kinematics')
 
 cone_kinematics_parser = TypedParser(
-    ConeTraitsKinematics, [ConeTraitsKinematics])
+    ConeTraitsKinematics, [ConeTraitsKinematics], family='cone_kinematics')

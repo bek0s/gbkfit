@@ -13,7 +13,7 @@ of an option with titles (see Choices) are each a constant with its
 title.
 
 The options of a family (e.g. a PSF) are one of its members, chosen by
-their type (see catalogue); a member that needs modules that are not
+their type (see Family); a member that needs modules that are not
 installed has the keywords 'available' (false) and 'requires' (what to
 install), so that the schema is the same on every machine.
 """
@@ -31,11 +31,11 @@ import astropy.units
 import numpy as np
 import numpy.typing as npt
 
-from .catalogue import Family, family_of
+from .families import Family, family_of
 from .serializable import Serializable, is_record
 from .types import (
-    Choices, DataFile, FilePath, config_form, describe_type, is_varying,
-    option_types, unit_kinds_of, unit_of)
+    Choices, DataFile, FilePath, config_form, describe_type, option_types,
+    unit_kinds_of, unit_of, varying_table)
 
 
 __all__ = [
@@ -305,11 +305,10 @@ class SchemaWriter:
             if param.kind is param.VAR_KEYWORD:
                 others = schema
                 continue
-            if is_varying(hints.get(name)):
+            if (table := varying_table(hints.get(name))) is not None:
                 # (an option that varies along the spectral axis is given
                 # as a table of its values too, see Varying)
-                from gbkfit.instrument import SpectralTable
-                schema = {'anyOf': [schema, self.option(SpectralTable)]}
+                schema = {'anyOf': [schema, self.option(table)]}
             if (unit := unit_of(hints.get(name))) is not None:
                 schema['unit'] = unit
             if name in docs:

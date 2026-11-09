@@ -24,9 +24,9 @@ from gbkfit.config import (
 from gbkfit.io import (
     Beam, header_beam, model_header, parse_wcs, read_header, read_image,
     spectral_points)
-import gbkfit.math
-from . import _detail
+from . import _detail, _profiles
 from ._detail import WING_FLUX
+from .varying import SpectralTable
 
 
 __all__ = [
@@ -46,14 +46,15 @@ __all__ = [
 
 # The options of the analytic PSFs: a width (arcsec), an axis ratio
 # (minor over major) and a position angle (degrees, of the major axis)
-_Width: TypeAlias = Annotated[float, Gt(0), Unit('arcsec'), Varying()]
-_Ratio: TypeAlias = Annotated[float, Gt(0), Le(1), Varying()]
-_Angle: TypeAlias = Annotated[float, Unit('deg'), Varying()]
+_Width: TypeAlias = Annotated[
+    float, Gt(0), Unit('arcsec'), Varying(SpectralTable)]
+_Ratio: TypeAlias = Annotated[float, Gt(0), Le(1), Varying(SpectralTable)]
+_Angle: TypeAlias = Annotated[float, Unit('deg'), Varying(SpectralTable)]
 
 # The shapes of the generalised Gaussian and of the Moffat (for a finite
 # flux, beta > 1)
-_GGaussBeta: TypeAlias = Annotated[float, Gt(0), Varying()]
-_MoffatBeta: TypeAlias = Annotated[float, Gt(1), Varying()]
+_GGaussBeta: TypeAlias = Annotated[float, Gt(0), Varying(SpectralTable)]
+_MoffatBeta: TypeAlias = Annotated[float, Gt(1), Varying(SpectralTable)]
 
 
 class PSF(_detail.SpreadFunction):
@@ -194,8 +195,23 @@ def _elliptical_radii(
     y = (np.arange(size[1]) - center_y) * step[1]
     x = x[None, :]
     y = y[:, None]
-    x, y = gbkfit.math.transform_lh_rotate_z(x, y, np.radians(posa))
+    x, y = _transform_lh_rotate_z(x, y, np.radians(posa))
     return np.sqrt(x * x + y * y / (ratio * ratio))
+
+
+def _transform_lh_rotate_z(
+        x: np.ndarray, y: np.ndarray, theta: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    The same transform as the native transform_lh_rotate_z (gmodels), so
+    that an angle theta is a position angle, measured from north (+y)
+    through east (-x).
+    """
+    sintheta = np.sin(theta)
+    costheta = np.cos(theta)
+    out_x = - x * sintheta + y * costheta
+    out_y = - x * costheta - y * sintheta
+    return out_x, out_y
 
 
 class _AnalyticPSF(_detail.AnalyticSpreadFunction, PSF):
@@ -345,7 +361,7 @@ class PSFGauss(_AnalyticPSF):
             The PSF.
         """
         check_options(PSFGauss.from_fwhm, locals())
-        sigma = gbkfit.math.gauss_fwhm_to_sigma(fwhm)
+        sigma = _profiles.gauss_fwhm_to_sigma(fwhm)
         return cls(sigma, ratio, posa)._given_as(
             fwhm=fwhm, ratio=ratio, posa=posa)
 
@@ -384,7 +400,7 @@ class PSFGauss(_AnalyticPSF):
             raise ValueError(
                 f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
         return cls(
-            gbkfit.math.gauss_fwhm_to_sigma(bmaj), bmin / bmaj, bpa
+            _profiles.gauss_fwhm_to_sigma(bmaj), bmin / bmaj, bpa
         )._given_as(bmaj=bmaj, bmin=bmin, bpa=bpa)
 
     @classmethod
@@ -435,7 +451,7 @@ class PSFGauss(_AnalyticPSF):
         Beam
             The beam.
         """
-        fwhm = float(gbkfit.math.gauss_sigma_to_fwhm(self._scale))
+        fwhm = float(_profiles.gauss_sigma_to_fwhm(self._scale))
         return Beam(fwhm, fwhm * self._ratio, self._posa)
 
     def _beam_area_impl(self) -> float:
@@ -447,7 +463,7 @@ class PSFGauss(_AnalyticPSF):
         return np.sqrt(-2 * np.log(WING_FLUX))
 
     def _profile(self, r: np.ndarray, scale: float) -> np.ndarray:
-        return gbkfit.math.gauss_1d_fun(r, 1, 0, scale)
+        return _profiles.gauss_1d_fun(r, 1, 0, scale)
 
 
 class PSFGGauss(_AnalyticPSF):
@@ -520,7 +536,7 @@ class PSFGGauss(_AnalyticPSF):
             The PSF.
         """
         check_options(PSFGGauss.from_fwhm, locals())
-        alpha = gbkfit.math.ggauss_fwhm_to_alpha(fwhm, beta)
+        alpha = _profiles.ggauss_fwhm_to_alpha(fwhm, beta)
         return cls(alpha, beta, ratio, posa)._given_as(
             fwhm=fwhm, beta=beta, ratio=ratio, posa=posa)
 
@@ -537,7 +553,7 @@ class PSFGGauss(_AnalyticPSF):
             2 / self._beta, 1 - WING_FLUX) ** (1 / self._beta)
 
     def _profile(self, r: np.ndarray, scale: float) -> np.ndarray:
-        return gbkfit.math.ggauss_1d_fun(r, 1, 0, scale, self._beta)
+        return _profiles.ggauss_1d_fun(r, 1, 0, scale, self._beta)
 
 
 class PSFMoffat(_AnalyticPSF):
@@ -610,7 +626,7 @@ class PSFMoffat(_AnalyticPSF):
             The PSF.
         """
         check_options(PSFMoffat.from_fwhm, locals())
-        alpha = gbkfit.math.moffat_fwhm_to_alpha(fwhm, beta)
+        alpha = _profiles.moffat_fwhm_to_alpha(fwhm, beta)
         return cls(alpha, beta, ratio, posa)._given_as(
             fwhm=fwhm, beta=beta, ratio=ratio, posa=posa)
 
@@ -624,7 +640,7 @@ class PSFMoffat(_AnalyticPSF):
         return np.sqrt(WING_FLUX ** (1 / (1 - self._beta)) - 1)
 
     def _profile(self, r: np.ndarray, scale: float) -> np.ndarray:
-        return gbkfit.math.moffat_1d_fun(r, 1, 0, scale, self._beta)
+        return _profiles.moffat_1d_fun(r, 1, 0, scale, self._beta)
 
 
 def _read_images(
@@ -987,4 +1003,4 @@ psf_parser = TypedParser(PSF, [
     PSFImage,
     PSFSum,
     PSFConvolution,
-    PSFImages])
+    PSFImages], family='psf')

@@ -346,4 +346,4 @@ aperture_parser = TypedParser(Aperture, [
     ApertureEllipse,
     ApertureField,
     AperturePolygon,
-    ApertureRectangle])
+    ApertureRectangle], family='aperture')

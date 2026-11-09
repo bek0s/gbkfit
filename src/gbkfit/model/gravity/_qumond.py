@@ -21,8 +21,8 @@ from collections.abc import Callable
 import numpy as np
 import scipy.sparse.linalg
 
+from ..mass.units import G
 from ._field_grid import CellMasses, FieldGradient, FieldGrid
-from .mass.units import G
 
 
 __all__ = [

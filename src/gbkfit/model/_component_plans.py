@@ -16,16 +16,17 @@ import gbkfit.units
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid, GridData
 from gbkfit.params import ParamValues
-from ..extras import Extras
-from ._units import DataUnit
-from .base import ComponentState, DepthAxis, NativeGrid, OpacityCubes
-from .extinction import ExtinctionLaw
-from .lines import Band
+from .components._units import DataUnit
+from .components.base import (
+    ComponentState, DepthAxis, NativeGrid, OpacityCubes)
+from .components.extinction import ExtinctionLaw
+from .components.lines import Band
+from .extras import Extras
 
 if TYPE_CHECKING:
-    from ..galaxy import Galaxy
     from ._component_set import ComponentSet
-    from .base import Component
+    from .components.base import Component
+    from .galaxy import Galaxy
 
 
 __all__ = [

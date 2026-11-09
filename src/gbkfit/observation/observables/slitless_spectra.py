@@ -26,7 +26,7 @@ from gbkfit.utils import iterutils
 from . import _dcube, _detail, _moments
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan
-from .apertures import Aperture, aperture_parser
+from .apertures import SlitlessAperture, slitless_aperture_parser
 from .base import FluxScale, HostModelData, ModelData, Observable
 from .traces import Trace, trace_parser
 
@@ -326,13 +326,13 @@ class SlitlessSpectra(Observable):
     not modelled.
 
     An aperture in front of the disperser (e.g. the shutters of JWST
-    NIRSpec; see Aperture) lets only the light of its open parts through:
-    the light of each pixel of the sky, seen through the PSF, is clipped
-    to them, and the open parts are dispersed by the trace where they are.
-    The light from across a shutter thus lands on the detector moved along
-    the dispersion, as that of other wavelengths. The spectrograph after
-    the aperture then blurs the spectra by its own LSF (the instrument's,
-    with an aperture), along the trace.
+    NIRSpec; see SlitlessAperture) lets only the light of its open parts
+    through: the light of each pixel of the sky, seen through the PSF, is
+    clipped to them, and the open parts are dispersed by the trace where
+    they are. The light from across a shutter thus lands on the detector
+    moved along the dispersion, as that of other wavelengths. The
+    spectrograph after the aperture then blurs the spectra by its own LSF
+    (the instrument's, with an aperture), along the trace.
 
     The light within each pixel of the sky is spread evenly over it; the
     sky can be sampled by sky_sampling pixels for each pixel of the image
@@ -369,7 +369,7 @@ class SlitlessSpectra(Observable):
         is the centre by default.
     rota : float, optional
         The rotation of the image on the sky.
-    aperture : Aperture, optional
+    aperture : SlitlessAperture, optional
         The aperture in front of the disperser, if any.
     exposures : Exposure or Sequence of Exposure, optional
         The exposures combined into the image; one, of the sky as it is,
@@ -416,7 +416,7 @@ class SlitlessSpectra(Observable):
             dataset: DatasetSlitlessSpectra,
             spectral: SpectralAxis,
             trace: Trace,
-            aperture: Aperture | None = None,
+            aperture: SlitlessAperture | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: Annotated[int, Ge(1)] = 1,
             resampled: bool = False
@@ -469,7 +469,7 @@ class SlitlessSpectra(Observable):
             trace=trace_parser.dump(
                 self._trace, prefix=prefix, dump_path=dump_path,
                 overwrite=overwrite),
-            aperture=aperture_parser.dump(self._aperture),
+            aperture=slitless_aperture_parser.dump(self._aperture),
             exposures=exposure_parser.dump(list(self._exposures)),
             sky_sampling=self._sky_sampling,
             resampled=self._resampled), data)
@@ -483,7 +483,7 @@ class SlitlessSpectra(Observable):
             rpix: Rpix | None = None,
             rval: Rval = (0, 0),
             rota: Rota = 0,
-            aperture: Aperture | None = None,
+            aperture: SlitlessAperture | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: Annotated[int, Ge(1)] = 1,
             resampled: bool = False
@@ -517,7 +517,7 @@ class SlitlessSpectra(Observable):
         """Return the trace of the disperser."""
         return self._trace
 
-    def aperture(self) -> Aperture | None:
+    def aperture(self) -> SlitlessAperture | None:
         """Return the aperture in front of the disperser, if any."""
         return self._aperture
 

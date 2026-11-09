@@ -745,4 +745,4 @@ def _priors(
     return mean, sigma, lower
 
 
-solve_parser = TypedParser(Solve, [SolveGaussian])
+solve_parser = TypedParser(Solve, [SolveGaussian], family='solve')

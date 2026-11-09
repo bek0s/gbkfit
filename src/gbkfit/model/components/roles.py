@@ -367,8 +367,8 @@ class DustOpacity(Opacity):
 emission_parser = TypedParser(Emission, [
     LineEmission,
     BandEmission,
-    StarsEmission])
+    StarsEmission], family='emission')
 
 # (the disks register their line opacity, LineOpacity)
 opacity_parser = TypedParser(Opacity, [
-    DustOpacity])
+    DustOpacity], family='opacity')

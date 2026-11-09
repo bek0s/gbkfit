@@ -153,7 +153,7 @@ rpt_parser = TypedParser(RPTrait, [
     RPTraitNWDistortion,
     RPTraitSpiral,
     RPTraitMap,
-    RPTraitImage])
+    RPTraitImage], family='rpt')
 
 # Density height traits parser
 rht_parser = TypedParser(RHTrait, [
@@ -163,7 +163,7 @@ rht_parser = TypedParser(RHTrait, [
     RHTraitGGauss,
     RHTraitLorentz,
     RHTraitMoffat,
-    RHTraitSech2])
+    RHTraitSech2], family='rht')
 
 
 # Velocity polar traits parser
@@ -186,7 +186,7 @@ vpt_parser = TypedParser(VPTrait, [
     VPTraitBar,
     VPTraitNWBar,
     VPTraitSpiral,
-    VPTraitMass])
+    VPTraitMass], family='vpt')
 
 # Velocity height traits parser
 vht_parser = TypedParser(VHTrait, [
@@ -194,7 +194,7 @@ vht_parser = TypedParser(VHTrait, [
     VHTraitLinear,
     VHTraitExponential,
     VHTraitGauss,
-    VHTraitMass])
+    VHTraitMass], family='vht')
 
 # Dispersion polar traits parser
 dpt_parser = TypedParser(DPTrait, [
@@ -211,22 +211,22 @@ dpt_parser = TypedParser(DPTrait, [
     DPTraitMixtureMoffat,
     DPTraitNWUniform,
     DPTraitNWHarmonic,
-    DPTraitNWDistortion])
+    DPTraitNWDistortion], family='dpt')
 
 # Dispersion height traits parser
 dht_parser = TypedParser(DHTrait, [
     DHTraitOne,
     DHTraitLinear,
     DHTraitExponential,
-    DHTraitGauss])
+    DHTraitGauss], family='dht')
 
 # Vertical polar distortion traits parser
 zpt_parser = TypedParser(ZPTrait, [
     ZPTraitNWUniform,
-    ZPTraitNWHarmonic])
+    ZPTraitNWHarmonic], family='zpt')
 
 # Selection polar traits parser
 spt_parser = TypedParser(SPTrait, [
     SPTraitAzimuthalRange,
     SPTraitRadialRange,
-    SPTraitNWAzimuthalRange])
+    SPTraitNWAzimuthalRange], family='spt')

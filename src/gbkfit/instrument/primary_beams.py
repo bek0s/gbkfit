@@ -301,4 +301,4 @@ class PrimaryBeamImage(PrimaryBeam):
 primary_beam_parser = TypedParser(PrimaryBeam, [
     PrimaryBeamAiry,
     PrimaryBeamGauss,
-    PrimaryBeamImage])
+    PrimaryBeamImage], family='primary_beam')

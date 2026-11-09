@@ -242,4 +242,4 @@ class ExtinctionTable(ExtinctionLaw):
 extinction_law_parser = TypedParser(ExtinctionLaw, [
     ExtinctionCCM,
     ExtinctionCalzetti,
-    ExtinctionTable])
+    ExtinctionTable], family='extinction_law')

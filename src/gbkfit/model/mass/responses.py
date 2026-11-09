@@ -636,4 +636,4 @@ halo_response_parser = TypedParser(HaloResponse, [
     ResponseBlumenthal86,
     ResponseGnedin04,
     ResponseCautun20,
-    ResponseSIDM])
+    ResponseSIDM], family='halo_response')

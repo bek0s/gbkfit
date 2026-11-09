@@ -557,4 +557,4 @@ disk_vertical_parser = TypedParser(DiskVertical, [
     VerticalSech2,
     VerticalSech,
     VerticalGauss,
-    VerticalComponent])
+    VerticalComponent], family='disk_vertical')

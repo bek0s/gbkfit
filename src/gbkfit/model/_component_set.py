@@ -13,22 +13,22 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid
 from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
 from gbkfit.utils import iterutils
-from ..distance import Distance
-from ..extras import Extras
-from ..gravity import Capability, Gravity, GravityNewton
-from ..mass import (
-    ComponentDensity, DiskDensity, MassComponent, MassModel, SpheroidDensity,
-    mass_component_parser)
-from . import _units
 from ._component_plans import ComponentPlans
 from ._functions import GalaxyFunctions
-from ._needs import Need, check_densities, check_needs
-from ._stage import GalaxyStage
 from ._transfer import LineResolution
-from ._units import DataUnit
-from .base import Component, ComponentState, DepthAxis, OpacityCubes
-from .disks.disk import ThickDisk
-from .lines import Band
+from .components import _units
+from .components._needs import Need, check_densities, check_needs
+from .components._stage import GalaxyStage
+from .components._units import DataUnit
+from .components.base import Component, ComponentState, DepthAxis, OpacityCubes
+from .components.disks.disk import ThickDisk
+from .components.lines import Band
+from .distance import Distance
+from .extras import Extras
+from .gravity import Capability, Gravity, GravityNewton
+from .mass import (
+    ComponentDensity, DiskDensity, MassComponent, MassModel, SpheroidDensity,
+    mass_component_parser)
 
 
 __all__ = [

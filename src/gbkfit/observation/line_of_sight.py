@@ -426,4 +426,4 @@ class LineOfSightTransfer(LineOfSight):
 line_of_sight_parser = TypedParser(LineOfSight, [
     LineOfSightFlat,
     LineOfSightGrid,
-    LineOfSightTransfer])
+    LineOfSightTransfer], family='line_of_sight')

@@ -1,14 +1,14 @@
 """
-Tests for the check of configurations (gbkfit.tasks.check): their
-warnings and errors, with their paths, also of texts not saved yet.
+Tests for the descriptions of configurations (gbkfit.setup.describe):
+their warnings and errors, with their paths, also of texts not saved yet.
 """
 
 import pathlib
 
 import ruamel.yaml
 
-from gbkfit import project
-from gbkfit.tasks.check import Problem, check
+from gbkfit import describe, project
+from gbkfit.config import FORMAT_VERSION, ConfigProblem
 
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
@@ -23,8 +23,8 @@ def test_the_problems_of_a_configuration_have_their_paths(tmp_path):
     filename = tmp_path / 'config.yaml'
     yaml.dump(config, filename)
     path = ['galaxies', 0, 'components', 0]
-    # (an unknown option is an error, and the check goes on past it)
-    (unknown, error) = check(str(filename)).problems
+    # (an unknown option is an error, and the description goes on past it)
+    (unknown, error) = describe(str(filename)).problems
     assert (unknown.severity, unknown.path) == ('error', path)
     assert "'rnode' (did you mean 'rnodes'?)" in unknown.message
     assert (error.severity, error.path) == ('error', path)
@@ -34,22 +34,22 @@ def test_the_problems_of_a_configuration_have_their_paths(tmp_path):
     yaml.dump(config, filename)
     fixed = filename.read_text()
     filename.write_text(text)
-    assert check(str(filename), {str(filename): fixed}).problems == []
+    assert describe(str(filename), {str(filename): fixed}).problems == ()
 
 
-def test_the_sections_of_tasks_are_checked_too(tmp_path):
+def test_the_mock_and_bootstrap_sections_are_described_too(tmp_path):
     # (the mock data of eval, the bootstrap of fit: their errors showed
     # only when the task ran)
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     config['mock'] = dict(noise=dict(type='gauss', rms=1), nmock=2)
     filename = tmp_path / 'config.yaml'
     yaml.dump(config, filename)
-    (problem,) = check(str(filename)).problems
+    (problem,) = describe(str(filename)).problems
     assert problem.path == ['mock'] and "'nmock'" in problem.message
 
 
 
-def test_the_files_of_the_sections_of_tasks_are_those_of_the_root(
+def test_the_files_of_the_mock_section_are_those_of_the_root(
         tmp_path, monkeypatch):
     # (the error map of a mock, next to the configuration, checked from
     # another directory: it was looked for there, audit 2026-10-31 #33)
@@ -62,24 +62,24 @@ def test_the_files_of_the_sections_of_tasks_are_those_of_the_root(
     astropy.io.fits.writeto(folder / 'error.fits', np.ones((2, 2, 2)))
     yaml.dump(config, folder / 'config.yaml')
     monkeypatch.chdir(tmp_path)
-    problems = check(str(folder / 'config.yaml')).problems
+    problems = describe(str(folder / 'config.yaml')).problems
     assert not [p for p in problems if 'error.fits' in p.message]
 
 def test_a_configuration_that_cannot_be_read_has_an_error(tmp_path):
     filename = tmp_path / 'config.yaml'
-    assert check(str(filename), {str(filename): 'galaxies: [\n'}) \
+    assert describe(str(filename), {str(filename): 'galaxies: [\n'}) \
         .problems[0].severity == 'error'
-    version = project.FORMAT_VERSION
+    version = FORMAT_VERSION
     message = (
         f"the configuration has no version: 'version: {version}' for the "
         f"format of this gbkfit (gbkfit-cli migrate rewrites configurations "
         f"of older ones)")
-    assert check(str(filename), {str(filename): 'fitter: {}\n'}).problems \
-        == [Problem('error', [], message)]
+    assert describe(str(filename), {str(filename): 'fitter: {}\n'}).problems \
+        == (ConfigProblem('error', [], message),)
     text = f'version: {version}\nfitter: {{}}\n'
-    assert check(str(filename), {str(filename): text}).problems \
-        == [Problem('error', [], "the configuration needs the sections "
-                                 "['galaxies', 'observations', 'params']")]
+    assert describe(str(filename), {str(filename): text}).problems \
+        == (ConfigProblem('error', [], "the configuration needs the sections "
+                                 "['galaxies', 'observations', 'params']"),)
 
 
 def test_the_templates_of_a_project_make_a_setup_without_problems(tmp_path):
@@ -99,4 +99,4 @@ def test_the_templates_of_a_project_make_a_setup_without_problems(tmp_path):
     setup = pathlib.Path(study.create_piece('setups', 'first'))
     assert 'galaxies: [first]' in setup.read_text()
     setup.write_text(setup.read_text() + 'mock: {noise: first}\n')
-    assert check(str(setup)).problems == []
+    assert describe(str(setup)).problems == ()

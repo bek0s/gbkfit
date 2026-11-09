@@ -1523,7 +1523,7 @@ def test_disk_densities_are_azimuthal_means(driver):
     # more azimuths; none outside the ring that the disk selects. The
     # circular velocity that the disk takes from its galaxy is not needed
     from gbkfit.model import ThinDisk
-    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
     from gbkfit.model.components.disks._profiles import NodalDiskDensity
     component = ThinDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
@@ -1560,7 +1560,7 @@ def test_disk_densities_are_exact_at_jumps(driver):
     # rule took as 66 / 256 of a turn): the means of the exponential and
     # of the map where it is selected, against 2^21 azimuths per circle
     from gbkfit.model import ThinDisk
-    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
     from gbkfit.model.components.disks._profiles import NodalDiskDensity
     component = ThinDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
@@ -1607,7 +1607,7 @@ def test_disk_densities_see_small_blobs(driver):
     # by quadrature split at its cusp; and a distortion of width 0.01 along
     # the rings, whose mean is a s erf(pi R / (s sqrt(2))) / (R sqrt(2 pi))
     from gbkfit.model import ThinDisk
-    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
     from gbkfit.model.components.disks._profiles import NodalDiskDensity
     component = ThinDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
@@ -1792,7 +1792,7 @@ def test_pressure_support_is_the_jeans_equation(driver):
     # thin disk: (R / rho) d(rho sigma^2)/dR = -sigma^2 R (1 / 4 + 2 / 10),
     # to the precision of the three-point derivative on the subnodes
     from gbkfit.model import ThinDisk
-    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
     from gbkfit.model.components.disks._profiles import pressure_support
     component = ThinDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
@@ -1826,7 +1826,7 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
     # 1.678 x 4), and of a Sersic one (a ggauss of shape 1.5 = 1 / n),
     # -2 sigma^2 1.5 (R / 4)^1.5 (type 2), here of a dispersion of scale 10
     from gbkfit.model import ThickDisk
-    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
     from gbkfit.model.components.disks._profiles import pressure_support
     component = ThickDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
@@ -2084,7 +2084,7 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
     # at the midplane and at the heights; the factors v(R, z) / v(R, 0) at
     # the subnodes and the 33 heights of the table (1 where v(R, 0) = 0),
     # which the disk interpolates linearly
-    from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
     params = DISK_PROPERTIES | dict(
         ht_s=1, dpt_a=100, distance=10, mass_bh_log_m=10)
     galaxy, state = rotation_at_heights(

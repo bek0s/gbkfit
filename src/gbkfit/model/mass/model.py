@@ -35,7 +35,7 @@ mass_component_parser = TypedParser(MassComponent, [
     MassSpheroid,
     MassLightSpheroid,
     MassTable,
-    MassUser])
+    MassUser], family='mass_component')
 
 
 class MassModel(Serializable):

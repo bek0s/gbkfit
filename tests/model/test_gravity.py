@@ -170,7 +170,7 @@ def test_qumond_of_a_kuzmin_disk(M, a):
     # of the field of a point; in its plane, of |g_N| just above it, of its
     # vertical pull 2 pi G Sigma too: some 60% less than nu(|F_R| / a0) F_R
     # at 0.25 kpc of the light one
-    from gbkfit.model._qumond import phantom_gradient
+    from gbkfit.model.gravity._qumond import phantom_gradient
     disk = Kuzmin(M, a)
     a0 = 1.2e-10 * KPC / 1e6
 
@@ -196,7 +196,7 @@ def test_qumond_of_a_kuzmin_disk(M, a):
 def test_qumond_solves_newtonian_gravity(vertical):
     # The Newtonian gravity on its grid, of the masses of its cells, is
     # that of the mass: of a boost of 1, the phantom is the mass
-    from gbkfit.model._qumond import phantom_gradient
+    from gbkfit.model.gravity._qumond import phantom_gradient
     model = MassModel.load(dict(components=[dict(
         type='disk', name='stars', surface=dict(type='exponential'),
         vertical=vertical)]))

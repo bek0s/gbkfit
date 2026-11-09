@@ -5,9 +5,10 @@ import pytest
 from astropy.io import fits
 
 import gbkfit
-from gbkfit.config import ConfigError
+from gbkfit.config import FORMAT_VERSION, ConfigError
 import gbkfit.project
 from gbkfit import setup
+from gbkfit.setup import _config
 from gbkfit.objective import Objective
 
 
@@ -22,7 +23,7 @@ PARAMS = dict(properties=dict(
 
 HOST = dict(type='host')
 
-VERSION = gbkfit.project.FORMAT_VERSION
+VERSION = FORMAT_VERSION
 
 
 def observation(**options):
@@ -168,10 +169,10 @@ def load_plan(galaxy=GALAXY, **sections):
     the sections of a configuration, on its drivers.
     """
     cfg = dict(galaxies=[galaxy]) | sections
-    group = setup._load_observation_group(cfg)
+    group = _config._load_observation_group(cfg)
     from gbkfit.driver.drivers.host import DriverHost
-    return group.plan(*setup._load_placement(
-        cfg, group, setup._load_drivers(cfg), DriverHost()))
+    return group.plan(*_config._load_placement(
+        cfg, group, _config._load_drivers(cfg), DriverHost()))
 
 
 def test_observations_use_the_drivers_of_the_configuration():
@@ -290,10 +291,10 @@ def test_workers_are_on_drivers_of_the_configuration(tmp_path):
 
 def test_depth_order_has_galaxies_and_groups_of_them():
     from gbkfit.observation import DepthGroup
-    order = setup._load_depth_order(['fg', {'pair': ['a', 'b']}])
+    order = _config._load_depth_order(['fg', {'pair': ['a', 'b']}])
     assert order == ['fg', DepthGroup('pair', ('a', 'b'))]
     with pytest.raises(ConfigError, match="a group of depth_order is"):
-        setup._load_depth_order([{'pair': ['a', 'b'], 'other': ['c']}])
+        _config._load_depth_order([{'pair': ['a', 'b'], 'other': ['c']}])
 
 
 def test_a_configuration_is_described_without_devices(tmp_path):

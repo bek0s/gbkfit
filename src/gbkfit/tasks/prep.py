@@ -26,7 +26,7 @@ import numpy.typing as npt
 from astropy.io import fits
 
 import gbkfit.units
-from gbkfit.config import DataFile, split_data_file
+from gbkfit.config import ConfigError, DataFile, split_data_file
 from gbkfit.instrument import psf_parser
 from gbkfit.io import (
     ErrorKind, MaskKind, casa_beam_table, read_column, read_header,
@@ -89,11 +89,11 @@ def _output(output_dir: str, file: DataFile, role: str = '') -> str:
 
 
 def _check_distinct(outputs: Sequence[str]) -> None:
-    """Raise ValueError if two inputs have one prepared file."""
+    """Raise ConfigError if two inputs have one prepared file."""
     seen = set()
     for output in outputs:
         if output in seen:
-            raise ValueError(
+            raise ConfigError(
                 f"two inputs would be prepared into {output}: inputs of one "
                 f"name (e.g. in two directories) must be renamed")
         seen.add(output)
@@ -312,11 +312,11 @@ def prep_pixel_spectra(
 
     Raises
     ------
-    ValueError
+    ConfigError
         If both noise_error and an errors file are given.
     """
     if noise_error and file_e is not None:
-        raise ValueError(
+        raise ConfigError(
             "give a file of the errors or estimate them from the noise "
             "(noise_error), not both")
     output_dir = _output_dir(output_dir, output_dir_mode)
@@ -424,7 +424,7 @@ def _read_bins(
     try:
         index, nbins = prep.bin_index(bins)
     except ValueError as e:
-        raise ValueError(f"{split_data_file(file)[0]}: {e}") from e
+        raise ConfigError(f"{split_data_file(file)[0]}: {e}") from e
     return header, index, nbins
 
 
@@ -484,7 +484,7 @@ def prep_region_moments(
     for file, arrays in zip(file_d[1:], maps[1:]):
         if not np.array_equal(
                 _read_bins(file_bins, bins_plane, arrays)[1], index):
-            raise ValueError(
+            raise ConfigError(
                 f"{file}: the bins on its pixels are not those on the "
                 f"pixels of {file_d[0]}")
     _write_bins(bins_header, index, file_bins, output_dir)
@@ -498,7 +498,7 @@ def prep_region_moments(
             try:
                 values = prep.bin_values(index, nbins, data)
             except ValueError as e:
-                raise ValueError(f"{filename}: {e}") from e
+                raise ConfigError(f"{filename}: {e}") from e
             write_image(
                 _output(output_dir, file_d[i], role), values.astype(dtype),
                 unit=arrays.unit, overwrite=True)
@@ -622,7 +622,7 @@ def prep_gauss_hermite_moments(
         The output directory (see the module).
     """
     if len(columns) != 4 or (errors is not None and len(errors) != 4):
-        raise ValueError(
+        raise ConfigError(
             "give the columns of V, sigma, h3 and h4, and of their errors "
             "if any, four each")
     table = read_table(file, format_)
@@ -714,12 +714,12 @@ def prep_lsf_resolving_power(
     table = read_table(file, format_)
     point_values = read_column(table, points, points_unit)
     if point_values.unit == astropy.units.dimensionless_unscaled:
-        raise ValueError(
+        raise ConfigError(
             f"the column of the points, {points!r}, has no unit; give it "
             f"(points_unit)")
     power = read_column(table, column, None)
     if power.unit != astropy.units.dimensionless_unscaled:
-        raise ValueError(
+        raise ConfigError(
             f"the column of the resolving powers, {column!r}, has a unit "
             f"({gbkfit.units.format_unit(power.unit)}): a resolving power "
             f"is a number")
@@ -767,7 +767,7 @@ def prep_psf_kmos3d(
     with fits.open(file) as hdus:
         headers = [x.header for x in hdus if x.name.endswith(' PSF')]
     if not headers:
-        raise ValueError(
+        raise ConfigError(
             f"{file}: there is no image of the PSF (an HDU whose name ends "
             f"in ' PSF')")
     psf = psf_parser.dump(prep.kmos3d_psf(headers[0]))

@@ -13,7 +13,7 @@ import ruamel.yaml
 
 import gbkfit
 from gbkfit.config import Column, DataFile, TypedParser, TypedSerializable
-from gbkfit.config.catalogue import Family, Member
+from gbkfit.config import Family, Member
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.instrument import PSF, PSFGauss
 from gbkfit.model import Galaxy

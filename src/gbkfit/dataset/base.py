@@ -323,7 +323,7 @@ class DatasetTypedParser(TypedParser):
     """
 
     def __init__(self):
-        super().__init__(Dataset)
+        super().__init__(Dataset, family='dataset')
 
     def dump_many(
             self, x: Sequence[Dataset], *args: Any, **kwargs: Any

@@ -1,4 +1,3 @@
-from ._functions import GalaxyFunctions
 from ._stage import GalaxyMass, GalaxyStage, GalaxyState
 from ._units import DataUnit, LightUnit
 from .base import *
@@ -10,7 +9,6 @@ from .particles import *
 from .parts import *
 from .points import *
 from .roles import *
-from .scenes import *
 
 from . import cones, disks, spheroids, traits
 from ._nodal import TraitTable

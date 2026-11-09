@@ -31,7 +31,7 @@ def write_image(filename):
 
 
 def test_eval_writes_a_run(tmp_path):
-    from gbkfit.project import FORMAT_VERSION
+    from gbkfit.config import FORMAT_VERSION
     config = dict(
         version=FORMAT_VERSION,
         driver=dict(type='host'),

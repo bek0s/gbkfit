@@ -256,4 +256,4 @@ class WorkerPool:
         self.close()
 
 
-workers_parser = TypedParser(Workers)
+workers_parser = TypedParser(Workers, family='workers')

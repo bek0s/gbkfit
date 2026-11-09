@@ -201,4 +201,4 @@ class ParamModeIncrements(ParamMode):
 
 param_mode_parser = TypedParser(ParamMode, [
     ParamModeIncrements,
-    ParamModeOffsets])
+    ParamModeOffsets], family='param_mode')

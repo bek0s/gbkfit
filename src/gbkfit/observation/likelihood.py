@@ -871,4 +871,4 @@ class LikelihoodUser(Likelihood):
 
 
 likelihood_parser = TypedParser(
-    Likelihood, [LikelihoodGaussian, LikelihoodUser])
+    Likelihood, [LikelihoodGaussian, LikelihoodUser], family='likelihood')

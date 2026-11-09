@@ -1,15 +1,7 @@
 """
-The front door of GBKFIT: galaxies, their observations and their
-parameters set up on drivers (see Setup), in Python or from a
-configuration (see load).
-
-A configuration (a YAML or JSON file, or a dictionary) has the section
-'version', the version of its format (see gbkfit.project.FORMAT_VERSION;
-a setup of a project has that of its project), the sections 'galaxies',
-'observations' and 'params', and can have the sections
-'driver' or 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
-'fitter' and 'workers', and those of the tasks ('mock' and 'bootstrap';
-see gbkfit.tasks), which load leaves to them.
+The configurations of setups: their sections (see schema), the families
+of their options (see catalogue), and their reading (read_config),
+description without devices (describe) and setting up (load).
 """
 
 import dataclasses
@@ -17,40 +9,35 @@ import json
 import logging
 import os
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, NamedTuple, Self, TypeVar
+from typing import Annotated, Any, NamedTuple, TypeVar
 
 import astropy.units
 import ruamel.yaml
 from annotated_types import Ge
 
 from gbkfit.config import (
-    ConfigError, FilePath, Problem, collect_problems, config_path,
-    name_problem, paths_relative_to, report_unknown, strict_mode, warn)
+    FORMAT_VERSION, ConfigError, ConfigProblem, Family, FilePath,
+    collect_problems, config_path, families, name_problem, paths_relative_to,
+    report_unknown, strict_mode, warn)
 from gbkfit.config.schema import SchemaWriter
-from gbkfit.control import StopControl
 import gbkfit.model
 import gbkfit.observation
-import gbkfit.outputs
 import gbkfit.project
 from gbkfit.driver import Driver, driver_by_name, driver_parser
-from gbkfit.fitting import (
-    BootstrapOptions, EvaluationLog, Fitter, FitResult, ProgressObserver,
-    fitter_parser)
-from gbkfit.objective import Evaluation, Objective
-from gbkfit.parallel import WorkerPool, Workers, workers_parser
-from gbkfit.observation import (
-    DepthGroup, GroupPlan, MockOptions, ObservationGroup)
+from gbkfit.fitting import BootstrapOptions, Fitter, fitter_parser
+from gbkfit.parallel import Workers, workers_parser
+from gbkfit.observation import DepthGroup, MockOptions, ObservationGroup
 from gbkfit.params import (
-    JointPrior, ParamDesc, ParamMode, ParamSpace, ParamValues, Property,
-    load_pdescs_dict, param_space_parser)
+    JointPrior, ParamDesc, ParamMode, ParamSpace, Property, load_pdescs_dict,
+    param_space_parser)
 from gbkfit.utils import iterutils
+from ._setup import Setup
 
 
 __all__ = [
     'ConfigFile',
     'Description',
-    'Setup',
-    'SetupEvaluation',
+    'catalogue',
     'describe',
     'load',
     'read_config',
@@ -122,12 +109,11 @@ class _Section(NamedTuple):
     item_options: Mapping[str, Any] = {}
 
 
-# The sections of configurations, by name (those of load and of the
-# tasks)
+# The sections of configurations, by name
 _SECTIONS = dict(
     version=_Section(
         Annotated[int, Ge(1)],
-        "The version of the format (see gbkfit.project.FORMAT_VERSION)."),
+        "The version of the format (see gbkfit.config.FORMAT_VERSION)."),
     galaxies=_Section(
         gbkfit.model.Galaxy, "The galaxies.", True, True,
         dict(driver=str)),
@@ -155,13 +141,32 @@ _SECTIONS = dict(
     fitter=_Section(Fitter, "The fitter."),
     workers=_Section(
         Workers, "The workers of evaluations of several parameters at once."),
-    mock=_Section(MockOptions, "Mock data (the task eval)."),
-    bootstrap=_Section(BootstrapOptions, "A bootstrap (the task fit)."))
+    mock=_Section(MockOptions, "Mock data of the observations."),
+    bootstrap=_Section(BootstrapOptions, "A bootstrap of a fit."))
 
 # The required sections, and the others
 _REQUIRED = tuple(k for k, v in _SECTIONS.items() if v.required)
 _OPTIONAL = tuple(
     k for k, v in _SECTIONS.items() if not v.required and k != 'version')
+
+
+def catalogue() -> dict[str, Family]:
+    """
+    Return the catalogue of GBKFIT: its families, the base classes whose
+    configurations choose one of their members by its type (the option
+    'type'; e.g. the PSFs), and their members (see Family).
+
+    A member that needs modules GBKFIT does not always have (e.g. the
+    nautilus fitter, or the cuda driver; see Serializable.requires) is in
+    it whether they are installed or not, with what to install.
+
+    Returns
+    -------
+    dict
+        The families, by name, in the order of their names.
+    """
+    # (this module imports the whole library, and so every family)
+    return families()
 
 
 def schema() -> dict[str, Any]:
@@ -208,263 +213,6 @@ class ConfigFile(NamedTuple):
     project: gbkfit.project.Project | None
     setup: str | None
     sources: dict[str, Any]
-
-
-@dataclasses.dataclass(frozen=True)
-class SetupEvaluation:
-    """
-    An evaluation of a setup at values of its free elements (see
-    Setup.evaluate).
-
-    Attributes
-    ----------
-    values : ParamValues
-        The values of all parameters, with those of the solved elements
-        that the objective solves there (without an objective, their
-        values without data; see Solve.default).
-    objective : Evaluation or None
-        The evaluation of the objective there (its merits, the parts of
-        its chi-square, and the solved values), or None without an
-        objective.
-    """
-    values: ParamValues
-    objective: Evaluation | None
-
-
-class Setup:
-    """
-    Galaxies, their observations and their parameters, set up on drivers:
-    the plan of the group (see ObservationGroup.plan), the parameters, the
-    objective if every observation has data, the fitter if given, and
-    workers of copies of the objective if given and it has one (see
-    WorkerPool). load sets up a configuration as one. A fitter or workers
-    need no data until a fit (e.g. a configuration of a fit evaluated to
-    draw mocks).
-
-    It holds the memory of its objective and its workers until it is
-    closed (see close; e.g. at the end of a with block).
-
-    Parameters
-    ----------
-    group : ObservationGroup
-        The galaxies and their observations.
-    params : ParamSpace
-        The parameters, of the group: of its parameters, constants and
-        functions (see ObservationGroup.pdescs, constants and
-        function_names).
-    fitter : Fitter, optional
-        The fitter of its fits (see fit).
-    driver : Driver, optional
-        The driver of the galaxies and the observations; the host by
-        default.
-    drivers : Mapping of str to Driver, optional
-        Other drivers of some of them, by their labels (see
-        ObservationGroup.plan).
-    workers : Workers, optional
-        The workers of copies of the objective, which evaluate the batches
-        of points of fits at once (see Workers.start).
-
-    Raises
-    ------
-    ValueError
-        If the parameters are not of the group, the fitter cannot fit
-        them (see Fitter.check), or the group cannot be planned (see
-        ObservationGroup.plan).
-
-    Examples
-    --------
-    >>> group = ObservationGroup(galaxy, observation)
-    >>> params = ParamSpace(
-    ...     group.pdescs(), dict(incl=60, vpt_vt=FreeElement(min=50, max=300)),
-    ...     constants=group.constants())
-    >>> with Setup(group, params, fitter=FitterScipyLeastSquares(),
-    ...            driver=DriverCuda()) as setup:
-    ...     result = setup.fit()
-    """
-
-    def __init__(
-            self,
-            group: ObservationGroup,
-            params: ParamSpace,
-            fitter: Fitter | None = None,
-            driver: Driver | None = None,
-            drivers: Mapping[str, Driver] | None = None,
-            workers: Workers | None = None
-    ):
-        if missing := [n for n in group.pdescs() if n not in params.pdescs()]:
-            raise ValueError(
-                f"the parameters are not those of the group: they lack "
-                f"{missing}")
-        if unknown := sorted(
-                set(params.function_names()) - set(group.function_names())):
-            raise ValueError(
-                f"the galaxies have no functions {unknown}; they have "
-                f"{list(group.function_names())}")
-        if fitter is not None:
-            fitter.check(params, group)
-        self._group_plan = group.plan(driver, drivers)
-        self._params = params
-        self._objective = None
-        if group.has_data():
-            _log.info("setting up objective...")
-            self._objective = Objective(self._group_plan, params.solves())
-        self._fitter = fitter
-        self._pool = None if workers is None or self._objective is None \
-            else workers.start(self._objective)
-
-    @property
-    def group_plan(self) -> GroupPlan:
-        """The plan of the group."""
-        return self._group_plan
-
-    @property
-    def params(self) -> ParamSpace:
-        """The parameters."""
-        return self._params
-
-    @property
-    def objective(self) -> Objective | None:
-        """The objective, or None if an observation has no data."""
-        return self._objective
-
-    @property
-    def fitter(self) -> Fitter | None:
-        """The fitter, if given."""
-        return self._fitter
-
-    @property
-    def pool(self) -> WorkerPool | None:
-        """
-        The workers of copies of the objective, if given and it has one.
-        """
-        return self._pool
-
-    def evaluate(
-            self, free: Mapping[str, float] | Sequence[float] | None = None
-    ) -> SetupEvaluation:
-        """
-        Evaluate the setup at values of its free elements: the values of
-        all parameters, with those of the solved elements, and the
-        evaluation of its objective there, if it has one.
-
-        Parameters
-        ----------
-        free : Mapping of str to float or Sequence of float, optional
-            The values of the free elements (see ParamSpace.evaluate); by
-            default their option 'value'.
-
-        Returns
-        -------
-        SetupEvaluation
-            The evaluation.
-
-        Raises
-        ------
-        ValueError
-            If values of free elements are missing or unknown.
-        ParamEvaluationError
-            If the parameters cannot be evaluated there.
-        """
-        values = self.params.evaluate(free)
-        if self.objective is None:
-            return SetupEvaluation(values, None)
-        evaluation = self.objective.evaluate(values)
-        return SetupEvaluation(
-            self.params.evaluate(free, evaluation.solved), evaluation)
-
-    def outputs(
-            self,
-            evaluation: SetupEvaluation,
-            data: bool = False,
-            extra: bool = False
-    ) -> dict[str, gbkfit.outputs.Output]:
-        """
-        Return the outputs of an evaluation, as the tasks write them, by
-        their paths in a run (see gbkfit.outputs.evaluation_outputs).
-
-        Parameters
-        ----------
-        evaluation : SetupEvaluation
-            The evaluation (see evaluate).
-        data : bool, optional
-            Whether to add the data of the observations ('data', 'error'
-            and 'data_image'; see gbkfit.outputs.data_outputs), which do
-            not change with the values.
-        extra : bool, optional
-            Whether to add the extra outputs of the models ('extra'; e.g.
-            their cubes at high resolution).
-
-        Returns
-        -------
-        dict
-            The outputs: the models ('model', and their images,
-            'model_image'), and with the objective the residuals too
-            ('residual', 'wresidual' and 'residual_image').
-        """
-        residuals = self.objective is not None
-        outputs = gbkfit.outputs.evaluation_outputs(
-            self.group_plan, self.objective, evaluation.values, True,
-            residuals, extra)
-        if data:
-            outputs |= gbkfit.outputs.data_outputs(self.group_plan)
-        return outputs
-
-    def fit(
-            self,
-            observers: Sequence[ProgressObserver] = (),
-            control: StopControl | None = None,
-            log: EvaluationLog | None = None
-    ) -> FitResult:
-        """
-        Fit the data of its objective with its fitter, on its workers if
-        it has them (see Fitter.fit).
-
-        Parameters
-        ----------
-        observers : Sequence of ProgressObserver, optional
-            Who receives the progress of the fit as it runs (see
-            FitProgress).
-        control : StopControl, optional
-            The control of the fit, to stop it.
-        log : EvaluationLog, optional
-            The log of the evaluations: a new one, or that of a fit to
-            resume (with the same objective, parameters and fitter).
-
-        Returns
-        -------
-        FitResult
-            The result.
-
-        Raises
-        ------
-        ValueError
-            If it has no fitter, or no objective (an observation has no
-            data), or the fit cannot start (see Fitter.fit).
-        """
-        if self.fitter is None:
-            raise ValueError("a fit needs a fitter (section 'fitter')")
-        if self.objective is None:
-            raise ValueError("a fit needs data for every observation")
-        return self.fitter.fit(
-            self.objective, self.params, observers, control, log, self.pool)
-
-    def close(self) -> None:
-        """
-        Release the memory of its objective and its plan (allocated again by
-        their next evaluation; see Objective.close and GroupPlan.close),
-        and stop its workers.
-        """
-        if self.pool is not None:
-            self.pool.close()
-        if self.objective is not None:
-            self.objective.close()
-        self.group_plan.close()
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *exc_info: object) -> None:
-        self.close()
 
 
 def read_config(
@@ -551,9 +299,9 @@ class Description:
 
     Attributes
     ----------
-    problems : tuple of Problem
+    problems : tuple of ConfigProblem
         Its warnings and its unknown names, then its error, if any, each
-        with its path in the configuration (see Problem).
+        with its path in the configuration (see ConfigProblem).
     config : dict or None
         The configuration, as plain JSON values (see read_config), if it
         could be read.
@@ -573,7 +321,7 @@ class Description:
         if it could be read: that of the sections that tasks load (e.g.
         'mock').
     """
-    problems: tuple[Problem, ...]
+    problems: tuple[ConfigProblem, ...]
     config: dict[str, Any] | None
     group: ObservationGroup | None
     params: ParamSpace | None
@@ -588,10 +336,11 @@ def describe(
 ) -> Description:
     """
     Describe a configuration without devices: load its galaxies, their
-    observations, its parameters and its fitter as descriptions, with
-    every rule of them checked (see ObservationGroup), but no drivers and
-    no plans; and collect its problems, past its unknown names (see
-    collect_problems). Its drivers are checked by type only.
+    observations, its parameters, its fitter and its options of mock data
+    and of a bootstrap as descriptions, with every rule of them checked
+    (see ObservationGroup), but no drivers and no plans; and collect its
+    problems, past its unknown names (see collect_problems). Its drivers
+    are checked by type only.
 
     Parameters
     ----------
@@ -631,6 +380,8 @@ def describe(
                             "a fit needs data for every observation, and "
                             "some have none: the configuration can only be "
                             "evaluated")
+            _load_mock(cfg, group)
+            _load_bootstrap(cfg, group, params)
             # (the names of drivers, checked against the configurations of
             # those declared)
             declared = {None: cfg['driver']} if 'driver' in cfg \
@@ -653,9 +404,9 @@ def load(
     """
     Set up a configuration: the plan of the observations of its galaxies
     on its drivers, its parameters, its objective if every observation
-    has data, its fitter if it has one, and its workers if it has them
-    (see Setup). Its fitter and workers need data only to fit (see
-    Setup.fit).
+    has data, its fitter, its workers and its options of mock data and of
+    a bootstrap if it has them (see Setup). Its fitter, workers and
+    bootstrap need data only to fit (see Setup.fit).
 
     Parameters
     ----------
@@ -705,7 +456,11 @@ def load(
             cfg, group.pdescs(), group.constants(), group.function_names())
         fitter = _load_fitter(cfg)
         workers = _load_workers(cfg, drivers)
-        return Setup(group, params, fitter, driver, placed, workers)
+        mock_options = _load_mock(cfg, group)
+        bootstrap_options = _load_bootstrap(cfg, group, params)
+        return Setup(
+            group, params, fitter, driver, placed, workers, mock_options,
+            bootstrap_options)
 
 
 def _root(config: Any) -> str | None:
@@ -741,7 +496,7 @@ def _check_version(
 ) -> None:
     """
     Remove the section 'version' of a configuration, and check that it is
-    the current version of the format (see gbkfit.project.FORMAT_VERSION);
+    the current version of the format (see gbkfit.config.FORMAT_VERSION);
     a setup of a project is of the version of its project, which it need
     not give.
 
@@ -752,7 +507,7 @@ def _check_version(
     """
     version = config.pop('version', None) if isinstance(config, dict) \
         else None
-    current = gbkfit.project.FORMAT_VERSION
+    current = FORMAT_VERSION
     if project is not None:
         if version not in (None, project.version()):
             raise ConfigError(
@@ -1011,6 +766,38 @@ def _load_fitter(cfg: dict[str, Any]) -> Fitter | None:
     _log.info("setting up fitter...")
     with config_path('fitter'):
         return fitter_parser.load(cfg['fitter'])
+
+
+def _load_mock(
+        cfg: dict[str, Any], group: ObservationGroup
+) -> MockOptions | None:
+    """
+    Return the options of mock data of a configuration (its section
+    'mock'), if it has them, checked against the observations of a group.
+    """
+    if 'mock' not in cfg:
+        return None
+    with config_path('mock'):
+        options = MockOptions.load(cfg['mock'])
+        options.per_observation(group.nobservations())
+    return options
+
+
+def _load_bootstrap(
+        cfg: dict[str, Any], group: ObservationGroup, params: ParamSpace
+) -> BootstrapOptions | None:
+    """
+    Return the options of a bootstrap of a configuration (its section
+    'bootstrap'), if it has them, checked for a fit of the data of a
+    group, if it has data, and the parameters.
+    """
+    if 'bootstrap' not in cfg:
+        return None
+    with config_path('bootstrap'):
+        options = BootstrapOptions.load(cfg['bootstrap'])
+        if group.has_data():
+            options.check(group, params)
+    return options
 
 
 def _load_workers(

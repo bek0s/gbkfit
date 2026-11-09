@@ -10,10 +10,10 @@ import scipy.special
 import astropy.units as u
 
 from gbkfit.config import ConfigError
-import gbkfit.math
 import gbkfit.units
 from gbkfit.grid import VelocityConvention
 from gbkfit.instrument import *
+from gbkfit.utils import numutils
 
 
 C = 299792.458
@@ -49,7 +49,7 @@ def test_psf_analytic(psf_type, psf_class, psf_params):
     arr_max_index = tuple(i.item() for i in arr_max_index)
     arr_max_index = arr_max_index[::-1]
     assert psf_arr.shape[::-1] == psf_size
-    assert all(gbkfit.math.is_odd(n) for n in psf_size)
+    assert all(numutils.is_odd(n) for n in psf_size)
     assert math.isclose(np.sum(psf_arr), 1.0, abs_tol=1e-9)
     assert arr_max_index == (psf_size[0] // 2, psf_size[1] // 2)
     # Dump tests
@@ -86,7 +86,7 @@ def test_lsf_analytic(lsf_type, lsf_class, lsf_params):
     arr_max_index = tuple(i.item() for i in arr_max_index)
     arr_max_index = arr_max_index[::-1][0]
     assert lsf_arr.shape[0] == lsf_size
-    assert gbkfit.math.is_odd(lsf_size)
+    assert numutils.is_odd(lsf_size)
     assert math.isclose(np.sum(lsf_arr), 1.0, abs_tol=1e-9)
     assert arr_max_index == lsf_size // 2
     # Dump tests

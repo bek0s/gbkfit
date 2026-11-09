@@ -10,7 +10,7 @@ import pytest
 import ruamel.yaml
 
 from gbkfit import project
-from gbkfit.config import ConfigError
+from gbkfit.config import FORMAT_VERSION, ConfigError
 
 
 yaml = ruamel.yaml.YAML(typ='safe')
@@ -148,7 +148,7 @@ def test_a_project_is_found_above_its_files(study, tmp_path):
     assert found.path == study.path
     assert project.find(tmp_path) is None
     write(tmp_path / 'newer' / project.MARKER, dict(
-        format=project.FORMAT, version=project.FORMAT_VERSION + 1))
+        format=project.FORMAT, version=FORMAT_VERSION + 1))
     with pytest.raises(ValueError, match="newer"):
         project.find(tmp_path / 'newer' / 'setups')
 

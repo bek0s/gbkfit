@@ -218,13 +218,13 @@ def test_profile_data_in_another_unit_are_converted():
 
 
 def test_outputs_of_profiles_are_tables():
-    import gbkfit.outputs
+    import gbkfit.setup
     observation = ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc, name='rc')
     data = observation.make_dataset({'vcirc': Data(
         [100.0, 150.0], error=[5.0, 5.0], unit='km/s')})
     plan = ObservationGroup(mass_galaxy(), observation.with_data(data)).plan()
     # (with the extra outputs of the gravity of a galaxy of mass alone)
-    outputs = gbkfit.outputs.evaluation_outputs(
+    outputs = gbkfit.setup.evaluation_outputs(
         plan, Objective(plan), PARAMS, True, True)
     assert {
         f'observations/rc/{kind}/vcirc.ecsv'

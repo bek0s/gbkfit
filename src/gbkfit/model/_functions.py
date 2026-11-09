@@ -17,14 +17,14 @@ import numpy.typing as npt
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
-from .base import ComponentState
-from .disks._profiles import dispersion, rotation
-from .disks.disk import Disk
-from ._stage import GalaxyMass, GalaxyStage, GalaxyState
+from .components._stage import GalaxyMass, GalaxyStage, GalaxyState
+from .components.base import ComponentState
+from .components.disks._profiles import dispersion, rotation
+from .components.disks.disk import Disk
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
-    from .disks._stage import DiskState
+    from .components.disks._stage import DiskState
 
 
 __all__ = [

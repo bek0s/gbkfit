@@ -14,15 +14,13 @@ import time
 from collections.abc import Generator
 from typing import Any, Literal
 
-from gbkfit.config import ConfigError, config_path
+from gbkfit.config import FORMAT_VERSION, ConfigError
 from gbkfit.control import StopControl, Stopped
 import gbkfit.fitting
 import gbkfit.outputs
 import gbkfit.params
 import gbkfit.project
 import gbkfit.setup
-from gbkfit.observation import ObservationGroup
-from gbkfit.params import ParamSpace
 from gbkfit.setup import ConfigFile, Setup
 from gbkfit.utils import numutils
 from . import _detail, _progress
@@ -48,20 +46,18 @@ def fit(
     Fit the galaxies of a configuration to its data, and write the outputs
     as a run (see gbkfit.outputs): the configuration (config.yaml, kind
     'config'), the result in fit/ (see FitResult.write), the data and the
-    models and residuals at the best fit (see data_outputs and
-    evaluation_outputs), and fit/restart.yaml ('restart_config'): the
-    configuration with the free parameters starting at the best fit, to
-    fit again from there (e.g. with another fitter). With a section
-    'workers' (e.g. {type: threads, drivers: [names]}), the batches of
-    points of the fitter are evaluated at once on copies of the objective
-    (see Workers), e.g. one per GPU. As it fits, it shows its
-    progress on the console, writes every report of it to
-    logs/progress.jsonl ('progress'), its log to logs/gbkfit.log ('log';
-    see run_log), and the configuration at the best
-    fit so far to fit/best.yaml ('best_config'; see _progress), from
-    which a stopped fit can start again. In a project, it writes the
-    sources of the configuration too (setup.json, 'setup'; see
-    write_setup).
+    models and residuals at the best fit (see Setup.outputs), and
+    fit/restart.yaml ('restart_config'): the configuration with the free
+    parameters starting at the best fit, to fit again from there (e.g.
+    with another fitter). With a section 'workers' (e.g. {type: threads,
+    drivers: [names]}), the batches of points of the fitter are evaluated
+    at once on copies of the objective (see Workers), e.g. one per GPU. As
+    it fits, it shows its progress on the console, writes every report of
+    it to logs/progress.jsonl ('progress'), its log to logs/gbkfit.log
+    ('log'; see run_log), and the configuration at the best fit so far to
+    fit/best.yaml ('best_config'; see _progress), from which a stopped fit
+    can start again. In a project, it writes the sources of the
+    configuration too (setup.json, 'setup'; see write_setup).
 
     With a section 'bootstrap' (see BootstrapOptions), the errors of the
     best fit are then bootstrapped too (see gbkfit.fitting.run_bootstrap),
@@ -188,19 +184,19 @@ def bootstrap(output_dir: str, config: str) -> None:
         config, ('bootstrap',), ()).config
     result = gbkfit.fitting.FitResult.read(gbkfit.outputs.open(output_dir))
     best = result.best()
-    with gbkfit.setup.load(file) as setup:
-        options = _load_bootstrap(
-            bootstrap_cfg, setup.group_plan.group(), setup.params)
+    # (the configuration of the fit, with the section of the bootstrap)
+    with gbkfit.setup.load(
+            file._replace(config=file.config | bootstrap_cfg)) as setup:
         with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
             control = StopControl()
             with _stop_on_interrupt(control):
-                boot = _bootstrap(setup, best.elements, options, control)
+                boot = _bootstrap(setup, best.elements, control)
             if boot is None:
                 return
             dataclasses.replace(result, bootstrap=boot).write(run)
             run.write(
                 'fit/bootstrap.yaml', 'bootstrap_config',
-                dict(version=gbkfit.project.FORMAT_VERSION) | bootstrap_cfg)
+                dict(version=FORMAT_VERSION) | bootstrap_cfg)
     _log.info(f"bootstrap:\n{_bootstrap_summary(best, boot)}")
 
 
@@ -244,40 +240,22 @@ def _read_config(config: str) -> ConfigFile:
     return file
 
 
-def _load_bootstrap(
-        cfg: dict[str, Any], group: ObservationGroup, params: ParamSpace
-) -> gbkfit.fitting.BootstrapOptions | None:
-    """
-    Load the options of the bootstrap of a configuration (its section
-    'bootstrap'), if it has them, checked for a fit of the observations of
-    a group and the parameters.
-    """
-    if 'bootstrap' not in cfg:
-        return None
-    with config_path('bootstrap'):
-        options = gbkfit.fitting.BootstrapOptions.load(cfg['bootstrap'])
-        options.check(group, params)
-    return options
-
-
 def _bootstrap(
         setup: Setup,
         start: dict[str, float],
-        options: gbkfit.fitting.BootstrapOptions,
         control: StopControl,
         log: gbkfit.fitting.SubFitLog | None = None
 ) -> gbkfit.fitting.Bootstrap | None:
     """
-    Bootstrap a fit from its best fit (the value of every element), on the
-    workers of the setup, if any, with the log, if given: the bootstrap,
+    Bootstrap a fit of a setup from its best fit (the value of every
+    element), with the log, if given (see Setup.bootstrap): the bootstrap,
     or None if it was stopped.
     """
-    _log.info(f"bootstrap started ({options.nsamples()} refits)")
+    _log.info(
+        f"bootstrap started ({setup.bootstrap_options.nsamples()} refits)")
     begin = time.perf_counter()
     try:
-        boot = gbkfit.fitting.run_bootstrap(
-            setup.objective, setup.params, start, setup.fitter, options,
-            setup.pool, control, log)
+        boot = setup.bootstrap(start, control, log)
     except Stopped:
         _log.warning(
             "bootstrap stopped: the result has no bootstrap"
@@ -326,9 +304,6 @@ def _fit(
     with the logs, if given, and write the outputs to its run (see fit).
     """
     params = setup.params
-    options = _load_bootstrap(
-        cfg, setup.group_plan.group(), setup.params)
-
     _log.info("model-fitting started")
 
     def write_best(free: dict[str, float]) -> None:
@@ -355,14 +330,13 @@ def _fit(
     _write_config(
         run, 'fit/restart.yaml', 'restart_config', cfg, root, params,
         result.best().elements)
-    if options is not None:
+    if setup.bootstrap_options is not None:
         if bootstrap_log is not None:
             run.record(_BOOTSTRAP_LOG, 'bootstrap_log', 'jsonl')
         control = StopControl()
         with _stop_on_interrupt(control):
             boot = _bootstrap(
-                setup, result.best().elements, options, control,
-                bootstrap_log)
+                setup, result.best().elements, control, bootstrap_log)
         if boot is not None:
             result = dataclasses.replace(result, bootstrap=boot)
             result.write(run)

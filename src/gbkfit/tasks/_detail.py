@@ -11,6 +11,7 @@ import os
 from collections.abc import Generator, Mapping
 from typing import Any
 
+from gbkfit.config import FORMAT_VERSION
 import gbkfit.outputs
 import gbkfit.project
 from gbkfit.setup import ConfigFile
@@ -86,6 +87,6 @@ def write_config(
     directory = os.path.dirname(os.path.join(run.path, path))
     run.write(
         path, kind,
-        dict(version=gbkfit.project.FORMAT_VERSION,
+        dict(version=FORMAT_VERSION,
              root=os.path.relpath(root, directory)) | copy.deepcopy(cfg),
         **ids)

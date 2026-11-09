@@ -9,7 +9,7 @@ import pytest
 from gbkfit.config import ConfigError, strict_mode
 from gbkfit.grid import Coords, Grid
 from gbkfit.model import BandEmission, LineEmission, galaxy_parser
-from gbkfit.model.components._component_plans import opacity_cubes
+from gbkfit.model._component_plans import opacity_cubes
 from gbkfit.observation import Depth, LineOfSightGrid
 from modelutils import located_message
 

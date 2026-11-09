@@ -11,7 +11,8 @@ import pytest
 import ruamel.yaml
 from astropy.io import fits
 
-from gbkfit import outputs, project
+from gbkfit import outputs
+from gbkfit.config import FORMAT_VERSION
 from test_eval import data_grid
 
 
@@ -189,7 +190,7 @@ def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
     assert (result['bootstrap']['nsamples'],
             result['bootstrap']['nfailed']) == (3, 0)
     assert len(read(tmp_path / 'fit', 'bootstrap')) == 3
-    later = dict(version=project.FORMAT_VERSION, bootstrap=dict(
+    later = dict(version=FORMAT_VERSION, bootstrap=dict(
         nsamples=4, scheme=scheme,
         fitter=dict(type='scipy.least_squares', method='lm')))
     yaml.dump(later, tmp_path / 'later.yaml')

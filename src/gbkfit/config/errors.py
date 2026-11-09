@@ -14,7 +14,7 @@ from typing import Literal, NamedTuple
 
 __all__ = [
     'ConfigError',
-    'Problem',
+    'ConfigProblem',
     'UnknownNamesError',
     'collect_problems',
     'config_path',
@@ -361,7 +361,7 @@ def warn(message: str) -> None:
     _log_problem(ConfigError(message))
 
 
-class Problem(NamedTuple):
+class ConfigProblem(NamedTuple):
     """
     A problem of a configuration: an error or a warning, its path in the
     configuration (option names and list indices; e.g. ['galaxies', 0]),
@@ -375,12 +375,12 @@ class Problem(NamedTuple):
 # The problems collected in this context (thread or task), if any (see
 # collect_problems): per context, as strict mode, so that configurations
 # loaded at once in two threads do not collect those of each other
-_problems: contextvars.ContextVar[list[Problem] | None] = \
+_problems: contextvars.ContextVar[list[ConfigProblem] | None] = \
     contextvars.ContextVar('problems', default=None)
 
 
 @contextlib.contextmanager
-def collect_problems() -> Generator[list[Problem]]:
+def collect_problems() -> Generator[list[ConfigProblem]]:
     """
     Collect the problems of the configuration loaded in the block: the
     warnings logged about it (see warn), its unknown names, as errors (see
@@ -395,10 +395,10 @@ def collect_problems() -> Generator[list[Problem]]:
 
     Yields
     ------
-    list of Problem
+    list of ConfigProblem
         The problems, as they come.
     """
-    problems: list[Problem] = []
+    problems: list[ConfigProblem] = []
     token = _problems.set(problems)
     try:
         yield problems
@@ -416,14 +416,14 @@ def collect_problems() -> Generator[list[Problem]]:
 
 def _problem(
         severity: Literal['error', 'warning'], error: Exception
-) -> Problem:
+) -> ConfigProblem:
     """Return the problem of an error (or of a warning)."""
     path, context = error_location(error)
     message = error.message if isinstance(error, ConfigError) \
         else f"{type(error).__name__}: {error}"
     if context is not None:
         message = f"[{context}] {message}"
-    return Problem(severity, path, message)
+    return ConfigProblem(severity, path, message)
 
 
 def _log_problem(error: ConfigError, note: str | None = None) -> None:

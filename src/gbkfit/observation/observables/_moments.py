@@ -11,12 +11,12 @@ from annotated_types import Ge, Lt
 
 from gbkfit.config import Choices, warn
 from gbkfit.grid import SpectralAxis, check_convention
-import gbkfit.math
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import STARS, LineEmission, StarsEmission
 from gbkfit.params import ModelEvaluationError
+from gbkfit.utils import numutils
 from . import _dcube
 from .base import ModelData
 
@@ -121,9 +121,9 @@ def spectral_axis(
             rval = float((vmin + vmax) / 2)
         if size is None:
             half = max(vmax - rval, rval - vmin)
-            size = int(gbkfit.math.roundu_odd(2 * half / step))
+            size = int(numutils.roundu_odd(2 * half / step))
     if size is None:
-        size = int(gbkfit.math.roundu_odd(SPEC_RANGE / step))
+        size = int(numutils.roundu_odd(SPEC_RANGE / step))
     return spectral.replaced(SpectralAxis(
         size=size, step=step,
         rpix=size / 2 - 0.5 if spectral.rpix() is None else spectral.rpix(),

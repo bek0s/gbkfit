@@ -15,14 +15,14 @@ import pytest
 import ruamel.yaml
 
 from gbkfit import migration, project, setup
-from gbkfit.config import ConfigError
+from gbkfit.config import FORMAT_VERSION, ConfigError
 from gbkfit.observation import observable_parser
 
 
 yaml = ruamel.yaml.YAML(typ='safe')
 
 # The current version of the format
-VERSION = project.FORMAT_VERSION
+VERSION = FORMAT_VERSION
 
 OBSERVATION = dict(
     type='sky', name='kmos', line_of_sight=dict(type='flat'),
@@ -121,7 +121,7 @@ def test_a_project_is_migrated_across_its_pieces(tmp_path):
     assert study.piece('params', 'flux') == dict(
         properties=dict(kmos_flux_scale=1))
     assert yaml.load(tmp_path / 'study' / project.MARKER)['version'] == \
-        project.FORMAT_VERSION
+        FORMAT_VERSION
 
 
 def test_a_project_of_the_current_version_is_left_as_it_is(tmp_path):
@@ -265,7 +265,7 @@ def test_each_version_has_the_module_of_its_rules():
     # the order of the versions
     modules = [
         importlib.import_module(f'gbkfit.migration.v{version}')
-        for version in range(2, project.FORMAT_VERSION + 1)]
+        for version in range(2, FORMAT_VERSION + 1)]
     for version, module in enumerate(modules, 2):
         assert module.RULES
         assert {rule.version() for rule in module.RULES} == {version}

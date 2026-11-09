@@ -124,7 +124,7 @@ class Serializable(abc.ABC):
         >>> jsonschema.validate(dict(type='gauss', sigma=0.6), PSF.schema())
         >>> jsonschema.validate(dict(sigma=0.6), PSFGauss.schema())
         """
-        # (the schema imports the catalogue, which imports every family)
+        # (the schema imports this module)
         from .schema import class_schema
         return class_schema(cls)
 
@@ -554,13 +554,13 @@ def _item_type(type_: Any) -> Any:
 def _family_parser(type_: Any) -> 'TypedParser | None':
     """
     Return the parser of the family whose base is an annotation (e.g.
-    that of the PSFs, for PSF; see the catalogue), or None if it is
-    the base of none.
+    that of the PSFs, for PSF; see gbkfit.config.families), or None if it
+    is the base of none.
     """
     if not (isinstance(type_, type) and issubclass(type_, TypedSerializable)):
         return None
-    # (the catalogue imports every family, and so this module)
-    from .catalogue import family_of
+    # (families imports this module)
+    from .families import family_of
     family = family_of(type_)
     return None if family is None else family.parser
 

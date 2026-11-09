@@ -342,4 +342,4 @@ class DistanceRedshift(Distance):
 
 distance_parser = TypedParser(Distance, [
     DistanceDirect,
-    DistanceRedshift])
+    DistanceRedshift], family='distance')

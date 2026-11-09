@@ -11,6 +11,7 @@ from typing import Any
 
 from gbkfit.utils import iterutils
 from .errors import ConfigError, config_path, describe_unknown, quoted_names
+from .families import register_family
 from .serializable import Serializable, TypedSerializable, missing_modules
 
 
@@ -258,17 +259,25 @@ class TypedParser(Parser):
         The class.
     classes : type or list of type, optional
         The subclasses to register (see register).
+    family : str, optional
+        The name of the family of the class, which the parser registers
+        (see gbkfit.config.families; e.g. 'psf'): every parser of the
+        library names one.
     """
 
     def __init__(
             self,
             cls: type[TypedSerializable],
             classes: (type[TypedSerializable] | list[type[TypedSerializable]]
-                      | None) = None
+                      | None) = None,
+            *,
+            family: str | None = None
     ):
         super().__init__(cls)
         self._classes: dict[str, type[TypedSerializable]] = {}
         self.register(classes)
+        if family is not None:
+            register_family(family, self)
 
     def register(
             self,

@@ -138,7 +138,7 @@ class WeightAzimuthRange(WeightTrait):
 
 weight_trait_parser = TypedParser(WeightTrait, [
     WeightAzimuthPower,
-    WeightAzimuthRange])
+    WeightAzimuthRange], family='weight_trait')
 
 
 class Weights(Serializable):

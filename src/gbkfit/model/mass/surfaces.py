@@ -839,4 +839,4 @@ disk_surface_parser = TypedParser(DiskSurface, [
     SurfaceExponential,
     SurfaceNodewise,
     SurfaceGaussianRing,
-    SurfaceComponent])
+    SurfaceComponent], family='disk_surface')

@@ -860,7 +860,7 @@ class PriorTruncated(Prior):
         return np.clip(x, self._minimum, self._maximum)
 
 
-prior_parser = TypedParser(Prior)
+prior_parser = TypedParser(Prior, family='prior')
 prior_parser.register(PriorUniform)
 prior_parser.register(PriorLogUniform)
 prior_parser.register(PriorSine)

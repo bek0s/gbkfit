@@ -468,12 +468,12 @@ def _checked_terms(terms: np.ndarray) -> np.ndarray:
 
 light_profile_parser = TypedParser(LightProfile, [
     LightSersic,
-    LightMGE])
+    LightMGE], family='light_profile')
 
 spheroid_kinematics_parser = TypedParser(SpheroidKinematics, [
     JeansKinematics,
     SpheroidTraitsKinematics,
-    SchwarzschildKinematics])
+    SchwarzschildKinematics], family='spheroid_kinematics')
 
 
 # The geometric parameters of a spheroid: its centre, the orientation of

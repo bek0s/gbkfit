@@ -520,7 +520,7 @@ class JointPriorMVN(JointPrior):
         return float(value[0])
 
 
-joint_prior_parser = TypedParser(JointPrior)
+joint_prior_parser = TypedParser(JointPrior, family='joint_prior')
 joint_prior_parser.register(JointPriorGauss)
 joint_prior_parser.register(JointPriorSmooth)
 joint_prior_parser.register(JointPriorSmooth2D)

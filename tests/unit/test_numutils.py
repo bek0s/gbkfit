@@ -44,3 +44,39 @@ def test_nativify_makes_numpy_values_writable_as_json():
     assert native == dict(array=[0, 1, 2], flag=True, number=1.5,
                           nested=[[2, 'a']])
     json.dumps(native)
+
+
+def test_is_even_and_is_odd():
+    for num in [0, 0.0, 2, 2.0, 2.5]:
+        assert numutils.is_even(+num)
+        assert numutils.is_even(-num)
+        assert not numutils.is_odd(+num)
+        assert not numutils.is_odd(-num)
+    for num in [1, 1.0, 1.5]:
+        assert not numutils.is_even(+num)
+        assert not numutils.is_even(-num)
+        assert numutils.is_odd(+num)
+        assert numutils.is_odd(-num)
+
+
+def test_round_functions():
+    # round even
+    assert numutils.roundu_even(0.0) == 0
+    assert numutils.roundu_even(+3.0) == +4
+    assert numutils.roundu_even(-3.0) == -2
+    assert numutils.roundu_even(+3.5) == +4
+    assert numutils.roundu_even(-3.5) == -2
+    # round odd
+    assert numutils.roundu_odd(0.0) == 1
+    assert numutils.roundu_odd(+2.0) == +3
+    assert numutils.roundu_odd(-2.0) == -1
+    assert numutils.roundu_odd(+2.5) == +3
+    assert numutils.roundu_odd(-2.5) == -1
+    # round multiple
+    assert numutils.roundu_multiple(+1.0, 2.0) == +2
+    assert numutils.roundu_multiple(+5.0, 2.0) == +6
+    assert numutils.roundu_multiple(-1.0, 2.0) == 0
+    assert numutils.roundu_multiple(-5.0, 2.0) == -4
+    # round power of two
+    assert numutils.roundu_po2(3.0) == 4
+    assert numutils.roundu_po2(3.5) == 4

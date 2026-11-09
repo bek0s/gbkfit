@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import scipy.ndimage
 
+from gbkfit.config import ConfigError
 from gbkfit.grid import VelocityConvention
 from gbkfit.io import read_data
 from gbkfit.tasks import prep
@@ -389,7 +390,7 @@ def test_inputs_of_one_name_are_an_error():
     for folder in ('a', 'b'):
         os.makedirs(folder)
         fits.writeto(f'{folder}/vel.fits', np.ones((4, 5), np.float32))
-    with pytest.raises(ValueError, match="two inputs"):
+    with pytest.raises(ConfigError, match="two inputs"):
         prep.prep_pixel_moments(
             ['a/vel.fits', 'b/vel.fits'], None, None, *[None] * 8, False,
             None, 'float32')
@@ -917,7 +918,7 @@ def test_the_errors_of_a_prepared_cube_can_be_its_noise():
     prep_pixel_spectra('cube.fits', noise_error=True)
     np.testing.assert_allclose(
         fits.getdata('prep_cube_error.fits'), 0.05, rtol=0.3)
-    with pytest.raises(ValueError, match="not both"):
+    with pytest.raises(ConfigError, match="not both"):
         prep.prep_pixel_spectra(
             'cube.fits', 'errors.fits', None, *[None] * 9, False, None,
             'float32', noise_error=True)
@@ -1089,7 +1090,7 @@ def test_lsf_of_resolving_powers(tmp_path):
     from gbkfit.instrument import lsf_parser
     path = tmp_path / 'r.csv'
     path.write_text('wave,R\n1.0,2000\n2.0,3000\n')
-    with pytest.raises(ValueError, match="'wave', has no unit"):
+    with pytest.raises(ConfigError, match="'wave', has no unit"):
         prep.prep_lsf_resolving_power(str(path), 'wave', 'R', None, None,
                                       str(tmp_path))
     prep.prep_lsf_resolving_power(
@@ -1104,7 +1105,7 @@ def test_lsf_of_resolving_powers(tmp_path):
     wrong = tmp_path / 'r.ecsv'
     astropy.table.QTable(dict(
         wave=[1.0, 2.0] * u.um, R=[1.0, 2.0] * u.AA)).write(wrong)
-    with pytest.raises(ValueError, match="'R', has a unit"):
+    with pytest.raises(ConfigError, match="'R', has a unit"):
         prep.prep_lsf_resolving_power(
             str(wrong), 'wave', 'R', output_dir=str(tmp_path))
 

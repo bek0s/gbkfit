@@ -172,7 +172,8 @@ class PressureSupportSelfGravitating(PressureSupport):
 
 
 pressure_support_parser = TypedParser(
-    PressureSupport, [PressureSupportJeans, PressureSupportSelfGravitating])
+    PressureSupport, [PressureSupportJeans, PressureSupportSelfGravitating],
+    family='pressure_support')
 
 
 class VPTraitUniform(VPTrait):

@@ -33,15 +33,15 @@ import numpy as np
 import scipy.special
 from annotated_types import Gt
 
-import gbkfit.math
 import gbkfit.units
 from gbkfit.config import (
     DataFile, ScalarQuantity, TypedParser, UnitKinds, Varying,
     check_options, split_data_file)
 from gbkfit.grid import Grid, VelocityConvention
 from gbkfit.io import parse_wcs, read_image, spectral_points
-from . import _detail
+from . import _detail, _profiles
 from ._detail import WING_FLUX
+from .varying import SpectralTable
 
 
 __all__ = [
@@ -73,10 +73,13 @@ _Width: TypeAlias = Annotated[ScalarQuantity, Gt(0), UnitKinds(
     wavelength=('Angstrom', 'nm', 'um'), frequency=('Hz', 'kHz', 'MHz', 'GHz'),
     velocity=('m/s', 'km/s'), pixels=('pix',))]
 
+# The width of an analytic LSF, which can vary along the spectral axis
+_VaryingWidth: TypeAlias = Annotated[_Width, Varying(SpectralTable)]
+
 # The shapes of the generalised Gaussian and of the Moffat (for a finite
 # flux, beta > 1/2)
-_GGaussBeta: TypeAlias = Annotated[float, Gt(0), Varying()]
-_MoffatBeta: TypeAlias = Annotated[float, Gt(0.5), Varying()]
+_GGaussBeta: TypeAlias = Annotated[float, Gt(0), Varying(SpectralTable)]
+_MoffatBeta: TypeAlias = Annotated[float, Gt(0.5), Varying(SpectralTable)]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -410,13 +413,13 @@ class LSFGauss(_AnalyticLSF):
     def type_title() -> str:
         return 'Gaussian'
 
-    def __init__(self, sigma: Annotated[_Width, Varying()]):
+    def __init__(self, sigma: _VaryingWidth):
         check_options(LSFGauss.__init__, locals())
         super().__init__(sigma)
         self._given_as(sigma=sigma)
 
     @classmethod
-    def from_fwhm(cls, fwhm: Annotated[_Width, Varying()]) -> 'LSFGauss':
+    def from_fwhm(cls, fwhm: _VaryingWidth) -> 'LSFGauss':
         """
         Make the Gaussian of a full width at half maximum: of sigma =
         FWHM / (2 sqrt(2 ln 2)).
@@ -433,7 +436,7 @@ class LSFGauss(_AnalyticLSF):
             The LSF.
         """
         check_options(LSFGauss.from_fwhm, locals())
-        return cls(gbkfit.math.gauss_fwhm_to_sigma(fwhm))._given_as(
+        return cls(_profiles.gauss_fwhm_to_sigma(fwhm))._given_as(
             fwhm=fwhm)
 
     def _wings(self) -> float:
@@ -441,7 +444,7 @@ class LSFGauss(_AnalyticLSF):
         return np.sqrt(2) * scipy.special.erfinv(1 - WING_FLUX)
 
     def _profile(self, v: np.ndarray, scale: float) -> np.ndarray:
-        return gbkfit.math.gauss_1d_fun(v, 1, 0, scale)
+        return _profiles.gauss_1d_fun(v, 1, 0, scale)
 
 
 class LSFGGauss(_AnalyticLSF):
@@ -471,7 +474,7 @@ class LSFGGauss(_AnalyticLSF):
 
     def __init__(
             self,
-            alpha: Annotated[_Width, Varying()],
+            alpha: _VaryingWidth,
             beta: _GGaussBeta
     ):
         check_options(LSFGGauss.__init__, locals())
@@ -482,7 +485,7 @@ class LSFGGauss(_AnalyticLSF):
     @classmethod
     def from_fwhm(
             cls,
-            fwhm: Annotated[_Width, Varying()],
+            fwhm: _VaryingWidth,
             beta: _GGaussBeta
     ) -> 'LSFGGauss':
         """
@@ -503,7 +506,7 @@ class LSFGGauss(_AnalyticLSF):
             The LSF.
         """
         check_options(LSFGGauss.from_fwhm, locals())
-        alpha = gbkfit.math.ggauss_fwhm_to_alpha(fwhm, beta)
+        alpha = _profiles.ggauss_fwhm_to_alpha(fwhm, beta)
         return cls(alpha, beta)._given_as(fwhm=fwhm, beta=beta)
 
     def _wings(self) -> float:
@@ -513,7 +516,7 @@ class LSFGGauss(_AnalyticLSF):
             1 / self._beta, 1 - WING_FLUX) ** (1 / self._beta)
 
     def _profile(self, v: np.ndarray, scale: float) -> np.ndarray:
-        return gbkfit.math.ggauss_1d_fun(v, 1, 0, scale, self._beta)
+        return _profiles.ggauss_1d_fun(v, 1, 0, scale, self._beta)
 
 
 class LSFLorentz(_AnalyticLSF):
@@ -540,13 +543,13 @@ class LSFLorentz(_AnalyticLSF):
     def type_title() -> str:
         return 'Lorentzian'
 
-    def __init__(self, gamma: Annotated[_Width, Varying()]):
+    def __init__(self, gamma: _VaryingWidth):
         check_options(LSFLorentz.__init__, locals())
         super().__init__(gamma)
         self._given_as(gamma=gamma)
 
     @classmethod
-    def from_fwhm(cls, fwhm: Annotated[_Width, Varying()]) -> 'LSFLorentz':
+    def from_fwhm(cls, fwhm: _VaryingWidth) -> 'LSFLorentz':
         """
         Make the Lorentzian of a full width at half maximum: of gamma =
         FWHM / 2.
@@ -571,7 +574,7 @@ class LSFLorentz(_AnalyticLSF):
         return np.tan(np.pi / 2 * (1 - WING_FLUX))
 
     def _profile(self, v: np.ndarray, scale: float) -> np.ndarray:
-        return gbkfit.math.lorentz_1d_fun(v, 1, 0, scale)
+        return _profiles.lorentz_1d_fun(v, 1, 0, scale)
 
 
 class LSFMoffat(_AnalyticLSF):
@@ -600,7 +603,7 @@ class LSFMoffat(_AnalyticLSF):
 
     def __init__(
             self,
-            alpha: Annotated[_Width, Varying()],
+            alpha: _VaryingWidth,
             beta: _MoffatBeta
     ):
         check_options(LSFMoffat.__init__, locals())
@@ -611,7 +614,7 @@ class LSFMoffat(_AnalyticLSF):
     @classmethod
     def from_fwhm(
             cls,
-            fwhm: Annotated[_Width, Varying()],
+            fwhm: _VaryingWidth,
             beta: _MoffatBeta
     ) -> 'LSFMoffat':
         """
@@ -632,7 +635,7 @@ class LSFMoffat(_AnalyticLSF):
             The LSF.
         """
         check_options(LSFMoffat.from_fwhm, locals())
-        alpha = gbkfit.math.moffat_fwhm_to_alpha(fwhm, beta)
+        alpha = _profiles.moffat_fwhm_to_alpha(fwhm, beta)
         return cls(alpha, beta)._given_as(fwhm=fwhm, beta=beta)
 
     def _wings(self) -> float:
@@ -643,7 +646,7 @@ class LSFMoffat(_AnalyticLSF):
             0.5, self._beta - 0.5, 1 - WING_FLUX)) - 1)
 
     def _profile(self, v: np.ndarray, scale: float) -> np.ndarray:
-        return gbkfit.math.moffat_1d_fun(v, 1, 0, scale, self._beta)
+        return _profiles.moffat_1d_fun(v, 1, 0, scale, self._beta)
 
 
 class LSFProfile(LSF):
@@ -1056,4 +1059,4 @@ lsf_parser = TypedParser(LSF, [
     LSFSum,
     LSFConvolution,
     LSFHanning,
-    LSFProfiles])
+    LSFProfiles], family='lsf')

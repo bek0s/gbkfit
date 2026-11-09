@@ -14,9 +14,8 @@ from typing import Any, TextIO
 
 import ruamel.yaml
 
-from gbkfit.config import ConfigError
+from gbkfit.config import FORMAT_VERSION, ConfigError
 import gbkfit.project
-from gbkfit.project import FORMAT_VERSION
 from . import v2, v3, v4, v5, v6, v7
 from .rules import Change, Rule, insert_first
 
@@ -147,7 +146,7 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
     """
     Rewrite the pieces and the setups of a project of an older version of
     the format in the current one, in place, and mark it of the current
-    version (see gbkfit.project.FORMAT_VERSION).
+    version (see gbkfit.config.FORMAT_VERSION).
 
     The pieces are migrated together, as one configuration with all of
     them (so that a rule can change a piece of observations and one of
@@ -277,7 +276,7 @@ def _mark_current(path: str) -> None:
     with _replacing(os.path.join(path, gbkfit.project.MARKER)) as f:
         ruamel.yaml.YAML(typ='safe').dump(dict(
             format=gbkfit.project.FORMAT,
-            version=gbkfit.project.FORMAT_VERSION), f)
+            version=FORMAT_VERSION), f)
 
 
 @contextlib.contextmanager

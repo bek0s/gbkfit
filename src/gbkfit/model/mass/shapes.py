@@ -382,4 +382,4 @@ class ShapeFlattened(SpheroidShape):
 
 spheroid_shape_parser = TypedParser(SpheroidShape, [
     ShapeSphere,
-    ShapeFlattened])
+    ShapeFlattened], family='spheroid_shape')

@@ -591,7 +591,8 @@ class LensShear(LensMass):
 
 
 lens_mass_parser = TypedParser(LensMass, [
-    LensDeflectionMap, LensEPL, LensMultipole, LensNFW, LensSIE, LensShear])
+    LensDeflectionMap, LensEPL, LensMultipole, LensNFW, LensSIE, LensShear],
+    family='lens_mass')
 
 
 def _centre_pdescs() -> dict[str, ParamScalarDesc]:

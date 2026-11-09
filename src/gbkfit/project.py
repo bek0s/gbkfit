@@ -36,12 +36,11 @@ from typing import Any, NamedTuple
 
 import ruamel.yaml
 
-from gbkfit.config import ConfigError, config_path
+from gbkfit.config import FORMAT_VERSION, ConfigError, config_path
 
 
 __all__ = [
     'FORMAT',
-    'FORMAT_VERSION',
     'MARKER',
     'TEMPLATES',
     'Project',
@@ -56,12 +55,6 @@ __all__ = [
 
 
 FORMAT = 'gbkfit-project'
-# The version of the format of configurations, which projects (their
-# marker) and configuration files (their section 'version') carry: 2, the
-# configurations of 2026-10-25 on, 3, of 2026-10-28 on, 4, of 2026-11-04
-# on, 5, of 2026-11-05 on, 6, of 2026-11-08 on, and 7, of 2026-11-09 on;
-# gbkfit.migration rewrites the older ones
-FORMAT_VERSION = 7
 MARKER = 'gbkfit-project.yaml'
 
 # The folders of the pieces, by the sections and options of the

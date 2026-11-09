@@ -1705,7 +1705,7 @@ def test_multistart_runs_any_optimizer_with_its_options():
     # CMA-ES) at another initial value; samplers have no initial value
     pytest.importorskip('cma')
     from gbkfit.fitting import fitter_parser
-    from gbkfit.fitting.fitters.cmaes.core import FitParamCMAES
+    from gbkfit.fitting.fitters.cmaes import FitParamCMAES
     multistart = fitter_parser.load(dict(
         type='multistart', local=dict(type='cmaes')))
     assert multistart.fit_param_class() is FitParamCMAES

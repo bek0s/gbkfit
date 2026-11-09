@@ -23,14 +23,14 @@ import astropy.constants
 import astropy.units
 import numpy as np
 
-import gbkfit.outputs
 import gbkfit.project
+import gbkfit.setup
 import gbkfit.units
 from gbkfit.config import ConfigError, error_message, paths_relative_to
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.model import (
-    BandEmission, Extras, Galaxy, LineEmission, galaxy_parser)
-from gbkfit.model.components import GalaxyFunctions
+    BandEmission, Extras, Galaxy, GalaxyFunctions, LineEmission,
+    galaxy_parser)
 from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.params import ParamSpace
 
@@ -273,9 +273,9 @@ class Renders:
                 group = ObservationGroup([galaxy], seen)
                 values = _values(group, properties)
                 plan = group.plan(DriverHost())
-                outputs = gbkfit.outputs.evaluation_outputs(
+                outputs = gbkfit.setup.evaluation_outputs(
                     plan, None, values, True, False, False) \
-                    | gbkfit.outputs.data_outputs(plan)
+                    | gbkfit.setup.data_outputs(plan)
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
         observable = seen[0].observable()

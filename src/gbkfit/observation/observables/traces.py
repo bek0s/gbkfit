@@ -499,4 +499,4 @@ def _cubic_spline(
 trace_parser = TypedParser(Trace, [
     TracePolynomial,
     TraceGrismConf,
-    TraceTable])
+    TraceTable], family='trace')

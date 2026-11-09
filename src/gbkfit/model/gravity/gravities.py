@@ -24,11 +24,11 @@ from gbkfit.config import (
     Choices, TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
+from ..mass import MassContext, MassModel, forces_in_plane
+from ..mass.units import G
 from ._field_grid import FieldGradient
 from ._qumond import phantom_gradient
 from ._scalar_field import solve_field
-from .mass import MassContext, MassModel, forces_in_plane
-from .mass.units import G
 
 
 __all__ = [
@@ -834,4 +834,5 @@ def _forces_of_components(mass_model: MassModel) -> str | None:
 
 
 gravity_parser = TypedParser(
-    Gravity, [GravityNewton, GravityMOND, GravityHuSawicki, GravityPalatini])
+    Gravity, [GravityNewton, GravityMOND, GravityHuSawicki, GravityPalatini],
+    family='gravity')

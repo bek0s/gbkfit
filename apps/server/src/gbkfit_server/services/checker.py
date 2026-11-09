@@ -1,7 +1,7 @@
 """
 The checker of the text of a file of the workspace (see checks): a
-process that checks it as its task would (see gbkfit.tasks.check), and
-places its problems on its lines:
+process that describes it (see gbkfit.describe), and places its
+problems on its lines:
 
     python -m gbkfit_server.services.checker
 
@@ -49,7 +49,7 @@ def main() -> None:
 def diagnose(path: str, text: str) -> list[dict[str, Any]]:
     """Return the diagnostics of the text of a file."""
     import gbkfit.project
-    from gbkfit.tasks.check import check
+    from gbkfit import describe
     try:
         document = _yaml.load(text)
     except ruamel.yaml.MarkedYAMLError as e:
@@ -64,7 +64,7 @@ def diagnose(path: str, text: str) -> list[dict[str, Any]]:
     if folder is None:
         return [
             _diagnostic(_line(document, p.path), p.severity, _text(p))
-            for p in check(path, {path: text}).problems]
+            for p in describe(path, {path: text}).problems]
     name = Path(path).relative_to(
         Path(project.path, folder)).with_suffix('').as_posix()
     diagnostics = {}
@@ -73,7 +73,7 @@ def diagnose(path: str, text: str) -> list[dict[str, Any]]:
         if not prefixes:
             continue
         via = setup.relative_to(project.path).as_posix()
-        for problem in check(str(setup), {path: text}).problems:
+        for problem in describe(str(setup), {path: text}).problems:
             for prefix in prefixes:
                 if problem.path[:len(prefix)] == prefix:
                     diagnostic = _diagnostic(

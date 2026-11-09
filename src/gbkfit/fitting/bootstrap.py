@@ -213,7 +213,8 @@ class BootstrapGaussian(BootstrapScheme):
 
 
 bootstrap_scheme_parser = TypedParser(
-    BootstrapScheme, [BootstrapBlocks, BootstrapGaussian])
+    BootstrapScheme, [BootstrapBlocks, BootstrapGaussian],
+    family='bootstrap_scheme')
 
 
 class BootstrapOptions(Serializable):

@@ -2,7 +2,7 @@
 Migration of configurations to the current format.
 
 Configurations carry the version of their format (see
-gbkfit.project.FORMAT_VERSION): configuration files their section
+gbkfit.config.FORMAT_VERSION): configuration files their section
 'version', and the pieces and setups of a project its marker. The format
 changes by rules (see Rule, RULES), each of which rewrites the old form
 of a configuration of an older version in the form of its own; migrate

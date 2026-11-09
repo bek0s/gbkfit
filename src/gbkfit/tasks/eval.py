@@ -10,13 +10,12 @@ import os
 from typing import Any, Literal
 
 
-from gbkfit.config import ConfigError, config_path, paths_relative_to
+from gbkfit.config import ConfigError, config_path
 import gbkfit.outputs
 import gbkfit.setup
-from gbkfit.observation import (
-    GroupPlan, Likelihood, MockOptions, Noise, observation_parser)
+from gbkfit.observation import observation_parser
 from gbkfit.params import ParamValues
-from gbkfit.setup import ConfigFile
+from gbkfit.setup import ConfigFile, SetupEvaluation
 from gbkfit.utils import numutils
 from . import _detail
 
@@ -38,15 +37,14 @@ def eval_(
 ) -> None:
     """
     Evaluate the galaxies of a configuration at its parameters (their
-    fixed values, and the 'value' of the free ones), or its objective,
-    and write the outputs as a run (see gbkfit.outputs; its option 'mode'
-    is the mode): the configuration (config.yaml, kind 'config'), the
-    parameters and the derived values (params.json, 'params'), the
-    models and their extra outputs, and in the mode 'objective' the data
-    and the residuals too (see data_outputs and evaluation_outputs), and
-    the log (logs/gbkfit.log, 'log'; see run_log); in a project, the
-    sources of the configuration too (setup.json, 'setup'; see
-    write_setup).
+    fixed values, and the 'value' of the free ones), or its objective, and
+    write the outputs as a run (see gbkfit.outputs; its option 'mode' is
+    the mode): the configuration (config.yaml, kind 'config'), the
+    parameters and the derived values (params.json, 'params'), the models
+    and their extra outputs, and in the mode 'objective' the data and the
+    residuals too (see Setup.outputs), and the log (logs/gbkfit.log,
+    'log'; see run_log); in a project, the sources of the configuration
+    too (setup.json, 'setup'; see write_setup).
 
     The mode 'mock' writes the models (as 'model'), and mock data of the
     observations: their models measured from what their instruments
@@ -131,19 +129,10 @@ def _eval(
     eval_).
     """
     group_plan, params = setup.group_plan, setup.params
-    # (in the mode 'model', the solved elements take their values without
-    # data)
     objective = setup.objective if mode == 'objective' else None
     if mode == 'objective' and objective is None:
         raise ConfigError(
             "the mode 'objective' needs data for every observation")
-    mock = None
-    if mode == 'mock':
-        with paths_relative_to(root), \
-                config_path('mock'):
-            mock = MockOptions.load(cfg['mock'])
-            noises, likelihoods = mock.per_observation(
-                group_plan.group().nobservations())
 
     _log.info("calculating model parameters...")
     if missing := [
@@ -153,25 +142,26 @@ def _eval(
             raise ConfigError(
                 f"an evaluation is at the 'value' of each free parameter; "
                 f"these have none: {missing}")
-    param_values = setup.evaluate().values if objective is not None \
-        else params.evaluate()
+    # (in the other modes, the solved elements take their values without
+    # data)
+    evaluation = setup.evaluate() if objective is not None \
+        else SetupEvaluation(params.evaluate(), None)
+    param_values = evaluation.values
     run.write('params.json', 'params', dict(
         params=param_values, eparams=params.element_values(param_values),
         derived=params.derived_values(param_values, group_plan.functions())))
 
     _log.info("evaluating...")
-    outputs = gbkfit.outputs.evaluation_outputs(
-        group_plan, objective, param_values, True, mode == 'objective')
-    if objective is not None:
-        outputs |= gbkfit.outputs.data_outputs(group_plan)
-        _log.info(f"chi-square: {objective.chi2(param_values)}")
+    outputs = setup.outputs(
+        evaluation, data=objective is not None, extra=True)
+    if evaluation.objective is not None:
+        _log.info(f"chi-square: {evaluation.objective.merits.chi2}")
     _log.info("storing outputs to the filesystem...")
     gbkfit.outputs.write_outputs(run, outputs)
-    if mock is not None:
-        _log.info(f"drawing {mock.nmocks()} mock datasets...")
-        _write_mocks(
-            cfg, root, group_plan, param_values, mock, noises, likelihoods,
-            run)
+    if mode == 'mock':
+        _log.info(
+            f"drawing {setup.mock_options.nmocks()} mock datasets...")
+        _write_mocks(cfg, root, setup, param_values, run)
 
     if profile_iters > 0:
         _log.info("running performance test...")
@@ -209,34 +199,27 @@ def _timings_table(time_stats: dict[str, dict[str, Any]]) -> str:
 def _write_mocks(
         cfg: dict[str, Any],
         root: str,
-        group_plan: GroupPlan,
+        setup: gbkfit.setup.Setup,
         values: ParamValues,
-        mock: MockOptions,
-        noises: list[Noise],
-        likelihoods: list[Likelihood | None],
         run: gbkfit.outputs.RunWriter
 ) -> None:
     """
-    Draw the mock data of the observations of a plan of a group at the
-    parameter values, with the noise and the likelihood of each, and
-    write their files and configurations (see eval_).
+    Draw the mock data of the observations of a setup at the parameter
+    values (see Setup.mock), and write their files and configurations
+    (see eval_).
     """
-    group = group_plan.group()
+    group = setup.group_plan.group()
     with config_path('mock'):
-        datasets = group_plan.mock(
-            values, noises, mock.nmocks(), mock.nsamples(), mock.seed())
+        mocks = setup.mock(values)
     sections = {k: v for k, v in cfg.items() if k != 'mock'}
-    for k in range(mock.nmocks()):
+    for k, mocked_observations in enumerate(mocks):
         observations = []
-        for i, (observation, info) in enumerate(zip(
-                group.observations(), cfg['observations'])):
+        for i, (mocked, info) in enumerate(zip(
+                mocked_observations, cfg['observations'])):
             name = group.observation_label(i)
             folder = f'mocks/{k}/observations/{name}'
             directory = os.path.join(run.path, *folder.split('/'))
             os.makedirs(directory, exist_ok=True)
-            with config_path('mock'):
-                mocked = observation.with_data(
-                    datasets[i][k], likelihoods[i])
             # (the paths of the files of the data are relative to the
             # root of the configuration, as its other paths; they are
             # of this run, whose earlier files a run into the same

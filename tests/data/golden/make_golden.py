@@ -176,7 +176,7 @@ def _load(config: dict[str, Any], root: pathlib.Path, driver: str) -> 'Setup':
     driver (see gbkfit.load).
     """
     import gbkfit
-    from gbkfit.project import FORMAT_VERSION
+    from gbkfit.config import FORMAT_VERSION
     return gbkfit.load(dict(
         config, version=FORMAT_VERSION, root=str(root),
         driver=dict(type=driver)))
@@ -236,7 +236,7 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     """
     from gbkfit.observation import likelihood_parser, noise_parser
     from gbkfit.observation import observation_parser
-    from gbkfit.project import FORMAT_VERSION
+    from gbkfit.config import FORMAT_VERSION
     from gbkfit.config import paths_relative_to
     from gbkfit.utils import numutils
     folder.mkdir(parents=True, exist_ok=True)

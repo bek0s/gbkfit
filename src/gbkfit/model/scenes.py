@@ -15,23 +15,23 @@ import numpy as np
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamValues
-from ..extras import Extras
 from ._component_plans import opacity_cubes
 from ._component_set import IMAGE_SPECTRAL_AXIS, ComponentSetPlan
-from ._stage import GalaxyState
 from ._transfer import (
     MAX_SUBCHANNELS, LineResolution, TransferPlan, check_emitters,
     warn_resolution)
-from ._units import DataUnit
-from .base import ComponentState, DepthAxis, FrameParams
-from .disks.disk import Disk
-from .lines import Band
-from .roles import STARS
-from .traits import RPTraitImage
+from .components._stage import GalaxyState
+from .components._units import DataUnit
+from .components.base import ComponentState, DepthAxis, FrameParams
+from .components.disks.disk import Disk
+from .components.lines import Band
+from .components.roles import STARS
+from .components.traits import RPTraitImage
+from .extras import Extras
 
 if TYPE_CHECKING:
-    from ..galaxy import Galaxy
-    from .base import Component
+    from .components.base import Component
+    from .galaxy import Galaxy
 
 
 __all__ = [
