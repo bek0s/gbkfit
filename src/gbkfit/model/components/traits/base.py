@@ -12,7 +12,7 @@ import numpy as np
 
 from gbkfit.config import (
     TypedSerializable, check_name, check_options, make_typed_desc)
-from gbkfit.params.pdescs import ParamDesc, ParamVectorDesc
+from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .options import (
     Blobs, Direction, DispersionDirection, Nodewise, SAMPLING_DEFAULT, Sampling,
     TraitOption, VPT_DIRECTIONS, VPT_DIRECTION_PLANE, Zmax, splits_around)
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    'Amplitude',
     'DHTrait',
     'DPTrait',
     'GalaxyInput',
@@ -91,6 +92,49 @@ class ImageInput(GalaxyInput):
     The face-on light of an image in the plane of the disk, which the
     galaxy makes (see RPTraitImage).
     """
+
+
+@dataclasses.dataclass(frozen=True)
+class Amplitude:
+    """
+    What the amplitude a of the shapes of a family is: its quantity (a
+    noun, e.g. 'density', in the descriptions of the other parameters),
+    its title and description as a level (of a uniform shape, e.g.
+    'Density' and "the surface density") and as the value at the centre
+    (e.g. 'Central density'), its unit (None for a density, whose
+    component knows it), its least value, if any, and its default.
+    """
+    quantity: str
+    title: str
+    desc: str
+    central_title: str
+    central_desc: str
+    unit: str | None
+    min: float | None
+    default: float
+
+    def level(self) -> ParamScalarDesc:
+        """Return its description as a level (a uniform shape)."""
+        return self._scalar(self.title, self.desc)
+
+    def central(self) -> ParamScalarDesc:
+        """Return its description as the value at the centre."""
+        return self._scalar(self.central_title, self.central_desc)
+
+    def rings(self, nnodes: int) -> ParamVectorDesc:
+        """Return its description at each of nnodes rings."""
+        return ParamVectorDesc(
+            nnodes, title=self.title, desc=f"{self.desc} at each ring",
+            **self._valid())
+
+    def _scalar(self, title: str, desc: str) -> ParamScalarDesc:
+        return ParamScalarDesc(title=title, desc=desc, **self._valid())
+
+    def _valid(self) -> dict:
+        valid = dict(unit=self.unit, default=self.default)
+        if self.min is not None:
+            valid['min'] = self.min
+        return valid
 
 
 class Trait(TypedSerializable, abc.ABC):
@@ -246,6 +290,12 @@ class RPTrait(PTrait, abc.ABC):
     they are (see has_tail). The Monte Carlo disks draw their
     clouds from it (see has_analytical_integral and cloud_flux).
     """
+    AMPLITUDE = Amplitude(
+        quantity='density', title='Density', desc="the surface density",
+        central_title='Central density',
+        central_desc="the surface density at the centre", unit=None,
+        min=None, default=1)
+
 
     @abc.abstractmethod
     def has_analytical_integral(self) -> bool:
@@ -424,6 +474,12 @@ class DPTrait(PTrait, abc.ABC):
     of a disk (its option direction, see DispersionDirection and the
     package docstring).
     """
+    AMPLITUDE = Amplitude(
+        quantity='dispersion', title='Velocity dispersion',
+        desc="the velocity dispersion", central_title='Central dispersion',
+        central_desc="the velocity dispersion at the centre", unit='km/s',
+        min=0, default=20)
+
 
     def direction(self) -> str:
         """Return the direction of its dispersion (see DPT_DIRECTIONS)."""

@@ -3,7 +3,7 @@ The density polar traits (rpt): the density per unit area of the surface
 of a component (see RPTrait), but the maps (see images).
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import Annotated
 
 import numpy as np
@@ -12,9 +12,14 @@ import scipy.special
 from annotated_types import Ge
 
 from gbkfit.config import check_options
-from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
+from gbkfit.params.pdescs import ParamDesc
 from .base import (
-    RPTrait, WaveInput, params_nw_distortion, splits_nw_distortion)
+    RPTrait, WaveInput)
+from .shapes import (
+    ExponentialShape, GaussShape, GGaussShape, LorentzShape,
+    MixtureExponentialShape, MixtureGaussShape, MixtureGGaussShape,
+    MixtureMoffatShape, MoffatShape, NWDistortionShape, NWHarmonicShape,
+    NWUniformShape, Sech2Shape, UniformShape)
 from .options import (
     SAMPLING_DEFAULT, Blobs, Harmonic, Sampling, SamplingChoice,
     Spiral, SpiralWavenumber, SpiralWinding)
@@ -39,21 +44,8 @@ __all__ = [
 ]
 
 
-# Their uids in the native kernels
-RPT_UID_UNIFORM = 1
-RPT_UID_EXP = 2
-RPT_UID_GAUSS = 3
-RPT_UID_GGAUSS = 4
-RPT_UID_LORENTZ = 5
-RPT_UID_MOFFAT = 6
-RPT_UID_SECH2 = 7
-RPT_UID_MIXTURE_EXP = 51
-RPT_UID_MIXTURE_GAUSS = 52
-RPT_UID_MIXTURE_GGAUSS = 53
-RPT_UID_MIXTURE_MOFFAT = 54
-RPT_UID_NW_UNIFORM = 101
-RPT_UID_NW_HARMONIC = 102
-RPT_UID_NW_DISTORTION = 103
+# The uid of the spiral wave in the native kernels (of densities alone:
+# see shapes for those of the shared shapes)
 RPT_UID_SPIRAL = 104
 
 
@@ -331,7 +323,7 @@ def _ptrait_integrate_nw_distortion(
         integral(inner, middles) + integral(middles, outer), tail)
 
 
-class RPTraitUniform(RPTrait):
+class RPTraitUniform(UniformShape, RPTrait):
     """
     A uniform surface density, mainly for tests: its use is discouraged (a
     warning says so). It is a within the last node of its component, and
@@ -344,25 +336,6 @@ class RPTraitUniform(RPTrait):
         Its name, which prefixes its parameters (see Trait).
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'uniform'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Uniform'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_UNIFORM
-
-    def axisymmetric(self) -> bool:
-        return True
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(a=ParamScalarDesc(
-            title='Density', desc="the surface density", default=1))
-
     def has_analytical_integral(self) -> bool:
         return True
 
@@ -374,7 +347,7 @@ class RPTraitUniform(RPTrait):
             subrnodes, params['a'])
 
 
-class RPTraitExponential(RPTrait):
+class RPTraitExponential(ExponentialShape, RPTrait):
     """
     An exponential surface density: a exp(-r / s). Its parameters: a,
     the density at the centre, and s, the scale length.
@@ -384,31 +357,6 @@ class RPTraitExponential(RPTrait):
     name : str, optional
         Its name, which prefixes its parameters (see Trait).
     """
-
-    @staticmethod
-    def type() -> str:
-        return 'exponential'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Exponential'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_EXP
-
-    def axisymmetric(self) -> bool:
-        return True
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(
-                title='Central density',
-                desc="the surface density at the centre", default=1),
-            s=ParamScalarDesc(
-                title='Scale length',
-                desc="the radius where the density falls by a factor e",
-                min=0, unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -428,7 +376,7 @@ class RPTraitExponential(RPTrait):
         return float(-1 / params['s'])
 
 
-class RPTraitGauss(RPTrait):
+class RPTraitGauss(GaussShape, RPTrait):
     """
     A Gaussian surface density: a exp(-r^2 / (2 s^2)). Its parameters:
     a, the density at the centre, and s, the dispersion of the
@@ -439,31 +387,6 @@ class RPTraitGauss(RPTrait):
     name : str, optional
         Its name, which prefixes its parameters (see Trait).
     """
-
-    @staticmethod
-    def type() -> str:
-        return 'gauss'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Gaussian'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_GAUSS
-
-    def axisymmetric(self) -> bool:
-        return True
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(
-                title='Central density',
-                desc="the surface density at the centre", default=1),
-            s=ParamScalarDesc(
-                title='Width (sigma)',
-                desc="the standard deviation of the Gaussian",
-                min=0, unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -485,7 +408,7 @@ class RPTraitGauss(RPTrait):
         return float(-rl / (s * s))
 
 
-class RPTraitGGauss(RPTrait):
+class RPTraitGGauss(GGaussShape, RPTrait):
     """
     A generalised Gaussian surface density: a exp(-(r / s)^b). Its
     parameters: a, the density at the centre, s, the scale length, and
@@ -497,35 +420,6 @@ class RPTraitGGauss(RPTrait):
     name : str, optional
         Its name, which prefixes its parameters (see Trait).
     """
-
-    @staticmethod
-    def type() -> str:
-        return 'ggauss'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Generalised Gaussian'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_GGAUSS
-
-    def axisymmetric(self) -> bool:
-        return True
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(
-                title='Central density',
-                desc="the surface density at the centre", default=1),
-            s=ParamScalarDesc(
-                title='Scale length',
-                desc="the radius where the density falls by a factor e",
-                min=0, unit='arcsec', default=1),
-            b=ParamScalarDesc(
-                title='Shape',
-                desc="the shape: 1 is the exponential, 2 a Gaussian",
-                min=0, unit='', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -547,7 +441,7 @@ class RPTraitGGauss(RPTrait):
         return float(-b / s * (rl / s) ** (b - 1))
 
 
-class RPTraitLorentz(RPTrait):
+class RPTraitLorentz(LorentzShape, RPTrait):
     """
     A Lorentzian surface density: a s^2 / (r^2 + s^2). Its parameters:
     a, the density at the centre, and s, the half width at half
@@ -558,31 +452,6 @@ class RPTraitLorentz(RPTrait):
     name : str, optional
         Its name, which prefixes its parameters (see Trait).
     """
-
-    @staticmethod
-    def type() -> str:
-        return 'lorentz'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Lorentzian'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_LORENTZ
-
-    def axisymmetric(self) -> bool:
-        return True
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(
-                title='Central density',
-                desc="the surface density at the centre", default=1),
-            s=ParamScalarDesc(
-                title='Half width at half maximum',
-                desc="the radius where the density falls to half",
-                min=0, unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -604,7 +473,7 @@ class RPTraitLorentz(RPTrait):
         return float(-2 * rl / (rl * rl + s * s))
 
 
-class RPTraitMoffat(RPTrait):
+class RPTraitMoffat(MoffatShape, RPTrait):
     """
     A Moffat surface density: a (1 + (r / s)^2)^-b. Its parameters: a,
     the density at the centre, s, the core radius, and b, the power of
@@ -615,35 +484,6 @@ class RPTraitMoffat(RPTrait):
     name : str, optional
         Its name, which prefixes its parameters (see Trait).
     """
-
-    @staticmethod
-    def type() -> str:
-        return 'moffat'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Moffat'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_MOFFAT
-
-    def axisymmetric(self) -> bool:
-        return True
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(
-                title='Central density',
-                desc="the surface density at the centre", default=1),
-            s=ParamScalarDesc(
-                title='Core radius',
-                desc="the radius of the flat core",
-                min=0, unit='arcsec', default=1),
-            b=ParamScalarDesc(
-                title='Power index',
-                desc="the power of the fall, as r^(-2b) far out",
-                min=0, unit='', default=2))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -665,7 +505,7 @@ class RPTraitMoffat(RPTrait):
         return float(-2 * b * rl / (rl * rl + s * s))
 
 
-class RPTraitSech2(RPTrait):
+class RPTraitSech2(Sech2Shape, RPTrait):
     """
     A sech^2 surface density: a sech^2(r / s). Its parameters: a, the
     density at the centre, and s, the scale length.
@@ -675,31 +515,6 @@ class RPTraitSech2(RPTrait):
     name : str, optional
         Its name, which prefixes its parameters (see Trait).
     """
-
-    @staticmethod
-    def type() -> str:
-        return 'sech2'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Sech-squared'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_SECH2
-
-    def axisymmetric(self) -> bool:
-        return True
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(
-            a=ParamScalarDesc(
-                title='Central density',
-                desc="the surface density at the centre", default=1),
-            s=ParamScalarDesc(
-                title='Scale length',
-                desc="the scale length of the sech^2",
-                min=0, unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -721,7 +536,7 @@ class RPTraitSech2(RPTrait):
         return float(-2 * np.tanh(rl / s) / s)
 
 
-class RPTraitMixtureExponential(RPTrait):
+class RPTraitMixtureExponential(MixtureExponentialShape, RPTrait):
     """
     A surface density made of elliptical blobs, each an exponential of the
     elliptical distance rho from its centre: a exp(-rho / s). It has nblobs
@@ -743,27 +558,9 @@ class RPTraitMixtureExponential(RPTrait):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'mixture_exponential'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Exponential blobs'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_MIXTURE_EXP
-
     def __init__(self, nblobs: Annotated[int, Ge(1)], name: str | None = None):
         check_options(RPTraitMixtureExponential.__init__, locals())
         super().__init__(Blobs(nblobs), name=name)
-
-    def axisymmetric(self) -> bool:
-        return False
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=None, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -777,7 +574,7 @@ class RPTraitMixtureExponential(RPTrait):
         return _ptrait_integrate_mixture_exponential(params)
 
 
-class RPTraitMixtureGauss(RPTrait):
+class RPTraitMixtureGauss(MixtureGaussShape, RPTrait):
     """
     A surface density made of elliptical blobs, each a Gaussian of the
     elliptical distance rho from its centre: a exp(-rho^2 / (2 s^2)). It
@@ -799,27 +596,9 @@ class RPTraitMixtureGauss(RPTrait):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'mixture_gauss'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Gaussian blobs'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_MIXTURE_GAUSS
-
     def __init__(self, nblobs: Annotated[int, Ge(1)], name: str | None = None):
         check_options(RPTraitMixtureGauss.__init__, locals())
         super().__init__(Blobs(nblobs), name=name)
-
-    def axisymmetric(self) -> bool:
-        return False
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=None, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -833,7 +612,7 @@ class RPTraitMixtureGauss(RPTrait):
         return _ptrait_integrate_mixture_gauss(params)
 
 
-class RPTraitMixtureGGauss(RPTrait):
+class RPTraitMixtureGGauss(MixtureGGaussShape, RPTrait):
     """
     A surface density made of elliptical blobs, each a generalised Gaussian
     of the elliptical distance rho from its centre: a exp(-(rho / s)^b). It
@@ -856,27 +635,9 @@ class RPTraitMixtureGGauss(RPTrait):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'mixture_ggauss'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Generalised Gaussian blobs'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_MIXTURE_GGAUSS
-
     def __init__(self, nblobs: Annotated[int, Ge(1)], name: str | None = None):
         check_options(RPTraitMixtureGGauss.__init__, locals())
         super().__init__(Blobs(nblobs), name=name)
-
-    def axisymmetric(self) -> bool:
-        return False
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=dict(min=0), unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -890,7 +651,7 @@ class RPTraitMixtureGGauss(RPTrait):
         return _ptrait_integrate_mixture_ggauss(params)
 
 
-class RPTraitMixtureMoffat(RPTrait):
+class RPTraitMixtureMoffat(MixtureMoffatShape, RPTrait):
     """
     A surface density made of elliptical blobs, each a Moffat of the
     elliptical distance rho from its centre: a (1 + (rho / s)^2)^-b. It has
@@ -913,24 +674,9 @@ class RPTraitMixtureMoffat(RPTrait):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'mixture_moffat'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Moffat blobs'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_MIXTURE_MOFFAT
-
     def __init__(self, nblobs: Annotated[int, Ge(1)], name: str | None = None):
         check_options(RPTraitMixtureMoffat.__init__, locals())
         super().__init__(Blobs(nblobs), name=name)
-
-    def axisymmetric(self) -> bool:
-        return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
         # (b > 1: the flux of a blob is infinite otherwise)
@@ -949,7 +695,7 @@ class RPTraitMixtureMoffat(RPTrait):
         return _ptrait_integrate_mixture_moffat(params)
 
 
-class RPTraitNWUniform(RPTrait):
+class RPTraitNWUniform(NWUniformShape, RPTrait):
     """
     A surface density given at each ring: a(r). Its parameter: a,
     node-wise.
@@ -969,18 +715,6 @@ class RPTraitNWUniform(RPTrait):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'nw_uniform'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Uniform (per ring)'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_NW_UNIFORM
-
     def __init__(
             self,
             sampling: SamplingChoice = SAMPLING_DEFAULT,
@@ -988,14 +722,6 @@ class RPTraitNWUniform(RPTrait):
     ):
         check_options(RPTraitNWUniform.__init__, locals())
         super().__init__(Sampling(sampling), name=name)
-
-    def axisymmetric(self) -> bool:
-        return True
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(a=ParamVectorDesc(
-            nnodes, title='Density',
-            desc="the surface density at each ring", default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -1011,7 +737,7 @@ class RPTraitNWUniform(RPTrait):
         return _nodewise_log_slope(params['a'], subrnodes)
 
 
-class RPTraitNWHarmonic(RPTrait):
+class RPTraitNWHarmonic(NWHarmonicShape, RPTrait):
     """
     A harmonic density: a(r) cos(m (theta - p(r))), of the order m. Its
     parameters, node-wise: a, the amplitude, and p (but for order 0), the
@@ -1036,18 +762,6 @@ class RPTraitNWHarmonic(RPTrait):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'nw_harmonic'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Harmonic (per ring)'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_NW_HARMONIC
-
     def __init__(
             self,
             order: Annotated[int, Ge(0)],
@@ -1056,13 +770,6 @@ class RPTraitNWHarmonic(RPTrait):
     ):
         check_options(RPTraitNWHarmonic.__init__, locals())
         super().__init__(Harmonic(order), Sampling(sampling), name=name)
-
-    def axisymmetric(self) -> bool:
-        # (a harmonic of order 0 is uniform)
-        return self._option(Harmonic).order == 0
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return self._option(Harmonic).params(nnodes, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -1079,7 +786,7 @@ class RPTraitNWHarmonic(RPTrait):
         return _nodewise_log_slope(params['a'], subrnodes)
 
 
-class RPTraitNWDistortion(RPTrait):
+class RPTraitNWDistortion(NWDistortionShape, RPTrait):
     """
     A surface density around one azimuth at each ring: a(r)
     exp(-(dtheta r)^2 / (2 s(r)^2)). Here dtheta is the azimuth from p(r)
@@ -1102,18 +809,6 @@ class RPTraitNWDistortion(RPTrait):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'nw_distortion'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Distortion (per ring)'
-
-    @staticmethod
-    def uid() -> int:
-        return RPT_UID_NW_DISTORTION
-
     def __init__(
             self,
             sampling: SamplingChoice = SAMPLING_DEFAULT,
@@ -1121,20 +816,6 @@ class RPTraitNWDistortion(RPTrait):
     ):
         check_options(RPTraitNWDistortion.__init__, locals())
         super().__init__(Sampling(sampling), name=name)
-
-    def axisymmetric(self) -> bool:
-        return False
-
-    def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return params_nw_distortion(nnodes, unit=None)
-
-    def azimuthal_edges(
-            self,
-            r: np.ndarray,
-            params: dict[str, np.ndarray],
-            subrnodes: Sequence[float]
-    ) -> np.ndarray | None:
-        return splits_nw_distortion(r, params, subrnodes)
 
     def has_analytical_integral(self) -> bool:
         return False
