@@ -239,6 +239,16 @@ class MassComponent(TypedSerializable, abc.ABC):
         """
         return ()
 
+    def needs_distance(self) -> str | None:
+        """
+        Return why it needs the distance of its galaxy, the length of an
+        arcsec in it, if it does: here, if it follows the densities of
+        components (of their radii in arcsec).
+        """
+        if followed := self.followed_components():
+            return f"follows the densities of the components {list(followed)}"
+        return None
+
     @classmethod
     def followed_kind(cls) -> type[ComponentDensity] | None:
         """

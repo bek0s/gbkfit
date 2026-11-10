@@ -197,6 +197,13 @@ class MassTable(MassComponent):
             desc="the ratio of its mass to that of its table (e.g. a "
                  "mass-to-light ratio)", min=0, unit='', default=1))
 
+    def needs_distance(self) -> str | None:
+        if self._radii.unit.is_equivalent(u.arcsec):
+            return "is a table of radii in angles"
+        if self._distance is not None:
+            return "is a table measured at a distance (D0)"
+        return None
+
     def gives_enclosed_mass(self) -> bool:
         return False
 
@@ -239,20 +246,13 @@ class MassTable(MassComponent):
         its unit), and the factor of its V^2 at the distance of the
         galaxy, D/D0 (1 without D0; see the class).
 
-        Raises
-        ------
-        ValueError
-            If the context does not have the length of an arcsec, which
-            they need.
+        (Of angles or a D0, the context has the length of an arcsec:
+        see needs_distance.)
         """
         angles = self._radii.unit.is_equivalent(u.arcsec)
         if not angles and self._distance is None:
             return R / self._radii.unit.to(u.kpc), 1.0
         kpc_per_arcsec = context.kpc_per_arcsec
-        if kpc_per_arcsec is None:
-            raise ValueError(
-                f"the mass component '{self.name()}' needs the length of an "
-                f"arcsec in its galaxy, which its context does not give")
         arcsec = R / kpc_per_arcsec
         scale = 1.0
         if self._distance is not None:

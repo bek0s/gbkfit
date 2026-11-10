@@ -75,35 +75,40 @@ def density_needs(
 
 def galaxy_gives(
         mass_model: MassModel | None,
-        gravity: Gravity
+        gravity: Gravity,
+        has_distance: bool = True
 ) -> dict[Capability, str | None]:
     """
-    Return what a galaxy of a mass model (None without mass) and a gravity
-    gives its components: of each capability, None if it gives it, or else
-    why not.
+    Return what a galaxy of a mass model (None without mass), a gravity
+    and a distance or not gives its components: of each capability, None
+    if it gives it, or else why not.
     """
     if mass_model is None:
         return {capability: "it has no mass" for capability in Capability}
-    return {Capability.MASS: None} | gravity.gives(mass_model)
+    distance = None if has_distance else (
+        "it has no distance (e.g. distance: {type: parameter})")
+    return {Capability.MASS: None, Capability.DISTANCE: distance} \
+        | gravity.gives(mass_model)
 
 
 def check_needs(
         needs: Iterable[Need],
         mass_model: MassModel | None,
-        gravity: Gravity
+        gravity: Gravity,
+        has_distance: bool = True
 ) -> None:
     """
-    Check that a galaxy of a mass model (None without mass) and a gravity
-    gives what its components need (see galaxy_gives). Without mass, only
-    the needs of the mass alone fail: those of the rest of what the mass
-    gives come with them.
+    Check that a galaxy of a mass model (None without mass), a gravity and
+    a distance or not gives what its components need (see galaxy_gives).
+    Without mass, only the needs of the mass alone fail: those of the
+    rest of what the mass gives come with them.
 
     Raises
     ------
     ValueError
         If the galaxy does not give a need, saying what needs it.
     """
-    gives = galaxy_gives(mass_model, gravity)
+    gives = galaxy_gives(mass_model, gravity, has_distance)
     names = [] if mass_model is None \
         else [component.name() for component in mass_model.components()]
     for need in needs:

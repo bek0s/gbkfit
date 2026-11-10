@@ -1750,6 +1750,39 @@ def test_mass_trait_parameters_and_round_trip():
         == dumped
 
 
+def test_a_distance_is_needed_where_arcsec_meet_kpc():
+    # By the components that move in the mass, the mass that follows a
+    # component, and the tables of radii in angles or measured at a
+    # distance; not by mass alone, of radii in kpc, nor by components that
+    # the mass does not move
+    message = "it has no distance"
+    with pytest.raises(ValueError, match="'traced' follows the densities"):
+        galaxy_parser.load(dict(
+            components=[DISK | dict(
+                type='thin_disk', name='hi',
+                vptraits=dict(type='arctan', direction='tan'))],
+            mass=[dict(type='traced_disk', name='traced', component='hi')]))
+    for radii, distance in (dict(value=[1, 2], unit='arcsec'), None), (
+            dict(value=[1, 2], unit='kpc'), 10):
+        table = dict(type='table', name='t', radii=radii,
+                     velocities=[10, 20])
+        if distance is not None:
+            table['distance'] = distance
+        with pytest.raises(ValueError, match=message):
+            galaxy_parser.load(dict(mass=[table]))
+    alone = galaxy_parser.load(dict(mass=copy.deepcopy(MASS)))
+    assert 'distance' not in alone.pdescs()
+    values = {k: v for k, v in MASS_PROPERTIES.items() if k != 'distance'}
+    radius = np.array([0.5, 1.0])
+    # (of a halo of no overdensity: any epoch)
+    np.testing.assert_allclose(
+        alone.plan_functions().bind(values)['vcirc'](radius),
+        np.sqrt(mass_model(MASS).vcirc2(radius, values, CONTEXT)),
+        rtol=1e-12)
+    assert 'kpc_per_arcsec' not in alone.plan_functions().names()
+    disk_galaxy('smooth', dict(type='arctan', direction='tan'), MASS)
+
+
 def test_mass_trait_mass_and_distance():
     # (mass that no component uses is for profiles or derived values: see
     # ObservationGroup, which warns of it unused)
@@ -1758,7 +1791,7 @@ def test_mass_trait_mass_and_distance():
     assert not disk_galaxy(
         'smooth', dict(type='arctan', direction='tan'), MASS, DISTANCE
     ).components_use_mass()
-    with pytest.raises(ValueError, match="needs its distance"):
+    with pytest.raises(ValueError, match="moves in the mass of its galaxy"):
         disk_galaxy('smooth', dict(type='mass'), MASS)
     # (a distance without mass gives the length of an arcsec to the
     # derived values, e.g. of an arctan disk at z ~ 1.5: audit 2026-10-31

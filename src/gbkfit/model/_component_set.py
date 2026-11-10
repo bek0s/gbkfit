@@ -58,8 +58,9 @@ def _with_mass_params(
     MassModel.mass_ratios) in the unit that the emission of the component
     gives it (see _units.mass_ratio_unit).
     Raise ValueError if the gravity is given without mass (its only
-    user), the mass has no distance, a component needs what
-    the galaxy does not give (see Component.needs: e.g. the mass), a mass
+    user), a component needs what the galaxy does not give (see
+    Component.needs: e.g. the mass, or the distance, see
+    _distance_needs), a mass
     component follows a component whose density it cannot follow (see
     Component.density_kind), the gravity does not take the mass model (see
     Gravity.check_mass_model) or does not give the shares of a dark
@@ -78,10 +79,9 @@ def _with_mass_params(
         # derived values, e.g. radii in kpc of a disk of an arctan curve)
         return params if distance is None \
             else _with_params(params, distance.pdescs())
-    if distance is None:
-        raise ValueError(
-            "the mass of a galaxy needs its distance (e.g. distance: "
-            "{type: parameter})")
+    check_needs(
+        _distance_needs(components, mass_model), mass_model, gravity,
+        distance is not None)
     kinds = {cmp.name(): cmp.density_kind() for cmp in components
              if cmp.density_kind() is not None}
     for mass_component in mass_model.components():
@@ -106,8 +106,35 @@ def _with_mass_params(
     mass = pdescs_with_units(mass_model.pdescs(), {
         name: _units.mass_ratio_unit(emissions[followed])
         for name, followed in mass_model.mass_ratios().items()})
-    return _with_params(
-        params, distance.pdescs() | mass | gravity.pdescs())
+    own = {} if distance is None else distance.pdescs()
+    return _with_params(params, own | mass | gravity.pdescs())
+
+
+def _distance_needs(
+        components: Sequence[Component],
+        mass_model: MassModel
+) -> list[Need]:
+    """
+    Return what needs the distance of a galaxy of the components and the
+    mass model (see Capability.DISTANCE): the components that take its
+    mass (see Component.uses_mass), whose radii in arcsec meet its kpc,
+    and the mass components that need it (see
+    MassComponent.needs_distance).
+    """
+    needs = [
+        Need(Capability.DISTANCE, (
+            f"the component {cmp.name()!r} moves in the mass of its "
+            f"galaxy, and so takes the length of an arcsec in it (its "
+            f"distance)") if cmp.name() is not None else (
+            "the component moves in the mass of its galaxy, and so takes "
+            "the length of an arcsec in it (its distance)"))
+        for cmp in components if cmp.uses_mass()]
+    return needs + [
+        Need(Capability.DISTANCE, (
+            f"the mass component {mass_component.name()!r} {why}, and so "
+            f"takes the length of an arcsec in its galaxy (its distance)"))
+        for mass_component in mass_model.components()
+        if (why := mass_component.needs_distance()) is not None]
 
 
 def _with_params(

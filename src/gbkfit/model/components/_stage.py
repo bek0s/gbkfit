@@ -75,13 +75,14 @@ class GalaxyMass:
     """
     The mass of a galaxy in one evaluation: its model, the values of the
     parameters of the mass and the gravity of the galaxy, the context of
-    the mass, the length of an arcsec in the galaxy (kpc), and the field
-    of the mass in the gravity of the galaxy (see Gravity).
+    the mass, the length of an arcsec in the galaxy (kpc; None without a
+    distance, which only what takes it needs, see Capability.DISTANCE),
+    and the field of the mass in the gravity of the galaxy (see Gravity).
     """
     model: MassModel
     params: ParamValues
     context: MassContext
-    kpc_per_arcsec: float
+    kpc_per_arcsec: float | None
     field: GravityField
 
 
@@ -219,9 +220,10 @@ class GalaxyStage:
             self._scale_cache = StageCache(
                 component_set.distance().pdescs())
         if mass_model is not None:
+            scale = () if self._scale_cache is None else (self._scale_cache,)
             self._mass_cache = StageCache(
                 (*mass_model.pdescs(), *component_set.gravity().pdescs()),
-                (self._scale_cache, *(lights[i] for i in self._followed)))
+                (*scale, *(lights[i] for i in self._followed)))
         mass = () if self._mass_cache is None else (self._mass_cache,)
         self._parts: dict[int, _ComponentParts] = {}
         for i, stage in self._stages.items():
@@ -239,8 +241,10 @@ class GalaxyStage:
         that takes part, by its name, or its position (e.g. 'component0').
         """
         caches: dict[str, StageCache[Any]] = {}
+        if self._scale_cache is not None:
+            caches |= dict(scale=self._scale_cache)
         if self._mass_cache is not None:
-            caches |= dict(scale=self._scale_cache, mass=self._mass_cache)
+            caches |= dict(mass=self._mass_cache)
         for i, parts in self._parts.items():
             caches |= {
                 f'{self._labels[i]}.{name}': cache
@@ -290,7 +294,8 @@ class GalaxyStage:
             for i, parts in self._parts.items()}
         mass = None
         if self._mass_cache is not None:
-            scale = self._scale_cache.evaluate(params, self._scale)
+            scale = None if self._scale_cache is None \
+                else self._scale_cache.evaluate(params, self._scale)
             mass = self._mass_cache.evaluate(params, functools.partial(
                 self._mass, scale=scale, lights=lights))
             if out_extra is not None:
@@ -324,9 +329,9 @@ class GalaxyStage:
         lights = {
             i: self._light(self._parts[i].light.view(params), i)
             for i in self._followed}
-        return self._mass(
-            self._mass_cache.view(params),
-            self._scale(self._scale_cache.view(params)), lights)
+        scale = None if self._scale_cache is None \
+            else self._scale(self._scale_cache.view(params))
+        return self._mass(self._mass_cache.view(params), scale, lights)
 
     def kpc_per_arcsec(self, params: ParamValues) -> float | None:
         """
@@ -378,14 +383,14 @@ class GalaxyStage:
     def _mass(
             self,
             view: ParamView,
-            scale: float,
+            scale: float | None,
             lights: dict[int, ParamValues]
     ) -> GalaxyMass:
         """
         Return the mass of the galaxy, of the values of the parameters of
-        its mass and its gravity, the length of an arcsec in it (kpc; see
-        _scale), and the light of each component that it follows (see
-        _light), by its index.
+        its mass and its gravity, the length of an arcsec in it (kpc, see
+        _scale; None without a distance), and the light of each component
+        that it follows (see _light), by its index.
         """
         component_set = self._component_set
         components = component_set.components()

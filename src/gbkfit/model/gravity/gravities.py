@@ -91,11 +91,15 @@ _FR_RMAX_MIN = 1000.0
 class Capability(enum.Enum):
     """
     What a galaxy gives the components that need it (see Component.needs):
-    its mass, and what its gravity gives of it (see Gravity.gives).
+    its mass, its distance, and what its gravity gives of its mass (see
+    Gravity.gives).
     """
 
     # The mass (e.g. the circular velocity in its gravity)
     MASS = 'mass'
+    # The distance: the length of an arcsec in the galaxy, where its
+    # angles (e.g. the radii of its components) meet the kpc of its mass
+    DISTANCE = 'distance'
     # The forces of the mass anywhere (off the plane too), those of a field
     # (they have no curl)
     FORCES = 'forces'

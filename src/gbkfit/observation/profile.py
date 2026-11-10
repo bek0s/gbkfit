@@ -308,15 +308,19 @@ class ObservationProfile(Observation):
 
     def check(self, seen: SeenGalaxies) -> None:
         """
-        Check that the galaxy it sees has its functions, and those of a
-        disk at radii in angles, in their range (see
-        Galaxy.function_radius_range and Observation.check).
+        Check that the galaxy it sees has its functions, those of a disk
+        at radii in angles, in their range (see
+        Galaxy.function_radius_range and Observation.check), and a
+        distance for those of radii in kpc at radii in angles (or lengths
+        measured at a distance).
 
         Raises
         ------
         ValueError
-            If the galaxy does not have a function, or a function of a
-            disk is at radii of physical lengths, or out of its range.
+            If the galaxy does not have a function, a function of a disk is
+            at radii of physical lengths or out of its range, or one of
+            radii in kpc is at radii in angles and the galaxy has no
+            distance.
         """
         galaxy, label = seen.galaxies[0], seen.labels[0]
         names = galaxy.function_names()
@@ -325,6 +329,14 @@ class ObservationProfile(Observation):
                 f"galaxy {label} has no functions {missing}; its functions "
                 f"are {list(names)}")
         arcsec, _ = self._radii_of()
+        if arcsec is not None and galaxy.distance() is None and (kpc := [
+                key for key in self.keys()
+                if GalaxyFunctions.radial_units(key)[1] != u.arcsec]):
+            raise ValueError(
+                f"the functions {kpc} are of radii in kpc, and the radii of "
+                f"the profile are angles (or lengths measured at a "
+                f"distance): galaxy {label} needs a distance (e.g. "
+                f"distance: {{type: parameter}})")
         for key in self.keys():
             bounds = galaxy.function_radius_range(key)
             if bounds is None:

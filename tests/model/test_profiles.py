@@ -203,6 +203,18 @@ def test_profiles_refuse_what_they_cannot_measure():
     with pytest.raises(ValueError, match="in a unit of km / s"):
         ObservationProfile(data=DatasetProfile(
             {'vcirc': Data(np.ones(2), unit='kpc')}, radii))
+    # (a galaxy of mass alone needs no distance for radii in kpc; at radii
+    # in angles, or lengths measured at a distance, it does)
+    alone = galaxy_parser.load(dict(mass=copy.deepcopy(MASS)))
+    params = {k: v for k, v in PARAMS.items() if k != 'distance'}
+    group = ObservationGroup(alone, ObservationProfile(['vcirc'], radii))
+    np.testing.assert_allclose(
+        model(group, params)['vcirc'],
+        alone.plan_functions().bind(params)['vcirc'](radii.value))
+    for observation in (ObservationProfile(['vcirc'], [1.0, 3.0] * u.arcsec),
+                        ObservationProfile(['vcirc'], radii, 20)):
+        with pytest.raises(ValueError, match="needs a distance"):
+            ObservationGroup(alone, observation).plan()
 
 
 def test_profile_data_in_another_unit_are_converted():
