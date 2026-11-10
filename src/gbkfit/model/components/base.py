@@ -54,14 +54,20 @@ class OpacityCubes(NamedTuple):
     cubes of opacity of its observation (see opacity_cubes): their number
     (0 without dust), the cube of each component of the galaxy with dust
     (an absorber, by index) and the factor of its optical depth at V
-    there, and for each component whose light is evaluated (an emitter, by
-    index), the ratios of the optical depths of the cubes to theirs at the
-    wavelength of each of its lines or its band (an array of shape (nrows,
-    ncubes)), or None without dust.
+    there (an array of one value), and for each component whose light is
+    evaluated (an emitter, by index), the ratios of the optical depths of
+    the cubes to theirs at the wavelength of each of its lines or its band
+    (an array of shape (nrows, ncubes)), or None without dust. The factors
+    and the ratios follow the systemic velocities of the components: the
+    model of the dust (None without dust) changes the arrays in place at
+    each evaluation (its method update, of the values of the parameters
+    of the galaxies; see _component_plans._DustModel), which the plans
+    read then.
     """
     ncubes: int
-    deposits: dict[int, tuple[int, float]]
+    deposits: dict[int, tuple[int, np.ndarray]]
     ratios: dict[int, np.ndarray | None]
+    model: Any = None
 
 
 class NativeGrid(TypedDict):

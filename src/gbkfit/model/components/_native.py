@@ -364,6 +364,9 @@ class NativeComponentPlan(ComponentPlan):
         self._plan = plan
         self._fluxes = emission.fluxes
         self._opacity_scales = emission.opacity_scales
+        # (the ratios of its rows follow the systemic velocities: their host
+        # array changes in place at each evaluation, see opacity_cubes)
+        self._opacity_ratios_h = opacity_ratios
         self._opacity_ratios = None
         if opacity_ratios is not None:
             self._opacity_ratios = driver.mem_copy_h2d(opacity_ratios)
@@ -390,6 +393,9 @@ class NativeComponentPlan(ComponentPlan):
         lines = self.line_values(params) if self._lines is not None \
             else None
         odata = outputs.get('odata')
+        if odata is not None:
+            self._driver.mem_copy_h2d(
+                self._opacity_ratios_h, self._opacity_ratios)
         plan_outputs = dict(
             image=outputs.get('image'),
             scube=outputs.get('scube'),

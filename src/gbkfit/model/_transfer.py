@@ -276,9 +276,16 @@ class TransferPlan:
             key: driver.mem_alloc_d(math.prod(layout.shape(
                 native_grid if layout.layer else slab_grid)), dtype)
             for key, layout in self._layouts.items()}
+        # The ratios of the cubes of opacity of the rows of each emitter:
+        # their host arrays, which change in place at each evaluation (they
+        # follow the systemic velocities, see opacity_cubes), and their
+        # copies on the device
         self._ratios = {}
+        self._ratios_h = {}
         for m, i in self._keys:
             ratios = self._plans[m].ratios[i]
+            if ratios is not None:
+                self._ratios_h[m, i] = ratios
             self._ratios[m, i] = None if ratios is None \
                 else driver.mem_copy_h2d(ratios)
         # The cubes of opacity of a slab, with absorbers (flat, as the
@@ -372,6 +379,8 @@ class TransferPlan:
                 self._evaluate_fields(
                     values, states, key, grids[m], extras)
         driver.mem_copy_h2d(lines_h, lines_d)
+        for key, ratios in self._ratios_h.items():
+            driver.mem_copy_h2d(ratios, self._ratios[key])
 
         image = outputs.get('image') is not None
         out = outputs['image'] if image else outputs['scube']

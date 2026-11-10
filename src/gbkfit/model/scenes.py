@@ -280,14 +280,19 @@ class AdditiveScenePlan(ScenePlan):
             smoothing: float | None
     ):
         super().__init__(scene, grid)
+        # (the dust of each galaxy alone, see opacity_cubes)
+        cubes = [
+            opacity_cubes(
+                [galaxy], [emitters], scene._lines, scene._band, dtype)[0]
+            for galaxy, emitters in zip(scene._galaxies, scene._emitters)]
         self._plans: tuple[ComponentSetPlan, ...] = tuple(
             galaxy.plan(
                 driver, self._spatial, self._spectral, depth, dtype, emitters,
-                opacity_cubes(
-                    [galaxy], [emitters], scene._lines, scene._band,
-                    dtype)[0],
-                scene._lines, scene._band, scene._data_unit, smoothing)
-            for galaxy, emitters in zip(scene._galaxies, scene._emitters))
+                galaxy_cubes, scene._lines, scene._band, scene._data_unit,
+                smoothing)
+            for galaxy, emitters, galaxy_cubes in zip(
+                scene._galaxies, scene._emitters, cubes))
+        self._dust = [galaxy_cubes.model for galaxy_cubes in cubes]
         self._depth = depth
 
     @staticmethod
@@ -314,6 +319,10 @@ class AdditiveScenePlan(ScenePlan):
             extras: list[Extras] | None,
             group_extras: Extras | None
     ) -> None:
+        # (the dust of each galaxy, of its systemic velocities)
+        for g, dust in enumerate(self._dust):
+            if dust is not None:
+                dust.update([params[g]])
         resolutions = [
             plan.evaluate(
                 params[g], states[g], outputs,
@@ -378,6 +387,9 @@ class TransferScenePlan(ScenePlan):
         cubes = opacity_cubes(
             scene._galaxies, scene._emitters, scene._lines, scene._band,
             dtype)
+        # (the dust of all the galaxies, which dims the light of those
+        # behind it: one model, see opacity_cubes)
+        self._dust = cubes[0].model
         members = [
             galaxy.transfer_member(emitters, galaxy_cubes, depth)
             for galaxy, emitters, galaxy_cubes, depth in zip(
@@ -417,6 +429,8 @@ class TransferScenePlan(ScenePlan):
         for state in (self._opacity_front, self._tau):
             if state is not None:
                 self._driver.mem_fill(state, 0)
+        if self._dust is not None:
+            self._dust.update(params)
         # Each unit marches from the dust and the line opacity in front of
         # it, if any; with extras, its march tells how finely it resolves
         # its lines, and the worst gets a warning. The extras of the march

@@ -447,3 +447,57 @@ def test_dust_of_a_law_needs_named_lines(driver):
         type='dust', law=dict(type='ccm'))
     with pytest.raises(ValueError, match="must name its lines"):
         group_plan([case])
+
+
+def dusty_galaxy(emission, dusts=1, **options):
+    """
+    A galaxy of a disk of the given emission and of disks of dust of the
+    law of Cardelli et al. (ccm), each of its own vsys.
+    """
+    gas = dict(THIN_GAS, emission=emission)
+    dust = [dict(THICK_DISK, name=f'dust{i}', opacity=dict(
+        type='dust', law=dict(type='ccm')),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform')) for i in range(dusts)]
+    return gbkfit.model.galaxy_parser.load(
+        dict(components=[gas] + dust) | options)
+
+
+def test_dust_reads_its_law_in_its_frame():
+    # At the wavelength of the light in the frame of the dust, at 1 + z
+    # times D(vsys) of its galaxy and its systemic velocity, a parameter:
+    # of the band of an image, the band over (1 + z) D(vsys of the dust);
+    # of a line, its rest wavelength times D(vsys of the gas) / D(vsys of
+    # the dust), the law at its rest wavelength when they move together
+    from gbkfit.grid import doppler
+    from gbkfit.model._component_plans import opacity_cubes
+    from gbkfit.model.components.lines import catalogue_in_use
+    band = catalogue_in_use().band('sdss_r')
+    galaxy = dusty_galaxy(dict(type='band'), redshift=0.1)
+    law = galaxy.components()[1].opacity().law()
+    cubes = opacity_cubes([galaxy], [[0]], None, band, np.float64)[0]
+    for vsys in (0, 10000):
+        cubes.model.update([dict(dust0_vsys=vsys, gas_vsys=-3000)])
+        np.testing.assert_allclose(cubes.ratios[0], [[law.ratio(
+            band.wavelength().to_value('um') / (1.1 * doppler(vsys)))]],
+            rtol=1e-12)
+    galaxy = dusty_galaxy(dict(type='lines', lines=['halpha']))
+    cubes = opacity_cubes([galaxy], [[0]], ['halpha'], None, np.float64)[0]
+    rest = 0.656461
+    for gas, dust in ((3000, 3000), (3000, -2000)):
+        cubes.model.update([dict(dust0_vsys=dust, gas_vsys=gas)])
+        np.testing.assert_allclose(cubes.ratios[0], [[law.ratio(
+            rest * doppler(gas) / doppler(dust))]], rtol=1e-6)
+
+
+def test_dust_of_each_systemic_velocity_is_a_kind():
+    # (several wavelengths: a cube of each kind of dust, at most 4; one
+    # law in frames of different vsys, parameters, is of several kinds)
+    from gbkfit.model._component_plans import opacity_cubes
+    lines = dict(type='lines', lines=['halpha', 'nii6583'])
+    cubes = opacity_cubes(
+        [dusty_galaxy(lines, dusts=2)], [[0]], None, None, np.float64)[0]
+    assert cubes.ncubes == 2
+    with pytest.raises(ValueError, match="each systemic velocity"):
+        opacity_cubes(
+            [dusty_galaxy(lines, dusts=5)], [[0]], None, None, np.float64)
