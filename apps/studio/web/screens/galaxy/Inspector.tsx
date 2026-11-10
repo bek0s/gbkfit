@@ -97,6 +97,14 @@ export function Inspector({ draft, options, defs, params, project, field, compon
             <MoreOptions ctx={ctx} family="component" item={owner} path={base} without={COMPONENT_HANDLED} title="Options of the component" />
           </>
         )}
+        {part.key === 'distance' && component === null && (
+          // (the redshift of the galaxy: the frame of its lines and the
+          // epoch of its distance of the type redshift)
+          <div className="gx-row">
+            <span className="gx-row-label">Redshift</span>
+            <NumberOption value={Number(options.redshift ?? 0)} onCommit={(z) => set(['redshift'], z > 0 ? z : undefined)} label="redshift" unit="" />
+          </div>
+        )}
         {part.typed && <TypedPart ctx={ctx} part={part} path={optionPath} value={value} rings={rings} />}
         {part.family && <ListPart ctx={ctx} part={part} base={base} rings={rings} kind={String(owner.type ?? '')} isGalaxy={component === null} head={actions} />}
       </div>
