@@ -880,11 +880,24 @@ def responding_halo(**options):
         baryons=['stars', 'bulge']) | options
 
 
+def virial_radius(halo_mass, context):
+    """
+    The radius (kpc) within which the mean density of a halo of the mass
+    halo_mass(r) (G M, of the radius) is 180 times the mean matter
+    density of the context, by root finding.
+    """
+    target = 180 * context.omega_m * context.critical_density
+    return scipy.optimize.brentq(
+        lambda r: 3 * halo_mass(r) / (4 * np.pi * G * r ** 3) - target,
+        1.0, 1e4, xtol=1e-12, rtol=1e-15)
+
+
 def test_contracted_halos_keep_the_dark_matter_of_their_shells():
-    # Within r, the dark matter the halo had within r', with r' M(r') =
-    # r (M(r') + M_b(r)) (in units of G: M = v^2 r of the halo, and the
-    # mass of the baryons within the sphere), against r' found by root
-    # finding at each radius
+    # Within r, the dark matter the halo had within r', with r' M(r') /
+    # (1 - f_b) = r (M(r') + M_b(r)) (in units of G: M = v^2 r of the
+    # halo, and the mass of the baryons within the sphere; f_b the share
+    # of the baryons within the virial radius, of 180 times the mean
+    # matter density), against r' found by root finding at each radius
     model = mass_model(
         BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
     params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
@@ -895,19 +908,28 @@ def test_contracted_halos_keep_the_dark_matter_of_their_shells():
     def halo_mass(r):
         return float(halo.vcirc2(
             np.array([r]), dict(log_m=12, c=5), CONTEXT)[0]) * r
-    masses = model.enclosed_mass_components(radius, params, CONTEXT)
-    baryons = G * (masses['stars'] + masses['bulge'])
-    for r, baryon, v2 in zip(radius, baryons, parts['halo']):
+    r_vir = virial_radius(halo_mass, CONTEXT)
+
+    def baryons_at(r):
+        masses = model.enclosed_mass_components(
+            np.array([r]), params, CONTEXT)
+        return G * float(masses['stars'][0] + masses['bulge'][0])
+    keep = 1 - baryons_at(r_vir) / (baryons_at(r_vir) + halo_mass(r_vir))
+    assert 0.9 < keep < 1
+    for r, v2 in zip(radius, parts['halo']):
+        baryon = baryons_at(r)
         initial = scipy.optimize.brentq(
-            lambda x: x * halo_mass(x) - r * (halo_mass(x) + baryon),
+            lambda x: x * halo_mass(x) / keep - r * (halo_mass(x) + baryon),
             r, 1e4 * r, xtol=1e-14, rtol=1e-15)
-        assert v2 == pytest.approx(halo_mass(initial) / r, rel=1e-10)
+        assert v2 == pytest.approx(halo_mass(initial) / r, rel=1e-9)
 
 
 def test_gnedin_and_cautun_contractions():
     # Gnedin et al. (2004): within R = r_bar, the dark matter the halo had
-    # within r_bar' of the shell r', with r' M(r_bar') = r (M(r_bar') +
-    # M_b(R)), r_bar = 0.85 r_D (r / r_D)^0.8, against r' found by root
+    # within r_bar' of the shell r', with r' M(r_bar') / (1 - f_b) = r
+    # (M(r_bar') + M_b(R)), r_bar = 0.85 r_vir (r / r_vir)^0.8, of the
+    # virial radius of their calibration (180 times the mean matter
+    # density), for any parameterisation, against r' found by root
     # finding; it contracts the halo less than Blumenthal et al. Cautun et
     # al. (2020): its formula, of the baryon fraction of the context
     params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
@@ -920,23 +942,29 @@ def test_gnedin_and_cautun_contractions():
         name: model.vcirc2_components(radius, params, context)
         for name, model in models.items()}
     halo, halo_params = MassSpheroid('h', ProfileNFW()), dict(log_m=12, c=5)
-    r_d = 5 * ProfileNFW().scales(halo_params, context)[1]
+
+    def halo_mass(r):
+        return float(halo.vcirc2(np.array([r]), halo_params, context)[0]) * r
+    r_vir = virial_radius(halo_mass, context)
 
     def averaged(r):
-        return 0.85 * r_d * (r / r_d) ** 0.8
+        return 0.85 * r_vir * (r / r_vir) ** 0.8
 
     def mass(r):
-        return float(halo.vcirc2(
-            np.array([averaged(r)]), halo_params, context)[0]) * averaged(r)
-    masses = models['gnedin04'].enclosed_mass_components(
-        radius, params, context)
-    baryons = G * (masses['stars'] + masses['bulge'])
+        return halo_mass(averaged(r))
+
+    def baryons_at(r):
+        masses = models['gnedin04'].enclosed_mass_components(
+            np.array([r]), params, context)
+        return G * float(masses['stars'][0] + masses['bulge'][0])
+    keep = 1 - baryons_at(r_vir) / (baryons_at(r_vir) + halo_mass(r_vir))
+    baryons = np.array([baryons_at(R) for R in radius])
     for R, baryon, v2 in zip(radius, baryons, parts['gnedin04']['halo']):
-        r = r_d * (R / (0.85 * r_d)) ** (1 / 0.8)
+        r = r_vir * (R / (0.85 * r_vir)) ** (1 / 0.8)
         initial = scipy.optimize.brentq(
-            lambda x: x * mass(x) - r * (mass(x) + baryon),
+            lambda x: x * mass(x) / keep - r * (mass(x) + baryon),
             r, 1e4 * r, xtol=1e-14, rtol=1e-15)
-        assert v2 == pytest.approx(mass(initial) / R, rel=1e-10)
+        assert v2 == pytest.approx(mass(initial) / R, rel=1e-9)
     before = halo.vcirc2(radius, halo_params, context)
     assert np.all(before < parts['gnedin04']['halo'])
     assert np.all(parts['gnedin04']['halo'] < parts['blumenthal86']['halo'])
@@ -947,9 +975,9 @@ def test_gnedin_and_cautun_contractions():
     with pytest.raises(ValueError, match="cosmic baryon fraction"):
         mass_model(BARYONS + [responding_halo(response=dict(type='cautun20'))]
                    ).vcirc2(radius, params, CONTEXT)
-    with pytest.raises(ValueError, match="takes the radius r_D"):
-        MassSpheroid('h', ProfileNFW('density_radius'), baryons=['stars'],
-                     response=ResponseGnedin04())
+    # (any parameterisation: the virial radius is that of the profile)
+    MassSpheroid('h', ProfileNFW('density_radius'), baryons=['stars'],
+                 response=ResponseGnedin04())
 
 
 @pytest.mark.parametrize('profile, solve, bounds, given', [
@@ -1000,8 +1028,13 @@ def test_responding_halos_are_checked(tmp_path):
         mass_model([responding_halo(response=dict(type='blumenthal86'))])
     with pytest.raises(ValueError, match="in a loop"):
         mass_model([
-            responding_halo(name='a', baryons=['b']),
-            responding_halo(name='b', baryons=['a'])])
+            responding_halo(
+                name='a', baryons=['b'], response=dict(type='blumenthal86')),
+            responding_halo(
+                name='b', baryons=['a'], response=dict(type='blumenthal86'))])
+    # (baryons that nothing uses)
+    with pytest.raises(ValueError, match="it has neither: leave them out"):
+        MassSpheroid('h', ProfileNFW(), baryons=['stars'])
     info = responding_halo(
         response=dict(type='blumenthal86'),
         dark_fraction=dict(solve='log_m', bounds=[9.0, 15.0]))

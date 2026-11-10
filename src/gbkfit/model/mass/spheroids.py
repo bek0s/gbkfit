@@ -202,6 +202,11 @@ class MassSpheroid(MassComponent):
             raise ValueError(
                 "a dark fraction needs the baryons that the spheroid "
                 "responds to (baryons)")
+        if baryons and response is None and dark_fraction is None:
+            raise ValueError(
+                "the baryons of a spheroid are those that it responds to "
+                "(response) or whose share sets its mass (dark_fraction); "
+                "it has neither: leave them out")
         if dark_fraction is not None and dark_fraction.solve() not in own:
             raise ValueError(
                 f"the dark fraction sets {dark_fraction.solve()!r}, which "

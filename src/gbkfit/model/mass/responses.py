@@ -19,7 +19,7 @@ from gbkfit.config import (
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext
-from .halos import ProfileHalo
+from .halo_params import Overdensity
 from .profiles import SpheroidProfile
 from .units import G
 
@@ -36,9 +36,15 @@ __all__ = [
 
 
 # The orbit-averaged radii of the contraction of Gnedin et al. (2004):
-# r_bar = A0 r_D (r / r_D)^w
+# r_bar = A0 r_vir (r / r_vir)^w, of the virial radius r_vir of their
+# calibration, within which the mean density is 180 times the mean
+# matter density (_VIRIAL)
 _GNEDIN04_A0 = 0.85
 _GNEDIN04_W = 0.8
+_VIRIAL = Overdensity('180m')
+
+# The bisections of the virial radius of a halo, in ln r (kpc)
+_VIRIAL_RANGE = (np.log(1e-3), np.log(1e5))
 
 # The bisections of the initial radius of a contracted shell, in ln r
 # over [ln r, ln r + _CONTRACTION_RANGE] (to the precision of floats)
@@ -128,13 +134,19 @@ class HaloResponse(TypedSerializable, abc.ABC):
 class ResponseBlumenthal86(HaloResponse):
     """
     The adiabatic contraction of Blumenthal et al. 1986: the halo
-    contracts in the pull of its baryons, each shell keeping r M(<r). The
-    dark matter within r' ends within r, with r' M(r') = r (M(r') +
-    M_b(r)) (Burkert et al. 2010, Eq. 19), of the masses within spheres of
-    the halo before (M = v^2 r / G) and of the baryons: v^2(r) = G M(r') /
-    r = v^2(r') r' / r. (Burkert et al. 2010, Eq. 18, which DysmalPy's
-    documentation quotes, writes v^2(r') for this term, smaller by r /
-    r': it does not keep the mass that Eq. 19 moves within r.)
+    contracts in the pull of its baryons, each shell keeping r M(<r). It
+    starts as a halo that holds the baryons that later cool, of the same
+    profile: the dark matter within r' ends within r, with r' M(r') / (1
+    - f_b) = r (M(r') + M_b(r)), of the masses within spheres of the halo
+    before (of dark matter, M = v^2 r / G) and of the baryons, and f_b
+    the share of the baryons of the galaxy in its mass within the virial
+    radius r_vir (within which the mean density of the halo is 180 times
+    the mean matter density), M_b / (M_b + M) there: v^2(r) = G M(r') / r
+    = v^2(r') r' / r. (Burkert et al. 2010, Eq. 19, leaves out 1 - f_b,
+    which contracts the halo more: a few % locally, about 20% at high
+    redshift. Their Eq. 18, which DysmalPy's documentation quotes, writes
+    v^2(r') for this term, smaller by r / r': it does not keep the mass
+    that Eq. 19 moves within r.)
     """
 
     @staticmethod
@@ -154,7 +166,9 @@ class ResponseBlumenthal86(HaloResponse):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        return _contracted(R, halo_vcirc2, baryons_mass)
+        return _contracted(
+            R, halo_vcirc2, baryons_mass,
+            _virial_radius(halo_vcirc2, context))
 
 
 class ResponseGnedin04(HaloResponse):
@@ -162,9 +176,10 @@ class ResponseGnedin04(HaloResponse):
     The adiabatic contraction of Gnedin et al. 2004: that of Blumenthal et
     al. 1986 on orbit-averaged radii, which contracts the halo less. It is
     that of Blumenthal et al. (see ResponseBlumenthal86) with the
-    orbit-averaged radii r_bar = 0.85 r_D (r / r_D)^0.8 in the masses, of
-    the radius r_D of the halo (of a parameterisation of a mass or a
-    velocity).
+    orbit-averaged radii r_bar = 0.85 r_vir (r / r_vir)^0.8 in the masses,
+    of the virial radius r_vir of their calibration (within which the
+    mean density of the halo is 180 times the mean matter density), for
+    halos of any parameterisation.
     """
 
     @staticmethod
@@ -174,14 +189,6 @@ class ResponseGnedin04(HaloResponse):
     @staticmethod
     def type_title() -> str:
         return 'Adiabatic contraction (Gnedin 2004)'
-
-    def check_profile(self, profile: SpheroidProfile) -> None:
-        if not (isinstance(profile, ProfileHalo)
-                and profile.parameterisation() != 'density_radius'):
-            raise ValueError(
-                "the contraction 'gnedin04' takes the radius r_D of a halo: "
-                "it needs a halo of a parameterisation of a mass or a "
-                "velocity")
 
     def vcirc2(
             self,
@@ -193,8 +200,8 @@ class ResponseGnedin04(HaloResponse):
             context: MassContext
     ) -> np.ndarray:
         return _contracted(
-            R, halo_vcirc2, baryons_mass, _GNEDIN04_A0, _GNEDIN04_W,
-            profile.halo_radius(params, context))
+            R, halo_vcirc2, baryons_mass,
+            _virial_radius(halo_vcirc2, context), _GNEDIN04_A0, _GNEDIN04_W)
 
 
 class ResponseCautun20(HaloResponse):
@@ -592,42 +599,80 @@ def _sidm_match(
         "tolerance")
 
 
+def _virial_radius(halo_vcirc2: _VCirc2, context: MassContext) -> float:
+    """
+    Return the virial radius (kpc) of a halo (of its squared circular
+    velocity before its response): that within which its mean density,
+    3 v^2 / (4 pi G r^2), is 180 times the mean matter density of the
+    epoch of the galaxy (_VIRIAL), by bisection in ln r.
+
+    Raises
+    ------
+    ValueError
+        If the halo is not that dense anywhere in _VIRIAL_RANGE, or
+        denser everywhere.
+    """
+    target = _VIRIAL.density(context)
+
+    def excess(x: float) -> float:
+        r = np.exp(x)
+        mean = 3 * float(halo_vcirc2(np.array([r]))[0]) \
+            / (4 * np.pi * G * r ** 2)
+        return mean - target
+    lo, hi = _VIRIAL_RANGE
+    if not excess(lo) > 0 > excess(hi):
+        raise ValueError(
+            f"the halo has no virial radius (of the overdensity {_VIRIAL}) "
+            f"between {np.exp(lo):g} and {np.exp(hi):g} kpc, which its "
+            f"contraction takes")
+    for _ in range(_CONTRACTION_BISECTIONS):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if excess(mid) > 0 else (lo, mid)
+    return float(np.exp((lo + hi) / 2))
+
+
 def _contracted(
         R: np.ndarray,
         halo_vcirc2: _VCirc2,
         baryons_mass: _Mass,
+        r_vir: float,
         a0: float = 1.0,
-        w: float = 1.0,
-        r_d: float = 1.0
+        w: float = 1.0
 ) -> np.ndarray:
     """
     Return the squared circular velocity at the radii R of a halo
-    contracted adiabatically by baryons, of the orbit-averaged radii
-    r_bar = a0 r_D (r / r_D)^w (Gnedin et al. 2004; r_bar = r, a0 = w =
-    1: Blumenthal et al. 1986): the dark matter within r_bar' of the shell
-    of the radius r' ends within r_bar of r, with r' M(r_bar') = r (M(
-    r_bar') + M_b(r_bar)) (Burkert et al. 2010, Eq. 19, with the radii of
-    Gnedin et al.), of the masses within spheres of the halo before (M =
-    v^2 r / G, of halo_vcirc2) and of the baryons (baryons_mass), functions
-    of the radius: at R = r_bar, v^2 = G M(r_bar') / R.
+    contracted adiabatically by baryons, of the virial radius r_vir, of
+    the orbit-averaged radii r_bar = a0 r_vir (r / r_vir)^w (Gnedin et al.
+    2004; r_bar = r, a0 = w = 1: Blumenthal et al. 1986): the dark matter
+    within r_bar' of the shell of the radius r' ends within r_bar of r,
+    with r' M(r_bar') / (1 - f_b) = r (M(r_bar') + M_b(r_bar)) (Blumenthal
+    et al. 1986; Gnedin et al. 2004), of the masses within spheres of the
+    halo before (M = v^2 r / G, of halo_vcirc2) and of the baryons
+    (baryons_mass), functions of the radius, and the share of the baryons
+    in the mass within r_vir, f_b = M_b / (M_b + M) there: at R = r_bar,
+    v^2 = G M(r_bar') / R.
     """
     out = np.zeros_like(R)
     valid = R > 0
     averaged = R[valid]
     # (G M of both)
     baryons = G * baryons_mass(averaged)
+    virial = np.array([r_vir])
+    halo_vir = float(halo_vcirc2(virial)[0]) * r_vir
+    baryons_vir = G * float(baryons_mass(virial)[0])
+    keep = 1 - baryons_vir / (baryons_vir + halo_vir)
     # (the radius of the shell whose orbit-averaged radius is R)
-    r = r_d * (averaged / (a0 * r_d)) ** (1 / w)
+    r = r_vir * (averaged / (a0 * r_vir)) ** (1 / w)
     lo = np.log(r)
     hi = lo + _CONTRACTION_RANGE
     for _ in range(_CONTRACTION_BISECTIONS):
         mid = (lo + hi) / 2
         x = np.exp(mid)
-        x_averaged = a0 * r_d * (x / r_d) ** w
+        x_averaged = a0 * r_vir * (x / r_vir) ** w
         halo = halo_vcirc2(x_averaged) * x_averaged
-        inside = x * halo < r * (halo + baryons)
+        inside = x * halo / keep < r * (halo + baryons)
         lo, hi = np.where(inside, mid, lo), np.where(inside, hi, mid)
-    x_averaged = a0 * r_d * (np.exp((lo + hi) / 2) / r_d) ** w
+    x_averaged = a0 * r_vir * (np.exp((lo + hi) / 2) / r_vir) ** w
     out[valid] = halo_vcirc2(x_averaged) * x_averaged / averaged
     return out
 
