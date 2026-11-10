@@ -120,12 +120,9 @@ components:
   loose: false
   tilted: false
   rnodes: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
-  density:
-    ptraits: {type: exponential}
-  kinematics:
-    type: traits
-    vptraits: {type: arctan, direction: tan}
-    dptraits: {type: uniform}
+  rptraits: {type: exponential}
+  vptraits: {type: arctan, direction: tan}
+  dptraits: {type: uniform}
   emission: {type: lines}
 """,
     'observations': """\
@@ -182,8 +179,8 @@ properties:
   disk_vsys: 0
   disk_posa: {value: 30, min: 0, max: 180}
   disk_incl: {value: 60, min: 5, max: 85}
-  disk_pt_a: 1
-  disk_pt_s: 5
+  disk_rpt_a: 1
+  disk_rpt_s: 5
   disk_vpt_rt: 3
   disk_vpt_vt: {value: 180, min: 50, max: 300}
   disk_dpt_a: 20

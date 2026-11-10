@@ -22,10 +22,9 @@ HOLLOW_RNODES = [0, 3.5, 4, 10, 10.5]
 HOLLOW_A = [0, 0, 1, 1, 0]
 HOLLOW = dict(
     type='cone', rnodes=HOLLOW_RNODES,
-    density=dict(
-        ptraits=dict(type='nw_uniform'),
-        htraits=dict(type='gauss', zmax=1.5)))
-HOLLOW_PROPERTIES = dict(wall=30, pt_a=HOLLOW_A, ht_s=0.5)
+    rptraits=dict(type='nw_uniform'),
+    rhtraits=dict(type='gauss', zmax=1.5))
+HOLLOW_PROPERTIES = dict(wall=30, rpt_a=HOLLOW_A, rht_s=0.5)
 
 GEOMETRY = dict(xpos=1.5, ypos=-1, posa=30, incl=60)
 
@@ -108,9 +107,8 @@ def test_the_velocity_of_each_voxel(
     # sin(incl) / R (R the distance from the axis) or 100 (y sin(incl) + z
     # cos(incl)) / r (r the distance from the apex)
     cone = HOLLOW | dict(
-        kinematics=dict(
-            type='traits', vptraits=dict(type='uniform', direction=direction),
-            dptraits=UNIFORM),
+        vptraits=dict(type='uniform', direction=direction),
+        dptraits=UNIFORM,
         emission=LINES)
     observable = dict(
         type='pixel_spectra', size=[48, 48], step=[0.5, 0.5],
@@ -141,10 +139,10 @@ def test_a_uniform_wall_is_a_hard_cone(driver, evaluate_cases):
     # height trait of that half-width at each node, which is linear in r
     # between them as the cone interpolates it (of the hollow cone, whose
     # density is 0 within 3.5: the half-width there is that at 3.5).
-    cone = HOLLOW | dict(emission=BAND, density=HOLLOW['density'] | dict(
-        htraits=dict(type='uniform', zmax=2, nodewise=True)))
+    cone = HOLLOW | dict(
+        emission=BAND, rhtraits=dict(type='uniform', zmax=2, nodewise=True))
     _, extra = evaluate_cases([image(driver, cone)], GEOMETRY | dict(
-        wall=30, pt_a=HOLLOW_A, ht_s=list(np.multiply(
+        wall=30, rpt_a=HOLLOW_A, rht_s=list(np.multiply(
             np.maximum(HOLLOW_RNODES, 3.5), np.sin(np.radians(10))))))
     bdata = extra.get('bdata', component='component0')
     x, y, z = cone_frame(bdata, **GEOMETRY)
@@ -169,19 +167,18 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
     dust = dict(
         type='thick_disk', name='dust', loose=False, tilted=False,
         rnodes=list(range(0, 13)), opacity=dict(type='dust'),
-        density=dict(
-            ptraits=dict(type='exponential'),
-            htraits=dict(type='sech2', zmax=1)))
+        rptraits=dict(type='exponential'),
+        rhtraits=dict(type='sech2', zmax=1))
     properties = dict(
         cone_xpos=0, cone_ypos=0, cone_posa=0, cone_incl=0, cone_wall=30,
-        cone_pt_a=HOLLOW_A, cone_ht_s=0.5, dust_xpos=0, dust_ypos=0,
+        cone_rpt_a=HOLLOW_A, cone_rht_s=0.5, dust_xpos=0, dust_ypos=0,
         dust_posa=0,
-        dust_incl=0, dust_pt_a=0.5, dust_pt_s=4, dust_ht_s=0.2)
+        dust_incl=0, dust_rpt_a=0.5, dust_rpt_s=4, dust_rht_s=0.2)
     for sides, fraction in (('positive', 1), ('negative', 0)):
         cone = HOLLOW | dict(name='cone', sides=sides, emission=BAND)
         group = [image(
             driver, cone, line_of_sight=line_of_sight, components=[dust])]
-        clear, _ = evaluate_cases(group, properties | dict(dust_pt_a=0))
+        clear, _ = evaluate_cases(group, properties | dict(dust_rpt_a=0))
         dimmed, extra = evaluate_cases(group, properties)
         tau = extra.get('total_odata').data.sum(axis=0)
         clear, dimmed = (
@@ -194,27 +191,24 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
 
 
 KINEMATICS = dict(
-    type='traits',
     vptraits=dict(type='uniform', direction='out'), dptraits=UNIFORM)
 
 
 @pytest.mark.parametrize('options, message', [
-    (dict(kinematics=KINEMATICS | dict(vptraits=dict(type='mass'))),
+    (dict(vptraits=dict(type='mass')),
      "a cone does not take velocity polar trait mass"),
-    (dict(kinematics=KINEMATICS | dict(
-        vptraits=dict(type='uniform', direction='rad'))),
+    (dict(vptraits=dict(type='uniform', direction='rad')),
      r"a cone takes velocity traits along \['tan', 'out'\]"),
-    (dict(density=dict(
-        ptraits=dict(type='mixture_gauss', nblobs=1),
-        htraits=dict(type='gauss', zmax=1))),
+    (dict(rptraits=dict(type='mixture_gauss', nblobs=1),
+          rhtraits=dict(type='gauss', zmax=1)),
      "a cone does not take density polar trait mixture_gauss"),
-    (dict(density=dict(ptraits=UNIFORM)),
-     "missing required options: 'htraits'"),
+    (dict(rhtraits=None),
+     "option 'rhtraits' cannot be null"),
     (dict(opacity=dict(type='line', coefficients=UNIFORM)),
      "the opacity of a cone is dust"),
     (dict(sides='up'), "'sides' must be one of")])
 def test_what_a_cone_does_not_take(options, message):
     # What disks take, but cones do not
-    cone = HOLLOW | dict(kinematics=KINEMATICS, emission=LINES) | options
+    cone = HOLLOW | dict(**KINEMATICS, emission=LINES) | options
     with pytest.raises((ConfigError, ValueError), match=message):
         galaxy_parser.load(dict(components=[cone]))

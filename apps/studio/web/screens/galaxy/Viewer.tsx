@@ -46,7 +46,7 @@ function hasDepth(galaxy: Options): boolean {
   return components.some((c) => {
     const component = c as Options | undefined;
     if (!component) return false;
-    return component.type === 'thick_disk' || component.type === 'cone' || component.type === 'spheroid';
+    return component.type === 'thick_disk' || component.type === 'cone' || String(component.type).endsWith('spheroid');
   });
 }
 

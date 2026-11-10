@@ -346,10 +346,9 @@ def test_a_line_has_one_unit_in_a_galaxy():
     # (hi21 beside halpha, in a component of the unit of halpha)
     from gbkfit.model import galaxy_parser
     disk = dict(type='thin_disk', rnodes=[0, 1, 2],
-                density=dict(ptraits=dict(type='exponential')),
-                kinematics=dict(type='traits',
-                                vptraits=dict(type='arctan', direction='tan'),
-                                dptraits=dict(type='uniform')))
+                rptraits=dict(type='exponential'),
+                vptraits=dict(type='arctan', direction='tan'),
+                dptraits=dict(type='uniform'))
     with pytest.raises(ValueError, match="the line 'hi21' has the unit"):
         galaxy_parser.load(dict(components=[
             disk | dict(name='hi', emission=dict(

@@ -293,10 +293,9 @@ def test_the_geometry_of_a_model_is_found(driver):
     # the axis ratio of a thin disk cos(incl)
     galaxy = dict(components=[dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 21)),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(type='traits',
-                        vptraits=dict(type='arctan', direction='tan'),
-                        dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines'))])
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
@@ -305,7 +304,7 @@ def test_the_geometry_of_a_model_is_found(driver):
             type='pixel_moments', size=[41, 41],
             spectral=dict(size=161, step=5, convention='relativistic'),
             orders=[1], flux_floor=1e-4))])
-    values = dict(vsys=0, xpos=0, ypos=0, posa=40, incl=60, pt_a=1, pt_s=4,
+    values = dict(vsys=0, xpos=0, ypos=0, posa=40, incl=60, rpt_a=1, rpt_s=4,
                   vpt_rt=2, vpt_vt=150, dpt_a=20)
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), values)

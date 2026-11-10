@@ -22,24 +22,23 @@ from gbkfit.instrument import (
 GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    density=dict(ptraits=dict(type='exponential')),
+    rptraits=dict(type='exponential'),
     emission=dict(type='band'))])
 
-PROPERTIES = dict(xpos=0.3, ypos=-0.6, posa=50, incl=60, pt_a=1, pt_s=4)
+PROPERTIES = dict(xpos=0.3, ypos=-0.6, posa=50, incl=60, rpt_a=1, rpt_s=4)
 
 
 # A galaxy of lines (seen by spectral cubes), and the speed of light
 LINE_GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 40, 4)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))])
 
 LINE_PROPERTIES = dict(
-    vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60, pt_a=1, pt_s=12,
+    vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60, rpt_a=1, rpt_s=12,
     vpt_rt=6, vpt_vt=60, dpt_a=20)
 
 C = 299792.458

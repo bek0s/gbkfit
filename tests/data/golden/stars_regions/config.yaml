@@ -1,16 +1,15 @@
 # stars_regions: The kinematics of the stars of a flattened Sersic spheroid in Voronoi bins, as pPXF gives them (log velocities, a PSF and no LSF), as Jeans models are fitted to them: the mean and the dispersion of each bin (see prep.gauss_hermite_moments). Its Jeans kinematics in the gravity of its light and an NFW halo.
 # (written by make_golden.py; do not edit)
-version: 7
+version: 8
 driver: {type: host}
 galaxies:
 - components:
-  - type: spheroid
+  - type: jeans_spheroid
     name: stars
     rmax: 8
     emission: {type: stars}
     profile: {type: sersic}
     shape: {type: flattened}
-    kinematics: {type: jeans}
   mass:
   - {type: light_spheroid, name: lum, component: stars}
   - type: spheroid
@@ -29,8 +28,10 @@ observations:
       rpix: [11.5, 11.5]
       rval: [0.0, 0.0]
       rota: 0.0
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
+      error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
+      error: observation0_moment2_e.fits}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   line_of_sight:
     type: grid

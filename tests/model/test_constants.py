@@ -10,7 +10,7 @@ from modelutils import observation_group
 RNODES = list(range(0, 21, 2))
 
 PROPERTIES = dict(
-    vsys=0, xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=4, dpt_a=10)
+    vsys=0, xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=4, dpt_a=10)
 
 EXPONENTIAL = dict(type='exponential')
 SECH2 = dict(type='sech2', zmax=8)
@@ -22,13 +22,12 @@ def disk(vptraits, density=None, **options):
     density (thin by default; thick with height traits).
     """
     if density is None:
-        density = dict(ptraits=EXPONENTIAL)
+        density = dict(rptraits=EXPONENTIAL)
     return dict(
-        type='thick_disk' if 'htraits' in density else 'thin_disk',
+        type='thick_disk' if 'rhtraits' in density else 'thin_disk',
         loose=False, tilted=False, rnodes=RNODES,
-        density=density,
-        kinematics=dict(type='traits',
-                        vptraits=vptraits, dptraits=dict(type='uniform')),
+        **density,
+        vptraits=vptraits, dptraits=dict(type='uniform'),
         emission=dict(type='lines')) | options
 
 
@@ -61,12 +60,12 @@ def test_names_of_constants():
     # of their component, when its galaxy has several (dust too), and by
     # that of their galaxy, when there are several
     vptraits = dict(type='arctan', direction='tan')
-    thick = dict(ptraits=EXPONENTIAL, htraits=SECH2)
+    thick = dict(rptraits=EXPONENTIAL, rhtraits=SECH2)
     galaxy0 = spectral_cube(
         [disk(vptraits, thick, name='gas'),
          disk(vptraits, thick, name='ring', rnodes=[0, 5, 10]),
          dict(type='thick_disk', name='dust', loose=False, tilted=False,
-              rnodes=[0, 1], density=thick, opacity=dict(type='dust'))],
+              rnodes=[0, 1], **thick, opacity=dict(type='dust'))],
         dict(type='grid')) | dict(name='g0')
     galaxy1 = spectral_cube(
         [disk(vptraits, rnodes=[0, 3, 6])], dict(type='flat')) \

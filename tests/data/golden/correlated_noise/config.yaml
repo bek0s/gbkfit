@@ -1,6 +1,6 @@
 # correlated_noise: A cube of noise correlated on the sky by the beam and along the channels, declared on the data: the likelihood whitens its residuals.
 # (written by make_golden.py; do not edit)
-version: 7
+version: 8
 driver: {type: host}
 galaxies:
 - components:
@@ -8,12 +8,9 @@ galaxies:
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    density:
-      ptraits: {type: exponential}
-    kinematics:
-      type: traits
-      vptraits: {type: arctan, direction: tan}
-      dptraits: {type: uniform}
+    rptraits: {type: exponential}
+    vptraits: {type: arctan, direction: tan}
+    dptraits: {type: uniform}
     emission: {type: lines}
 observations:
 - type: sky
@@ -34,7 +31,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 1.2, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20 km/s}
+    lsf: {type: gauss, sigma: 20.0 km s-1}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   dtype: float64
@@ -46,8 +43,8 @@ params:
     posa: {value: 42, min: 0, max: 90}
     incl: {value: 50, min: 10, max: 80}
     vsys: {value: 8, min: -50, max: 50}
-    pt_a: 1
-    pt_s: 3.2
+    rpt_a: 1
+    rpt_s: 3.2
     vpt_rt: 2.2
     vpt_vt: {value: 140, min: 50, max: 300}
     dpt_a: {value: 30, min: 5, max: 80}

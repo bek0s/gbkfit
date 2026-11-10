@@ -26,19 +26,17 @@ KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 DISK = dict(
     type='thick_disk', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)), rstep=0.5,
-    density=dict(
-        ptraits=dict(type='exponential'),
-        htraits=dict(type='gauss', zmax=10)),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform'), equilibrium=dict(type='central')),
+    rptraits=dict(type='exponential'),
+    rhtraits=dict(type='gauss', zmax=10),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'), equilibrium=dict(type='central'),
     emission=dict(type='lines'))
 
 # The equilibrium in the gravity of the mass component 'gas'
 SELF_GRAVITATING = dict(type='self_gravitating', mass='gas')
 
 PROPERTIES = dict(
-    xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4, ht_s=1,
+    xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, rht_s=1,
     vpt_rt=3, vpt_vt=200, dpt_a=0)
 
 
@@ -50,7 +48,7 @@ def galaxy(disk, **info):
 
 def with_kinematics(disk, **kinematics):
     """The disk with the given options of its kinematics instead."""
-    return disk | dict(kinematics=disk['kinematics'] | kinematics)
+    return disk | dict(kinematics)
 
 
 def evaluate(driver, galaxy_, properties):
@@ -116,7 +114,7 @@ def test_equilibrium_along_z_is_the_dispersion_of_sigma_z(driver, disk_type):
     sigma[0] = sigma[1]
     np.testing.assert_allclose(
         evaluate(driver, balanced, PROPERTIES),
-        evaluate(driver, given, PROPERTIES | dict(dpt1_a=0, dpt2_a=sigma)),
+        evaluate(driver, given, PROPERTIES | dict(dpt2_a=0, dpt3_a=sigma)),
         rtol=1e-6, atol=1e-7)
 
 
@@ -141,7 +139,7 @@ def test_central_equilibrium_in_the_mass_of_the_galaxy():
     np.testing.assert_array_equal(
         states[0].equilibrium, table['sigma'])
     dumped = galaxy_parser.dump(balanced)
-    assert dumped['components'][0]['kinematics']['equilibrium'] == \
+    assert dumped['components'][0]['equilibrium'] == \
         dict(type='central')
 
 
@@ -169,8 +167,8 @@ def test_self_gravitating_equilibrium_in_a_mass_disk():
         rtol=1e-6)
     np.testing.assert_array_equal(
         states[0].equilibrium, table['sigma'])
-    kinematics = galaxy_parser.dump(balanced)['components'][0]['kinematics']
-    assert kinematics['equilibrium'] == SELF_GRAVITATING
+    dumped = galaxy_parser.dump(balanced)['components'][0]
+    assert dumped['equilibrium'] == SELF_GRAVITATING
 
 
 def test_self_gravitating_equilibrium_in_its_own_mass_disk():
@@ -255,9 +253,8 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
     # against its radius is the isothermal slab of the self-gravitating
     # equilibrium: sigma^2 = 2 sqrt(3) G Sigma h, to about h / rd
     disk = with_kinematics(DISK, equilibrium=dict(type='jeans')) | dict(
-        name='gas', density=dict(
-            ptraits=dict(type='exponential'),
-            htraits=dict(type='sech2', zmax=2)))
+        name='gas', rptraits=dict(type='exponential'),
+                    rhtraits=dict(type='sech2', zmax=2))
     balanced = galaxy(
         disk, mass=[dict(
             type='disk', name='gas', surface=dict(type='component',
@@ -265,7 +262,7 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
             vertical=dict(type='component', component='gas'))],
         distance=dict(type='direct', cosmology='Planck18'))
     params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
-        | dict(gas_ht_s=0.05, distance=10, mass_gas_upsilon=1e9)
+        | dict(gas_rht_s=0.05, distance=10, mass_gas_upsilon=1e9)
     extra = Extras()
     balanced.plan_stage().evaluate(params, extra)
     table = extra.get('equilibrium', component='gas')
@@ -311,7 +308,7 @@ def test_jeans_equilibrium_needs_vertical_forces(tmp_path):
 @pytest.mark.parametrize('disk, message', [
     (with_kinematics(DISK, equilibrium=dict(type='thin')), "'thin'"),
     (DISK | dict(
-        type='thin_disk', density=dict(ptraits=dict(type='exponential'))),
+        type='thin_disk', rptraits=dict(type='exponential')),
      r"options of a thick disk \(type: thick_disk\), which a thin disk "
      r"does not take: 'equilibrium'"),
     (with_kinematics(DISK, vptraits=dict(type='arctan', direction='rad')),

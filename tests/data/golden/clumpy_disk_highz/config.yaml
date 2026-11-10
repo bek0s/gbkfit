@@ -1,6 +1,6 @@
 # clumpy_disk_highz: The first science: a thick, turbulent disk with three clumps of a galaxy at z = 1.5 that emits Halpha and [NII] 6583, in the cube of an IFU whose spectral axis is in optical velocities of Halpha at rest, float32 (the default).
 # (written by make_golden.py; do not edit)
-version: 7
+version: 8
 driver: {type: host}
 galaxies:
 - redshift: 1.5
@@ -9,17 +9,14 @@ galaxies:
     loose: false
     tilted: false
     rnodes: [0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6]
-    density:
-      ptraits:
-      - {type: exponential}
-      - {type: mixture_exponential, nblobs: 3}
-      htraits:
-      - {type: sech2, zmax: 4}
-      - {type: sech2, zmax: 4}
-    kinematics:
-      type: traits
-      vptraits: {type: arctan, direction: tan}
-      dptraits: {type: uniform}
+    rptraits:
+    - {type: exponential}
+    - {type: mixture_exponential, nblobs: 3}
+    rhtraits:
+    - {type: sech2, zmax: 4}
+    - {type: sech2, zmax: 4}
+    vptraits: {type: arctan, direction: tan}
+    dptraits: {type: uniform}
     emission:
       type: lines
       lines: [halpha, nii6583]
@@ -31,7 +28,8 @@ observations:
     rpix: [14.5, 14.5]
     rval: [0, 0]
     rota: 0
-    spectral: {step: 120.0, rpix: 19.5, rval: 450870.0, rest: 6.564610000000001e-07 m, medium: vacuum}
+    spectral: {step: 120.0, rpix: 19.5, rval: 450870.0, rest: 6.564610000000001e-07
+        m, medium: vacuum}
     data: observation0_spectra_d.fits
     error: 1.9999999494757503e-05
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
@@ -42,7 +40,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.2, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 35 km/s}
+    lsf: {type: gauss, sigma: 35.0 km s-1}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   dtype: float32
@@ -54,19 +52,19 @@ params:
     posa: {value: 43, min: 0, max: 90}
     incl: {value: 50, min: 10, max: 80}
     vsys: {value: 6, min: -50, max: 50}
-    pt_a: 1
-    pt_s: 0.4
-    pt1_r: [0.25, 0.5, 0.7]
-    pt1_t: [30, 160, 260]
-    pt1_a:
+    rpt_a: 1
+    rpt_s: 0.4
+    rpt2_r: [0.25, 0.5, 0.7]
+    rpt2_t: [30, 160, 260]
+    rpt2_a:
     - {value: 0.7, min: 0, max: 5}
     - 0.6
     - 0.5
-    pt1_s: [0.06, 0.08, 0.05]
-    pt1_q: [1, 1, 1]
-    pt1_p: [0, 0, 0]
-    ht_s: 0.08
-    ht1_s: 0.06
+    rpt2_s: [0.06, 0.08, 0.05]
+    rpt2_q: [1, 1, 1]
+    rpt2_p: [0, 0, 0]
+    rht_s: 0.08
+    rht2_s: 0.06
     vpt_rt: 0.15
     vpt_vt: {value: 185, min: 50, max: 400}
     dpt_a: {value: 45, min: 5, max: 150}

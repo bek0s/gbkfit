@@ -23,15 +23,14 @@ HI = 1420.405752e6
 DISK = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))])
 
 DISK_PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
-    pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
+    rpt_a=1, rpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 # The channels of 20 km/s from -160 km/s, of increasing frequency (so
 # against the cube, of increasing velocity); baselines of up to 15 km

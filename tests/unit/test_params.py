@@ -104,16 +104,16 @@ GOLDEN_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
 # and light profiles, the flux of points), the mass per unit of that
 # light, and the jitter of a noise of data of no unit
 UNITLESS_PARAMS = dict(
-    blobs_maps_selection={'pt_a', 'pt1_a', 'pt2_a'},
-    disk_cone_lines={'disk_pt_a', 'cone_pt_a'},
+    blobs_maps_selection={'rpt_a', 'rpt2_a', 'rpt3_a'},
+    disk_cone_lines={'disk_rpt_a', 'cone_rpt_a'},
     dust_extinction_band=set(),
-    equilibrium_heights_mond={'gas_pt_a', 'mass_gas_upsilon'},
-    lens_foreground={'pt_a'},
+    equilibrium_heights_mond={'gas_rpt_a', 'mass_gas_upsilon'},
+    lens_foreground={'rpt_a'},
     points_particles_band={'nucleus_flux'},
     profile_table_mass=set(),
-    spiral_bar_flows={'gas_pt_a'},
+    spiral_bar_flows={'gas_rpt_a'},
     stars_orbits={'stars_i0', 'mass_lum_upsilon'},
-    upper_limits_fitted_noise={'pt_a', 'halpha_noise_jitter_moment1'})
+    upper_limits_fitted_noise={'rpt_a', 'halpha_noise_jitter_moment1'})
 
 
 @pytest.mark.parametrize('case, unitless', UNITLESS_PARAMS.items())

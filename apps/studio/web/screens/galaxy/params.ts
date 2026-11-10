@@ -10,7 +10,7 @@
 // (e.g. its components' names, the place of a trait in its list, the
 // number of rings), so that its properties are kept in step with them as
 // they change (see transition).
-import { isObject, startsWith, type Options, type Path } from './options';
+import { getAt, isObject, startsWith, type Options, type Path } from './options';
 
 export interface Param {
   name: string;
@@ -25,7 +25,7 @@ export interface Param {
   range: string;
   period: number | null;
   // The path of the option that makes it in the galaxy (e.g.
-  // ['components', 0, 'kinematics', 'vptraits', 1]; ['components', 0]:
+  // ['components', 0, 'vptraits', 1]; ['components', 0]:
   // the component itself)
   owner: Path;
 }
@@ -178,7 +178,7 @@ export function freeRange(param: Param, field: number): [number, number] {
 
 // The name of a parameter in the part that owns it: without the prefixes
 // of its component, its trait (or the name of a trait, of a line), or its
-// mass component: e.g. 'vt' of 'disk_vpt1_vt', 'log_m' of 'mass_halo_log_m'
+// mass component: e.g. 'vt' of 'disk_vpt2_vt', 'log_m' of 'mass_halo_log_m'
 export function shortName(param: Param, options: Options, siblings: Param[]): string {
   const prefix = commonPrefix(siblings.filter((p) => ownerKey(p.owner) === ownerKey(param.owner)).map((p) => p.name));
   const [section, index] = param.owner;
@@ -188,14 +188,17 @@ export function shortName(param: Param, options: Options, siblings: Param[]): st
     if (name !== null && rest.startsWith(`${name}_`)) rest = rest.slice(name.length + 1);
     // (of a line, its ratio: 'nii6583 ratio')
     if (param.owner[2] === 'emission') return rest.replace(/_ratio$/, ' ratio');
-    // (of a trait, its prefix: of its kind and place, or its name; that of
-    // all the parameters of the trait, up to an underscore, if it has
-    // several, else up to its first underscore)
+    // (of a trait, its prefix: of its kind and place, or its kind and
+    // name; that of all the parameters of the trait, up to an underscore,
+    // if it has several, else its kind, its place and its name)
     if (param.owner.length > 3) {
       const own = prefix.length && prefix.endsWith('_') ? prefix : '';
       if (own && param.name.startsWith(own) && param.name.length > own.length) return param.name.slice(own.length);
-      const at = rest.indexOf('_');
-      return at < 0 ? rest : rest.slice(at + 1);
+      const trait = getAt(options, param.owner);
+      const traitName = isObject(trait) && typeof trait.name === 'string' ? trait.name : null;
+      rest = rest.replace(/^[a-z]+\d*_/, '');
+      if (traitName !== null && rest.startsWith(`${traitName}_`)) rest = rest.slice(traitName.length + 1);
+      return rest;
     }
   } else if (section === 'mass' && typeof index === 'number') {
     const owner = options.mass;

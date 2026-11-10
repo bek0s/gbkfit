@@ -23,8 +23,8 @@ __all__ = [
 class VariedTable:
     """
     A table of parameters whose number of rows a fitter varies: its name
-    (that of its parameters without their column, e.g. 'pt1' of
-    'pt1_r'), the names of its free columns, the free elements of the
+    (that of its parameters without their column, e.g. 'rpt2' of
+    'rpt2_r'), the names of its free columns, the free elements of the
     rows it varies (rows, columns: their indices in the free values), the
     values of an unused row (the empty row in its columns, the median of
     the prior in the others), and the number of its rows that are always
@@ -102,7 +102,7 @@ def table_layout(
 
     Only the rows of a table that share all their settings are
     interchangeable, and only they can be dropped: a row with settings of
-    its own (see ParamSpace.own_settings: e.g. 'pt1_r[0]') is always
+    its own (see ParamSpace.own_settings: e.g. 'rpt2_r[0]') is always
     used, and so are the rows whose empty columns are not free (e.g.
     blobs of a fixed amplitude), and all those of a table of a parameter
     with a mode. Of the others, the first are always used too, as many as

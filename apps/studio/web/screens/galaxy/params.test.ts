@@ -54,11 +54,11 @@ test('the ranges of sliders stay within the valid ranges', () => {
 });
 
 test('short names drop the prefixes of their owners', () => {
-  const options = { components: [{ name: 'disk' }], mass: [{ name: 'halo' }] };
+  const options = { components: [{ name: 'disk', vptraits: [{}, {}, { name: 'fast' }] }], mass: [{ name: 'halo' }] };
   const params = [
-    param('disk_vpt1_rt', ['components', 0, 'kinematics', 'vptraits', 1]),
-    param('disk_vpt1_vt', ['components', 0, 'kinematics', 'vptraits', 1]),
-    param('disk_fast_vt', ['components', 0, 'kinematics', 'vptraits', 2]),
+    param('disk_vpt2_rt', ['components', 0, 'vptraits', 1]),
+    param('disk_vpt2_vt', ['components', 0, 'vptraits', 1]),
+    param('disk_vpt_fast_vt', ['components', 0, 'vptraits', 2]),
     param('disk_posa', ['components', 0]),
     param('disk_nii6583_ratio', ['components', 0, 'emission', 'lines', 1]),
     param('mass_halo_log_m', ['mass', 0]),
@@ -73,13 +73,13 @@ test('resampling by places, or evenly', () => {
 });
 
 test('the properties follow the parameters of the galaxy', () => {
-  const vpt = (i: number): Path => ['components', 0, 'kinematics', 'vptraits', i];
-  const before = [param('d_vpt_vt', vpt(0)), param('d_vpt1_vt', vpt(1)), param('d_posa', ['components', 0], 3)];
+  const vpt = (i: number): Path => ['components', 0, 'vptraits', i];
+  const before = [param('d_vpt_vt', vpt(0)), param('d_vpt2_vt', vpt(1)), param('d_posa', ['components', 0], 3)];
   const after = [param('d_vpt_vt', vpt(0)), param('d_posa', ['components', 0], 5)];
   const radii = { before: () => [0, 1, 2], after: () => [0, 0.5, 1, 1.5, 2] };
-  const properties = { d_vpt_vt: 100, d_vpt1_vt: { value: 50, min: 0 }, d_posa: [0, 10, 20], other: 3 };
+  const properties = { d_vpt_vt: 100, d_vpt2_vt: { value: 50, min: 0 }, d_posa: [0, 10, 20], other: 3 };
   // (the first trait removed: the second is the first now)
-  const moved = (owner: Path) => (owner.length === 5 ? (owner[4] === 0 ? null : [...owner.slice(0, 4), (owner[4] as number) - 1]) : owner);
+  const moved = (owner: Path) => (owner.length === 4 ? (owner[3] === 0 ? null : [...owner.slice(0, 3), (owner[3] as number) - 1]) : owner);
   expect(transition(properties, before, after, moved, radii)).toEqual({
     d_vpt_vt: { value: 50, min: 0 },
     d_posa: [0, 5, 10, 15, 20],

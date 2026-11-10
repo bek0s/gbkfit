@@ -144,7 +144,7 @@ def test_the_old_disk_types_are_migrated():
         'thin_disk', 'thick_disk', 'cone']
     assert components[1] == dict(
         type='thick_disk', name='b', clouds=dict(cflux=1e-3, seed=2),
-        density=thick)
+        rptraits=thick['ptraits'], rhtraits=thick['htraits'])
 
 
 @pytest.mark.parametrize('components, owns', [
@@ -192,11 +192,12 @@ def test_kinematics_are_migrated_to_typed_ones():
         dict(type='cone', kinematics=dict(vptraits=dict(type='uniform'))),
         dict(type='spheroid', kinematics=dict(type='jeans'))]
     migration.migrate(dict(galaxies=[dict(components=components)]), 2)
-    assert [c['kinematics'] for c in components] == [
-        dict(type='traits', vptraits=dict(type='mass'), equilibrium=dict(
+    # (and then on the components: see test_components_are_flat)
+    assert components == [
+        dict(type='thin_disk', vptraits=dict(type='mass'), equilibrium=dict(
             type='self_gravitating', mass='gas', direction='ver')),
-        dict(type='traits', vptraits=dict(type='uniform')),
-        dict(type='jeans')]
+        dict(type='cone', vptraits=dict(type='uniform')),
+        dict(type='jeans_spheroid')]
 
 
 def test_spectral_axes_are_migrated_to_one_option():
@@ -409,6 +410,11 @@ DISK = dict(
         type='traits', vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform')),
     emission=dict(type='lines'))
+# DISK migrated to the current version: its traits on the disk
+FLAT_DISK = dict(
+    rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'), emission=dict(type='lines'))
 SHARED = [
     DISK | dict(name='gas'), DISK | dict(name='ion'),
     dict(type='point', name='agn', emission=dict(type='lines'))]
@@ -492,9 +498,14 @@ def test_shared_geometries_without_params_are_migrated_by_hand():
     assert "by hand: rename the parameter posa to gas_posa, ion_posa: " \
         "gas_posa" in by_hand
     alone = dict(galaxies=[dict(components=[copy.deepcopy(DISK)])])
+    path = ['galaxies', 0, 'components', 0]
     assert migration.migrate(alone, 3) == [
+        migration.Change(path, "type disk -> thin_disk"),
         migration.Change(
-            ['galaxies', 0, 'components', 0], "type disk -> thin_disk"),
+            path, "density: {ptraits, htraits} -> rptraits, rhtraits"),
+        migration.Change(
+            path, "kinematics: {type: traits, ...} -> its options on the "
+                  "component"),
         migration.Change(['version'], f"3 -> {VERSION}")]
 
 
@@ -502,7 +513,8 @@ def test_own_geometries_are_migrated_to_their_components():
     disk = copy.deepcopy(DISK) | dict(name='gas', geometry='own', tilted=True)
     config = dict(galaxies=[dict(components=[disk])])
     migration.migrate(config, 3)
-    assert disk == DISK | dict(type='thin_disk', name='gas', tilted=True)
+    assert disk == FLAT_DISK | dict(
+        type='thin_disk', name='gas', tilted=True)
 
 
 @pytest.mark.parametrize('old, new', [
@@ -515,7 +527,7 @@ def test_rings_evenly_spaced_are_migrated_to_one_option(old, new):
     migration.migrate(config, 3)
     assert disk == dict(type='thin_disk', name='gas', rnodes=new, rstep=0.5)
     assert list(disk) == ['type', 'name', 'rnodes', 'rstep']
-    assert spheroid['kinematics'] == dict(type='traits', rnodes=new)
+    assert spheroid == dict(type='spheroid', rnodes=new)
 
 
 def test_rings_of_several_forms_are_migrated_by_hand():
@@ -579,7 +591,8 @@ def test_disks_are_thin_or_thick_by_their_type(density, new):
     config = dict(galaxies=[dict(components=[disk], mass=[mass])])
     changes = migration.migrate(config, 4)
     expected = THICK_DENSITY if new == 'thick_disk' else THIN_DENSITY
-    assert disk == dict(type=new, name='gas', density=expected)
+    assert disk == dict(type=new, name='gas') | {
+        f'r{key}': value for key, value in expected.items()}
     # (the mass disk is of another family)
     assert mass['type'] == 'disk'
     assert not any(c.message.startswith('by hand') for c in changes)
@@ -594,9 +607,9 @@ def test_a_thin_disk_loses_the_options_of_a_thick_disk_that_are_none():
     config = dict(galaxies=[dict(components=[disk])])
     changes = migration.migrate(config, 4)
     assert disk == dict(
-        type='thin_disk', density=THIN_DENSITY, kinematics=dict(
-            type='traits', vptraits=dict(type='uniform', direction='tan'),
-            dptraits=dict(type='uniform')))
+        type='thin_disk', rptraits=THIN_DENSITY['ptraits'],
+        vptraits=dict(type='uniform', direction='tan'),
+        dptraits=dict(type='uniform'))
     assert not any(c.message.startswith('by hand') for c in changes)
     from gbkfit.model import galaxy_parser
     galaxy_parser.load(config['galaxies'][0] | dict(components=[
@@ -623,9 +636,9 @@ def test_the_options_of_a_thick_disk_on_a_thin_one_are_changed_by_hand():
         (path, ' a thin disk takes no opacity'),
         (path, ' a thin disk takes no clouds'),
         (path + ['kinematics'], ' a thin disk takes no equilibrium')]
-    # (left as they were)
+    # (left as they were, and then on the disk)
     assert disk['opacity'] == dict(type='dust')
-    assert disk['kinematics']['equilibrium'] == dict(type='central')
+    assert disk['equilibrium'] == dict(type='central')
 
 
 def test_the_hdu_of_the_file_of_a_table_is_in_the_file():
@@ -743,3 +756,123 @@ def test_tables_of_pieces_of_projects_have_their_hdu_in_their_file(tmp_path):
     migration.migrate_project(study.path)
     assert study.piece('lsf', 'muse')['sigma']['file'] == dict(
         file='lsf.fits', hdu=1)
+
+
+def test_components_are_flat():
+    # Version 8: the groups of options without a choice of kind go, and a
+    # spheroid's type says how its stars move
+    thick = dict(
+        type='thick_disk', name='gas',
+        density=dict(
+            ptraits=dict(type='exponential'),
+            htraits=dict(type='sech2', zmax=8)),
+        kinematics=dict(
+            type='traits', vptraits=dict(type='arctan', direction='tan'),
+            dptraits=dict(type='uniform'), equilibrium=dict(type='jeans')),
+        emission=dict(type='lines'))
+    spheroids = [
+        dict(type='spheroid', name='a', kinematics=dict(type='jeans')),
+        dict(type='spheroid', name='b', kinematics=dict(
+            type='schwarzschild', norbits=200)),
+        dict(type='spheroid', name='c', kinematics=dict(
+            type='traits', vptraits=dict(type='uniform', direction='tan'),
+            dptraits=dict(type='uniform'), rnodes=[0, 10])),
+        dict(type='spheroid', name='d')]
+    config = dict(galaxies=[dict(components=[thick, *spheroids])])
+    changes = migration.migrate(config, 7)
+    # (in the order of the options they replace)
+    assert list(thick) == [
+        'type', 'name', 'rptraits', 'rhtraits', 'vptraits', 'dptraits',
+        'equilibrium', 'emission']
+    assert thick['rhtraits'] == dict(type='sech2', zmax=8)
+    assert spheroids == [
+        dict(type='jeans_spheroid', name='a'),
+        dict(type='orbit_spheroid', name='b', norbits=200),
+        dict(type='spheroid', name='c',
+             vptraits=dict(type='uniform', direction='tan'),
+             dptraits=dict(type='uniform'), rnodes=[0, 10]),
+        dict(type='spheroid', name='d')]
+    assert not any(c.message.startswith('by hand') for c in changes)
+
+
+def test_flat_components_keep_their_comments(tmp_path):
+    path = tmp_path / 'galaxy.yaml'
+    path.write_text(
+        'version: 7\n'
+        'galaxies:\n'
+        '- components:\n'
+        '  - type: thin_disk  # the gas\n'
+        '    density:\n'
+        '      ptraits:\n'
+        '        type: exponential\n'
+        '    emission:  # its light\n'
+        '      type: band\n')
+    migration.migrate_file(str(path))
+    text = path.read_text()
+    assert 'type: thin_disk  # the gas' in text
+    assert 'rptraits:\n' in text and 'density' not in text
+    assert 'emission:  # its light' in text
+
+
+def test_trait_parameters_are_named_after_their_kind():
+    # Version 8: pt and ht are rpt and rht; unnamed traits are numbered
+    # from the second (pt1 -> rpt2); named traits keep their kind (rot ->
+    # vpt_rot); the coefficients of line opacity are numbered so too
+    disk = dict(
+        type='thick_disk', name='gas',
+        density=dict(
+            ptraits=[dict(type='exponential'), dict(type='nw_uniform')],
+            htraits=[dict(type='sech2'), dict(type='sech2')]),
+        kinematics=dict(
+            type='traits',
+            vptraits=[dict(type='arctan', name='rot'),
+                      dict(type='uniform', name='inflow')],
+            dptraits=dict(type='uniform')),
+        opacity=dict(type='line', coefficients=[
+            dict(type='uniform'), dict(type='exponential')]))
+    params = dict(
+        properties=dict(
+            gas_pt_a=1, gas_pt1_a=[1, 2], gas_ht_s=1,
+            gas_ht1_s='gas_ht_s * 2', gas_rot_vt=100, gas_inflow_vr=3,
+            gas_dpt_a=10, gas_op_a=1, gas_op1_a=0.1),
+        priors=dict(x='gas_pt1_a[0] + gas_rot_vt'))
+    config = dict(galaxies=[dict(components=[disk])], params=params)
+    changes = migration.migrate(config, 7)
+    assert params == dict(
+        properties=dict(
+            gas_rpt_a=1, gas_rpt2_a=[1, 2], gas_rht_s=1,
+            gas_rht2_s='gas_rht_s * 2', gas_vpt_rot_vt=100,
+            gas_vpt_inflow_vr=3, gas_dpt_a=10, gas_op_a=1, gas_op2_a=0.1),
+        priors=dict(x='gas_rpt2_a[0] + gas_vpt_rot_vt'))
+    assert list(params['properties'])[:2] == ['gas_rpt_a', 'gas_rpt2_a']
+    assert not any(c.message.startswith('by hand') for c in changes)
+
+
+def test_trait_parameters_of_the_galaxies_of_a_project_are_renamed():
+    # (their params are in the setups: renamed alike, unless two galaxies
+    # rename a prefix in different ways)
+    def galaxy(*rptraits):
+        return dict(components=[dict(
+            type='thin_disk', name='disk',
+            density=dict(ptraits=list(rptraits)))])
+    one, two = dict(type='uniform'), dict(type='uniform', name='ring')
+    params = dict(properties=dict(disk_pt_a=1, disk_ring_a=2))
+    config = dict(galaxies=[galaxy(one), galaxy(one, one)], params=params)
+    changes = migration.migrate(config, 7)
+    assert params == dict(properties=dict(disk_rpt_a=1, disk_ring_a=2))
+    assert not any(c.message.startswith('by hand') for c in changes)
+    params = dict(properties=dict(disk_pt_a=1, disk_ring_a=2))
+    config = dict(galaxies=[galaxy(one), galaxy(two)], params=params)
+    changes = migration.migrate(config, 7)
+    assert params == dict(properties=dict(disk_rpt_a=1, disk_rpt_ring_a=2))
+    # (a conflict: the same old prefix renamed in two ways, here by a
+    # trait named pt)
+    tied = dict(type='uniform', name='pt')
+    params = dict(properties=dict(disk_pt_a=1))
+    config = dict(galaxies=[galaxy(one), galaxy(tied)], params=params)
+    changes = migration.migrate(config, 7)
+    assert params == dict(properties=dict(disk_pt_a=1))
+    assert any(
+        c.message.startswith('by hand: the galaxies rename the parameters '
+                             'disk_pt_*')
+        for c in changes)

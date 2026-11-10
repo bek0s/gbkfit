@@ -23,28 +23,27 @@ VALUES = dict(
     z0=0.5, rmin=1.0, rmax=8.0, n=1.5)
 
 # Each kind of trait of a disk, named after the prefix of its parameters:
-# the part of the disk it belongs to (None: the disk itself), its option
-# and its parser
+# its option and its parser
 KINDS = dict(
-    pt=('density', 'ptraits', traits.rpt_parser),
-    ht=('density', 'htraits', traits.rht_parser),
-    vpt=('kinematics', 'vptraits', traits.vpt_parser),
-    vht=('kinematics', 'vhtraits', traits.vht_parser),
-    dpt=('kinematics', 'dptraits', traits.dpt_parser),
-    dht=('kinematics', 'dhtraits', traits.dht_parser),
-    zpt=(None, 'zptraits', traits.zpt_parser),
-    spt=(None, 'sptraits', traits.spt_parser))
+    rpt=('rptraits', traits.rpt_parser),
+    rht=('rhtraits', traits.rht_parser),
+    vpt=('vptraits', traits.vpt_parser),
+    vht=('vhtraits', traits.vht_parser),
+    dpt=('dptraits', traits.dpt_parser),
+    dht=('dhtraits', traits.dht_parser),
+    zpt=('zptraits', traits.zpt_parser),
+    spt=('sptraits', traits.spt_parser))
 
 # The traits of the disks that are not being tested, by kind, with their
 # values: those of the disk that emits lines, and of the dusty disk
 LINE_DISK_TRAITS = dict(
-    pt=(dict(type='exponential'), dict(pt_a=1, pt_s=4)),
-    ht=(dict(type='sech2', zmax=8), dict(ht_s=1)),
+    rpt=(dict(type='exponential'), dict(rpt_a=1, rpt_s=4)),
+    rht=(dict(type='sech2', zmax=8), dict(rht_s=1)),
     vpt=(dict(type='arctan', direction='tan'), dict(vpt_rt=2, vpt_vt=150)),
     dpt=(dict(type='uniform'), dict(dpt_a=20)))
 DUST_DISK_TRAITS = dict(
-    pt=(dict(type='exponential'), dict(pt_a=0.05, pt_s=4)),
-    ht=(dict(type='sech2', zmax=8), dict(ht_s=1)))
+    rpt=(dict(type='exponential'), dict(rpt_a=0.05, rpt_s=4)),
+    rht=(dict(type='sech2', zmax=8), dict(rht_s=1)))
 
 GEOMETRY = dict(xpos=0, ypos=0, posa=20, incl=60)
 
@@ -93,16 +92,12 @@ def trait_configs(parser):
     return configs
 
 
-# The options of the parts of a disk besides their traits
-PARTS = dict(density={}, kinematics=dict(type='traits'))
-
-
 def cases():
-    for kind, (_, _, parser) in KINDS.items():
+    for kind, (_, parser) in KINDS.items():
         for config in trait_configs(parser):
             yield pytest.param(kind, False, config, id=f"{kind}-{config}")
     for kind in DUST_DISK_TRAITS:
-        for config in trait_configs(KINDS[kind][2]):
+        for config in trait_configs(KINDS[kind][1]):
             yield pytest.param(
                 kind, True, config, id=f"dust_{kind}-{config}")
 
@@ -116,11 +111,7 @@ def thick_disk(name, traits_, **roles):
         type='thick_disk', name=name, loose=False, tilted=False, rnodes=RNODES,
         **roles)
     for kind, trait in traits_.items():
-        part, option, _ = KINDS[kind]
-        if part is None:
-            disk[option] = trait
-        else:
-            disk.setdefault(part, dict(PARTS[part]))[option] = trait
+        disk[KINDS[kind][0]] = trait
     return disk
 
 
@@ -214,8 +205,8 @@ def axisymmetry_cases():
     selection and velocity; see NodalDiskDensity and _profiles.rotation), and
     harmonics also of order 0.
     """
-    for kind in ('pt', 'dpt', 'spt', 'vpt'):
-        for config in trait_configs(KINDS[kind][2]):
+    for kind in ('rpt', 'dpt', 'spt', 'vpt'):
+        for config in trait_configs(KINDS[kind][1]):
             configs = [config]
             if 'order' in config:
                 configs.append(config | dict(order=0))
@@ -240,7 +231,7 @@ def test_traits_are_axisymmetric_as_they_declare(kind, config):
             params[name] = value if pdesc.type() == 'scalar' \
                 else np.full(pdesc.size(), value)
     disk = component.density_disk()
-    native_kind = dict(pt='rpt', dpt='dpt', spt='spt', vpt='vpt')[kind]
+    native_kind = kind
     values = disk.plan(DriverHost(), 0, np.float64).evaluate_polar_traits(
         params, native_kind, np.array([[1.3], [5.1], [9.7]]),
         np.linspace(0, 360, 97, endpoint=False))[0]

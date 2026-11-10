@@ -59,12 +59,12 @@ class NodalDisk(abc.ABC):
         """
         traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
         can leave kinds out (no traits). prefixes has the prefix of the
-        parameters of the traits of each kind in traits_ (e.g. 'pt' for
-        the density polar traits), or of each of its traits (e.g.
-        'op_halpha_'). density_units has the unit of the density of the
-        density polar traits of each kind, if known (see NodalTraits).
-        opacity_lines has the line of each trait of line opacity ('opt'):
-        its index among the lines of the emission. equilibrium is its
+        parameters of each trait of the kinds that are not named after
+        their kind (e.g. 'op_halpha_' of 'opt'; see NodalTraits).
+        density_units has the unit of the density of the density polar
+        traits of each kind, if known (see NodalTraits). opacity_lines has
+        the line of each trait of line opacity ('opt'): its index among
+        the lines of the emission. equilibrium is its
         vertical equilibrium, if any (see parts.Equilibrium).
         """
 
@@ -146,6 +146,13 @@ class NodalDisk(abc.ABC):
     def trait_params(self, kind: str) -> TraitParams:
         """Return the parameters of the traits of one kind (TraitParams)."""
         return self._traits.params(kind)
+
+    def shared(self, kind: str) -> bool:
+        """
+        Check whether the traits of one kind are one height trait that the
+        polar traits share (see NodalTraits.shared).
+        """
+        return self._traits.shared(kind)
 
     def trait_values(
             self, kind: str, params: ParamValues

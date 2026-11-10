@@ -25,31 +25,28 @@ KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 GAS = dict(
     type='thick_disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)), rstep=0.5,
-    density=dict(
-        ptraits=dict(type='exponential'),
-        htraits=dict(type='gauss', zmax=10)),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
-        dptraits=dict(type='uniform'), equilibrium=dict(type='central')),
+    rptraits=dict(type='exponential'),
+    rhtraits=dict(type='gauss', zmax=10),
+    vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
+    dptraits=dict(type='uniform'), equilibrium=dict(type='central'),
     emission=dict(type='lines'))
 MASS = [
     dict(type='point', name='bh'),
     dict(type='spheroid', name='halo', profile=dict(type='nfw'))]
 PARAMS = dict(
     gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60, gas_vsys=0,
-    gas_pt_a=1, gas_pt_s=4, gas_ht_s=0.5, gas_dpt_a=10, distance=10,
+    gas_rpt_a=1, gas_rpt_s=4, gas_rht_s=0.5, gas_dpt_a=10, distance=10,
     mass_bh_log_m=10, mass_halo_log_m=12, mass_halo_c=8)
 
 # A disk without mass: its rotation of arctan traits
 DISK = dict(
     type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 21, 2)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))
 DISK_PARAMS = dict(
-    xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4, vpt_rt=3,
+    xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, vpt_rt=3,
     vpt_vt=200, dpt_a=20)
 
 
@@ -155,7 +152,7 @@ def test_pressure_support_of_the_velocity_ellipsoid():
     # dispersion along every direction is isotropic
     def with_dispersion(dptraits):
         gas = copy.deepcopy(GAS)
-        gas['kinematics']['dptraits'] = dptraits
+        gas['dptraits'] = dptraits
         return gas_galaxy(components=[gas], mass=[copy.deepcopy(MASS[1])])
 
     def rotation_table(galaxy, params):
@@ -172,9 +169,9 @@ def test_pressure_support_of_the_velocity_ellipsoid():
     expected = isotropic['pressure'].value
     same, _ = rotation_table(
         with_dispersion(directions),
-        params | dict(gas_dpt1_a=30, gas_dpt2_a=30))
+        params | dict(gas_dpt2_a=30, gas_dpt3_a=30))
     np.testing.assert_array_equal(same['pressure'].value, expected)
-    values = params | dict(gas_dpt1_a=20, gas_dpt2_a=10)
+    values = params | dict(gas_dpt2_a=20, gas_dpt3_a=10)
     ellipsoid, _ = rotation_table(with_dispersion(directions), values)
     np.testing.assert_allclose(
         ellipsoid['pressure'].value, expected + 30 ** 2 - 20 ** 2,

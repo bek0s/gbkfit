@@ -10,21 +10,21 @@ import pytest
 from gbkfit.model import Extras, galaxy_parser
 
 
-THIN = dict(ptraits=dict(type='exponential'))
-THICK = THIN | dict(htraits=dict(type='sech2', zmax=8))
+THIN = dict(rptraits=dict(type='exponential'))
+THICK = THIN | dict(rhtraits=dict(type='sech2', zmax=8))
 
 
 def disk(density=THICK, **options):
     return dict(
-        type='thick_disk' if 'htraits' in density else 'thin_disk',
+        type='thick_disk' if 'rhtraits' in density else 'thin_disk',
         loose=False, tilted=False, rnodes=[0, 1, 2],
-        density=density, emission=dict(type='band'), **options)
+        **density, emission=dict(type='band'), **options)
 
 
 def dust(**options):
     return dict(
         type='thick_disk', loose=False, tilted=False, rnodes=[0, 1, 2],
-        density=THICK, opacity=dict(type='dust'), **options)
+        **THICK, opacity=dict(type='dust'), **options)
 
 
 def load_galaxy(components):
@@ -33,7 +33,7 @@ def load_galaxy(components):
 
 def test_one_component_needs_no_name():
     galaxy = load_galaxy([disk()])
-    assert {'xpos', 'pt_a', 'ht_s'} <= set(galaxy.pdescs())
+    assert {'xpos', 'rpt_a', 'rht_s'} <= set(galaxy.pdescs())
     assert set(galaxy.constants()) == {'rnodes', 'subrnodes'}
 
 
@@ -42,9 +42,9 @@ def test_names_prefix_the_parameters_and_constants():
     galaxy = load_galaxy(
         [disk(name='disk'), disk(name='bulge'), dust(name='dust')])
     names = set(galaxy.pdescs())
-    assert {'disk_xpos', 'bulge_xpos', 'dust_xpos', 'disk_pt_a',
-            'bulge_pt_s', 'dust_pt_a'} <= names
-    assert not {'xpos', 'pt_a'} & names
+    assert {'disk_xpos', 'bulge_xpos', 'dust_xpos', 'disk_rpt_a',
+            'bulge_rpt_s', 'dust_rpt_a'} <= names
+    assert not {'xpos', 'rpt_a'} & names
     galaxy = load_galaxy(
         [disk(name='disk'), disk(name='bulge'), dust(name='dust')])
     assert set(galaxy.constants()) == {
@@ -138,7 +138,7 @@ def test_invalid_galaxy_and_observation_names_are_rejected(
 
 
 # The properties of a thin disk
-DISK_PROPERTIES = dict(xpos=0, ypos=0, posa=0, incl=45, pt_a=1, pt_s=2)
+DISK_PROPERTIES = dict(xpos=0, ypos=0, posa=0, incl=45, rpt_a=1, rpt_s=2)
 
 
 def extra_outputs(group_, prefixes):
@@ -178,12 +178,10 @@ def test_galaxy_names_prefix_the_extra_outputs():
 def test_each_parameter_has_the_option_that_makes_it():
     # (for those who show the parameters with their options, e.g. Studio)
     gas = dict(
-        type='thick_disk', name='gas', rnodes=[0, 2, 4], density=THICK,
-        kinematics=dict(
-            type='traits',
-            vptraits=[dict(type='arctan', direction='tan', name='rotation'),
-                      dict(type='uniform', direction='rad', name='inflow')],
-            dptraits=dict(type='uniform')),
+        type='thick_disk', name='gas', rnodes=[0, 2, 4], **THICK,
+        vptraits=[dict(type='arctan', direction='tan', name='rotation'),
+                  dict(type='uniform', direction='rad', name='inflow')],
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines', lines=['halpha', 'nii6583']))
     bulge = dict(
         type='spheroid', name='bulge', rmax=10, emission=dict(type='band'),
@@ -194,14 +192,14 @@ def test_each_parameter_has_the_option_that_makes_it():
     owners = galaxy.param_owners()
     assert set(owners) == set(galaxy.pdescs())
     assert owners['gas_xpos'] == ('components', 0)
-    assert owners['gas_pt_s'] == ('components', 0, 'density', 'ptraits', 0)
-    assert owners['gas_ht_s'] == ('components', 0, 'density', 'htraits', 0)
-    # Named traits: their parameters are named after them, of their
-    # options
-    assert owners['gas_rotation_vt'] == (
-        'components', 0, 'kinematics', 'vptraits', 0)
-    assert owners['gas_inflow_vr'] == (
-        'components', 0, 'kinematics', 'vptraits', 1)
+    assert owners['gas_rpt_s'] == ('components', 0, 'rptraits', 0)
+    assert owners['gas_rht_s'] == ('components', 0, 'rhtraits', 0)
+    # Named traits: their parameters are named after their kind and
+    # them, of their options
+    assert owners['gas_vpt_rotation_vt'] == (
+        'components', 0, 'vptraits', 0)
+    assert owners['gas_vpt_inflow_vr'] == (
+        'components', 0, 'vptraits', 1)
     assert owners['gas_nii6583_ratio'] == (
         'components', 0, 'emission', 'lines', 1)
     assert owners['bulge_re'] == ('components', 1, 'profile')

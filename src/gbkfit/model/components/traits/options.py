@@ -453,7 +453,7 @@ class Spiral(TraitOption):
     are interpolated linearly between them, so that the subnodes must
     follow f where the arms wind tightly (rstep). The density and the
     velocities of one wave are two traits, which share its parameters
-    (e.g. tied by expressions, 'disk_vpt1_p': 'disk_pt1_p').
+    (e.g. tied by expressions, 'disk_vpt2_p': 'disk_rpt2_p').
 
     Its parameters: p (degrees), the azimuth of the arms where f = 0; c
     (km/s, positive), with the wavenumber of the dispersion relation; e;

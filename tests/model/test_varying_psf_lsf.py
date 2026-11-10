@@ -16,13 +16,12 @@ from gbkfit.observation import ObservationGroup, observation_parser
 
 GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits',
-        vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))])
 PROPERTIES = dict(
-    vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, pt_a=1, pt_s=2.5,
+    vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, rpt_a=1, rpt_s=2.5,
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 # 40 channels of 12 km/s, centred on 0
 SIZE, STEP = (33, 32, 40), (1, 1, 12)

@@ -1,9 +1,9 @@
 """
-The density and the kinematics of the components made of nodes (rings or
-shells along a radius, e.g. disks), each a set of traits (see traits),
-and the vertical equilibrium of thick disks. A thin disk has parts of its
-own (ThinDensity, ThinDiskTraitsKinematics), without what only a thick
-component has: its heights and its equilibrium.
+The traits of the components made of nodes (rings or shells along a
+radius, e.g. disks), which they take as options of their own (see
+traits): the checks of their density traits (density_traits), their
+kinematic traits (KinematicTraits, see kinematic_traits), and the
+vertical equilibrium of thick disks (Equilibrium).
 """
 
 import abc
@@ -11,8 +11,7 @@ from collections.abc import Sequence
 from typing import Annotated, Any, Literal, TypeAlias
 
 from gbkfit.config import (
-    BasicParser, Choices, Serializable, TypedParser, TypedSerializable,
-    check_name, check_options)
+    Choices, TypedParser, TypedSerializable, check_name, check_options)
 from gbkfit.utils import iterutils
 from . import traits
 from ._nodal import MAX_TRAITS
@@ -20,21 +19,14 @@ from ._nodal import MAX_TRAITS
 
 __all__ = [
     'CentralEquilibrium',
-    'ConeTraitsKinematics',
-    'Density',
     'Equilibrium',
     'JeansEquilibrium',
     'KinematicTraits',
     'SelfGravitatingEquilibrium',
-    'ThickDiskTraitsKinematics',
-    'ThinDensity',
-    'ThinDiskTraitsKinematics',
-    'cone_kinematics_parser',
-    'density_parser',
+    'density_traits',
+    'dump_traits',
     'equilibrium_parser',
-    'thick_disk_kinematics_parser',
-    'thin_density_parser',
-    'thin_disk_kinematics_parser'
+    'kinematic_traits'
 ]
 
 
@@ -64,16 +56,18 @@ def _height_traits(
 ) -> tuple[traits.HTrait | None, ...] | None:
     """
     Return the height traits of an option as a tuple (None if not given),
-    in which an item can be None (a default trait). Raise ValueError if
-    there is not one for each polar trait.
+    in which an item can be None (a default trait): one that every polar
+    trait shares (one trait, or a list of one), or one for each polar
+    trait, in their order. Raise ValueError for another number.
     """
     if value is None:
         return None
     value = iterutils.tuplify(value)
-    if len(value) != npolar:
+    if len(value) not in (1, npolar):
         raise ValueError(
-            f"the number of {option} must be equal to the number of "
-            f"{polar_option} ({len(value)} != {npolar})")
+            f"{option} takes one trait, which every one of the {polar_option} "
+            f"shares, or one for each of them ({npolar}); {len(value)} "
+            f"were given")
     return value
 
 
@@ -117,7 +111,7 @@ def _check_dispersion_directions(
                 f"one, or an {traits.DPT_DIRECTION_DEFAULT!r} trait")
 
 
-def _dump_traits(
+def dump_traits(
         parser: TypedParser,
         value: tuple[traits.Trait | None, ...] | None
 ) -> list[dict[str, Any] | None] | None:
@@ -127,86 +121,69 @@ def _dump_traits(
     return [parser.dump(trait) for trait in value]
 
 
-class ThinDensity(Serializable):
+def density_traits(
+        rptraits: traits.RPTrait | Sequence[traits.RPTrait],
+        rhtraits: traits.RHTrait | Sequence[traits.RHTrait] | None,
+        thick: bool
+) -> tuple[tuple[traits.RPTrait, ...], tuple[traits.RHTrait, ...]]:
     """
-    The density of a thin disk: its polar traits, the density per unit
-    area of its plane, seen face-on (see traits). What the density is
-    depends on the roles of the disk: light for one that emits.
-
-    Parameters
-    ----------
-    ptraits : RPTrait or Sequence of RPTrait
-        The polar traits (parameters 'pt_*').
+    Return the density traits of a component as tuples: its polar traits,
+    the density per unit area of its surface (the plane of a disk, seen
+    face-on), and of a thick one, its height traits, the probability
+    density of the distance from the surface of each (none for a thin
+    one).
 
     Raises
     ------
     ValueError
-        If there are no polar traits or too many.
+        If there are no polar traits or too many, or a thick component has
+        neither one height trait that they share nor one for each.
     """
-
-    def dump(self) -> dict[str, Any]:
-        return dict(ptraits=_dump_traits(traits.rpt_parser, self._ptraits))
-
-    def __init__(
-            self,
-            ptraits: traits.RPTrait | Sequence[traits.RPTrait]
-    ):
-        check_options(ThinDensity.__init__, locals())
-        self._ptraits = _polar_traits('ptraits', ptraits)
-
-    def ptraits(self) -> tuple[traits.RPTrait, ...]:
-        """Return the polar traits."""
-        return self._ptraits
+    rptraits = _polar_traits('rptraits', rptraits)
+    if not thick:
+        return rptraits, ()
+    if rhtraits is None:
+        raise ValueError(
+            "a thick component needs the height traits of its density "
+            "(rhtraits)")
+    rhtraits = _height_traits(
+        'rhtraits', rhtraits, len(rptraits), 'rptraits')
+    if None in rhtraits:
+        raise ValueError("rhtraits cannot have empty items")
+    return rptraits, rhtraits
 
 
-class Density(Serializable):
+def kinematic_traits(
+        vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None,
+        dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None,
+        vhtraits:
+        traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
+        dhtraits:
+        traits.DHTrait | Sequence[traits.DHTrait | None] | None = None
+) -> 'KinematicTraits | None':
     """
-    The density of a thick component (a thick disk, or a cone): its polar
-    traits, the density per unit area of its surface (the plane of a
-    disk, seen face-on), and its height traits, the probability density
-    of the distance from the surface of each (see traits). What the
-    density is depends on the roles of the component: light for one that
-    emits, the optical depth for dust. A thin disk has a density of its
-    own, without height traits (see ThinDensity).
-
-    Parameters
-    ----------
-    ptraits : RPTrait or Sequence of RPTrait
-        The polar traits (parameters 'pt_*').
-    htraits : RHTrait or Sequence of RHTrait
-        The height traits, one for each polar trait (parameters 'ht_*').
+    Return the kinematic traits of a component (see KinematicTraits), or
+    None if it has none: a component without velocity and dispersion
+    traits does not move (e.g. one seen only by images).
 
     Raises
     ------
     ValueError
-        If there are no polar traits or too many, or not one height trait
-        for each polar trait.
+        If only one of vptraits and dptraits is given, height traits are
+        given without them, or the traits are not valid (see
+        KinematicTraits).
     """
-
-    def dump(self) -> dict[str, Any]:
-        return dict(
-            ptraits=_dump_traits(traits.rpt_parser, self._ptraits),
-            htraits=_dump_traits(traits.rht_parser, self._htraits))
-
-    def __init__(
-            self,
-            ptraits: traits.RPTrait | Sequence[traits.RPTrait],
-            htraits: traits.RHTrait | Sequence[traits.RHTrait]
-    ):
-        check_options(Density.__init__, locals())
-        self._ptraits = _polar_traits('ptraits', ptraits)
-        self._htraits = _height_traits(
-            'htraits', htraits, len(self._ptraits), 'ptraits')
-        if None in self._htraits:
-            raise ValueError("htraits cannot have empty items")
-
-    def ptraits(self) -> tuple[traits.RPTrait, ...]:
-        """Return the polar traits."""
-        return self._ptraits
-
-    def htraits(self) -> tuple[traits.RHTrait, ...]:
-        """Return the height traits."""
-        return self._htraits
+    if vptraits is None and dptraits is None:
+        if vhtraits is not None or dhtraits is not None:
+            raise ValueError(
+                "vhtraits and dhtraits are the heights of the velocity and "
+                "dispersion traits: give vptraits and dptraits")
+        return None
+    if vptraits is None or dptraits is None:
+        raise ValueError(
+            "a component that moves takes both its velocity traits "
+            "(vptraits) and its dispersion traits (dptraits)")
+    return KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
 
 
 # The directions of the dispersion of a vertical equilibrium (see
@@ -224,10 +201,8 @@ class KinematicTraits:
     velocity dispersion of each of its points (see traits). The velocity
     traits add up, so motions combine; the rotation of a disk in the
     gravity of the galaxy is the velocity trait 'mass' (see
-    traits.VPTraitMass). The traits of the kinematics of traits of disks,
-    cones and spheroids (see ThinDiskTraitsKinematics,
-    ThickDiskTraitsKinematics, ConeTraitsKinematics and
-    spheroids.SpheroidTraitsKinematics).
+    traits.VPTraitMass). Disks, cones and spheroids of traits take them
+    as options of their own (see kinematic_traits).
 
     Parameters
     ----------
@@ -239,18 +214,19 @@ class KinematicTraits:
         along a direction, every direction needs its own or an isotropic
         one.
     vhtraits : VHTrait or Sequence of VHTrait, optional
-        The velocity height traits of a thick component, one for each
-        velocity polar trait (None items or none at all: the velocity does
-        not change with the distance from the surface).
+        The velocity height traits of a thick component: one that every
+        velocity polar trait shares (parameters 'vht_*'), or one for each
+        (None items or none at all: the velocity does not change with the
+        distance from the surface).
     dhtraits : DHTrait or Sequence of DHTrait, optional
-        The dispersion height traits of a thick component, one for each
-        dispersion polar trait (as vhtraits).
+        The dispersion height traits of a thick component, one shared or
+        one for each dispersion polar trait (as vhtraits).
 
     Raises
     ------
     ValueError
-        If there are no polar traits or too many, not one height trait
-        for each polar trait, a direction of the dispersion without a
+        If there are no polar traits or too many, neither one shared
+        height trait nor one for each polar trait, a direction of the dispersion without a
         dispersion trait, several velocity traits 'mass' (the rotation in
         the gravity would count more than once), or a velocity height
         trait 'mass' that does not pair with the velocity trait 'mass' or
@@ -261,12 +237,12 @@ class KinematicTraits:
     def dump(self) -> dict[str, Any]:
         """Return the options of the traits."""
         info = dict(
-            vptraits=_dump_traits(traits.vpt_parser, self._vptraits),
-            dptraits=_dump_traits(traits.dpt_parser, self._dptraits))
+            vptraits=dump_traits(traits.vpt_parser, self._vptraits),
+            dptraits=dump_traits(traits.dpt_parser, self._dptraits))
         if self._vhtraits is not None:
-            info['vhtraits'] = _dump_traits(traits.vht_parser, self._vhtraits)
+            info['vhtraits'] = dump_traits(traits.vht_parser, self._vhtraits)
         if self._dhtraits is not None:
-            info['dhtraits'] = _dump_traits(traits.dht_parser, self._dhtraits)
+            info['dhtraits'] = dump_traits(traits.dht_parser, self._dhtraits)
         return info
 
     def __init__(
@@ -288,7 +264,11 @@ class KinematicTraits:
         _check_dispersion_directions(self._dptraits)
         self._vhtraits = _height_traits(
             'vhtraits', vhtraits, len(self._vptraits), 'vptraits')
-        for vptrait, vhtrait in zip(self._vptraits, self._vhtraits or ()):
+        # (a shared height trait pairs with every velocity trait)
+        vhtraits = self._vhtraits or ()
+        if len(vhtraits) == 1:
+            vhtraits *= len(self._vptraits)
+        for vptrait, vhtrait in zip(self._vptraits, vhtraits):
             if isinstance(vhtrait, traits.VHTraitMass):
                 _check_rotation_at_heights(vptrait)
         self._dhtraits = _height_traits(
@@ -468,191 +448,3 @@ equilibrium_parser = TypedParser(Equilibrium, [
     CentralEquilibrium,
     SelfGravitatingEquilibrium,
     JeansEquilibrium], family='equilibrium')
-
-
-class ThinDiskTraitsKinematics(TypedSerializable):
-    """
-    How a thin disk moves, as its traits give: its velocity and dispersion
-    polar traits, in its plane. See KinematicTraits for the traits. A disk
-    that emits lines into a spectral cube needs kinematics.
-
-    Parameters
-    ----------
-    vptraits, dptraits :
-        The traits (see KinematicTraits).
-
-    Raises
-    ------
-    ValueError
-        If the traits are not valid (see KinematicTraits).
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'traits'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Traits'
-
-    def dump(self) -> dict[str, Any]:
-        return dict(type=self.type()) | self._traits.dump()
-
-    def __init__(
-            self,
-            vptraits: traits.VPTrait | Sequence[traits.VPTrait],
-            dptraits: traits.DPTrait | Sequence[traits.DPTrait]
-    ):
-        check_options(ThinDiskTraitsKinematics.__init__, locals())
-        self._traits = KinematicTraits(vptraits, dptraits)
-
-    def vptraits(self) -> tuple[traits.VPTrait, ...]:
-        """Return the velocity polar traits."""
-        return self._traits.vptraits()
-
-    def dptraits(self) -> tuple[traits.DPTrait, ...]:
-        """Return the velocity dispersion polar traits."""
-        return self._traits.dptraits()
-
-
-class ThickDiskTraitsKinematics(TypedSerializable):
-    """
-    How a thick disk moves, as its traits give, and with a vertical
-    equilibrium, the dispersion that holds it up against the gravity of
-    its galaxy. See KinematicTraits for the traits, and Equilibrium for
-    the equilibrium. A disk that emits lines into a spectral cube needs
-    kinematics.
-
-    Parameters
-    ----------
-    vptraits, dptraits, vhtraits, dhtraits : optional
-        The traits (see KinematicTraits).
-    equilibrium : Equilibrium, optional
-        The vertical equilibrium of the disk; none by default.
-
-    Raises
-    ------
-    ValueError
-        If the traits are not valid (see KinematicTraits).
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'traits'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Traits'
-
-    def dump(self) -> dict[str, Any]:
-        info = dict(type=self.type()) | self._traits.dump()
-        if self._equilibrium is not None:
-            info['equilibrium'] = equilibrium_parser.dump(self._equilibrium)
-        return info
-
-    def __init__(
-            self,
-            vptraits: traits.VPTrait | Sequence[traits.VPTrait],
-            dptraits: traits.DPTrait | Sequence[traits.DPTrait],
-            vhtraits:
-            traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
-            dhtraits:
-            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
-            equilibrium: Equilibrium | None = None
-    ):
-        check_options(ThickDiskTraitsKinematics.__init__, locals())
-        self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
-        self._equilibrium = equilibrium
-
-    def vptraits(self) -> tuple[traits.VPTrait, ...]:
-        """Return the velocity polar traits."""
-        return self._traits.vptraits()
-
-    def dptraits(self) -> tuple[traits.DPTrait, ...]:
-        """Return the velocity dispersion polar traits."""
-        return self._traits.dptraits()
-
-    def vhtraits(self) -> tuple[traits.VHTrait | None, ...] | None:
-        """Return the velocity height traits, if given."""
-        return self._traits.vhtraits()
-
-    def dhtraits(self) -> tuple[traits.DHTrait | None, ...] | None:
-        """Return the velocity dispersion height traits, if given."""
-        return self._traits.dhtraits()
-
-    def equilibrium(self) -> Equilibrium | None:
-        """Return the vertical equilibrium, if any."""
-        return self._equilibrium
-
-
-class ConeTraitsKinematics(TypedSerializable):
-    """
-    How a cone moves, as its traits give. See KinematicTraits for the
-    traits. A cone that emits lines into a spectral cube needs
-    kinematics.
-
-    Parameters
-    ----------
-    vptraits, dptraits, vhtraits, dhtraits : optional
-        The traits (see KinematicTraits).
-
-    Raises
-    ------
-    ValueError
-        If the traits are not valid (see KinematicTraits).
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'traits'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Traits'
-
-    def dump(self) -> dict[str, Any]:
-        return dict(type=self.type()) | self._traits.dump()
-
-    def __init__(
-            self,
-            vptraits: traits.VPTrait | Sequence[traits.VPTrait],
-            dptraits: traits.DPTrait | Sequence[traits.DPTrait],
-            vhtraits:
-            traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
-            dhtraits:
-            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None
-    ):
-        check_options(ConeTraitsKinematics.__init__, locals())
-        self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
-
-    def vptraits(self) -> tuple[traits.VPTrait, ...]:
-        """Return the velocity polar traits."""
-        return self._traits.vptraits()
-
-    def dptraits(self) -> tuple[traits.DPTrait, ...]:
-        """Return the velocity dispersion polar traits."""
-        return self._traits.dptraits()
-
-    def vhtraits(self) -> tuple[traits.VHTrait | None, ...] | None:
-        """Return the velocity height traits, if given."""
-        return self._traits.vhtraits()
-
-    def dhtraits(self) -> tuple[traits.DHTrait | None, ...] | None:
-        """Return the velocity dispersion height traits, if given."""
-        return self._traits.dhtraits()
-
-
-density_parser = BasicParser(Density)
-
-thin_density_parser = BasicParser(ThinDensity)
-
-thin_disk_kinematics_parser = TypedParser(
-    ThinDiskTraitsKinematics, [ThinDiskTraitsKinematics],
-    family='thin_disk_kinematics')
-
-thick_disk_kinematics_parser = TypedParser(
-    ThickDiskTraitsKinematics, [ThickDiskTraitsKinematics],
-    family='thick_disk_kinematics')
-
-cone_kinematics_parser = TypedParser(
-    ConeTraitsKinematics, [ConeTraitsKinematics], family='cone_kinematics')

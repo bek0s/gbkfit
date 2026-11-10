@@ -17,7 +17,7 @@ from gbkfit.observation import DepthGroup
 SPECTRAL = Grid((11,), Coords((10,), (5,), (0,), 0), 0)
 
 DISK_PARAMS = dict(
-    vsys=0, xpos=0.5, ypos=-1, posa=30, incl=60, pt_a=1, pt_s=3, ht_s=1,
+    vsys=0, xpos=0.5, ypos=-1, posa=30, incl=60, rpt_a=1, rpt_s=3, rht_s=1,
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 
@@ -26,17 +26,16 @@ def disk(kind='smooth', thick=True):
     The configuration of a disk of gas, thick or thin, smooth or of
     clouds.
     """
-    density = dict(ptraits=dict(type='exponential'))
+    density = dict(rptraits=dict(type='exponential'))
     if thick:
-        density.update(htraits=dict(type='sech2', zmax=8))
+        density.update(rhtraits=dict(type='sech2', zmax=8))
     clouds = dict(clouds=dict(cflux=1e-3)) if kind == 'clouds' else {}
     return dict(
         type='thick_disk' if thick else 'thin_disk',
         loose=False, tilted=False, rnodes=dict(max=10, sep=1),
-        density=density,
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
+        **density,
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines')) | clouds
 
 
@@ -138,34 +137,32 @@ def test_a_point_is_a_layer_at_its_depth(driver):
 # radiative transfer
 LINES = dict(type='lines')
 KINEMATICS = dict(
-    type='traits',
     vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform'))
 THICK = dict(
-    ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8))
-THIN = dict(ptraits=dict(type='exponential'))
+    rptraits=dict(type='exponential'), rhtraits=dict(type='sech2', zmax=8))
+THIN = dict(rptraits=dict(type='exponential'))
 GAS = dict(
     type='thick_disk', name='gas', loose=False, tilted=False,
-    rnodes=dict(max=10, sep=1), density=THICK, kinematics=KINEMATICS,
+    rnodes=dict(max=10, sep=1), **THICK, **KINEMATICS,
     emission=LINES)
-THIN_GAS = GAS | dict(type='thin_disk', density=THIN)
+THIN_GAS = {key: value for key, value in GAS.items() if key != 'rhtraits'} \
+    | dict(type='thin_disk', **THIN)
 DUST = dict(
     type='thick_disk', name='dust', loose=False, tilted=False,
-    rnodes=dict(max=10, sep=1), density=THICK, opacity=dict(type='dust'))
+    rnodes=dict(max=10, sep=1), **THICK, opacity=dict(type='dust'))
 NUCLEUS = dict(type='point', name='nucleus', emission=LINES, depth=True)
 OUTFLOW = dict(
     type='cone', name='outflow', rnodes=[0, 1, 3, 6],
-    density=dict(
-        ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='uniform', direction='out'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='uniform'), rhtraits=dict(type='gauss', zmax=1),
+    vptraits=dict(type='uniform', direction='out'),
+    dptraits=dict(type='uniform'),
     emission=LINES)
 
 PROPERTIES = dict(
     gas_vsys=0, gas_xpos=0.5, gas_ypos=-1, gas_posa=30, gas_incl=60,
-    gas_pt_a=1, gas_pt_s=3, gas_ht_s=1, gas_vpt_rt=2, gas_vpt_vt=150,
+    gas_rpt_a=1, gas_rpt_s=3, gas_rht_s=1, gas_vpt_rt=2, gas_vpt_vt=150,
     gas_dpt_a=20, dust_xpos=0, dust_ypos=0, dust_posa=40, dust_incl=70,
-    dust_pt_a=0.3, dust_pt_s=4, dust_ht_s=0.5, nucleus_xpos=0.3,
+    dust_rpt_a=0.3, dust_rpt_s=4, dust_rht_s=0.5, nucleus_xpos=0.3,
     nucleus_ypos=0.6, nucleus_depth=0.7, nucleus_flux=20, nucleus_vsys=30,
     nucleus_disp=25)
 
@@ -252,10 +249,10 @@ def test_transfer_dims_each_line_by_its_law(driver, evaluate_cases):
 def test_transfer_gives_what_a_grid_gives_for_an_image(
         driver, evaluate_cases):
     stars = GAS | dict(name='stars', emission=dict(type='band'))
-    del stars['kinematics']
+    del stars['vptraits'], stars['dptraits']
     properties = PROPERTIES | dict(
         stars_xpos=0.5, stars_ypos=-1, stars_posa=30, stars_incl=60,
-        stars_pt_a=1, stars_pt_s=3, stars_ht_s=1)
+        stars_rpt_a=1, stars_rpt_s=3, stars_rht_s=1)
     grid, transfer = cubes_of(
         evaluate_cases, driver, [stars, DUST], properties,
         observable=dict(type='pixel_brightness', size=[24, 24]))
@@ -362,8 +359,8 @@ def test_named_lines_take_a_coefficient_each(driver, evaluate_cases):
         nii6583=[dict(type='uniform'), dict(type='exponential')])
     galaxy = galaxy_parser.load(dict(components=[line_opacity(
         GAS | dict(emission=emission), coefficients)]))
-    assert {'gas_op_halpha_a', 'gas_op_nii6583_a', 'gas_op1_nii6583_a',
-            'gas_op1_nii6583_s'} <= set(galaxy.pdescs())
+    assert {'gas_op_halpha_a', 'gas_op_nii6583_a', 'gas_op2_nii6583_a',
+            'gas_op2_nii6583_s'} <= set(galaxy.pdescs())
     dumped = galaxy_parser.dump(galaxy)
     assert galaxy_parser.dump(galaxy_parser.load(dumped)) == dumped
 
@@ -420,7 +417,7 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
         | dict(
             outflow_vsys=0, outflow_xpos=0.5, outflow_ypos=-1,
             outflow_posa=30, outflow_incl=60, outflow_wall=30,
-            outflow_pt_a=0.2, outflow_ht_s=0.4, outflow_vpt_vo=200,
+            outflow_rpt_a=0.2, outflow_rht_s=0.4, outflow_vpt_vo=200,
             outflow_dpt_a=40)
     models = []
     for slab in (None, 1, 7):
@@ -504,7 +501,8 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
     # band in its own rest frame; behind them, not at all
     from gbkfit.model import LineCatalogue
     stars = dict(
-        THIN_GAS, name='stars', emission=dict(type='band'), kinematics=None)
+        THIN_GAS, name='stars', emission=dict(type='band'), vptraits=None,
+        dptraits=None)
     dust = DUST | dict(opacity=dict(type='dust', law=dict(
         type='table', wavelengths=[0.2, 1.0], ratios=[3.0, 1.0])))
     galaxies = [
@@ -512,10 +510,10 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
         dict(name='front', components=[dust], redshift=0.5)]
     properties = galaxy_properties('back', dict(
         stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0,
-        stars_pt_a=1, stars_pt_s=4))
+        stars_rpt_a=1, stars_rpt_s=4))
     properties |= galaxy_properties('front', dict(
-        dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0, dust_pt_a=0.5,
-        dust_pt_s=4, dust_ht_s=1))
+        dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0, dust_rpt_a=0.5,
+        dust_rpt_s=4, dust_rht_s=1))
     order = ['front', 'back'] if dust_in_front else ['back', 'front']
     image = dict(
         observable=dict(type='pixel_brightness', size=[24, 24]),
@@ -551,8 +549,8 @@ def test_line_opacity_continues_into_the_galaxies_behind(driver):
             driver, galaxies, properties | values, order,
             with_extras=False)[0]
 
-    thin_a = model(['a', 'b'], b_gas_pt_a=0)
-    thin_b = model(['a', 'b'], a_gas_pt_a=0)
+    thin_a = model(['a', 'b'], b_gas_rpt_a=0)
+    thin_b = model(['a', 'b'], a_gas_rpt_a=0)
     source = thin_a.max() / 3
     dimmed = np.exp(-thin_a / source)
     in_front = model(['a', 'b'], a_gas_op_a=1 / source)

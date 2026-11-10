@@ -22,7 +22,7 @@ BEAM = Beam(66, 53.7)
 SIZE = (24, 24, 41)
 STEP = (10, 10, 10)
 PARAMS = dict(
-    xpos=0, ypos=0, posa=30, incl=60, vsys=470, pt_a=1, pt_s=40, vpt_rt=40,
+    xpos=0, ypos=0, posa=30, incl=60, vsys=470, rpt_a=1, rpt_s=40, vpt_rt=40,
     vpt_vt=150, dpt_a=15)
 
 
@@ -31,15 +31,14 @@ def disk(unit=None, lines=('hi21',), thick=False):
     emission = dict(type='lines', lines=list(lines))
     if unit is not None:
         emission.update(unit=unit)
-    density = dict(ptraits=dict(type='exponential'))
+    density = dict(rptraits=dict(type='exponential'))
     if thick:
-        density.update(htraits=dict(type='sech2', zmax=30))
+        density.update(rhtraits=dict(type='sech2', zmax=30))
     return dict(
         type='thick_disk' if thick else 'thin_disk',
-        rnodes=list(range(0, 121, 20)), density=density,
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
+        rnodes=list(range(0, 121, 20)), **density,
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=emission)
 
 
@@ -102,7 +101,7 @@ def test_line_opacity_saturates_at_a_temperature(driver):
     # exp(-I / S)) in K as the galaxy emits it, I that without line
     # opacity, and the data see it dimmed by 1 / (1 + z) (and in Jy/beam,
     # that times Jy/beam per K)
-    params = PARAMS | dict(ht_s=5)
+    params = PARAMS | dict(rht_s=5)
     gas = disk('K km/s', thick=True)
     thin = model(driver, [gas], 'K', line_of_sight='transfer', params=params)
     one_plus_z = 1 / (1 - 470 / 299792.458)
@@ -156,7 +155,7 @@ def test_light_in_bands_with_a_unit_needs_the_redshift():
     # must give when the component has no systemic velocity
     stars = dict(
         type='thin_disk', rnodes=list(range(0, 121, 20)),
-        density=dict(ptraits=dict(type='exponential')),
+        rptraits=dict(type='exponential'),
         emission=dict(type='band', unit='Jy/arcsec2'))
     with pytest.raises(ValueError, match="give the galaxy its redshift"):
         galaxy_parser.load(dict(components=[stars]))

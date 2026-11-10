@@ -18,13 +18,12 @@ GEOMETRY = dict(xpos=0.4, ypos=-0.3, posa=40, incl=60, vsys=0)
 DISK = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, int(RMAX) + 1)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))])
 DISK_PROPERTIES = GEOMETRY | dict(
-    pt_a=1, pt_s=H, vpt_rt=RT, vpt_vt=VT, dpt_a=DISP)
+    rpt_a=1, rpt_s=H, vpt_rt=RT, vpt_vt=VT, dpt_a=DISP)
 CUBE = dict(
     type='pixel_spectra', size=[40, 40], step=[1, 1],
     spectral=dict(size=40, step=15, convention='relativistic'))
@@ -140,7 +139,7 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
         posa=dict(value=30, min=0, max=90),
         incl=dict(value=50, min=20, max=80),
         vpt_vt=dict(value=150, min=50, max=300),
-        pt_a=dict(value=0.5, min=0.1, max=5))
+        rpt_a=dict(value=0.5, min=0.1, max=5))
     params = gbkfit.params.ParamSpace.from_properties(
         objective.pdescs(), properties)
     best = fitter_parser.load(dict(type='scipy.least_squares')).fit(
@@ -148,7 +147,7 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
     assert best['posa'] == pytest.approx(40, abs=0.3)
     assert best['incl'] == pytest.approx(60, abs=0.5)
     assert best['vpt_vt'] == pytest.approx(VT, rel=0.01)
-    assert best['pt_a'] == pytest.approx(1, rel=0.01)
+    assert best['rpt_a'] == pytest.approx(1, rel=0.01)
 
 
 def test_particles_in_an_image(driver, tmp_path):

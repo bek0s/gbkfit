@@ -85,7 +85,7 @@ sight sets only two of the three at each radius, sigma_phi^2
 sin^2(incl) + sigma_z^2 cos^2(incl) (on the major axis) and sigma_R^2
 sin^2(incl) + sigma_z^2 cos^2(incl) (on the minor axis): a fit needs a
 ratio (e.g. of the traits 'rad', 'tan' and 'ver' in this order, sigma_z
-= sigma_R / 2 is the parameter expression dpt2_a: 'dpt_a * 0.5') or a
+= sigma_R / 2 is the parameter expression dpt3_a: 'dpt_a * 0.5') or a
 prior.
 
 The planar velocity polar traits of a disk (e.g. the flow along a bar)

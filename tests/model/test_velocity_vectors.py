@@ -13,7 +13,7 @@ import pytest
 LINES = dict(type='lines')
 UNIFORM = dict(type='uniform')
 THICK = dict(
-    ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=4))
+    rptraits=dict(type='exponential'), rhtraits=dict(type='sech2', zmax=4))
 GEOMETRY = dict(xpos=0.5, ypos=-0.5, posa=30, incl=55, vsys=20)
 
 # A speed along each direction of a disk (but outward), and a flow along a
@@ -24,46 +24,42 @@ SPEEDS = [
     dict(type='uniform', direction='ver'),
     dict(type='bar')]
 SPEED_VALUES = dict(
-    vpt_vt=100, vpt1_vr=20, vpt2_vv=10, vpt3_v=30, vpt3_p=20, vpt3_s=2)
+    vpt_vt=100, vpt2_vr=20, vpt3_vv=10, vpt4_v=30, vpt4_p=20, vpt4_s=2)
 
 
 def disk(density, **options):
     """A disk of the given density, with the speeds of SPEEDS."""
     return dict(
-        type='thick_disk' if 'htraits' in density else 'thin_disk',
+        type='thick_disk' if 'rhtraits' in density else 'thin_disk',
         loose=False, tilted=False, rnodes=list(range(0, 9)),
-        density=density, emission=LINES, kinematics=dict(
-            type='traits', vptraits=SPEEDS, dptraits=UNIFORM)) | options
+        **density, emission=LINES, vptraits=SPEEDS, dptraits=UNIFORM) | options
 
 
 # The components that move, and the values of their parameters
 COMPONENTS = dict(
     thin_disk=(
-        disk(dict(ptraits=dict(type='exponential'))),
-        dict(pt_a=1, pt_s=3, dpt_a=10) | SPEED_VALUES),
+        disk(dict(rptraits=dict(type='exponential'))),
+        dict(rpt_a=1, rpt_s=3, dpt_a=10) | SPEED_VALUES),
     thick_disk=(
-        disk(THICK), dict(pt_a=1, pt_s=3, ht_s=1, dpt_a=10) | SPEED_VALUES),
+        disk(THICK), dict(rpt_a=1, rpt_s=3, rht_s=1, dpt_a=10) | SPEED_VALUES),
     cloud_disk=(
         disk(THICK, clouds=dict(cflux=1e-3)),
-        dict(pt_a=1, pt_s=3, ht_s=1, dpt_a=10) | SPEED_VALUES),
+        dict(rpt_a=1, rpt_s=3, rht_s=1, dpt_a=10) | SPEED_VALUES),
     cone=(
         dict(
             type='cone', rnodes=[0, 1, 6], emission=LINES,
-            density=dict(
-                ptraits=UNIFORM, htraits=dict(type='gauss', zmax=1.5)),
-            kinematics=dict(
-                type='traits',
-                vptraits=[
-                    dict(type='uniform', direction='tan'),
-                    dict(type='uniform', direction='out')],
-                dptraits=UNIFORM)),
-        dict(wall=30, pt_a=1, ht_s=0.5, vpt_vt=100, vpt1_vo=50, dpt_a=10)),
+            rptraits=UNIFORM, rhtraits=dict(type='gauss', zmax=1.5),
+            vptraits=[
+                dict(type='uniform', direction='tan'),
+                dict(type='uniform', direction='out')],
+            dptraits=UNIFORM),
+        dict(wall=30, rpt_a=1, rht_s=0.5, vpt_vt=100, vpt2_vo=50, dpt_a=10)),
     spheroid=(
         dict(
             type='spheroid', profile=dict(type='sersic'), rmax=6,
-            emission=dict(type='band'), kinematics=dict(
-                type='traits', vptraits=dict(type='uniform', direction='tan'),
-                dptraits=UNIFORM, rnodes=[0, 6])),
+            emission=dict(type='band'),
+            vptraits=dict(type='uniform', direction='tan'), dptraits=UNIFORM,
+            rnodes=[0, 6]),
         dict(ie=1, re=2, n=1, vpt_vt=100, dpt_a=10)))
 
 
@@ -108,12 +104,11 @@ def test_the_length_of_the_vector_is_the_speed(driver, evaluate_cases):
     # A smooth thick disk: one point of it in each voxel, of the speeds 100,
     # 20 and 10 km/s along the tangential, radial and vertical directions
     # (wherever the disk has them: off its axis and its midplane)
-    component = disk(THICK) | dict(kinematics=dict(
-        type='traits', vptraits=SPEEDS[:3], dptraits=UNIFORM))
+    component = disk(THICK) | dict(vptraits=SPEEDS[:3], dptraits=UNIFORM)
     _, extra = evaluate_cases(
         [case(driver, component)],
-        GEOMETRY | dict(pt_a=1, pt_s=3, ht_s=1, dpt_a=10, vpt_vt=100,
-                        vpt1_vr=20, vpt2_vv=10))
+        GEOMETRY | dict(rpt_a=1, rpt_s=3, rht_s=1, dpt_a=10, vpt_vt=100,
+                        vpt2_vr=20, vpt3_vv=10))
     length = np.linalg.norm(vectors(extra), axis=0)
     moves = np.isfinite(length)
     assert moves.sum() > 100
@@ -124,11 +119,10 @@ def test_the_length_of_the_vector_is_the_speed(driver, evaluate_cases):
 
 def test_a_flow_along_a_bar_is_in_the_plane(driver, evaluate_cases):
     # A bar as wide as the disk: the flow of 30 km/s along its axis
-    component = disk(THICK) | dict(kinematics=dict(
-        type='traits', vptraits=SPEEDS[3], dptraits=UNIFORM))
+    component = disk(THICK) | dict(vptraits=SPEEDS[3], dptraits=UNIFORM)
     _, extra = evaluate_cases(
         [case(driver, component)],
-        GEOMETRY | dict(pt_a=1, pt_s=3, ht_s=1, dpt_a=10, vpt_v=30,
+        GEOMETRY | dict(rpt_a=1, rpt_s=3, rht_s=1, dpt_a=10, vpt_v=30,
                         vpt_p=20, vpt_s=100))
     length = np.linalg.norm(vectors(extra), axis=0)
     moves = np.isfinite(length)
@@ -151,17 +145,16 @@ def test_a_radial_flow_points_away_from_the_centre(driver, evaluate_cases):
     # the offset on the sky, outwards (audit 2026-10-31 #86)
     component = dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
-        density=dict(ptraits=dict(type='exponential')), emission=LINES,
-        kinematics=dict(
-            type='traits', vptraits=dict(type='uniform', direction='rad'),
-            dptraits=UNIFORM))
+        rptraits=dict(type='exponential'), emission=LINES,
+        vptraits=dict(type='uniform', direction='rad'),
+        dptraits=UNIFORM)
     _, extra = evaluate_cases([dict(
         driver=dict(type=driver.type()), observable=dict(
             type='pixel_spectra', size=[24, 24], step=[0.5, 0.5],
             spectral=dict(size=41, step=10, convention='relativistic')),
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[component]))],
-        GEOMETRY | dict(pt_a=1, pt_s=3, vpt_vr=20, dpt_a=10))
+        GEOMETRY | dict(rpt_a=1, rpt_s=3, vpt_vr=20, dpt_a=10))
     vx, vy = vectors(extra)[:2]
     y, x = (np.indices(vx.shape) - 11.5) * 0.5
     dx, dy = x - GEOMETRY['xpos'], y - GEOMETRY['ypos']

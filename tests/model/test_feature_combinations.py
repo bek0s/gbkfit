@@ -23,10 +23,9 @@ def component(name, **emission):
     return dict(
         type='thin_disk', name=name, loose=False, tilted=False,
         rnodes=list(range(0, 14)),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines', **emission))
 
 
@@ -43,7 +42,7 @@ PROPERTIES = {f'gas_{key}': value for key, value in GEOMETRY.items()} | {
     f'{name}_{key}': value
     for name in ('gas', 'stars')
     for key, value in dict(
-        pt_a=1, pt_s=3, vpt_rt=2, vpt_vt=150, dpt_a=20).items()} \
+        rpt_a=1, rpt_s=3, vpt_rt=2, vpt_vt=150, dpt_a=20).items()} \
     | dict(gas_nii_ratio=0.3)
 
 APERTURES = dict(type='apertures', apertures=[

@@ -22,8 +22,7 @@ from .._units import DataUnit
 from ..base import Component
 from ..lines import Band, Bands, Lines
 from ..nodes import Nodes
-from ..parts import (
-    ConeTraitsKinematics, Density, cone_kinematics_parser)
+from ..parts import KinematicTraits
 from ..roles import (
     DustOpacity, Emission, LineEmission, Opacity, emission_parser,
     opacity_parser)
@@ -37,11 +36,6 @@ __all__ = [
     'make_cone'
 ]
 
-
-# The prefix of the parameters of the traits of each kind
-TRAIT_PREFIXES = dict(
-    rpt='pt', rht='ht', vpt='vpt', vht='vht', dpt='dpt', dht='dht',
-    spt='spt')
 
 # The traits that the cones take: the polar traits of the radius and the
 # azimuth alone (not the mixtures, maps and distortions of the plane of a
@@ -81,8 +75,7 @@ def dump_cone_component(
         component: Component,
         cone: _cone.NodalCone,
         rnodes: Nodes,
-        density: Density,
-        kinematics: ConeTraitsKinematics | None
+        kinematics: KinematicTraits | None
 ) -> dict[str, Any]:
     """
     Return the configuration of a cone component made of the given cone,
@@ -91,9 +84,12 @@ def dump_cone_component(
     info = dict(type=component.type()) | dump_name(component) | dict(
         sides=cone.sides(), rnodes=rnodes.dump(),
         rstep=cone.rstep(),
-        interp=cone.interp().type(), density=density.dump())
+        interp=cone.interp().type(),
+        rptraits=traits.rpt_parser.dump(list(cone.traits('rpt'))),
+        rhtraits=traits.rht_parser.dump(
+            list(cone.traits('rht')[:1 if cone.shared('rht') else None])))
     if kinematics is not None:
-        info.update(kinematics=cone_kinematics_parser.dump(kinematics))
+        info.update(kinematics.dump())
     if component.emission() is not None:
         info.update(emission=emission_parser.dump(component.emission()))
     if component.opacity() is not None:
@@ -105,8 +101,9 @@ def dump_cone_component(
 
 def make_cone(
         cone_class: type[_cone.NodalCone],
-        density: Density,
-        kinematics: ConeTraitsKinematics | None,
+        rptraits: tuple[traits.RPTrait, ...],
+        rhtraits: tuple[traits.RHTrait, ...],
+        kinematics: KinematicTraits | None,
         emission: Emission | None,
         opacity: Opacity | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
@@ -117,7 +114,7 @@ def make_cone(
 ) -> _cone.NodalCone:
     """
     Return the cone of a cone component, of class cone_class, made of its
-    parts (see Cone for the options). It takes the default height
+    traits (see Cone for the options). It takes the default height
     traits of its velocity and dispersion traits where it has none.
 
     Raises
@@ -128,7 +125,9 @@ def make_cone(
         together (e.g. lines without kinematics).
     """
     if isinstance(emission, LineEmission) and kinematics is None:
-        raise ValueError("a cone that emits lines needs kinematics")
+        raise ValueError(
+            "a cone that emits lines needs kinematics: give it vptraits and "
+            "dptraits")
     if opacity is not None and not isinstance(opacity, DustOpacity):
         raise ValueError("the opacity of a cone is dust (type: dust)")
     sptraits = iterutils.tuplify(sptraits)
@@ -136,20 +135,18 @@ def make_cone(
         raise ValueError(
             f"at most {MAX_TRAITS} sptraits are supported; {len(sptraits)} "
             f"were given")
-    traits_ = dict(rpt=density.ptraits(), rht=density.htraits(), spt=sptraits)
+    traits_ = dict(rpt=rptraits, rht=rhtraits, spt=sptraits)
     if kinematics is not None:
         traits_.update(
             vpt=kinematics.vptraits(), dpt=kinematics.dptraits(),
             vht=with_default_height_traits(
-                kinematics.vhtraits(), len(kinematics.vptraits()),
-                traits.VHTraitOne),
+                kinematics.vhtraits(), traits.VHTraitOne),
             dht=with_default_height_traits(
-                kinematics.dhtraits(), len(kinematics.dptraits()),
-                traits.DHTraitOne))
+                kinematics.dhtraits(), traits.DHTraitOne))
     CONE_TRAITS.check(traits_)
     node_args = parse_component_rnode_args(rnodes, rstep, interp)
     return cone_class(
-        sides=sides, **node_args, traits_=traits_, prefixes=TRAIT_PREFIXES,
+        sides=sides, **node_args, traits_=traits_, prefixes={},
         density_units=dict(rpt=_units.density_unit(emission)))
 
 

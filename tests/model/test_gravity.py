@@ -25,13 +25,10 @@ KPC = 3.0856775814913673e19
 DISK = dict(
     type='thick_disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)), rstep=0.5,
-    density=dict(
-        ptraits=dict(type='exponential'),
-        htraits=dict(type='gauss', zmax=10)),
-    kinematics=dict(
-        type='traits',
-        vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-        equilibrium=dict(type='central')),
+    rptraits=dict(type='exponential'),
+    rhtraits=dict(type='gauss', zmax=10),
+    vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
+    equilibrium=dict(type='central'),
     emission=dict(type='lines'))
 MASS = [dict(
     type='disk', name='stars', surface=dict(type='exponential'),
@@ -40,7 +37,7 @@ POINT = [dict(type='point', name='bh')]
 DISTANCE = dict(type='direct', cosmology='Planck18')
 PARAMS = dict(
     gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60, gas_vsys=0,
-    gas_pt_a=1, gas_pt_s=4, gas_ht_s=0.5, gas_dpt_a=10, distance=10,
+    gas_rpt_a=1, gas_rpt_s=4, gas_rht_s=0.5, gas_dpt_a=10, distance=10,
     mass_bh_log_m=10, gravity_a0=1.2)
 
 # The interpolation functions of MOND, of y = g_N / a0
@@ -58,7 +55,7 @@ def galaxy(disk=DISK, **info):
 
 def with_kinematics(**kinematics):
     """The disk with the given options of its kinematics instead."""
-    return DISK | dict(kinematics=DISK['kinematics'] | kinematics)
+    return DISK | dict(kinematics)
 
 
 def test_newtonian_gravity_by_default():
@@ -71,7 +68,7 @@ def test_newtonian_gravity_by_default():
 
 
 def test_gravity_without_mass_refused():
-    disk = DISK | dict(kinematics=DISK['kinematics'] | dict(
+    disk = DISK | dict(dict(
         vptraits=dict(type='arctan', direction='tan')))
     with pytest.raises(ValueError, match='give the galaxy mass, or no grav'):
         galaxy_parser.load(dict(
@@ -431,10 +428,11 @@ def test_palatini_corrections_of_the_density_gradient():
 
 # A thin disk that rotates in the mass of its galaxy, and a mass disk
 # that follows the gas
-THIN_DISK = DISK | dict(
-    type='thin_disk', density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(type='traits',
-                    vptraits=dict(type='mass'), dptraits=dict(type='uniform')))
+THIN_DISK = {
+    key: value for key, value in DISK.items()
+    if key not in ('rhtraits', 'equilibrium')} \
+    | dict(type='thin_disk', rptraits=dict(type='exponential'),
+           vptraits=dict(type='mass'), dptraits=dict(type='uniform'))
 GAS_MASS = dict(
     type='disk', name='gas', surface=dict(type='component', component='gas'),
     vertical=dict(type='component', component='gas'))

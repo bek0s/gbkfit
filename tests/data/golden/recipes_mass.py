@@ -29,19 +29,15 @@ def _disk(
 ) -> dict[str, Any]:
     """A thin exponential disk that emits lines, of the given traits."""
     return dict(type='thin_disk', name=name) | rings | dict(
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits',
-            vptraits=vptraits, dptraits=dptraits or dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=vptraits, dptraits=dptraits or dict(type='uniform'),
         emission=dict(type='lines')) | options
 
 
-def _thick(disk: dict[str, Any], **kinematics: Any) -> dict[str, Any]:
-    """The disk, thick (sech2 heights), with more options of kinematics."""
-    density = disk['density'] | dict(htraits=dict(type='sech2', zmax=6))
+def _thick(disk: dict[str, Any], **options: Any) -> dict[str, Any]:
+    """The disk, thick (sech2 heights), with more options."""
     return disk | dict(
-        type='thick_disk', density=density,
-        kinematics=disk['kinematics'] | kinematics)
+        type='thick_disk', rhtraits=dict(type='sech2', zmax=6)) | options
 
 
 _INSTRUMENT = dict(
@@ -88,11 +84,11 @@ def _prefixed(prefix: str, properties: dict[str, Any]) -> dict[str, Any]:
 
 # The geometry and light of a disk (at 80 Mpc: 0.39 kpc per arcsec)
 _GEOMETRY_TRUTH = dict(
-    xpos=0.3, ypos=-0.4, posa=40, incl=55, vsys=10, pt_a=1, pt_s=3)
+    xpos=0.3, ypos=-0.4, posa=40, incl=55, vsys=10, rpt_a=1, rpt_s=3)
 _GEOMETRY_TRIAL = dict(
     xpos=0.3, ypos=-0.4, posa=dict(value=43, min=0, max=90),
     incl=dict(value=50, min=10, max=80), vsys=dict(value=12, min=-50, max=50),
-    pt_a=1, pt_s=3)
+    rpt_a=1, rpt_s=3)
 
 
 # --- C1: rotation from the mass, with pressure support -------------------
@@ -121,21 +117,21 @@ _MASS_ROTATION_PRESSURE = dict(
     galaxies=[dict(components=[_C1_GAS], mass=_C1_MASS, distance=_DISTANCE)],
     observations=[_moments()],
     truth=_prefixed('gas', _GEOMETRY_TRUTH | dict(
-        dpt_a=35, dpt1_a=25, dpt2_a=15)) | dict(
+        dpt_a=35, dpt2_a=25, dpt3_a=15)) | dict(
         distance=80, mass_gas_upsilon=5e8, mass_gas_hz=0.2,
         mass_halo_log_m=11.5, mass_halo_c=10),
     trial=_prefixed('gas', _GEOMETRY_TRIAL | dict(
-        dpt_a=dict(value=30, min=5, max=80), dpt1_a=25, dpt2_a=15)) | dict(
+        dpt_a=dict(value=30, min=5, max=80), dpt2_a=25, dpt3_a=15)) | dict(
         distance=80, mass_gas_upsilon=dict(value=4e8, min=1e7, max=1e10),
         mass_gas_hz=0.2, mass_halo_log_m=dict(value=11.8, min=10, max=13),
         mass_halo_c=10),
     noises=[dict(type='gauss', rms=0.002)],
     likelihoods=[_MOMENTS_LIKELIHOOD],
     params=dict(
-        derived=dict(v22='vcirc(2.2 * gas_pt_s * kpc_per_arcsec)'),
+        derived=dict(v22='vcirc(2.2 * gas_rpt_s * kpc_per_arcsec)'),
         priors=[
             dict(type='gauss', expr='v22', mean=120, std=10),
-            dict(type='gauss', expr='gas_dpt1_a / gas_dpt_a', mean=0.7,
+            dict(type='gauss', expr='gas_dpt2_a / gas_dpt_a', mean=0.7,
                  std=0.1)]))
 
 
@@ -164,11 +160,11 @@ _EQUILIBRIUM_HEIGHTS_MOND = dict(
         distance=_DISTANCE,
         gravity=dict(type='mond', interpolation='simple'))],
     observations=[_cube([20, 20, 30])],
-    truth=_prefixed('gas', _GEOMETRY_TRUTH | dict(ht_s=0.6, dpt_a=10)) | dict(
+    truth=_prefixed('gas', _GEOMETRY_TRUTH | dict(rht_s=0.6, dpt_a=10)) | dict(
         distance=80, mass_bulge_log_m=10.0, mass_bulge_re=1.0,
         mass_bulge_n=1.5, mass_gas_upsilon=3e8, gravity_a0=1.2),
     trial=_prefixed('gas', _GEOMETRY_TRIAL | dict(
-        ht_s=dict(value=0.8, min=0.1, max=3), dpt_a=10)) | dict(
+        rht_s=dict(value=0.8, min=0.1, max=3), dpt_a=10)) | dict(
         distance=80, mass_bulge_log_m=dict(value=10.2, min=9, max=12),
         mass_bulge_re=1.0, mass_bulge_n=1.5, mass_gas_upsilon=3e8,
         gravity_a0=dict(value=1.6, min=0, max=5)),
@@ -193,15 +189,15 @@ _SPIRAL_BAR_FLOWS = dict(
         components=[_C3_GAS], mass=[_STARS, _NFW], distance=_DISTANCE)],
     observations=[_moments()],
     truth=_prefixed('gas', _GEOMETRY_TRUTH | dict(
-        dpt_a=20, vpt1_p=40, vpt1_c=60, vpt1_e=0.3, vpt1_o=1,
-        vpt2_v=-40, vpt2_p=30, vpt2_s=2, vpt3_vr=25, vpt3_p=70,
-        vpt3_s=30)) | dict(
+        dpt_a=20, vpt2_p=40, vpt2_c=60, vpt2_e=0.3, vpt2_o=1,
+        vpt3_v=-40, vpt3_p=30, vpt3_s=2, vpt4_vr=25, vpt4_p=70,
+        vpt4_s=30)) | dict(
         distance=80, mass_stars_log_m=10.3, mass_stars_rd=1.2,
         mass_halo_log_m=11.5, mass_halo_c=10),
     trial=_prefixed('gas', _GEOMETRY_TRIAL | dict(
-        dpt_a=20, vpt1_p=dict(value=50, min=0, max=120), vpt1_c=60,
-        vpt1_e=0.3, vpt1_o=1, vpt2_v=dict(value=-30, min=-100, max=0),
-        vpt2_p=30, vpt2_s=2, vpt3_vr=25, vpt3_p=70, vpt3_s=30)) | dict(
+        dpt_a=20, vpt2_p=dict(value=50, min=0, max=120), vpt2_c=60,
+        vpt2_e=0.3, vpt2_o=1, vpt3_v=dict(value=-30, min=-100, max=0),
+        vpt3_p=30, vpt3_s=2, vpt4_vr=25, vpt4_p=70, vpt4_s=30)) | dict(
         distance=80, mass_stars_log_m=dict(value=10.4, min=9, max=12),
         mass_stars_rd=1.2, mass_halo_log_m=11.5, mass_halo_c=10),
     noises=[dict(type='gauss', rms=0.002)],
@@ -310,9 +306,8 @@ def _c6_gas() -> dict[str, Any]:
 _C6_DUST = dict(
     type='thick_disk', name='dust', loose=False, tilted=False,
     rnodes=list(range(0, 11)),
-    density=dict(
-        ptraits=dict(type='exponential'),
-        htraits=dict(type='sech2', zmax=6)),
+    rptraits=dict(type='exponential'),
+    rhtraits=dict(type='sech2', zmax=6),
     opacity=dict(type='dust'))
 
 
@@ -322,9 +317,9 @@ def _c6_properties(
     The properties of the galaxies of C6: the gas of both of the given
     geometry and rotation speed (the one behind elsewhere), and the dust.
     """
-    gas = geometry | dict(ht_s=0.5, vpt_rt=2, vpt_vt=vpt_vt, dpt_a=20)
+    gas = geometry | dict(rht_s=0.5, vpt_rt=2, vpt_vt=vpt_vt, dpt_a=20)
     dust = dict(
-        xpos=0, ypos=0, posa=60, incl=50, pt_a=0.4, pt_s=3, ht_s=0.4)
+        xpos=0, ypos=0, posa=60, incl=50, rpt_a=0.4, rpt_s=3, rht_s=0.4)
     back = gas | dict(xpos=2.5, ypos=2.0, posa=120, vsys=40)
     return (_prefixed('front_gas', gas) | _prefixed('front_dust', dust)
             | _prefixed('back_gas', back))
@@ -389,8 +384,8 @@ _PARAMS_FEATURES = dict(
     truth=dict(
         cold_xpos=0.3, cold_ypos=-0.4, cold_vsys=10,
         cold_posa=[40, 41, 43, 46, 50, 54, 58], cold_incl=55,
-        cold_pt_a=1, cold_pt_s=3, cold_vpt_rt=2, cold_vpt_vt=150,
-        cold_dpt_a=15, warm_pt_a=0.5, warm_pt_s=4, warm_vpt_rt=2,
+        cold_rpt_a=1, cold_rpt_s=3, cold_vpt_rt=2, cold_vpt_vt=150,
+        cold_dpt_a=15, warm_rpt_a=0.5, warm_rpt_s=4, warm_vpt_rt=2,
         warm_vpt_vt=120, warm_dpt_a=40, nucleus_xpos=0.3,
         nucleus_ypos=-0.4, nucleus_vsys=10, nucleus_flux=_NUCLEUS_FLUX,
         nucleus_disp=60, lnf_mu=0.5, lnf_sigma=0.3, lnf_z=0.6) | _C7_TIES,
@@ -402,9 +397,9 @@ _PARAMS_FEATURES = dict(
             dict(value=offset, min=-30, max=30)
             for offset in (1, 2, 4, 8, 12, 16)],
         cold_incl=dict(value=50, min=10, max=80),
-        cold_pt_a=1, cold_pt_s=3, cold_vpt_rt=2,
+        cold_rpt_a=1, cold_rpt_s=3, cold_vpt_rt=2,
         cold_vpt_vt=dict(value=140, min=50, max=300), cold_dpt_a=15,
-        warm_pt_a=0.5, warm_pt_s=4, warm_vpt_rt='cold_vpt_rt',
+        warm_rpt_a=0.5, warm_rpt_s=4, warm_vpt_rt='cold_vpt_rt',
         warm_vpt_vt=dict(value=110, min=50, max=300),
         warm_dpt_a='cold_dpt_a * 2.5', nucleus_xpos='cold_xpos',
         nucleus_ypos='cold_ypos', nucleus_vsys='cold_vsys',

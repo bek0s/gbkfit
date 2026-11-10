@@ -21,14 +21,14 @@ IMAGE = dict(
         type='pixel_brightness', size=[64, 64], step=0.2, rval=[150.0, 2.0]))
 GEOMETRY = dict(xpos=0.3, ypos=-0.2, posa=30, incl=60)
 EXPONENTIAL = dict(type='exponential')
-EXPONENTIAL_PARAMS = dict(pt_a=1, pt_s=1.5)
+EXPONENTIAL_PARAMS = dict(rpt_a=1, rpt_s=1.5)
 
 
 def disk(ptraits, **options):
     """A galaxy of a thin disk of the given density polar traits."""
     return dict(components=[dict(
         type='thin_disk', loose=False, tilted=False, rnodes=[0, 6],
-        density=dict(ptraits=ptraits), emission=dict(type='band'))
+        rptraits=ptraits, emission=dict(type='band'))
         | options])
 
 
@@ -79,7 +79,7 @@ def test_a_thin_disk_of_an_image_is_the_image(tmp_path, incl):
     trait = dict(
         type='image', file=str(tmp_path / 'truth.fits'), size=[260, 260],
         step=0.1)
-    _, model = image_of(disk(trait), GEOMETRY | dict(incl=incl, pt_a=1))
+    _, model = image_of(disk(trait), GEOMETRY | dict(incl=incl, rpt_a=1))
     assert model.sum() == pytest.approx(truth.sum(), rel=2e-3)
     assert np.sqrt(np.mean((model - truth) ** 2)) < 5e-3 * truth.max()
     assert np.abs(model - truth).max() < 5e-2 * truth.max()
@@ -93,9 +93,9 @@ def test_offsets_move_the_image(tmp_path):
     trait = dict(
         type='image', file=str(tmp_path / 'truth.fits'), size=[120, 120],
         step=0.1, offsets=True)
-    params = GEOMETRY | dict(pt_a=1, pt_dy=0)
-    _, moved = image_of(disk(trait), params | dict(pt_dx=0.6))
-    _, unmoved = image_of(disk(trait), params | dict(pt_dx=0))
+    params = GEOMETRY | dict(rpt_a=1, rpt_dy=0)
+    _, moved = image_of(disk(trait), params | dict(rpt_dx=0.6))
+    _, unmoved = image_of(disk(trait), params | dict(rpt_dx=0))
     assert np.sqrt(np.mean((moved - truth) ** 2)) < 5e-3 * truth.max()
     assert np.sqrt(np.mean((unmoved - truth) ** 2)) > 5e-2 * truth.max()
 
@@ -109,7 +109,7 @@ def test_the_mass_takes_the_light_of_the_image(tmp_path):
         mass=[dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
         distance=dict(type='direct'))
     kinematics = dict(
-        type='traits', vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
+        vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
         dptraits=dict(type='uniform'))
     params = GEOMETRY | dict(
         vsys=0, distance=100, mass_halo_log_m=12, mass_halo_c=10, dpt_a=15)
@@ -120,9 +120,9 @@ def test_the_mass_takes_the_light_of_the_image(tmp_path):
     rotation = {}
     for name, ptraits, light in (
             ('exponential', EXPONENTIAL, EXPONENTIAL_PARAMS),
-            ('image', image, dict(pt_a=1))):
+            ('image', image, dict(rpt_a=1))):
         galaxy = galaxy_parser.load(
-            disk(ptraits, kinematics=kinematics) | mass)
+            disk(ptraits, **kinematics) | mass)
         bound = galaxy.plan_functions(origin).bind(params | light)
         radii = np.array([1.0, 2.0, 4.0])
         rotation[name] = bound['rotation'](radii)
@@ -145,9 +145,8 @@ def rotating_disk_of_image(path):
     trait = dict(type='image', file=str(path), size=[8, 8], step=0.2)
     galaxy = disk(trait) | dict(
         mass=[dict(type='point', name='bh')], distance=dict(type='direct'))
-    galaxy['components'][0]['kinematics'] = dict(
-        type='traits', vptraits=dict(type='mass'),
-        dptraits=dict(type='uniform'))
+    galaxy['components'][0] |= dict(
+        vptraits=dict(type='mass'), dptraits=dict(type='uniform'))
     return galaxy
 
 
@@ -170,7 +169,7 @@ def test_profiles_of_galaxies_of_images(tmp_path):
         galaxy_parser.load(galaxy),
         observation_parser.load([dict(IMAGE), PROFILE]))
     params = GEOMETRY | dict(
-        vsys=0, pt_a=1, dpt_a=10, distance=10, mass_bh_log_m=9)
+        vsys=0, rpt_a=1, dpt_a=10, distance=10, mass_bh_log_m=9)
     vcirc = group.plan().model_h(params)[1]['vcirc']['d']
     assert vcirc == pytest.approx([np.sqrt(4.30092e-6 * 1e9)], rel=1e-4)
 
@@ -185,7 +184,7 @@ def test_images_warn_of_their_blur_and_their_cells(tmp_path, caplog):
     observation = IMAGE | dict(
         instrument=dict(psf=dict(type='gauss', sigma=0.3)))
     with caplog.at_level(logging.WARNING):
-        image_of(disk(trait), GEOMETRY | dict(pt_a=1), observation)
+        image_of(disk(trait), GEOMETRY | dict(rpt_a=1), observation)
     assert "larger than the pixels of its image" in caplog.text
     assert "41% more than the data" in caplog.text
 
@@ -199,6 +198,6 @@ def test_images_off_the_model_are_warned_of(tmp_path, caplog):
         type='image', file=str(tmp_path / 'truth.fits'), size=[30, 30],
         step=0.4)
     with caplog.at_level(logging.WARNING):
-        _, model = image_of(disk(trait), GEOMETRY | dict(pt_a=1))
+        _, model = image_of(disk(trait), GEOMETRY | dict(rpt_a=1))
     assert "covers none of its map" in caplog.text
     assert not np.any(model)

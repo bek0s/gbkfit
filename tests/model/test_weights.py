@@ -31,10 +31,9 @@ def config(driver, observable, weights, component=None):
     """
     gas = component or dict(
         type='thin_disk', name='gas', rnodes=list(range(0, 12)),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits', vptraits=dict(type='uniform', direction='tan'),
-            dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='uniform', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines'))
     return dict(
         driver=dict(type=driver.type()),
@@ -47,7 +46,7 @@ def config(driver, observable, weights, component=None):
 
 PROPERTIES = dict(
     gas_vsys=0, gas_xpos=1, gas_ypos=-2, gas_posa=30, gas_incl=60,
-    gas_pt_a=1, gas_pt_s=4, gas_vpt_vt=100, gas_dpt_a=20)
+    gas_rpt_a=1, gas_rpt_s=4, gas_vpt_vt=100, gas_dpt_a=20)
 
 
 def test_weights_follow_the_plane_of_the_disk(driver):

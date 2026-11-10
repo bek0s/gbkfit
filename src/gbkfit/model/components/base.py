@@ -190,7 +190,7 @@ class Component(TypedSerializable, abc.ABC):
         """
         Return the option of its configuration that makes each of its
         parameters (see pdescs), by name, as a path of option names and
-        list indices: e.g. ('kinematics', 'vptraits', 1) for those of its
+        list indices: e.g. ('vptraits', 1) for those of its
         second velocity polar trait, ('emission', 'lines', 2) for the flux
         ratio of its third line, and () for those of the component itself
         (e.g. its centre). For those who show the parameters with the

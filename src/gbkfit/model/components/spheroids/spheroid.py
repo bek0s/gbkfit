@@ -1,13 +1,19 @@
 """
-The spheroid component: the light of a spheroid of stars (e.g. a bulge,
+The spheroid components: the light of a spheroid of stars (e.g. a bulge,
 or an elliptical galaxy), a light profile (LightProfile) laid out in a
-shape.
+shape, whose type says how its stars move: as traits give, or not at all
+(TraitSpheroid), by the Jeans equations in the gravity of its galaxy
+(JeansSpheroid), or as a superposition of orbits in it (OrbitSpheroid).
 """
 
 import abc
 import functools
 import math
-from typing import Any
+from collections.abc import Sequence
+from typing import Annotated, Any
+
+from annotated_types import Ge, Gt
+from pydantic import FiniteFloat
 
 import numpy as np
 import numpy.typing as npt
@@ -26,7 +32,8 @@ from ...mass import SpheroidDensity
 from ...mass.profiles import ProfileGaussian, ProfileSersic, SpheroidProfile
 from ...mass.shapes import (
     ShapeFlattened, ShapeSphere, SpheroidShape, spheroid_shape_parser)
-from .._detail import dump_name
+from .. import traits
+from .._detail import Interp, RNodes, RStep, dump_name
 from .._needs import Need
 from .._native import (
     NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
@@ -36,6 +43,8 @@ from ..base import (
     Component, ComponentState, FieldsLayout, FrameParams, NativeGrid)
 from ..geometries import geometry_pdesc
 from ..lines import Band
+from ..nodes import Nodes
+from ..parts import kinematic_traits
 from ..roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
 from ._jeans import JeansKinematics
@@ -47,12 +56,14 @@ from ._stage import SpheroidStage
 
 
 __all__ = [
+    'JeansSpheroid',
     'LightMGE',
     'LightProfile',
     'LightSersic',
+    'OrbitSpheroid',
     'Spheroid',
-    'light_profile_parser',
-    'spheroid_kinematics_parser'
+    'TraitSpheroid',
+    'light_profile_parser'
 ]
 
 
@@ -470,12 +481,6 @@ light_profile_parser = TypedParser(LightProfile, [
     LightSersic,
     LightMGE], family='light_profile')
 
-spheroid_kinematics_parser = TypedParser(SpheroidKinematics, [
-    JeansKinematics,
-    SpheroidTraitsKinematics,
-    SchwarzschildKinematics], family='spheroid_kinematics')
-
-
 # The geometric parameters of a spheroid: its centre, the orientation of
 # its axis unless it is a sphere without kinematics, and with kinematics,
 # its systemic velocity
@@ -484,12 +489,13 @@ GEOMETRY_PDESCS = {
     for name in ('xpos', 'ypos', 'posa', 'incl', 'vsys')}
 
 
-class Spheroid(Component):
+class Spheroid(Component, abc.ABC):
     """
     A spheroid of stars (e.g. a bulge, or an elliptical galaxy): a light
-    profile laid out in a shape, with kinematics if any. It is the density
-    of its light profile, laid out in its shape (unless the profile has
-    its own axis ratios, see LightMGE), and its kinematics, if any (see
+    profile laid out in a shape, whose stars move as its type says (see
+    TraitSpheroid, JeansSpheroid and OrbitSpheroid). It is the density of
+    its light profile, laid out in its shape (unless the profile has its
+    own axis ratios, see LightMGE), and its kinematics, if any (see
     SpheroidKinematics; with a systemic velocity vsys). Its axis is the
     spin axis of a disk of its posa and incl; a sphere without kinematics
     has none (no posa or incl). It emits in bands, seen by images, or as
@@ -508,6 +514,8 @@ class Spheroid(Component):
     (where it can be infinite, e.g. a Sersic profile of n > 1), the
     others the density at their centre.
 
+    The options that every spheroid takes:
+
     Parameters
     ----------
     profile : LightProfile
@@ -522,9 +530,6 @@ class Spheroid(Component):
         Its shape (see mass.shapes): a sphere (the default), or flattened
         of the axis ratio q (a parameter), with the face-on projection of
         the sphere; none for a profile with its own axis ratios.
-    kinematics : SpheroidKinematics, optional
-        How its stars move: in the gravity of its galaxy (JeansKinematics)
-        or as traits give (SpheroidTraitsKinematics); none by default.
     name : str, optional
         Its name (see Component).
 
@@ -532,17 +537,9 @@ class Spheroid(Component):
     ------
     ValueError
         If rmax is not positive, the emission is not in bands, the profile
-        has its own axis ratios and a shape is given, or the kinematics
-        cannot move in it (see SpheroidKinematics.motion).
+        has its own axis ratios and a shape is given, or its stars cannot
+        move in it (see SpheroidKinematics.motion).
     """
-
-    @staticmethod
-    def type() -> str:
-        return 'spheroid'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Spheroid'
 
     def dump(self) -> dict[str, Any]:
         info = dict(type=self.type()) | dump_name(self) | dict(
@@ -551,8 +548,10 @@ class Spheroid(Component):
         if self._profile.takes_shape():
             info.update(shape=spheroid_shape_parser.dump(self._shape))
         if self._kinematics is not None:
-            info.update(kinematics=spheroid_kinematics_parser.dump(
-                self._kinematics))
+            # (the options of its kinematics are its own)
+            info.update({
+                key: value for key, value in self._kinematics.dump().items()
+                if key != 'type'})
         info.update(emission=emission_parser.dump(self.emission()))
         return info
 
@@ -561,11 +560,11 @@ class Spheroid(Component):
             profile: LightProfile,
             rmax: float,
             emission: Emission,
-            shape: SpheroidShape | None = None,
-            kinematics: SpheroidKinematics | None = None,
-            name: str | None = None
+            shape: SpheroidShape | None,
+            kinematics: SpheroidKinematics | None,
+            name: str | None
     ):
-        check_options(Spheroid.__init__, locals())
+        # (the options are checked by the constructor of the subclass)
         if not isinstance(emission, BandEmission):
             raise ValueError(
                 "a spheroid emits in bands (emission type: band)")
@@ -719,8 +718,6 @@ class Spheroid(Component):
         parts = [(('profile',), self._profile.pdescs())]
         if self._shape is not None:
             parts.append((('shape',), self._shape.pdescs()))
-        if self._motion is not None:
-            parts.append((('kinematics',), self._motion.pdescs()))
         for option, pdescs in parts:
             owners.update(dict.fromkeys(pdescs, option))
         if isinstance(self._motion, TraitsMotion):
@@ -754,8 +751,8 @@ class Spheroid(Component):
         if lines is not None and STARS in lines and self._kinematics is None:
             raise ValueError(
                 "a spectral cube sees the stars of a spheroid with "
-                "kinematics only (e.g. kinematics: {type: jeans}, or "
-                "{type: traits})")
+                "kinematics only (e.g. type: jeans_spheroid, or a spheroid "
+                "with vptraits and dptraits)")
 
     def plan(
             self,
@@ -775,6 +772,173 @@ class Spheroid(Component):
         return NativeComponentPlan(
             driver, SpheroidPlan(self, driver, emission.nlines, dtype),
             emission, opacity_ratios)
+
+
+class TraitSpheroid(Spheroid):
+    """
+    A spheroid whose stars move as traits give, or do not move (without
+    traits; e.g. a bulge seen only by images). Its traits are those of a
+    thick disk whose spin axis is the axis of the spheroid (see
+    SpheroidTraitsKinematics), on radial nodes of the distance from the
+    axis. Its stars take neither the mass of their galaxy nor its
+    gravity. See Spheroid for the options it shares.
+
+    Parameters
+    ----------
+    profile, rmax, emission, shape, name :
+        As those of Spheroid.
+    vptraits : VPTrait or Sequence of VPTrait, optional
+        The velocity polar traits (parameters 'vpt_*'), around the axis
+        ('tan'). A spheroid with vptraits and dptraits moves.
+    dptraits : DPTrait or Sequence of DPTrait, optional
+        The velocity dispersion polar traits (parameters 'dpt_*'),
+        isotropic or each along a direction of the cylinder.
+    vhtraits, dhtraits : optional
+        The velocity and dispersion height traits, one for each polar
+        trait (of the factor one where none are given).
+    rnodes : Nodes or Sequence of float, optional
+        The radii of the nodes of its traits (arcsec), from 0; by default
+        0 and its rmax. Given ones go to rmax at least.
+    rstep : float, optional
+        The width of the rings its traits are evaluated on (see
+        SpheroidTraitsKinematics).
+    interp : str, optional
+        How the node-wise parameters of its traits are interpolated
+        between its radii: 'linear', 'akima' or 'pchip'.
+
+    Raises
+    ------
+    ValueError
+        As Spheroid, or if the traits or nodes are not valid, or nodes are
+        given without traits.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'spheroid'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Spheroid'
+
+    def __init__(
+            self,
+            profile: LightProfile,
+            rmax: float,
+            emission: Emission,
+            shape: SpheroidShape | None = None,
+            vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None = None,
+            dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None = None,
+            vhtraits:
+            traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
+            dhtraits:
+            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
+            rnodes: Nodes | RNodes | None = None,
+            rstep: RStep | None = None,
+            interp: Interp = 'linear',
+            name: str | None = None
+    ):
+        check_options(TraitSpheroid.__init__, locals())
+        kinematics = None
+        if kinematic_traits(vptraits, dptraits, vhtraits, dhtraits) \
+                is not None:
+            kinematics = SpheroidTraitsKinematics(
+                vptraits, dptraits, vhtraits, dhtraits, rnodes, rstep, interp)
+        elif rnodes is not None or rstep is not None or interp != 'linear':
+            raise ValueError(
+                "rnodes, rstep and interp are the nodes of the traits of a "
+                "spheroid: give it vptraits and dptraits")
+        super().__init__(profile, rmax, emission, shape, kinematics, name)
+
+
+class JeansSpheroid(Spheroid):
+    """
+    A spheroid whose stars are in a steady state in the gravity of its
+    galaxy, by the Jeans equations (see JeansKinematics), of the
+    parameters beta_z (the anisotropy) and kappa (the rotation). See
+    Spheroid for the options.
+
+    Parameters
+    ----------
+    profile, rmax, emission, shape, name :
+        As those of Spheroid.
+
+    Raises
+    ------
+    ValueError
+        As Spheroid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'jeans_spheroid'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Jeans spheroid'
+
+    def __init__(
+            self,
+            profile: LightProfile,
+            rmax: float,
+            emission: Emission,
+            shape: SpheroidShape | None = None,
+            name: str | None = None
+    ):
+        check_options(JeansSpheroid.__init__, locals())
+        super().__init__(
+            profile, rmax, emission, shape, JeansKinematics(), name)
+
+
+class OrbitSpheroid(Spheroid):
+    """
+    A spheroid whose stars are in a steady state in the gravity of its
+    galaxy, as a superposition of orbits (Schwarzschild 1979; see
+    SchwarzschildKinematics), whose weights (the parameter 'weights') an
+    objective solves. See Spheroid for the options it shares.
+
+    Parameters
+    ----------
+    profile, rmax, emission, shape, name :
+        As those of Spheroid.
+    norbits : int, optional
+        The number of the orbits (each with its twin).
+    turns : float, optional
+        How long each orbit is integrated, in periods of the circular
+        orbit of its energy.
+    seed : int, optional
+        The seed of the random numbers of the starts.
+
+    Raises
+    ------
+    ValueError
+        As Spheroid, or if norbits is not a positive integer, turns not a
+        positive number, or seed not a non-negative integer.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'orbit_spheroid'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Orbit spheroid'
+
+    def __init__(
+            self,
+            profile: LightProfile,
+            rmax: float,
+            emission: Emission,
+            shape: SpheroidShape | None = None,
+            norbits: Annotated[int, Gt(0)] = 3000,
+            turns: Annotated[FiniteFloat, Gt(0)] = 100,
+            seed: Annotated[int, Ge(0)] = 0,
+            name: str | None = None
+    ):
+        check_options(OrbitSpheroid.__init__, locals())
+        super().__init__(
+            profile, rmax, emission, shape,
+            SchwarzschildKinematics(norbits, turns, seed), name)
 
 
 class SpheroidPlan(NativePlan):

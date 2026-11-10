@@ -31,7 +31,7 @@ DUST = dict(type='dust')
 
 
 def smdisk(**options):
-    thick = 'htraits' in options['density']
+    thick = 'rhtraits' in options
     return dict(
         type='thick_disk' if thick else 'thin_disk', rnodes=RNODES, **options)
 
@@ -51,14 +51,14 @@ CASES = dict(
             galaxy=dict(components=[
                 smdisk(
                     loose=True, tilted=True,
-                    density=dict(ptraits=[
-                        dict(type='exponential'), dict(type='nw_uniform')]),
+                    rptraits=[
+                        dict(type='exponential'), dict(type='nw_uniform')],
                     sptraits=dict(type='azrange'),
                     emission=BAND)])),
         dict(
             xpos=[0.5, 0.1, 0.2, 0.3, 0.4], ypos=[-1, -1, -1.2, -1.4, -1.6],
             posa=[30, 32, 34, 36, 38], incl=[50, 52, 54, 56, 58],
-            pt_a=1, pt_s=3, pt1_a=[0.5, 0.4, 0.3, 0.2, 0.1],
+            rpt_a=1, rpt_s=3, rpt2_a=[0.5, 0.4, 0.3, 0.2, 0.1],
             spt_p=45, spt_s=270)),
     kinematics_2d=(
         dict(
@@ -69,31 +69,28 @@ CASES = dict(
             galaxy=dict(components=[
                 smdisk(
                     name='disk1', loose=True, tilted=False,
-                    density=dict(ptraits=dict(type='gauss')),
-                    kinematics=dict(
-                        type='traits', vptraits=[
-                            dict(type='arctan', direction='tan'),
-                            dict(type='nw_uniform', direction='rad')],
-                        dptraits=dict(type='uniform')),
+                    rptraits=dict(type='gauss'),
+                    vptraits=[
+                        dict(type='arctan', direction='tan'),
+                        dict(type='nw_uniform', direction='rad')],
+                    dptraits=dict(type='uniform'),
                     emission=LINES),
                 smdisk(
                     name='disk2', loose=False, tilted=True,
-                    density=dict(ptraits=dict(type='exponential')),
-                    kinematics=dict(
-                        type='traits',
-                        vptraits=dict(type='tanh', direction='tan'),
-                        dptraits=dict(type='nw_uniform')),
+                    rptraits=dict(type='exponential'),
+                    vptraits=dict(type='tanh', direction='tan'),
+                    dptraits=dict(type='nw_uniform'),
                     sptraits=dict(type='nw_azrange'),
                     emission=LINES)])),
         dict(
             disk1_vsys=[10, 5, 5, 5, 5], disk1_xpos=[0, 0.2, 0.4, 0.6, 0.8],
             disk1_ypos=[0] * 5, disk1_posa=30, disk1_incl=60,
-            disk1_pt_a=1, disk1_pt_s=3, disk1_vpt_rt=2, disk1_vpt_vt=150,
-            disk1_vpt1_vr=[0, 10, 20, 20, 10], disk1_dpt_a=25,
+            disk1_rpt_a=1, disk1_rpt_s=3, disk1_vpt_rt=2, disk1_vpt_vt=150,
+            disk1_vpt2_vr=[0, 10, 20, 20, 10], disk1_dpt_a=25,
             disk2_vsys=0, disk2_xpos=1, disk2_ypos=-1,
             disk2_posa=[120, 122, 124, 126, 128],
             disk2_incl=[40, 45, 50, 55, 60],
-            disk2_pt_a=0.5, disk2_pt_s=4, disk2_vpt_rt=3, disk2_vpt_vt=100,
+            disk2_rpt_a=0.5, disk2_rpt_s=4, disk2_vpt_rt=3, disk2_vpt_vt=100,
             disk2_dpt_a=[40, 35, 30, 25, 20],
             disk2_spt_p=[0, 10, 20, 30, 40], disk2_spt_s=[300] * 5)),
     intensity_3d=(
@@ -103,40 +100,36 @@ CASES = dict(
             galaxy=dict(components=[
                 smdisk(
                     name='smooth', loose=False, tilted=True,
-                    density=dict(
-                        ptraits=dict(type='exponential'),
-                        htraits=dict(type='sech2', zmax=8)),
+                    rptraits=dict(type='exponential'),
+                    rhtraits=dict(type='sech2', zmax=8),
                     zptraits=dict(type='nw_uniform', zmax=1),
                     emission=BAND),
                 mcdisk(
                     name='clouds', loose=False, tilted=False, seed=3,
-                    density=dict(
-                        ptraits=dict(type='gauss'),
-                        htraits=dict(type='exponential', zmax=8)),
+                    rptraits=dict(type='gauss'),
+                    rhtraits=dict(type='exponential', zmax=8),
                     emission=BAND),
                 smdisk(
                     name='dust', loose=False, tilted=False,
-                    density=dict(
-                        ptraits=dict(type='exponential'),
-                        htraits=dict(type='sech2', zmax=8)),
+                    rptraits=dict(type='exponential'),
+                    rhtraits=dict(type='sech2', zmax=8),
                     opacity=DUST),
                 mcdisk(
                     name='dust_clouds', loose=False, tilted=False,
-                    density=dict(
-                        ptraits=dict(type='gauss'),
-                        htraits=dict(type='gauss', zmax=8)),
+                    rptraits=dict(type='gauss'),
+                    rhtraits=dict(type='gauss', zmax=8),
                     opacity=DUST)])),
         dict(
             smooth_xpos=0, smooth_ypos=0, smooth_posa=[30, 32, 34, 36, 38],
-            smooth_incl=[60] * 5, smooth_pt_a=1, smooth_pt_s=3,
-            smooth_ht_s=1, smooth_zpt_a=[0, 0.2, 0.4, 0.6, 0.8],
+            smooth_incl=[60] * 5, smooth_rpt_a=1, smooth_rpt_s=3,
+            smooth_rht_s=1, smooth_zpt_a=[0, 0.2, 0.4, 0.6, 0.8],
             clouds_xpos=1, clouds_ypos=1, clouds_posa=100, clouds_incl=30,
-            clouds_pt_a=2, clouds_pt_s=2, clouds_ht_s=0.5,
+            clouds_rpt_a=2, clouds_rpt_s=2, clouds_rht_s=0.5,
             dust_xpos=0, dust_ypos=0, dust_posa=30, dust_incl=60,
-            dust_pt_a=0.05, dust_pt_s=4, dust_ht_s=1,
+            dust_rpt_a=0.05, dust_rpt_s=4, dust_rht_s=1,
             dust_clouds_xpos=1, dust_clouds_ypos=1, dust_clouds_posa=100,
-            dust_clouds_incl=30, dust_clouds_pt_a=0.1, dust_clouds_pt_s=2,
-            dust_clouds_ht_s=0.5)),
+            dust_clouds_incl=30, dust_clouds_rpt_a=0.1, dust_clouds_rpt_s=2,
+            dust_clouds_rht_s=0.5)),
     kinematics_3d=(
         dict(
             observable=dict(
@@ -147,47 +140,40 @@ CASES = dict(
             galaxy=dict(components=[
                 smdisk(
                     name='smooth', loose=True, tilted=True,
-                    density=dict(
-                        ptraits=dict(type='exponential'),
-                        htraits=dict(type='sech2', zmax=8)),
-                    kinematics=dict(
-                        type='traits',
-                        vptraits=dict(type='arctan', direction='tan'),
-                        vhtraits=dict(type='one'),
-                        dptraits=dict(type='uniform')),
+                    rptraits=dict(type='exponential'),
+                    rhtraits=dict(type='sech2', zmax=8),
+                    vptraits=dict(type='arctan', direction='tan'),
+                    vhtraits=dict(type='one'),
+                    dptraits=dict(type='uniform'),
                     zptraits=dict(type='nw_harmonic', order=1, zmax=1),
                     emission=LINES),
                 mcdisk(
                     name='clouds', loose=False, tilted=False,
-                    density=dict(
-                        ptraits=dict(type='exponential'),
-                        htraits=dict(type='gauss', zmax=8)),
-                    kinematics=dict(
-                        type='traits',
-                        vptraits=dict(type='tanh', direction='tan'),
-                        dptraits=dict(type='gauss')),
+                    rptraits=dict(type='exponential'),
+                    rhtraits=dict(type='gauss', zmax=8),
+                    vptraits=dict(type='tanh', direction='tan'),
+                    dptraits=dict(type='gauss'),
                     sptraits=dict(type='azrange'),
                     emission=LINES),
                 smdisk(
                     name='dust', loose=False, tilted=False,
-                    density=dict(
-                        ptraits=dict(type='exponential'),
-                        htraits=dict(type='sech2', zmax=8)),
+                    rptraits=dict(type='exponential'),
+                    rhtraits=dict(type='sech2', zmax=8),
                     opacity=DUST)])),
         dict(
             smooth_vsys=[0, 5, 10, 15, 20],
             smooth_xpos=[0, 0.2, 0.4, 0.6, 0.8], smooth_ypos=[0] * 5,
             smooth_posa=[30, 32, 34, 36, 38], smooth_incl=[60, 61, 62, 63, 64],
-            smooth_pt_a=1, smooth_pt_s=3, smooth_ht_s=1, smooth_vpt_rt=2,
+            smooth_rpt_a=1, smooth_rpt_s=3, smooth_rht_s=1, smooth_vpt_rt=2,
             smooth_vpt_vt=150, smooth_dpt_a=25,
             smooth_zpt_a=[0, 0.2, 0.4, 0.6, 0.8],
             smooth_zpt_p=[0, 10, 20, 30, 40],
             clouds_vsys=-10, clouds_xpos=1, clouds_ypos=-1, clouds_posa=200,
-            clouds_incl=45, clouds_pt_a=0.5, clouds_pt_s=3, clouds_ht_s=1,
+            clouds_incl=45, clouds_rpt_a=0.5, clouds_rpt_s=3, clouds_rht_s=1,
             clouds_vpt_rt=3, clouds_vpt_vt=100, clouds_dpt_a=30,
             clouds_dpt_s=5, clouds_spt_p=90, clouds_spt_s=270,
             dust_xpos=0, dust_ypos=0, dust_posa=30, dust_incl=60,
-            dust_pt_a=0.05, dust_pt_s=4, dust_ht_s=1)))
+            dust_rpt_a=0.05, dust_rpt_s=4, dust_rht_s=1)))
 
 # The parameters of the cases given as offsets from their first element
 MODES = dict(
@@ -243,9 +229,8 @@ def test_galaxy_dump_and_load(driver, name, evaluate_cases):
 
 THICK_DISK = dict(components=smdisk(
     loose=False, tilted=False,
-    density=dict(
-        ptraits=dict(type='exponential'),
-        htraits=dict(type='sech2', zmax=8)),
+    rptraits=dict(type='exponential'),
+    rhtraits=dict(type='sech2', zmax=8),
     emission=BAND))
 
 
@@ -278,7 +263,7 @@ def test_the_depth_axis_follows_each_grid(driver):
     # that is too short, so a galaxy evaluated on a small grid and then on
     # a large one must give the same as one evaluated on the large one
     # only.
-    params = dict(xpos=0, ypos=0, posa=0, incl=90, pt_a=1, pt_s=4, ht_s=3)
+    params = dict(xpos=0, ypos=0, posa=0, incl=90, rpt_a=1, rpt_s=4, rht_s=3)
     galaxy = galaxy_parser.load(THICK_DISK)
     evaluate_image(driver, image_plan(driver, galaxy, (6, 6)), (6, 6), params)
     np.testing.assert_allclose(
@@ -294,7 +279,7 @@ def test_one_galaxy_serves_several_grids(driver):
     # A galaxy is a description: each plan owns the memory of its own
     # grid, so plans of one galaxy on different grids, evaluated in turn,
     # give what separate galaxies give
-    params = dict(xpos=0, ypos=0, posa=30, incl=60, pt_a=1, pt_s=4, ht_s=1)
+    params = dict(xpos=0, ypos=0, posa=30, incl=60, rpt_a=1, rpt_s=4, rht_s=1)
     shared = galaxy_parser.load(THICK_DISK)
     small = image_plan(driver, shared, (12, 12))
     large = image_plan(driver, shared, (32, 32))

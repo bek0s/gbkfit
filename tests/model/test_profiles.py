@@ -33,13 +33,12 @@ KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 GAS = dict(
     type='thin_disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(type='traits',
-                    vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
     emission=dict(type='lines'))
 GAS_PARAMS = dict(
     gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60, gas_vsys=0,
-    gas_pt_a=1, gas_pt_s=4, gas_dpt_a=10)
+    gas_rpt_a=1, gas_rpt_s=4, gas_dpt_a=10)
 
 
 def mass_galaxy(**info):
@@ -159,7 +158,7 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
     light = dict(
         type='thin_disk', name='stars', loose=False, tilted=False,
         rnodes=list(range(0, 21, 2)),
-        density=dict(ptraits=dict(type='exponential')),
+        rptraits=dict(type='exponential'),
         emission=dict(type='band'))
     galaxy = galaxy_parser.load(dict(
         components=[light], distance=dict(type='direct'), mass=[dict(
@@ -171,7 +170,7 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
     group = ObservationGroup(galaxy, [image, profile])
     params = dict(
         stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
-        stars_pt_a=1, stars_pt_s=4, distance=10, mass_stellar_upsilon=1e8)
+        stars_rpt_a=1, stars_rpt_s=4, distance=10, mass_stellar_upsilon=1e8)
     assert np.all(group.plan().model_h(params)[1]['vcirc']['d'] > 0)
     ObservationGroup(galaxy, image)
     warnings = [record for record in caplog.records

@@ -33,8 +33,6 @@ CLASSES = [
     gbkfit.model.Band,
     gbkfit.model.Galaxy,
     gbkfit.model.components.disks.Clouds,
-    gbkfit.model.components.parts.Density,
-    gbkfit.model.components.parts.ThinDensity,
     gbkfit.model.Line,
     gbkfit.model.mass.DarkFraction,
     gbkfit.model.mass.MassModel,

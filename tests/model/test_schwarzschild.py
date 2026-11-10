@@ -33,9 +33,9 @@ from test_spheroids import hernquist_mge
 # radius of 1 kpc, and a black hole, at 10 Mpc (A: 1 kpc in arcsec)
 A = 1 / (10 * 1e3 * np.pi / 648000)
 SPHEROID = dict(
-    type='spheroid', name='stars', rmax=30 * A,
+    type='orbit_spheroid', name='stars', rmax=30 * A,
     emission=dict(type='stars'), profile=dict(type='mge', ngauss=2),
-    kinematics=dict(type='schwarzschild', norbits=200, turns=20))
+    norbits=200, turns=20)
 GALAXY = dict(
     components=[SPHEROID],
     mass=[dict(type='spheroid', name='light',
@@ -117,8 +117,10 @@ def galaxy(**changes):
 
 def test_a_schwarzschild_spheroid_round_trips():
     loaded = galaxy()
-    assert galaxy_parser.dump(loaded)['components'][0]['kinematics'] \
-        == dict(type='schwarzschild', norbits=200, turns=20.0, seed=0)
+    dumped = galaxy_parser.dump(loaded)['components'][0]
+    assert dumped['type'] == 'orbit_spheroid'
+    assert (dumped['norbits'], dumped['turns'], dumped['seed']) \
+        == (200, 20.0, 0)
     # (an element for each orbit and its twin)
     assert loaded.pdescs()['stars_weights'].size() == 400
     assert loaded.components()[0].orbit_weights() == 'weights'
@@ -130,8 +132,7 @@ def test_a_schwarzschild_spheroid_round_trips():
     (dict(seed=-1), "'seed' must be at least 0"),
 ])
 def test_invalid_schwarzschild_kinematics_are_refused(options, message):
-    spheroid = SPHEROID | dict(kinematics=dict(
-        type='schwarzschild') | options)
+    spheroid = SPHEROID | options
     with pytest.raises(ConfigError, match=message):
         galaxy(components=[spheroid])
 
@@ -581,7 +582,7 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
     sigma, i0 = hernquist_mge(a)
     spheroid = SPHEROID | dict(
         rmax=30 * a, profile=dict(type='mge', ngauss=len(i0)),
-        kinematics=dict(type='schwarzschild', norbits=1500, turns=30))
+        norbits=1500, turns=30)
     group = ObservationGroup([galaxy(components=[spheroid])], [obs])
     values = dict(
         stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=90,
@@ -629,9 +630,12 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
         -1)
     regions = RegionsBins(index, step=(0.5, 0.5), rpix=(19.5, 19.5))
 
-    def stars(kinematics):
+    def stars(changes):
+        spheroid = {
+            key: value for key, value in SPHEROID.items()
+            if key not in ('norbits', 'turns')}
         return galaxy(
-            components=[SPHEROID | dict(rmax=40, kinematics=kinematics)],
+            components=[spheroid | dict(rmax=40) | changes],
             mass=[dict(type='light_spheroid', name='stars',
                        component='stars'),
                   dict(type='point', name='bh')])
@@ -647,7 +651,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
         spectral=SpectralAxis(
             size=241, step=10, rval=0, convention='log', rest='5000 Angstrom'))
     model = ObservationGroup(
-        [stars(dict(type='jeans'))],
+        [stars(dict(type='jeans_spheroid'))],
         [ObservationSky(moments, los, instrument=instrument, lines=['stars'],
                         dtype='float64')]).plan(driver).model_h(
         truth | dict(stars_beta_z=0.0, stars_kappa=0.6))[0]
@@ -663,8 +667,8 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
             spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
         los, instrument=instrument, lines=['stars'], data=dataset,
         likelihood=LikelihoodGaussian(missing_residual=3))
-    group = ObservationGroup([stars(dict(
-        type='schwarzschild', norbits=1500, turns=30))], [obs])
+    group = ObservationGroup(
+        [stars(dict(norbits=1500, turns=30))], [obs])
     solve = dict(solve=dict(
         type='gaussian', mean=1, sigma=10, min=0, likelihood='profiled'))
     objective = None

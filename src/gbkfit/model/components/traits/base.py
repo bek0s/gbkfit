@@ -102,10 +102,11 @@ class Trait(TypedSerializable, abc.ABC):
     (consts), and holds its options (see TraitOption).
 
     A trait can have a name, which prefixes its parameters in its
-    component in place of its kind and position (e.g. 'rot_vt' in place
-    of 'vpt1_vt'), so that they keep their names when other traits are
-    added; the traits of a kind of a component have names all or none,
-    and two traits of a component cannot share one.
+    component after its kind, in place of its position (e.g. 'vpt_rot_vt'
+    in place of 'vpt2_vt'); unnamed traits are numbered from the second
+    (e.g. 'vpt_vt', 'vpt2_vt'), so that a trait added at the end renames
+    none. The traits of one list of a component have names all or none,
+    and two of them cannot share one; traits of other lists can.
 
     Parameters
     ----------

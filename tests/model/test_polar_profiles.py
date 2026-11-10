@@ -29,11 +29,11 @@ def face_on_disk(driver, evaluate_cases, key, trait):
     """
     from gbkfit.model.components import traits
     parser = dict(b=traits.rpt_parser, d=traits.dpt_parser)[key]
-    prefix = dict(b='pt', d='dpt')[key]
+    prefix = dict(b='rpt', d='dpt')[key]
     names = list(parser.load(dict(type=trait)).params_sm())
-    density = dict(ptraits=dict(type=trait if key == 'b' else 'uniform'))
+    density = dict(rptraits=dict(type=trait if key == 'b' else 'uniform'))
     kinematics = dict(
-        type='traits', vptraits=dict(type='uniform', direction='tan'),
+        vptraits=dict(type='uniform', direction='tan'),
         dptraits=dict(type=trait if key == 'd' else 'uniform'))
     case = dict(
         driver=dict(type=driver.type()),
@@ -43,11 +43,11 @@ def face_on_disk(driver, evaluate_cases, key, trait):
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
             type='thin_disk', loose=False, tilted=False,
-            rnodes=list(range(0, 10)), density=density,
-            kinematics=kinematics, emission=dict(type='lines'))]))
+            rnodes=list(range(0, 10)), **density,
+            **kinematics, emission=dict(type='lines'))]))
     properties = dict(
         vsys=0, xpos=0, ypos=0, posa=0, incl=0, vpt_vt=0,
-        pt_a=1, dpt_a=10) | {f'{prefix}_{n}': VALUES[n] for n in names}
+        rpt_a=1, dpt_a=10) | {f'{prefix}_{n}': VALUES[n] for n in names}
     _, extra = evaluate_cases([case], properties)
     output = dict(b='bdata', d='ddata')[key]
     data = extra.get(output, component='component0').data
@@ -70,10 +70,9 @@ def map_component(ptraits):
     from gbkfit.model import component_parser
     return component_parser.load(dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 10)),
-        density=dict(ptraits=ptraits),
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='uniform', direction='tan'), dptraits=dict(type='uniform')),
+        rptraits=ptraits,
+        vptraits=dict(type='uniform', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines')))
 
 
@@ -85,7 +84,7 @@ def test_map_is_its_cells():
         .density_disk()
     params = dict(
         xpos=0, ypos=0, posa=0, incl=0, vsys=0, vpt_vt=0, dpt_a=1,
-        pt_a=np.arange(1.0, 7.0))
+        rpt_a=np.arange(1.0, 7.0))
     x = np.array([-2, 0, 2, -2, 0, 2, 3.5, 0])
     y = np.array([-1, -1, -1, 1, 1, 1, 0, 2.5])
     values = disk.plan(DriverHost(), 0, np.float64).evaluate_polar_traits(
@@ -102,10 +101,10 @@ def test_map_lies_where_blobs_lie(driver, evaluate_cases):
     lit = np.zeros(24)
     lit[1 * 6 + 4] = 1
     cases = [
-        (dict(type='map', size=[6, 4], step=1.0), dict(pt_a=lit)),
+        (dict(type='map', size=[6, 4], step=1.0), dict(rpt_a=lit)),
         (dict(type='mixture_gauss', nblobs=1), dict(
-            pt_r=np.hypot(x, y), pt_t=np.rad2deg(np.arctan2(y, x)), pt_a=1,
-            pt_s=0.3, pt_q=1, pt_p=0))]
+            rpt_r=np.hypot(x, y), rpt_t=np.rad2deg(np.arctan2(y, x)), rpt_a=1,
+            rpt_s=0.3, rpt_q=1, rpt_p=0))]
     yy, xx = (np.indices((121, 121)) - 60) * 0.05
     centroids = []
     for ptraits, values in cases:

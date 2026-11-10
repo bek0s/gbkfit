@@ -29,9 +29,8 @@ def disk_config(vptraits, ptraits=None):
     """
     return dict(
         type='thin_disk', loose=False, tilted=False, rnodes=RNODES,
-        density=dict(ptraits=ptraits or dict(type='exponential')),
-        kinematics=dict(type='traits',
-                        vptraits=vptraits, dptraits=dict(type='uniform')),
+        rptraits=ptraits or dict(type='exponential'),
+        vptraits=vptraits, dptraits=dict(type='uniform'),
         emission=dict(type='lines'))
 
 
@@ -43,7 +42,7 @@ def disk(vptraits, ptraits=None):
 # The values of the parameters of the disk but those of its velocity
 # traits
 DISK_VALUES = dict(
-    xpos=0, ypos=0, posa=0, incl=INCL, vsys=0, pt_a=1, pt_s=3, dpt_a=20)
+    xpos=0, ypos=0, posa=0, incl=INCL, vsys=0, rpt_a=1, rpt_s=3, dpt_a=20)
 
 
 def seen(driver, vptrait, values):
@@ -110,12 +109,9 @@ def test_cones_take_no_flows_of_the_plane_of_a_disk():
         with pytest.raises(ValueError, match="a cone does not take"):
             component_parser.load(dict(
                 type='cone', rnodes=RNODES,
-                density=dict(
-                    ptraits=dict(type='uniform'),
-                    htraits=dict(type='gauss', zmax=1.5)),
-                kinematics=dict(
-                    type='traits',
-                    vptraits=trait, dptraits=dict(type='uniform')),
+                rptraits=dict(type='uniform'),
+                rhtraits=dict(type='gauss', zmax=1.5),
+                vptraits=trait, dptraits=dict(type='uniform'),
                 emission=dict(type='lines')))
 
 
@@ -166,7 +162,7 @@ def test_a_spiral_wave_in_the_rotation_of_its_disk(driver):
     vptraits = [dict(type='uniform', direction='tan'),
                 dict(type='spiral', order=3)]
     values = DISK_VALUES | dict(
-        vpt_vt=100, vpt1_p=40, vpt1_c=50, vpt1_e=0.1, vpt1_o=2)
+        vpt_vt=100, vpt2_p=40, vpt2_c=50, vpt2_e=0.1, vpt2_o=2)
     galaxy = galaxy_parser.load(dict(components=[disk_config(vptraits)]))
     state = galaxy.plan_stage().evaluate(values).states[0]
     subrnodes = disk(vptraits).subrnodes()
@@ -189,7 +185,7 @@ def test_a_spiral_wave_in_the_rotation_of_its_disk(driver):
 WAVE_VPTRAITS = dict(type='uniform', direction='tan')
 WAVE_PTRAITS = [dict(type='exponential'), dict(type='spiral', order=3)]
 WAVE_VALUES = DISK_VALUES | dict(
-    vpt_vt=100, pt1_p=40, pt1_c=50, pt1_e=0.3, pt1_o=2)
+    vpt_vt=100, rpt2_p=40, rpt2_c=50, rpt2_e=0.3, rpt2_o=2)
 
 
 def test_the_density_of_a_spiral_wave(driver):
@@ -253,17 +249,17 @@ def test_the_arms_of_an_image_by_a_given_wavenumber(driver):
     # tan(20 degrees)), and f its integral by the trapezoid rule
     component = dict(
         type='thin_disk', loose=False, tilted=False, rnodes=RNODES,
-        density=dict(ptraits=[
+        rptraits=[
             dict(type='exponential'),
-            dict(type='spiral', order=2, wavenumber='given')]),
+            dict(type='spiral', order=2, wavenumber='given')],
         emission=dict(type='band'))
     image_disk = component_parser.load(component).density_disk()
     subrnodes = np.asarray(image_disk.subrnodes())
     k = -2 / (np.where(subrnodes > 0, subrnodes, np.inf)
               * np.tan(np.deg2rad(20)))
     values = dict(
-        xpos=0, ypos=0, posa=0, incl=INCL, pt_a=1, pt_s=3, pt1_p=40,
-        pt1_e=0.3, pt1_k=k)
+        xpos=0, ypos=0, posa=0, incl=INCL, rpt_a=1, rpt_s=3, rpt2_p=40,
+        rpt2_e=0.3, rpt2_k=k)
     galaxy = galaxy_parser.load(dict(components=[component]))
     state = galaxy.plan_stage().evaluate(values).states[0]
     f = np.concatenate(
@@ -300,7 +296,7 @@ def test_a_disk_takes_as_many_velocity_traits_as_the_kernels_do(driver):
     from gbkfit.model.components._nodal import MAX_TRAITS
     many = disk([dict(type='uniform', direction='tan')] * MAX_TRAITS)
     params = DISK_VALUES | {
-        f'vpt{i if i else ""}_vt': 10.0 for i in range(MAX_TRAITS)}
+        f'vpt{i + 1 if i else ""}_vt': 10.0 for i in range(MAX_TRAITS)}
     values = many.plan(driver, 0, np.float64).evaluate_polar_traits(
         params, 'vpt', R, THETA, INCL)
     np.testing.assert_allclose(

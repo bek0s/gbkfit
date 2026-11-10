@@ -26,7 +26,8 @@ from .components.lines import Band
 from .components.particles import Particles
 from .components.points import Point
 from .components.roles import BandEmission
-from .components.spheroids import Spheroid
+from .components.spheroids import (
+    JeansSpheroid, OrbitSpheroid, TraitSpheroid)
 from .distance import Distance, distance_parser
 from .gravity import Gravity, gravity_parser
 from .mass import MassComponent, MassModel, mass_component_parser
@@ -43,7 +44,9 @@ component_parser = TypedParser(Component, [
     ThinDisk,
     ThickDisk,
     Cone,
-    Spheroid,
+    TraitSpheroid,
+    JeansSpheroid,
+    OrbitSpheroid,
     Point,
     Particles], family='component')
 
@@ -58,7 +61,7 @@ class Galaxy(Serializable):
     (see GalaxyStage).
 
     Its parameters are those of its components, each prefixed by its name
-    when there are several ('disk_posa', 'disk_pt_a'), its distance
+    when there are several ('disk_posa', 'disk_rpt_a'), its distance
     ('distance'), its mass ('mass_{name}_*') and its gravity
     ('gravity_*'). A name prefixes them all when there are several
     galaxies (see ObservationGroup), whose order along the line of sight
@@ -183,8 +186,8 @@ class Galaxy(Serializable):
         """
         Return the option of its configuration that makes each of its
         parameters, by name, as a path of option names and list indices
-        (see Component.param_owners): e.g. ('components', 0, 'kinematics',
-        'vptraits', 1), ('mass', 1) or ('distance',). For those who show
+        (see Component.param_owners): e.g. ('components', 0, 'vptraits', 1),
+        ('mass', 1) or ('distance',). For those who show
         the parameters with the options that make them (e.g. Studio).
         """
         owners: dict[str, tuple[str | int, ...]] = dict.fromkeys(

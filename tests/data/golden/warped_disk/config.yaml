@@ -1,6 +1,6 @@
 # warped_disk: A loose and tilted disk (centre, systemic velocity, position angle and inclination of each ring), with a radial harmonic flow, a vertical flow and an anisotropic dispersion, in Gauss-Hermite maps (h3, h4); the disk fills the maps (fits of spectra of noise alone are wild).
 # (written by make_golden.py; do not edit)
-version: 7
+version: 8
 driver: {type: host}
 galaxies:
 - components:
@@ -8,18 +8,15 @@ galaxies:
     loose: true
     tilted: true
     rnodes: [0, 4, 8, 12, 16]
-    density:
-      ptraits: {type: exponential}
-    kinematics:
-      type: traits
-      vptraits:
-      - {type: arctan, direction: tan}
-      - {type: nw_harmonic, direction: rad, order: 2}
-      - {type: uniform, direction: ver}
-      dptraits:
-      - {type: uniform, direction: rad}
-      - {type: uniform, direction: tan}
-      - {type: uniform, direction: ver}
+    rptraits: {type: exponential}
+    vptraits:
+    - {type: arctan, direction: tan}
+    - {type: nw_harmonic, direction: rad, order: 2}
+    - {type: uniform, direction: ver}
+    dptraits:
+    - {type: uniform, direction: rad}
+    - {type: uniform, direction: tan}
+    - {type: uniform, direction: ver}
     emission: {type: lines}
 observations:
 - type: sky
@@ -40,7 +37,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20 km/s}
+    lsf: {type: gauss, sigma: 20.0 km s-1}
   observable:
     type: pixel_moments
     spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
@@ -72,13 +69,13 @@ params:
     - {value: 56, min: 10, max: 80}
     - 60
     - 64
-    pt_a: 1
-    pt_s: 4
+    rpt_a: 1
+    rpt_s: 4
     vpt_rt: 1.5
     vpt_vt: {value: 147, min: 50, max: 300}
-    vpt1_a: [0, 12, 20, 18, 10]
-    vpt1_p: [30, 30, 35, 40, 45]
-    vpt2_vv: {value: 5, min: -50, max: 50}
+    vpt2_a: [0, 12, 20, 18, 10]
+    vpt2_p: [30, 30, 35, 40, 45]
+    vpt3_vv: {value: 5, min: -50, max: 50}
     dpt_a: {value: 28, min: 5, max: 80}
-    dpt1_a: 20
-    dpt2_a: 14
+    dpt2_a: 20
+    dpt3_a: 14

@@ -44,10 +44,9 @@ def _disk(**options):
     return dict(
         type='thin_disk', loose=False, tilted=False,
         rnodes=list(np.arange(0, 41, 1.0)),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits', vptraits=dict(type='arctan', direction='tan'),
-            dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines')) | options
 
 
@@ -141,7 +140,7 @@ def test_a_thin_disk_in_a_cube(
              psf=dict(type='gauss', sigma=PSF_SIGMA),
              lsf=dict(type='gauss', sigma=f'{LSF_SIGMA} km/s')),
         dict(type='flat'),
-        dict(vsys=0, xpos=0, ypos=0, posa=PA, incl=INCL, pt_a=1, pt_s=RD,
+        dict(vsys=0, xpos=0, ypos=0, posa=PA, incl=INCL, rpt_a=1, rpt_s=RD,
              vpt_rt=RT, vpt_vt=VT, dpt_a=SIG))
     velocities = _velocities(NZ, DV)
     flux, mean, dispersion = _moments(cube, velocities)
@@ -196,15 +195,15 @@ def test_a_thick_disk_in_a_cube(driver, incl):
     # the line of sight (of 0.1 arcsec), its pixels split 3 x 3
     cube = _cube(
         driver,
-        dict(components=[_disk(type='thick_disk', density=dict(
-            ptraits=dict(type='exponential'),
-            htraits=dict(type='sech2', zmax=ZMAX)))]),
+        dict(components=[_disk(type='thick_disk',
+                               rptraits=dict(type='exponential'),
+                               rhtraits=dict(type='sech2', zmax=ZMAX))]),
         dict(type='pixel_spectra', size=[N, N], step=[STEP, STEP],
              spectral=dict(size=NZ, step=DV, convention='relativistic'),
              oversampling=[3, 3, 1]),
         dict(type='grid', depth=dict(extent=60, step=0.1)),
-        dict(vsys=0, xpos=0, ypos=0, posa=THICK_PA, incl=incl, pt_a=1,
-             pt_s=RD, ht_s=HS, vpt_rt=RT, vpt_vt=VT, dpt_a=THICK_SIG))
+        dict(vsys=0, xpos=0, ypos=0, posa=THICK_PA, incl=incl, rpt_a=1,
+             rpt_s=RD, rht_s=HS, vpt_rt=RT, vpt_vt=VT, dpt_a=THICK_SIG))
     flux, mean, dispersion = _moments(cube, _velocities(NZ, DV))
     true_flux, true_mean, true_dispersion = _thick_disk(incl)
     bright = _bright(true_flux, 8)
@@ -231,7 +230,7 @@ def test_a_galaxy_at_redshift_1_5(driver):
         psf=dict(type='gauss', sigma=0.25),
         lsf=dict(type='gauss', sigma='35 km/s'))
     properties = dict(
-        vsys=0, xpos=0, ypos=0, posa=PA, incl=INCL, pt_a=1, pt_s=1,
+        vsys=0, xpos=0, ypos=0, posa=PA, incl=INCL, rpt_a=1, rpt_s=1,
         vpt_rt=0.5, vpt_vt=VT, dpt_a=SIG)
     cube = _cube(
         driver, dict(redshift=z, components=[disk]),
@@ -271,10 +270,9 @@ def test_an_elliptical_blob(driver, posa, incl):
         driver=dict(type=driver.type()),
         galaxy=dict(components=[_disk(
             rnodes=list(range(0, 10)),
-            density=dict(ptraits=dict(type='mixture_gauss', nblobs=1)),
-            kinematics=dict(
-                type='traits', vptraits=dict(type='uniform', direction='tan'),
-                dptraits=dict(type='uniform')))]),
+            rptraits=dict(type='mixture_gauss', nblobs=1),
+            vptraits=dict(type='uniform', direction='tan'),
+            dptraits=dict(type='uniform'))]),
         observable=dict(
             type='pixel_spectra', size=[n, n], step=[step, step],
             spectral=dict(size=21, step=5, convention='relativistic')),
@@ -282,7 +280,7 @@ def test_an_elliptical_blob(driver, posa, incl):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), dict(
             vsys=0, xpos=0, ypos=0, posa=posa, incl=incl, vpt_vt=0, dpt_a=10,
-            pt_r=r, pt_t=t, pt_a=1, pt_s=s, pt_q=q, pt_p=p))
+            rpt_r=r, rpt_t=t, rpt_a=1, rpt_s=s, rpt_q=q, rpt_p=p))
     extra = Extras()
     plan.model_h(params.evaluate(), extra)
     image = extra.get('bdata', component='component0').data.reshape(n, n)

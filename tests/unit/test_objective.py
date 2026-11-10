@@ -26,10 +26,10 @@ from gbkfit.params import (
 GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    density=dict(ptraits=dict(type='exponential')),
+    rptraits=dict(type='exponential'),
     emission=dict(type='band'))])
 
-PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, pt_a=1, pt_s=2)
+PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, rpt_a=1, rpt_s=2)
 
 
 def make_objective(driver, data, likelihood=None, name=None, **values):
@@ -80,7 +80,7 @@ def test_the_log_likelihoods_of_the_points_sum_to_it(driver):
     assert len(pointwise) == objective.nresiduals() \
         == np.count_nonzero(data.mask())
     space = ParamSpace.from_properties(objective.pdescs(), PROPERTIES | dict(
-        pt_a=dict(min=0, max=2)))
+        rpt_a=dict(min=0, max=2)))
     lls = pointwise_log_likelihoods(objective, space, [[1.0], [0.5]])
     assert lls.shape == (2, len(pointwise))
     np.testing.assert_allclose(lls[0], pointwise, rtol=1e-6)
@@ -93,7 +93,7 @@ def test_the_log_likelihoods_of_the_points_sum_to_it(driver):
 
 
 def test_prior_predictive_checks_tell_priors_that_reach_the_data(driver):
-    # Data of the model at pt_a = 1 with noise: priors about it predict
+    # Data of the model at rpt_a = 1 with noise: priors about it predict
     # them (most within the 5-95 band); priors far from it do not (the
     # faint pixels, about 0 in every model, stay within the band)
     from gbkfit.analysis import prior_predictive
@@ -104,9 +104,9 @@ def test_prior_predictive_checks_tell_priors_that_reach_the_data(driver):
     data = Data(model + rng.normal(0, 1, model.shape) * error, error=error)
     objective, _ = make_objective(driver, data)
     near = ParamSpace.from_properties(objective.pdescs(), PROPERTIES | dict(
-        pt_a=dict(min=0.98, max=1.02)))
+        rpt_a=dict(min=0.98, max=1.02)))
     far = ParamSpace.from_properties(objective.pdescs(), PROPERTIES | dict(
-        pt_a=dict(min=3, max=4)))
+        rpt_a=dict(min=3, max=4)))
     good = prior_predictive(objective, near, ndraws=40, seed=1)
     bad = prior_predictive(objective, far, ndraws=40, seed=1)
     assert good.coverage[0]['brightness'] > 0.85
@@ -123,7 +123,7 @@ def test_a_prior_predictive_check_leaves_out_draws_whose_model_fails(
     data = Data(np.ones((24, 32)), error=np.full((24, 32), 0.1))
     objective, _ = make_objective(driver, data)
     space = ParamSpace.from_properties(objective.pdescs(), PROPERTIES | dict(
-        pt_a=dict(min=0.5, max=1.5)))
+        rpt_a=dict(min=0.5, max=1.5)))
     evaluate = objective.evaluate
     calls = []
 
@@ -337,14 +337,13 @@ def test_an_observation_without_data_is_an_error(driver):
 KINEMATICS = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 30)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))])
 
 DISK = dict(
-    vsys=0, xpos=0, ypos=0, posa=40, incl=60, pt_a=1, pt_s=4, vpt_rt=2,
+    vsys=0, xpos=0, ypos=0, posa=40, incl=60, rpt_a=1, rpt_s=4, vpt_rt=2,
     vpt_vt=150, dpt_a=20)
 
 
@@ -374,7 +373,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     objective = Objective(group(observable, dataset))
     truth = ParamSpace.from_properties(objective.pdescs(), DISK).evaluate()
     compact = ParamSpace.from_properties(
-        objective.pdescs(), DISK | dict(pt_s=0.1)).evaluate()
+        objective.pdescs(), DISK | dict(rpt_s=0.1)).evaluate()
     compact_moment1 = \
         objective.group_plan().model_h(compact)[0]['moment1']['d']
     without = np.isnan(compact_moment1)
@@ -417,7 +416,7 @@ def test_values_the_model_lacks_take_the_noise_of_their_error(driver):
         dataset, spectral=SpectralAxis(convention='relativistic'))
     objective = Objective(group(observable, dataset))
     compact = ParamSpace.from_properties(objective.pdescs(), DISK | dict(
-        pt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()
+        rpt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()
     moment1 = objective.group_plan().model_h(compact)[0]['moment1']['d']
     unmasked = dataset['moment1'].mask() != 0
     has = ~np.isnan(moment1) & unmasked

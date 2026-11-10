@@ -190,10 +190,9 @@ class SpheroidKinematics(TypedSerializable, abc.ABC):
 
 
 # The kinds of the traits of SpheroidTraitsKinematics: velocity (v) and
-# dispersion (d) polar (p) and height (h) traits, and the prefix of the
-# parameters of each
+# dispersion (d) polar (p) and height (h) traits, which name their
+# parameters (see _nodal.trait_prefixes)
 TRAIT_KINDS = ('vpt', 'vht', 'dpt', 'dht')
-TRAIT_PREFIXES = dict(vpt='vpt', vht='vht', dpt='dpt', dht='dht')
 
 # The traits that the stars of a spheroid take (see
 # SpheroidTraitsKinematics): the polar traits of the radius and the
@@ -250,11 +249,12 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
         isotropic or each along a direction: once one is along a
         direction, every direction needs its own or an isotropic one.
     vhtraits : VHTrait or Sequence of VHTrait, optional
-        The velocity height traits, one for each velocity polar trait
-        (parameters 'vht_*'; None items or none at all: of the factor one).
+        The velocity height traits, one that every velocity polar trait
+        shares or one for each (parameters 'vht_*'; None items or none at
+        all: of the factor one).
     dhtraits : DHTrait or Sequence of DHTrait, optional
-        The dispersion height traits, one for each dispersion polar trait
-        (parameters 'dht_*'; as vhtraits).
+        The dispersion height traits, one shared or one for each
+        dispersion polar trait (parameters 'dht_*'; as vhtraits).
     rnodes : Nodes or Sequence of float, optional
         The radii of its nodes, of R (arcsec), from 0: given, or evenly
         spaced (see Nodes), which its configuration keeps; by default 0
@@ -322,11 +322,9 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
         return dict(
             vpt=kinematics.vptraits(), dpt=kinematics.dptraits(),
             vht=with_default_height_traits(
-                kinematics.vhtraits(), len(kinematics.vptraits()),
-                traits.VHTraitOne),
+                kinematics.vhtraits(), traits.VHTraitOne),
             dht=with_default_height_traits(
-                kinematics.dhtraits(), len(kinematics.dptraits()),
-                traits.DHTraitOne))
+                kinematics.dhtraits(), traits.DHTraitOne))
 
     def uses_mass(self) -> bool:
         return False
@@ -361,7 +359,7 @@ class TraitsMotion(SpheroidMotion):
         self._subrnodes = subring_radii(rnodes, rstep)
         # (no density traits: no units of densities)
         self._traits = NodalTraits(
-            TRAIT_KINDS, traits_, TRAIT_PREFIXES, {}, rnodes,
+            TRAIT_KINDS, traits_, {}, {}, rnodes,
             self._subrnodes, interp)
 
     def pdescs(self) -> dict[str, ParamDesc]:

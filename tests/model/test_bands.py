@@ -15,7 +15,7 @@ DISK = dict(loose=False, tilted=False, rnodes=list(range(0, 12)))
 
 STARS = dict(
     DISK, type='thin_disk', name='stars',
-    density=dict(ptraits=dict(type='exponential')),
+    rptraits=dict(type='exponential'),
     emission=dict(type='band', bands=['sdss_g', 'sdss_r']))
 
 NUCLEUS = dict(
@@ -25,7 +25,7 @@ NUCLEUS = dict(
 PROPERTIES = dict(
     stars=dict(
         stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0,
-        stars_pt_a=1, stars_pt_s=4, stars_sdss_r_ratio=0.5),
+        stars_rpt_a=1, stars_rpt_s=4, stars_sdss_r_ratio=0.5),
     nucleus=dict(
         nucleus_xpos=0.5, nucleus_ypos=0.5, nucleus_flux=1,
         nucleus_sdss_r_ratio=0.5))
@@ -84,9 +84,8 @@ def test_only_images_have_a_band(driver):
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
             STARS, emission=dict(type='lines'),
-            kinematics=dict(
-                type='traits', vptraits=dict(type='arctan', direction='tan'),
-                dptraits=dict(type='uniform')))]),
+            vptraits=dict(type='arctan', direction='tan'),
+            dptraits=dict(type='uniform'))]),
         band='sdss_r')
     with pytest.raises(ValueError, match="only images have a band"):
         group_plan([case])
@@ -100,22 +99,21 @@ def test_dust_dims_an_image_at_the_rest_wavelength_of_its_band(
     # optical depth at the rest wavelength of the band (0.6166 / (1 + z))
     dust = dict(
         DISK, type='thick_disk', name='dust',
-        density=dict(
-            ptraits=dict(type='exponential'),
-            htraits=dict(type='sech2', zmax=8)),
+        rptraits=dict(type='exponential'),
+        rhtraits=dict(type='sech2', zmax=8),
         opacity=dict(type='dust', law=dict(
             type='table', wavelengths=[0.2, 1.0], ratios=[3.0, 1.0])))
     line_of_sight = dict(
         type='grid', depth=dict(extent=40 * 0.25, step=0.25))
     properties = PROPERTIES['stars'] | dict(
-        dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0, dust_pt_s=4,
-        dust_ht_s=1)
+        dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0, dust_rpt_s=4,
+        dust_rht_s=1)
 
     def evaluate(opacity):
         case = image_case(
             driver, [STARS, dust], 'sdss_r', line_of_sight, redshift)
         data, extra = evaluate_cases(
-            [case], properties | dict(dust_pt_a=opacity))
+            [case], properties | dict(dust_rpt_a=opacity))
         tau = extra.get('total_odata').data.sum(axis=0)
         return data[0]['brightness']['d'], tau
     clear, _ = evaluate(0)

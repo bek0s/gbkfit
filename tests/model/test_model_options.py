@@ -23,18 +23,18 @@ UNIFORM = dict(type='uniform')
 
 DISK = dict(loose=False, tilted=False, rnodes=[0, 2, 4, 6, 8])
 
-THIN = dict(ptraits=EXPONENTIAL)
-THICK = dict(ptraits=EXPONENTIAL, htraits=SECH2)
-KINEMATICS = dict(type='traits', vptraits=ARCTAN, dptraits=UNIFORM)
+THIN = dict(rptraits=EXPONENTIAL)
+THICK = dict(rptraits=EXPONENTIAL, rhtraits=SECH2)
+KINEMATICS = dict(vptraits=ARCTAN, dptraits=UNIFORM)
 
 # A component of each kind, with its required options
 BAND_THIN = dict(
-    DISK, type='thin_disk', density=THIN, emission=dict(type='band'))
-BAND_THICK = BAND_THIN | dict(type='thick_disk', density=THICK)
+    DISK, type='thin_disk', **THIN, emission=dict(type='band'))
+BAND_THICK = BAND_THIN | dict(type='thick_disk', **THICK)
 LINES_THIN = BAND_THIN | dict(
-    kinematics=KINEMATICS, emission=dict(type='lines'))
-LINES_THICK = LINES_THIN | dict(type='thick_disk', density=THICK)
-DUST = dict(DISK, type='thick_disk', density=THICK, opacity=dict(type='dust'))
+    **KINEMATICS, emission=dict(type='lines'))
+LINES_THICK = LINES_THIN | dict(type='thick_disk', **THICK)
+DUST = dict(DISK, type='thick_disk', **THICK, opacity=dict(type='dust'))
 
 COMPONENTS = dict(
     band_thin=BAND_THIN, band_thick=BAND_THICK, lines_thin=LINES_THIN,
@@ -128,7 +128,7 @@ def test_flat_lines_of_sight_do_not_see_mcdisks(kind):
     # A Monte Carlo disk is thick
     _, _, component = OBSERVATIONS[kind]
     mcdisk = component | dict(
-        type='thick_disk', clouds=dict(cflux=1e-3), density=THICK)
+        type='thick_disk', clouds=dict(cflux=1e-3), **THICK)
     message = load_error(config(kind, [mcdisk]))
     assert "a thick component needs a line of sight with a depth axis" \
         in message
@@ -225,10 +225,9 @@ def test_depth_axis(depth, axis):
 @pytest.mark.parametrize('name', COMPONENTS)
 def test_unknown_trait_options_are_errors(name):
     component = COMPONENTS[name]
-    density = component['density'] | dict(ptraits=dict(EXPONENTIAL, foo=1))
     message = galaxy_error(dict(components=[
-        component | dict(density=density)]))
-    assert message.startswith("components[0].density.ptraits")
+        component | dict(rptraits=dict(EXPONENTIAL, foo=1))]))
+    assert message.startswith("components[0].rptraits")
     assert "'foo'" in message
 
 
@@ -241,26 +240,48 @@ def test_unknown_options_are_warnings_in_lenient_mode(name, caplog):
 
 
 def test_trait_names_prefix_their_parameters():
-    # (in place of the kind and position, which an inserted trait moves)
+    # (after their kind, in place of their position, which an inserted
+    # trait moves)
     inflow = dict(type='uniform', direction='rad', name='inflow')
     rotation = ARCTAN | dict(name='rot')
-    info = dict(components=[LINES_THIN | dict(kinematics=dict(
-        type='traits', vptraits=[inflow, rotation], dptraits=UNIFORM))])
+    info = dict(components=[
+        LINES_THIN | dict(vptraits=[inflow, rotation], dptraits=UNIFORM)])
     galaxy = galaxy_parser.load(info)
-    assert {'inflow_vr', 'rot_rt', 'rot_vt', 'dpt_a'} <= set(galaxy.pdescs())
+    assert {'vpt_inflow_vr', 'vpt_rot_rt', 'vpt_rot_vt', 'dpt_a'} \
+        <= set(galaxy.pdescs())
     dumped = galaxy_parser.dump(galaxy)
-    vptraits = dumped['components'][0]['kinematics']['vptraits']
+    vptraits = dumped['components'][0]['vptraits']
     assert [trait['name'] for trait in vptraits] == ['inflow', 'rot']
 
 
-@pytest.mark.parametrize('vptraits, dptraits, message', [
-    ([ARCTAN | dict(name='rot'), ARCTAN], UNIFORM,
+def test_unnamed_traits_are_numbered_from_the_second():
+    # (a trait added at the end renames none of the others)
+    info = dict(components=[LINES_THIN | dict(
+        rptraits=[EXPONENTIAL, EXPONENTIAL, EXPONENTIAL],
+        vptraits=[ARCTAN, dict(type='uniform', direction='rad')],
+        dptraits=UNIFORM)])
+    names = set(galaxy_parser.load(info).pdescs())
+    assert {'rpt_a', 'rpt2_a', 'rpt3_a', 'vpt_vt', 'vpt2_vr', 'dpt_a'} \
+        <= names
+    assert not {'rpt1_a', 'vpt1_vr', 'pt_a'} & names
+
+
+def test_traits_of_other_kinds_can_share_a_name():
+    info = dict(components=[LINES_THIN | dict(
+        rptraits=EXPONENTIAL | dict(name='ring'),
+        vptraits=ARCTAN, dptraits=UNIFORM | dict(name='ring'))])
+    assert {'rpt_ring_a', 'dpt_ring_a'} <= set(
+        galaxy_parser.load(info).pdescs())
+
+
+@pytest.mark.parametrize('vptraits, message', [
+    ([ARCTAN | dict(name='rot'), ARCTAN],
      "either all or none of the traits must have a name"),
-    ([ARCTAN | dict(name='rot')], UNIFORM | dict(name='rot'),
+    ([ARCTAN | dict(name='rot'), ARCTAN | dict(name='rot')],
      r"cannot share a name; repeated: \['rot'\]")])
-def test_trait_names_are_all_or_none_and_unique(vptraits, dptraits, message):
-    info = dict(components=[LINES_THIN | dict(kinematics=dict(
-        type='traits', vptraits=vptraits, dptraits=dptraits))])
+def test_trait_names_are_all_or_none_and_unique_in_a_list(vptraits, message):
+    info = dict(components=[
+        LINES_THIN | dict(vptraits=vptraits, dptraits=UNIFORM)])
     assert re.search(message, galaxy_error(info))
 
 
@@ -317,7 +338,7 @@ def test_radial_step_can_be_half_the_node_separation():
 
 
 def test_discouraged_traits_are_warnings_with_the_path(caplog):
-    component = BAND_THIN | dict(density=dict(ptraits=UNIFORM))
+    component = BAND_THIN | dict(rptraits=UNIFORM)
     with config_path('galaxies'):
         galaxy_parser.load([dict(components=component)])
     assert "galaxies[0].components [thin_disk]: the use of" in caplog.text

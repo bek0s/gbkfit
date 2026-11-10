@@ -309,10 +309,9 @@ def test_the_traits_each_type_of_component_takes_are_given(client):
 def test_the_parameters_of_a_galaxy_are_described(client):
     disk = dict(
         type='thin_disk', rnodes=[0, 2, 4],
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits', vptraits=dict(type='arctan', direction='tan'),
-            dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines'))
     info = client.post('/api/v1/parameters', json=dict(
         project='study', galaxy=dict(components=[disk]))).json()
@@ -323,19 +322,20 @@ def test_the_parameters_of_a_galaxy_are_described(client):
     # Each with the option that makes it (see Galaxy.param_owners)
     owners = {p['name']: p['owner'] for p in info['parameters']}
     assert owners['vsys'] == ['components', 0]
-    assert owners['vpt_vt'] == ['components', 0, 'kinematics', 'vptraits', 0]
+    assert owners['vpt_vt'] == ['components', 0, 'vptraits', 0]
     assert info['problems'] == []
     # (a galaxy of a band, seen in an image; one with problems)
-    band = dict(disk, emission=dict(type='band'), kinematics=None)
+    band = dict(
+        disk, emission=dict(type='band'), vptraits=None, dptraits=None)
     assert client.post('/api/v1/parameters', json=dict(
         project='study', galaxy=dict(components=[band]))).json()['parameters']
     # A thick disk, which needs a line of sight with a depth axis
-    thick = dict(disk, type='thick_disk', density=dict(
-        ptraits=dict(type='exponential'),
-        htraits=dict(type='sech2', zmax=6)))
+    thick = dict(
+        disk, type='thick_disk', rptraits=dict(type='exponential'),
+        rhtraits=dict(type='sech2', zmax=6))
     info = client.post('/api/v1/parameters', json=dict(
         project='study', galaxy=dict(components=[thick]))).json()
-    assert 'ht_s' in [p['name'] for p in info['parameters']]
+    assert 'rht_s' in [p['name'] for p in info['parameters']]
     assert info['problems'] == []
     info = client.post('/api/v1/parameters', json=dict(
         project='study',
@@ -867,13 +867,12 @@ def render(client, galaxy, **request):
 # A rotating gas disk and a stellar disk in a band
 RENDERED = dict(components=[
     dict(type='thin_disk', name='gas', rnodes=dict(max=10, sep=2),
-         density=dict(ptraits=dict(type='exponential')),
-         kinematics=dict(
-             type='traits', vptraits=dict(type='arctan', direction='tan'),
-             dptraits=dict(type='uniform')),
+         rptraits=dict(type='exponential'),
+         vptraits=dict(type='arctan', direction='tan'),
+         dptraits=dict(type='uniform'),
          emission=dict(type='lines')),
     dict(type='thin_disk', name='stars', rnodes=[0, 2, 4, 6, 8],
-         density=dict(ptraits=dict(type='exponential')),
+         rptraits=dict(type='exponential'),
          emission=dict(type='band'))])
 
 
@@ -917,7 +916,7 @@ def test_a_galaxy_is_rendered_face_on_and_edge_on(client):
 def test_a_galaxy_is_observed_by_an_observation_of_its_project(client):
     galaxy = client.get('/api/v1/pieces/study/galaxies/disk.yaml').json()
     info = client.post('/api/v1/views/observed', json=dict(
-        project='study', galaxy=galaxy, properties=dict(pt_s=2),
+        project='study', galaxy=galaxy, properties=dict(rpt_s=2),
         observation='image')).json()
     assert info['observable'] == 'pixel_brightness'
     [array] = info['arrays']

@@ -110,7 +110,7 @@ def test_solved_amplitudes_are_the_least_squares_of_their_parts(driver):
 
 @pytest.mark.parametrize('change, message', [
     # (the Jeans kinematics take the light: the stars move with it)
-    (dict(kinematics=dict(type='jeans')), "jeans kinematics take its light"),
+    (dict(type='jeans_spheroid'), "jeans kinematics take its light"),
     # (a mass follows the light: it moves the gravity)
     (dict(mass=True), "a mass follows the light"),
     # (moments are ratios of sums of the light)
@@ -119,10 +119,10 @@ def test_solved_amplitudes_are_the_least_squares_of_their_parts(driver):
 def test_amplitudes_of_models_not_linear_in_them_are_refused(
         driver, change, message):
     core = CORE | dict(emission=dict(type='stars'))
-    if 'kinematics' in change:
-        core |= dict(kinematics=change['kinematics'])
+    if 'type' in change:
+        core |= dict(type=change['type'])
     galaxy = dict(components=[core])
-    if 'kinematics' in change or 'mass' in change:
+    if 'type' in change or 'mass' in change:
         galaxy |= dict(
             mass=[dict(type='light_spheroid', name='stars', component='core')]
             if 'mass' in change else [dict(type='point', name='bh')],
@@ -132,9 +132,8 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
     if 'moments' in change:
         from gbkfit.dataset import DatasetPixelMoments
         from gbkfit.observation import PixelMoments
-        core |= dict(kinematics=dict(
-            type='traits', vptraits=dict(type='uniform', direction='tan'),
-            dptraits=dict(type='uniform')))
+        core |= dict(vptraits=dict(type='uniform', direction='tan'),
+                     dptraits=dict(type='uniform'))
         moments = DatasetPixelMoments({1: Data(data, error=data + 1)})
         observable = PixelMoments.from_data(
             moments, spectral=SpectralAxis(convention='relativistic'))

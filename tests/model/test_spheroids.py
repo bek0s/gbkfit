@@ -19,8 +19,8 @@ from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, SpectralAxis
 from gbkfit.io import write_data
 from gbkfit.model import (
-    MassSpheroid, ProfileSersic, ShapeFlattened, Spheroid, component_parser,
-    galaxy_parser)
+    MassSpheroid, ProfileSersic, ShapeFlattened, TraitSpheroid,
+    component_parser, galaxy_parser)
 from gbkfit.model.mass import G, _numerics
 from gbkfit.params import ModelEvaluationError
 
@@ -255,10 +255,10 @@ def test_a_scale_or_an_axis_ratio_of_zero_gives_no_model(
 
 
 def test_a_sphere_has_no_axis():
-    spheroid = Spheroid.load(dict(
+    spheroid = TraitSpheroid.load(dict(
         profile=dict(type='sersic'), rmax=10, emission=BAND))
     assert set(spheroid.pdescs()) == {'xpos', 'ypos', 'ie', 're', 'n'}
-    flattened = Spheroid.load(dict(
+    flattened = TraitSpheroid.load(dict(
         profile=dict(type='sersic'), shape=dict(type='flattened'),
         rmax=10, emission=BAND))
     assert set(flattened.pdescs()) == {
@@ -285,19 +285,17 @@ def test_a_spheroid_round_trips():
           shape=dict(type='flattened')), "takes no shape"),
     (dict(profile=dict(type='mge', ngauss=0)), "ngauss must be"),
     # (stars do not flow out)
-    (dict(kinematics=dict(
-        type='traits', vptraits=dict(type='uniform', direction='out'),
-        dptraits=dict(type='uniform'))), "takes velocity traits along"),
-    (dict(kinematics=dict(
-        type='traits', vptraits=dict(type='uniform', direction='tan'),
-        dptraits=dict(type='uniform'), rnodes=[0, 5])),
+    (dict(vptraits=dict(type='uniform', direction='out'),
+          dptraits=dict(type='uniform')), "takes velocity traits along"),
+    (dict(vptraits=dict(type='uniform', direction='tan'),
+          dptraits=dict(type='uniform'), rnodes=[0, 5]),
      "go to its rmax"),
 ])
 def test_invalid_spheroids_are_refused(options, message):
     info = dict(profile=dict(type='sersic'), rmax=10, emission=BAND) \
         | options
     with pytest.raises(ValueError, match=message):
-        Spheroid.load(info)
+        TraitSpheroid.load(info)
 
 
 # A galaxy of a bulge (a spheroid) whose mass follows its light, at a
@@ -392,13 +390,11 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
     from gbkfit.params import ParamSpace
     disk = dict(
         type='thin_disk', name='gas', rnodes=list(range(0, 13, 2)),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
         emission=dict(type='lines'))
     # In the plane of the bulge
-    disk_properties = dict(gas_vsys=0, gas_pt_a=1, gas_pt_s=4, gas_dpt_a=15) \
+    disk_properties = dict(gas_vsys=0, gas_rpt_a=1, gas_rpt_s=4, gas_dpt_a=15) \
         | {f'gas_{name}': f'bulge_{name}'
            for name in ('xpos', 'ypos', 'posa', 'incl')}
 
@@ -443,7 +439,7 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
 def test_a_mass_follows_components_of_its_kind(mass, message):
     disk = dict(
         type='thin_disk', name='gas', rnodes=[0, 2, 4],
-        density=dict(ptraits=dict(type='exponential')), emission=BAND)
+        rptraits=dict(type='exponential'), emission=BAND)
     with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(
             components=[BULGE, disk], mass=[mass], distance=DISTANCE))
@@ -457,8 +453,8 @@ S = 10
 LOG_M = 10
 STARS_EMISSION = dict(type='stars')
 JEANS_SPHEROID = dict(
-    type='spheroid', name='stars', rmax=40, emission=STARS_EMISSION,
-    profile=dict(type='mge', ngauss=1), kinematics=dict(type='jeans'))
+    type='jeans_spheroid', name='stars', rmax=40, emission=STARS_EMISSION,
+    profile=dict(type='mge', ngauss=1))
 JEANS_PROPERTIES = dict(
     stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
     stars_vsys=1000, stars_i0=[1],
@@ -701,14 +697,15 @@ def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
     (dict(lines=None), "it sees none"),
     # (in a cube, their velocities change along the line of sight)
     (dict(line_of_sight='flat'), "needs a line of sight with a depth axis"),
-    # (a cube needs their kinematics)
+    # (a cube needs their kinematics: a spheroid without traits)
     (dict(kinematics=None), "with kinematics only"),
 ])
 def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
                                            change, message):
     spheroid = dict(JEANS_SPHEROID)
     if 'kinematics' in change:
-        del spheroid['kinematics']
+        spheroid['type'] = 'spheroid'
+
     case = stars_cube(
         driver, spheroid, change.get('line_of_sight', 'grid'))
     if 'lines' in change:
@@ -723,7 +720,7 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
 
 @pytest.mark.parametrize('component, message', [
     (dict(type='thin_disk', rnodes=[0, 5, 10],
-          density=dict(ptraits=dict(type='exponential')),
+          rptraits=dict(type='exponential'),
           emission=STARS_EMISSION), "stars of a disk with kinematics only"),
     (dict(type='point', emission=STARS_EMISSION),
      "does not see the stars of a point"),
@@ -753,7 +750,7 @@ def test_no_line_is_named_stars():
     with pytest.raises(ValueError, match="no line can be named 'stars'"):
         galaxy_parser.load(dict(components=[dict(
             type='thin_disk', rnodes=[0, 1, 2],
-            density=dict(ptraits=dict(type='exponential')),
+            rptraits=dict(type='exponential'),
             emission=dict(type='lines', lines=[
                 dict(name='stars', rest='656.28 nm')]))]))
 
@@ -764,16 +761,17 @@ def test_no_line_is_named_stars():
 # along R, phi and z
 TRAITS_SPHEROID = dict(
     type='spheroid', name='stars', rmax=30, emission=STARS_EMISSION,
-    profile=dict(type='mge', ngauss=1), kinematics=dict(
-        type='traits', vptraits=dict(type='uniform', direction='tan'),
-        vhtraits=dict(type='exponential'), dptraits=[
-            dict(type='uniform', direction=direction)
-            for direction in ('rad', 'tan', 'ver')]))
+    profile=dict(type='mge', ngauss=1),
+    vptraits=dict(type='uniform', direction='tan'),
+    vhtraits=dict(type='exponential'),
+    dptraits=[
+        dict(type='uniform', direction=direction)
+        for direction in ('rad', 'tan', 'ver')])
 TRAITS_PROPERTIES = {
     f'stars_{name}': value for name, value in GEOMETRY.items()} | dict(
     stars_vsys=20, stars_i0=[1], stars_sigma=[8], stars_q=[1],
-    stars_vpt_vt=100, stars_vht_s=4, stars_dpt_a=30, stars_dpt1_a=50,
-    stars_dpt2_a=70)
+    stars_vpt_vt=100, stars_vht_s=4, stars_dpt_a=30, stars_dpt2_a=50,
+    stars_dpt3_a=70)
 
 
 def spheroid_frame(grid_data, xpos, ypos, posa, incl):
@@ -848,9 +846,9 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
     write_data(
         str(tmp_path / 'bins.fits'), index,
         Coords((2, 2), (15.5, 15.5), (0, 0), 0))
-    spheroid = TRAITS_SPHEROID | dict(kinematics=dict(
-        type='traits', vptraits=dict(type='uniform', direction='tan'),
-        dptraits=dict(type='uniform')))
+    spheroid = TRAITS_SPHEROID | dict(
+        vptraits=dict(type='uniform', direction='tan'), vhtraits=None,
+        dptraits=dict(type='uniform'))
     case = stars_cube(driver, spheroid)
     case['galaxy'] = dict(components=[spheroid])
     case['observable'] = dict(
@@ -927,9 +925,8 @@ def hernquist_galaxy():
     a = HERNQUIST_A / HERNQUIST_KPC
     sigma, i0 = hernquist_mge(a)
     spheroid = dict(
-        type='spheroid', name='stars', rmax=30 * a,
-        emission=STARS_EMISSION, profile=dict(type='mge', ngauss=len(i0)),
-        kinematics=dict(type='jeans'))
+        type='jeans_spheroid', name='stars', rmax=30 * a,
+        emission=STARS_EMISSION, profile=dict(type='mge', ngauss=len(i0)))
     galaxy = dict(
         components=[spheroid],
         mass=[dict(type='spheroid', name='light',

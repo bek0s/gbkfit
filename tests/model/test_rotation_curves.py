@@ -58,9 +58,8 @@ def thin_disk(trait, rnodes, **options):
     """
     return dict(
         type='thin_disk', rnodes=rnodes, **options,
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(type='traits',
-                        vptraits=trait, dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=trait, dptraits=dict(type='uniform'),
         emission=dict(type='lines'))
 
 
@@ -78,7 +77,7 @@ def test_rotation_curves(driver, trait, evaluate_cases):
             dict(type=trait, direction='tan'), list(range(0, 14)),
             loose=False, tilted=False)]))
     properties = dict(
-        vsys=0, xpos=0, ypos=0, posa=0, incl=incl, pt_a=1, pt_s=4,
+        vsys=0, xpos=0, ypos=0, posa=0, incl=incl, rpt_a=1, rpt_s=4,
         dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     _, extra = evaluate_cases([case], properties)
     velocity = extra.get('vdata', component='component0').data
@@ -119,8 +118,8 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_cases):
             loose=False, tilted=False)]))
     # The centre of the disk is radius south of pixel (4, 4)
     properties = dict(
-        vsys=0, xpos=0, ypos=-radius, posa=0, incl=incl, pt_a=1,
-        pt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
+        vsys=0, xpos=0, ypos=-radius, posa=0, incl=incl, rpt_a=1,
+        rpt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     data, extra = evaluate_cases([case], properties)
     assert np.isfinite(data[0]['spectra']['d']).all()
     velocity = extra.get('vdata', component='component0').data
@@ -145,7 +144,7 @@ def test_the_centre_does_not_move(driver, evaluate_cases, trait, values):
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[thin_disk(trait, list(range(0, 12)))]))
     _, extra = evaluate_cases([case], dict(
-        vsys=0, xpos=0, ypos=0, posa=0, incl=60, pt_a=1, pt_s=4,
+        vsys=0, xpos=0, ypos=0, posa=0, incl=60, rpt_a=1, rpt_s=4,
         dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()})
     velocity = extra.get('vdata', component='component0').data
     # (the centre is the pixel 16, 16; the pixels on its diagonals move)

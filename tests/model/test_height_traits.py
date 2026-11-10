@@ -19,17 +19,18 @@ from modelutils import group_plan
 DISK = dict(
     type='thick_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    density=dict(
-        ptraits=dict(type='exponential'),
-        htraits=dict(type='sech2', zmax=8)),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    rhtraits=dict(type='sech2', zmax=8),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))
+# The disk, thin
+THIN_DISK = {key: value for key, value in DISK.items() if key != 'rhtraits'} \
+    | dict(type='thin_disk')
 
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=75,
-    pt_a=1, pt_s=4, ht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
+    rpt_a=1, rpt_s=4, rht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 SCUBE = dict(
     type='pixel_spectra', size=[32, 41], step=[1, 1],
@@ -53,12 +54,12 @@ def evaluate(driver, component, properties):
 
 def with_density(**traits):
     """The disk with the given density traits instead of its own."""
-    return DISK | dict(density=DISK['density'] | traits)
+    return DISK | dict(traits)
 
 
 def with_kinematics(**traits):
     """The disk with the given kinematics traits instead of its own."""
-    return DISK | dict(kinematics=DISK['kinematics'] | traits)
+    return DISK | dict(traits)
 
 
 def with_second(key, polar, height, polar_values, height_values):
@@ -67,7 +68,7 @@ def with_second(key, polar, height, polar_values, height_values):
     and its height trait, and the properties of the parameters (those of
     the second traits are prefixed vpt1_ and vht1_, or dpt1_ and dht1_).
     """
-    first = DISK['kinematics'][f'{key}ptraits']
+    first = DISK[f'{key}ptraits']
     component = with_kinematics(**{
         f'{key}ptraits': [first, polar],
         f'{key}htraits': [dict(type='one'), height]})
@@ -75,34 +76,34 @@ def with_second(key, polar, height, polar_values, height_values):
 
 
 @pytest.mark.parametrize('key, polar, values', [
-    ('v', dict(type='uniform', direction='tan'), dict(vpt1_vt=-30)),
-    ('d', dict(type='uniform'), dict(dpt1_a=15))])
+    ('v', dict(type='uniform', direction='tan'), dict(vpt2_vt=-30)),
+    ('d', dict(type='uniform'), dict(dpt2_a=15))])
 def test_linear_height_trait_above_the_disk_changes_nothing(
         driver, key, polar, values):
     # A lag (or a dispersion gradient) that starts above the disk (its
     # sech2 profile is truncated at zmax) changes nothing
     plain = evaluate(driver, DISK, PROPERTIES)
     component, properties = with_second(
-        key, polar, dict(type='linear'), values, {f'{key}ht1_z0': 1e6})
+        key, polar, dict(type='linear'), values, {f'{key}ht2_z0': 1e6})
     np.testing.assert_allclose(
         evaluate(driver, component, properties), plain, rtol=1e-5,
         atol=1e-7 * plain.max())
 
 
 @pytest.mark.parametrize('key, polar, values', [
-    ('v', dict(type='uniform', direction='tan'), dict(vpt1_vt=-30)),
-    ('d', dict(type='uniform'), dict(dpt1_a=15))])
+    ('v', dict(type='uniform', direction='tan'), dict(vpt2_vt=-30)),
+    ('d', dict(type='uniform'), dict(dpt2_a=15))])
 def test_linear_height_trait_changes_the_model(driver, key, polar, values):
     # A lag from the mid-plane changes the model, and is equal to the
     # same lag from a height of 0 given node-wise
     plain = evaluate(driver, DISK, PROPERTIES)
     component, properties = with_second(
-        key, polar, dict(type='linear'), values, {f'{key}ht1_z0': 0})
+        key, polar, dict(type='linear'), values, {f'{key}ht2_z0': 0})
     lagged = evaluate(driver, component, properties)
     assert np.abs(lagged - plain).max() > 1e-3 * plain.max()
     component, properties = with_second(
         key, polar, dict(type='linear', nodewise=True), values,
-        {f'{key}ht1_z0': [0] * len(DISK['rnodes'])})
+        {f'{key}ht2_z0': [0] * len(DISK['rnodes'])})
     np.testing.assert_allclose(
         evaluate(driver, component, properties), lagged, rtol=1e-5,
         atol=1e-7 * plain.max())
@@ -125,11 +126,11 @@ def test_moffat_height_of_shape_1_is_lorentz(driver, zmax):
     # (1 + (z / s)^2)^-1 is the Lorentz profile: the same pdf, and the
     # same cdf, which normalises the profile truncated at zmax
     lorentz = evaluate(
-        driver, with_density(htraits=dict(type='lorentz', zmax=zmax)),
+        driver, with_density(rhtraits=dict(type='lorentz', zmax=zmax)),
         PROPERTIES)
     moffat = evaluate(
-        driver, with_density(htraits=dict(type='moffat', zmax=zmax)),
-        PROPERTIES | dict(ht_b=1))
+        driver, with_density(rhtraits=dict(type='moffat', zmax=zmax)),
+        PROPERTIES | dict(rht_b=1))
     np.testing.assert_allclose(
         moffat, lorentz, rtol=1e-5, atol=1e-6 * lorentz.max())
 
@@ -161,25 +162,25 @@ def test_selections_keep_what_every_trait_selects(driver):
     component = DISK | dict(sptraits=[
         dict(type='rrange'), dict(type='azrange')])
     ring = dict(spt_rmin=2, spt_rmax=6)
-    half = dict(spt1_p=0, spt1_s=180)
+    half = dict(spt2_p=0, spt2_s=180)
     half_ring = evaluate(driver, component, PROPERTIES | ring | half)
     whole_ring = evaluate(
-        driver, component, PROPERTIES | ring | dict(spt1_p=0, spt1_s=360))
+        driver, component, PROPERTIES | ring | dict(spt2_p=0, spt2_s=360))
     assert half_ring.sum() == pytest.approx(0.5 * whole_ring.sum(), rel=0.05)
 
 @pytest.mark.parametrize('height, values, factor', [
-    (dict(type='linear'), dict(dht1_z0=1),
+    (dict(type='linear'), dict(dht2_z0=1),
      lambda z: np.maximum(0, np.abs(z) - 1)),
-    (dict(type='exponential'), dict(dht1_s=2),
+    (dict(type='exponential'), dict(dht2_s=2),
      lambda z: np.exp(-np.abs(z) / 2)),
-    (dict(type='gauss'), dict(dht1_s=2),
+    (dict(type='gauss'), dict(dht2_s=2),
      lambda z: np.exp(-0.5 * (z / 2) ** 2))])
 def test_height_traits_at_each_height(driver, height, values, factor):
     # A face-on thick disk, whose voxels are at the height of their z:
     # its dispersion is 20, plus 5 times the factor of the height trait
     # (the velocity height traits have the same factors)
     component, properties = with_second(
-        'd', dict(type='uniform'), height, dict(dpt1_a=5), values)
+        'd', dict(type='uniform'), height, dict(dpt2_a=5), values)
     plan = observe(driver, component)
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties | dict(incl=0))
@@ -192,7 +193,7 @@ def test_height_traits_at_each_height(driver, height, values, factor):
     # (the spaxel nearest the centre of the disk, at pixel (15.8, 19.4),
     # where it has density: within zmax of its plane)
     centre = ddata.data[:, 19, 16]
-    within = np.abs(z) < DISK['density']['htraits']['zmax']
+    within = np.abs(z) < DISK['rhtraits']['zmax']
     np.testing.assert_allclose(
         centre[within], 20 + 5 * factor(z[within]), rtol=1e-5)
 
@@ -228,7 +229,7 @@ def test_a_depth_axis_shorter_than_the_diagonal_warns(driver, caplog):
     # diagonal of the grid (the longest line across the field, 52 arcsec
     # here). A shorter one loses some of the light of a fat disk at an
     # inclination of 45 degrees, and a warning says so
-    properties = PROPERTIES | dict(incl=45, ht_s=3, pt_s=8)
+    properties = PROPERTIES | dict(incl=45, rht_s=3, rpt_s=8)
     caplog.set_level(logging.WARNING)
     default = flux(observe_depth(driver, DISK, {}), properties)
     assert 'shorter than the galaxies need' not in caplog.text
@@ -242,13 +243,13 @@ def test_a_profile_wide_for_its_zmax_warns(driver, caplog, scale, warns):
     # zmax (8) cuts 2e-7 of a sech2 profile of scale height 1, and 3.6% of
     # one of 4: zmax then shapes the density (with extra outputs)
     caplog.set_level(logging.WARNING)
-    flux(observe(driver, DISK), PROPERTIES | dict(ht_s=scale), Extras())
+    flux(observe(driver, DISK), PROPERTIES | dict(rht_s=scale), Extras())
     assert ('zmax shapes the density' in caplog.text) == warns
 
 
 @pytest.mark.parametrize('trait, values', [
     ('uniform', {}), ('exponential', {}), ('gauss', {}),
-    ('ggauss', dict(ht_b=1.5)), ('lorentz', {}), ('moffat', dict(ht_b=2.5)),
+    ('ggauss', dict(rht_b=1.5)), ('lorentz', {}), ('moffat', dict(rht_b=2.5)),
     ('sech2', {})])
 def test_the_cdf_of_each_density_height_trait(driver, trait, values):
     # The cdf (with which the share of the profile within zmax is checked)
@@ -256,16 +257,16 @@ def test_the_cdf_of_each_density_height_trait(driver, trait, values):
     # renormalise within zmax (here 40)
     from gbkfit.model import galaxy_parser
     galaxy = galaxy_parser.load(dict(components=[
-        with_density(htraits=dict(type=trait, zmax=40))]))
+        with_density(rhtraits=dict(type=trait, zmax=40))]))
     disk = galaxy.components()[0].density_disk()
     plan = disk.plan(driver, 0, np.dtype(np.float32))
     z = np.linspace(-40, 40, 160001)
-    params = PROPERTIES | dict(ht_s=1.5) | values
+    params = PROPERTIES | dict(rht_s=1.5) | values
     pdf = plan.evaluate_height_traits(params, 'rht', 5.0, z)[0]
     integral = np.concatenate([[0], np.cumsum((pdf[1:] + pdf[:-1]) / 2)]) \
         * (z[1] - z[0])
     trait_ = disk.traits('rht')[0]
-    args = [params['ht_s']] + ([params['ht_b']] if 'ht_b' in values else [])
+    args = [params['rht_s']] + ([params['rht_b']] if 'rht_b' in values else [])
     cdf = trait_.cdf(z, *args)
     expected = (cdf - cdf[0]) / (cdf[-1] - cdf[0])
     # (the trapezoids are off by about 2e-4 at the steps of uniform)
@@ -324,15 +325,14 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
 
 def test_outward_speeds_of_a_thin_disk_are_radial(driver):
     # In its plane, the radius of the sphere is that of the disk
-    thin = DISK | dict(
-        type='thin_disk', density=dict(ptraits=dict(type='exponential')))
+    thin = THIN_DISK
     properties = {
         key: value for key, value in PROPERTIES.items()
-        if key not in ('ht_s', 'vpt_rt', 'vpt_vt')}
+        if key not in ('rht_s', 'vpt_rt', 'vpt_vt')}
 
     def cube(direction, speed):
-        disk = thin | dict(kinematics=DISK['kinematics'] | dict(
-            vptraits=dict(type='uniform', direction=direction)))
+        disk = thin | dict(
+            vptraits=dict(type='uniform', direction=direction))
         return evaluate(driver, disk, properties | {speed: 40})
     # (to rounding: r / sqrt(r^2) is not 1 in floats)
     np.testing.assert_allclose(
@@ -358,7 +358,7 @@ def test_outward_speeds_of_a_thick_disk_leave_both_faces(driver):
     # (the spaxel (20, 19), 4.2 and 0.4 arcsec from the centre of the
     # disk, at the pixel (15.8, 19.4); within zmax of its plane)
     R = np.hypot(20 - 15.8, 19 - 19.4)
-    within = np.abs(z) < DISK['density']['htraits']['zmax']
+    within = np.abs(z) < DISK['rhtraits']['zmax']
     np.testing.assert_allclose(
         vdata.data[within, 19, 20], 40 * z[within] / np.hypot(R, z[within]),
         rtol=1e-5, atol=1e-4)
@@ -381,16 +381,13 @@ def test_speeds_away_from_the_plane_leave_both_faces(driver):
     coords = vdata.coords
     nz = vdata.data.shape[0]
     z = coords.rval[2] + (np.arange(nz) - coords.rpix[2]) * coords.step[2]
-    within = np.abs(z) < DISK['density']['htraits']['zmax']
+    within = np.abs(z) < DISK['rhtraits']['zmax']
     np.testing.assert_allclose(
         vdata.data[within, 19, 20], 40 * np.sign(z[within]), atol=1e-4)
 
 
 def test_speeds_away_from_the_plane_need_a_thick_disk():
-    thin = DISK | dict(
-        type='thin_disk', density=dict(ptraits=dict(type='exponential')),
-        kinematics=DISK['kinematics'] | dict(
-            vptraits=dict(type='uniform', direction='away')))
+    thin = THIN_DISK | dict(vptraits=dict(type='uniform', direction='away'))
     from gbkfit.model import component_parser
     with pytest.raises(
             ValueError, match=r"a thin disk takes velocity traits along "

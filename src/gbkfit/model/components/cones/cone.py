@@ -18,7 +18,7 @@ from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band
 from ..nodes import Nodes, as_nodes
-from ..parts import ConeTraitsKinematics, Density
+from ..parts import KinematicTraits, density_traits, kinematic_traits
 from ..roles import STARS, Emission, Opacity
 from . import _cone, _detail
 
@@ -42,11 +42,21 @@ class Cone(Component):
 
     Parameters
     ----------
-    density : Density
-        Its density, with height traits.
-    kinematics : ConeTraitsKinematics, optional
-        How it moves; required to emit lines. Its velocity traits are
-        around the axis ('tan') or out of the apex ('out').
+    rptraits : RPTrait or Sequence of RPTrait
+        Its density polar traits: the density per unit area of its
+        mid-surface (parameters 'rpt_*').
+    rhtraits : RHTrait or Sequence of RHTrait
+        Its density height traits, its profile across the walls: one that
+        every polar trait shares, or one for each (see ThickDisk).
+    vptraits : VPTrait or Sequence of VPTrait, optional
+        Its velocity polar traits (parameters 'vpt_*'), around the axis
+        ('tan') or out of the apex ('out'). A cone with vptraits and
+        dptraits moves; one that emits lines must.
+    dptraits : DPTrait or Sequence of DPTrait, optional
+        Its velocity dispersion polar traits (parameters 'dpt_*').
+    vhtraits, dhtraits : optional
+        Its velocity and dispersion height traits, one for each polar
+        trait (see parts.KinematicTraits).
     emission : Emission, optional
         The light it emits.
     opacity : DustOpacity, optional
@@ -90,12 +100,18 @@ class Cone(Component):
 
     def dump(self) -> dict[str, Any]:
         return _detail.dump_cone_component(
-            self, self._cone, self._rnodes, self._density, self._kinematics)
+            self, self._cone, self._rnodes, self._kinematics)
 
     def __init__(
             self,
-            density: Density,
-            kinematics: ConeTraitsKinematics | None = None,
+            rptraits: traits.RPTrait | Sequence[traits.RPTrait],
+            rhtraits: traits.RHTrait | Sequence[traits.RHTrait],
+            vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None = None,
+            dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None = None,
+            vhtraits:
+            traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
+            dhtraits:
+            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
             emission: Emission | None = None,
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
@@ -109,19 +125,17 @@ class Cone(Component):
     ):
         check_options(Cone.__init__, locals())
         super().__init__(name, emission, opacity)
-        self._density = density
-        self._kinematics = kinematics
+        rptraits, rhtraits = density_traits(rptraits, rhtraits, True)
+        self._kinematics = kinematics = kinematic_traits(
+            vptraits, dptraits, vhtraits, dhtraits)
         # In the form it was given in, for its configuration (see dump)
         self._rnodes = rnodes = as_nodes(rnodes)
         self._cone = _detail.make_cone(
-            _cone.SmoothCone, density, kinematics, emission, opacity,
-            sptraits, sides, rnodes=rnodes, rstep=rstep, interp=interp)
+            _cone.SmoothCone, rptraits, rhtraits, kinematics, emission,
+            opacity, sptraits, sides, rnodes=rnodes, rstep=rstep,
+            interp=interp)
         self._lines = make_lines(self._cone.pdescs(), emission)
         self._bands = make_bands(self._cone.pdescs(), emission)
-
-    def density(self) -> Density:
-        """Return its density."""
-        return self._density
 
     def check_lines(self, lines: tuple[str, ...] | None) -> None:
         if lines is not None and STARS in lines and self.kinematics() is None:
@@ -129,8 +143,8 @@ class Cone(Component):
                 "a spectral cube sees the stars of a cone with kinematics "
                 "only (its stars have no velocities to place in channels)")
 
-    def kinematics(self) -> ConeTraitsKinematics | None:
-        """Return its kinematics, if any."""
+    def kinematics(self) -> KinematicTraits | None:
+        """Return its kinematic traits, if it moves."""
         return self._kinematics
 
     def sides(self) -> str:

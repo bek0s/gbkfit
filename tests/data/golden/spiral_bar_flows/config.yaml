@@ -1,6 +1,6 @@
 # spiral_bar_flows: A gas disk rotating in its mass (a stellar disk and an NFW halo), with the flows of a spiral density wave of 3 arms (which the galaxy stage tabulates from the rotation), along a bar, and in two wedges; moment maps.
 # (written by make_golden.py; do not edit)
-version: 7
+version: 8
 driver: {type: host}
 galaxies:
 - components:
@@ -9,16 +9,13 @@ galaxies:
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    density:
-      ptraits: {type: exponential}
-    kinematics:
-      type: traits
-      vptraits:
-      - {type: mass}
-      - {type: spiral, order: 3}
-      - {type: bar}
-      - {type: wedge, direction: rad}
-      dptraits: {type: uniform}
+    rptraits: {type: exponential}
+    vptraits:
+    - {type: mass}
+    - {type: spiral, order: 3}
+    - {type: bar}
+    - {type: wedge, direction: rad}
+    dptraits: {type: uniform}
     emission: {type: lines}
   mass:
   - type: disk
@@ -38,15 +35,17 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
+      error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
+      error: observation0_moment2_e.fits}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20 km/s}
+    lsf: {type: gauss, sigma: 20.0 km s-1}
   observable:
     type: pixel_moments
     spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
@@ -63,19 +62,19 @@ params:
     gas_posa: {value: 43, min: 0, max: 90}
     gas_incl: {value: 50, min: 10, max: 80}
     gas_vsys: {value: 12, min: -50, max: 50}
-    gas_pt_a: 1
-    gas_pt_s: 3
+    gas_rpt_a: 1
+    gas_rpt_s: 3
     gas_dpt_a: 20
-    gas_vpt1_p: {value: 50, min: 0, max: 120}
-    gas_vpt1_c: 60
-    gas_vpt1_e: 0.3
-    gas_vpt1_o: 1
-    gas_vpt2_v: {value: -30, min: -100, max: 0}
-    gas_vpt2_p: 30
-    gas_vpt2_s: 2
-    gas_vpt3_vr: 25
-    gas_vpt3_p: 70
-    gas_vpt3_s: 30
+    gas_vpt2_p: {value: 50, min: 0, max: 120}
+    gas_vpt2_c: 60
+    gas_vpt2_e: 0.3
+    gas_vpt2_o: 1
+    gas_vpt3_v: {value: -30, min: -100, max: 0}
+    gas_vpt3_p: 30
+    gas_vpt3_s: 2
+    gas_vpt4_vr: 25
+    gas_vpt4_p: 70
+    gas_vpt4_s: 30
     distance: 80
     mass_stars_log_m: {value: 10.4, min: 9, max: 12}
     mass_stars_rd: 1.2

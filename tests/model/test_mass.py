@@ -1348,21 +1348,21 @@ MASS_PROPERTIES = dict(
 
 DISK = dict(
     loose=False, tilted=False, rnodes=list(range(0, 21, 2)), rstep=0.5,
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(type='traits', dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))
 
 DISK_PROPERTIES = dict(
-    xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4, dpt_a=15)
+    xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, dpt_a=15)
 
 
 def test_the_mass_of_a_galaxy_at_a_direct_distance_is_of_its_epoch():
     # The critical density that defines its halos is that of its redshift
     # (5.5 times that of today at z = 1.5), as by a distance of redshift
     galaxy = galaxy_parser.load(dict(
-        components=[DISK | dict(type='thin_disk', kinematics=dict(
-            type='traits',
-            vptraits=dict(type='mass'), dptraits=dict(type='uniform')))],
+        components=[DISK | dict(
+            type='thin_disk', vptraits=dict(type='mass'),
+            dptraits=dict(type='uniform'))],
         mass=copy.deepcopy(MASS), distance=copy.deepcopy(DISTANCE),
         redshift=1.5))
     mass = galaxy.plan_stage().mass(DISK_PROPERTIES | MASS_PROPERTIES)
@@ -1374,19 +1374,13 @@ def test_the_mass_of_a_galaxy_at_a_direct_distance_is_of_its_epoch():
 def with_traits(component, **traits):
     """
     The configuration of a disk component with the given traits of its
-    density (ptraits, htraits) and kinematics (vptraits, dptraits)
+    density (rptraits, rhtraits) and kinematics (vptraits, dptraits)
     instead of its own: a thick disk if its density has height traits, a
     thin one if not.
     """
-    density = component['density'] | {
-        key: value for key, value in traits.items()
-        if key in ('ptraits', 'htraits')}
-    kinematics = {
-        key: value for key, value in traits.items()
-        if key in ('vptraits', 'dptraits')}
+    component = component | traits
     return component | dict(
-        type='thick_disk' if 'htraits' in density else 'thin_disk',
-        density=density, kinematics=component['kinematics'] | kinematics)
+        type='thick_disk' if 'rhtraits' in component else 'thin_disk')
 
 
 def disk_galaxy(
@@ -1398,7 +1392,7 @@ def disk_galaxy(
     """
     disk = with_traits(DISK, vptraits=vptraits)
     if thick:
-        disk = with_traits(disk, htraits=dict(type='sech2', zmax=8))
+        disk = with_traits(disk, rhtraits=dict(type='sech2', zmax=8))
     if disk_type == 'clouds':
         disk |= dict(clouds=dict(cflux=1e-3))
     info = dict(components=[disk])
@@ -1454,9 +1448,9 @@ def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
     vcirc = np.sqrt(mass_model(MASS).vcirc2(
         subrnodes * 10 * 0.0048481368, MASS_PROPERTIES, CONTEXT))
     assert vcirc.max() > 100
-    properties = DISK_PROPERTIES | dict(pt_s=1.2)
+    properties = DISK_PROPERTIES | dict(rpt_s=1.2)
     if thick:
-        properties |= dict(ht_s=1)
+        properties |= dict(rht_s=1)
     np.testing.assert_allclose(
         evaluate(
             driver, massive, line_of_sight, properties | MASS_PROPERTIES),
@@ -1527,18 +1521,16 @@ def test_disk_densities_are_azimuthal_means(driver):
     from gbkfit.model.components.disks._profiles import NodalDiskDensity
     component = ThinDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
-        density=dict(ptraits=[
+        rptraits=[
             dict(type='exponential'), dict(type='nw_harmonic', order=2),
-            dict(type='mixture_gauss', nblobs=1)]),
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
+            dict(type='mixture_gauss', nblobs=1)],
+        vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
         sptraits=dict(type='rrange'),
         emission=dict(type='lines')))
     params = dict(
-        xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4,
-        pt1_a=np.full(11, 0.5), pt1_p=np.zeros(11), pt2_r=15, pt2_t=40,
-        pt2_a=0.5, pt2_s=0.3, pt2_q=1, pt2_p=0, dpt_a=10, spt_rmin=0,
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
+        rpt2_a=np.full(11, 0.5), rpt2_p=np.zeros(11), rpt3_r=15, rpt3_t=40,
+        rpt3_a=0.5, rpt3_s=0.3, rpt3_q=1, rpt3_p=0, dpt_a=10, spt_rmin=0,
         spt_rmax=18)
     plan = component.plan(
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
@@ -1564,18 +1556,17 @@ def test_disk_densities_are_exact_at_jumps(driver):
     from gbkfit.model.components.disks._profiles import NodalDiskDensity
     component = ThinDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
-        density=dict(ptraits=[
+        rptraits=[
             dict(type='exponential'),
-            dict(type='map', size=[6, 4], step=2.0)]),
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='uniform', direction='tan'), dptraits=dict(type='uniform')),
+            dict(type='map', size=[6, 4], step=2.0)],
+        vptraits=dict(type='uniform', direction='tan'),
+        dptraits=dict(type='uniform'),
         sptraits=dict(type='azrange'),
         emission=dict(type='lines')))
     cells = np.random.default_rng(3).normal(size=24)
     params = dict(
-        xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4,
-        pt1_a=cells, vpt_vt=100, dpt_a=10, spt_p=17, spt_s=93)
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
+        rpt2_a=cells, vpt_vt=100, dpt_a=10, spt_p=17, spt_s=93)
     plan = component.plan(
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
         None, None, 0.0)
@@ -1611,20 +1602,19 @@ def test_disk_densities_see_small_blobs(driver):
     from gbkfit.model.components.disks._profiles import NodalDiskDensity
     component = ThinDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
-        density=dict(ptraits=[
+        rptraits=[
             dict(type='mixture_gauss', nblobs=1),
             dict(type='mixture_ggauss', nblobs=1),
-            dict(type='nw_distortion')]),
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='uniform', direction='tan'), dptraits=dict(type='uniform')),
+            dict(type='nw_distortion')],
+        vptraits=dict(type='uniform', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines')))
     params = dict(
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, vpt_vt=100, dpt_a=10,
-        pt_r=15, pt_t=40, pt_a=1, pt_s=0.01, pt_q=1, pt_p=0,
-        pt1_r=10, pt1_t=-70, pt1_a=1, pt1_s=0.005, pt1_b=0.5, pt1_q=1,
-        pt1_p=0, pt2_a=np.ones(11), pt2_p=np.full(11, 40.0),
-        pt2_s=np.full(11, 0.01))
+        rpt_r=15, rpt_t=40, rpt_a=1, rpt_s=0.01, rpt_q=1, rpt_p=0,
+        rpt2_r=10, rpt2_t=-70, rpt2_a=1, rpt2_s=0.005, rpt2_b=0.5, rpt2_q=1,
+        rpt2_p=0, rpt3_a=np.ones(11), rpt3_p=np.full(11, 40.0),
+        rpt3_s=np.full(11, 0.01))
     plan = component.plan(
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
         None, None, 0.0)
@@ -1664,14 +1654,14 @@ def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
     thick = line_of_sight == 'grid'
     disk = with_traits(
-        DISK, ptraits=dict(type='nw_uniform'), vptraits=dict(type='mass'))
+        DISK, rptraits=dict(type='nw_uniform'), vptraits=dict(type='mass'))
     disk |= dict(name='hi')
     properties = {
         f'hi_{name}': value for name, value in DISK_PROPERTIES.items()
-        if name != 'pt_s'} | dict(hi_pt_a=brightness)
+        if name != 'rpt_s'} | dict(hi_rpt_a=brightness)
     if thick:
-        disk = with_traits(disk, htraits=dict(type='sech2', zmax=8))
-        properties |= dict(hi_ht_s=1)
+        disk = with_traits(disk, rhtraits=dict(type='sech2', zmax=8))
+        properties |= dict(hi_rht_s=1)
     halo = dict(type='spheroid', name='halo', profile=dict(
         type='pseudo_isothermal', parameters='density_radius'))
     halo_properties = dict(distance=10, mass_halo_log_rho=8, mass_halo_rs=1)
@@ -1752,9 +1742,8 @@ def test_disk_follows_a_component_without_light():
     dust = dict(
         type='thick_disk', name='dust', loose=False, tilted=False,
         rnodes=rnodes, rstep=DISK['rstep'],
-        density=dict(
-            ptraits=dict(type='nw_uniform'),
-            htraits=dict(type='sech2', zmax=8)),
+        rptraits=dict(type='nw_uniform'),
+        rhtraits=dict(type='sech2', zmax=8),
         opacity=dict(type='dust'))
     galaxy = galaxy_parser.load(dict(
         components=[stars, dust],
@@ -1768,7 +1757,7 @@ def test_disk_follows_a_component_without_light():
         for key, value in DISK_PROPERTIES.items()
         if f'{name}_{key}' in galaxy.pdescs()}
     params |= dict(
-        dust_pt_a=opacity, dust_ht_s=1, distance=10,
+        dust_rpt_a=opacity, dust_rht_s=1, distance=10,
         mass_gas_upsilon=upsilon)
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
     nodewise = mass_model([dict(
@@ -1796,13 +1785,11 @@ def test_pressure_support_is_the_jeans_equation(driver):
     from gbkfit.model.components.disks._profiles import pressure_support
     component = ThinDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='mass'), dptraits=dict(type='exponential')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='mass'), dptraits=dict(type='exponential'),
         emission=dict(type='lines')))
     params = dict(
-        xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4,
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
         dpt_a=30, dpt_s=10)
     plan = component.plan(
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
@@ -1830,15 +1817,14 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
     from gbkfit.model.components.disks._profiles import pressure_support
     component = ThickDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
-        density=dict(ptraits=ptrait, htraits=dict(type='sech2', zmax=8)),
-        kinematics=dict(
-            type='traits', vptraits=dict(
-                type='mass', pressure_support=dict(type='self_gravitating')),
-            dptraits=dict(type='exponential')),
+        rptraits=ptrait, rhtraits=dict(type='sech2', zmax=8),
+        vptraits=dict(
+            type='mass', pressure_support=dict(type='self_gravitating')),
+        dptraits=dict(type='exponential'),
         emission=dict(type='lines')))
     params = dict(
-        xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4, ht_s=1,
-        dpt_a=30, dpt_s=10) | (dict(pt_b=1.5) if 'pt_b' in component.pdescs()
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, rht_s=1,
+        dpt_a=30, dpt_s=10) | (dict(rpt_b=1.5) if 'rpt_b' in component.pdescs()
                                else {})
     plan = component.plan(
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
@@ -1871,13 +1857,13 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
         vptraits=dict(type='mass', pressure_support=dict(type='jeans')))
     # (a disk of no light that matters beyond its last ring, where the one
     # given at the subnodes keeps its last value)
-    properties = DISK_PROPERTIES | dict(pt_s=1.2, dpt_a=30, dpt_s=10)
+    properties = DISK_PROPERTIES | dict(rpt_s=1.2, dpt_a=30, dpt_s=10)
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
     density = np.exp(-subrnodes / 1.2)
     if line_of_sight == 'grid':
         disk = with_traits(
-            disk, htraits=dict(type='sech2', zmax=8, nodewise=True))
-        properties |= dict(ht_s=flaring)
+            disk, rhtraits=dict(type='sech2', zmax=8, nodewise=True))
+        properties |= dict(rht_s=flaring)
         density /= 2 * np.interp(subrnodes, rnodes, flaring)
     pressure = density * (30 * np.exp(-subrnodes / 10)) ** 2
     support = subrnodes * np.gradient(pressure, subrnodes, edge_order=2) \
@@ -1990,7 +1976,7 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
     # the pressure does not see: the support of the density of the disk
     disk = with_traits(
         DISK, vptraits=dict(type='mass', pressure_support=dict(type=mode)),
-        htraits=dict(type='sech2', zmax=8)) \
+        rhtraits=dict(type='sech2', zmax=8)) \
         | dict(name='gas')
     mass = [
         dict(type='disk', name='hi', surface=dict(
@@ -2000,14 +1986,14 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
             type='pseudo_isothermal', parameters='density_radius'))]
 
     def rotation(density):
-        support = disk | dict(kinematics=disk['kinematics'] | dict(
-            vptraits=disk['kinematics']['vptraits'] | density))
+        support = disk | dict(dict(
+            vptraits=disk['vptraits'] | density))
         galaxy = galaxy_parser.load(dict(
             components=[support], mass=copy.deepcopy(mass),
             distance=copy.deepcopy(DISTANCE)))
         params = {f'gas_{key}': value
                   for key, value in DISK_PROPERTIES.items()} | dict(
-            gas_ht_s=0.5, distance=10, mass_hi_upsilon=1e8,
+            gas_rht_s=0.5, distance=10, mass_hi_upsilon=1e8,
             mass_halo_log_rho=7, mass_halo_rs=3)
         state = galaxy.plan_stage().evaluate(params).states[0]
         return state.rotation['vpt_vt']
@@ -2039,8 +2025,8 @@ def rotation_at_heights(vptraits, mass, params):
     values params of its parameters.
     """
     disk = with_traits(
-        DISK, vptraits=vptraits, htraits=dict(type='sech2', zmax=8))
-    disk['kinematics'] |= dict(vhtraits=dict(type='mass', zmax=8))
+        DISK, vptraits=vptraits, rhtraits=dict(type='sech2', zmax=8))
+    disk |= dict(vhtraits=dict(type='mass', zmax=8))
     galaxy = galaxy_parser.load(dict(
         components=[disk], mass=copy.deepcopy(mass),
         distance=copy.deepcopy(DISTANCE)))
@@ -2067,8 +2053,8 @@ def test_the_table_of_rotation_at_heights_stays_within_the_density():
     # with it)
     disk = with_traits(
         DISK, vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
-        htraits=dict(type='sech2', zmax=6))
-    disk['kinematics'] |= dict(vhtraits=dict(type='mass', zmax=7))
+        rhtraits=dict(type='sech2', zmax=6))
+    disk |= dict(vhtraits=dict(type='mass', zmax=7))
     with pytest.raises(ValueError, match="must not be above the zmax"):
         galaxy_parser.load(dict(
             components=[disk], mass=[dict(
@@ -2086,7 +2072,7 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
     # which the disk interpolates linearly
     from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
     params = DISK_PROPERTIES | dict(
-        ht_s=1, dpt_a=100, distance=10, mass_bh_log_m=10)
+        rht_s=1, dpt_a=100, distance=10, mass_bh_log_m=10)
     galaxy, state = rotation_at_heights(
         dict(type='mass', pressure_support=dict(type='jeans')),
         [dict(type='point', name='bh')], params)
@@ -2131,7 +2117,7 @@ def test_self_gravitating_rotation_at_each_height():
     # sigma^2)/dR / rho = sigma^2 R (-2 + 2 u tanh(u)), u = z / z0, R in
     # kpc, to the precision of the three-point derivative on the subnodes
     params = DISK_PROPERTIES | dict(
-        ht_s=1, distance=10, mass_gas_log_m=9.5, mass_gas_rd=1,
+        rht_s=1, distance=10, mass_gas_log_m=9.5, mass_gas_rd=1,
         mass_bh_log_m=10.5)
     mass = [
         dict(type='disk', name='gas', surface=dict(type='exponential'),
@@ -2171,8 +2157,8 @@ def test_rotation_at_each_height_is_checked(
         type='user', name='mine', file=str(tmp_path / 'curve.py'),
         func='vcirc2')] if user else MASS
     disk = with_traits(
-        DISK, vptraits=vptraits, htraits=dict(type='sech2', zmax=8))
-    disk['kinematics'] |= dict(vhtraits=dict(type='mass', zmax=8))
+        DISK, vptraits=vptraits, rhtraits=dict(type='sech2', zmax=8))
+    disk |= dict(vhtraits=dict(type='mass', zmax=8))
     with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(
             components=[disk], mass=copy.deepcopy(mass),

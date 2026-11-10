@@ -16,19 +16,18 @@ from gbkfit.observation import ObservationGroup, observation_parser
 FLAT = dict(type='flat')
 GRID = dict(type='grid')
 
-THIN = dict(ptraits=dict(type='exponential'))
-THICK = THIN | dict(htraits=dict(type='sech2', zmax=8))
+THIN = dict(rptraits=dict(type='exponential'))
+THICK = THIN | dict(rhtraits=dict(type='sech2', zmax=8))
 
 
 def disk(name, density=THIN):
     """A rotating disk of the given density that emits a line."""
     return dict(
-        type='thick_disk' if 'htraits' in density else 'thin_disk',
+        type='thick_disk' if 'rhtraits' in density else 'thin_disk',
         name=name, loose=False, tilted=False, rnodes=list(range(0, 14)),
-        density=density,
-        kinematics=dict(
-            type='traits', vptraits=dict(type='arctan', direction='tan'),
-            dptraits=dict(type='uniform')),
+        **density,
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines'))
 
 
@@ -38,8 +37,8 @@ GALAXY = dict(components=[disk('ha'), disk('co')])
 GEOMETRY = dict(vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60)
 PROPERTIES = {f'ha_{key}': value for key, value in GEOMETRY.items()} | {
     f'co_{key}': f'ha_{key}' for key in GEOMETRY} | dict(
-    ha_pt_a=1, ha_pt_s=4, ha_vpt_rt=2, ha_vpt_vt=150, ha_dpt_a=20,
-    co_pt_a=2, co_pt_s=2, co_vpt_rt=2, co_vpt_vt=150, co_dpt_a=8)
+    ha_rpt_a=1, ha_rpt_s=4, ha_vpt_rt=2, ha_vpt_vt=150, ha_dpt_a=20,
+    co_rpt_a=2, co_rpt_s=2, co_vpt_rt=2, co_vpt_vt=150, co_dpt_a=8)
 
 SCUBE = dict(
     type='pixel_spectra', size=[32, 41], step=[1, 1],
@@ -87,10 +86,10 @@ def test_components_with_opacity_always_absorb(driver):
     emitters = [disk('ha', THICK), disk('co', THICK)]
     dust = dict(
         type='thick_disk', name='dust', loose=False, tilted=False,
-        rnodes=list(range(0, 14)), density=THICK, opacity=dict(type='dust'))
+        rnodes=list(range(0, 14)), **THICK, opacity=dict(type='dust'))
     galaxy = dict(components=emitters + [dust])
     properties = PROPERTIES | dict(
-        ha_ht_s=1, co_ht_s=0.5, dust_pt_a=0.3, dust_pt_s=4, dust_ht_s=0.5) | {
+        ha_rht_s=1, co_rht_s=0.5, dust_rpt_a=0.3, dust_rpt_s=4, dust_rht_s=0.5) | {
         f'dust_{key}': f'ha_{key}' for key in GEOMETRY if key != 'vsys'}
     ha, co, both = evaluate(driver, galaxy, [
         observation(['ha'], name='muse', line_of_sight=GRID),

@@ -23,9 +23,8 @@ def line_disk(vptraits, **options):
     return dict(components=[dict(
         type='thin_disk', loose=False, tilted=False,
         rnodes=list(range(0, 12)),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(type='traits',
-                        vptraits=vptraits, dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=vptraits, dptraits=dict(type='uniform'),
         emission=dict(type='lines')) | options])
 
 
@@ -48,7 +47,7 @@ def test_evaluation_does_not_modify_params(driver):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), dict(
             vsys=0, xpos=0, ypos=0, posa=30, incl=45,
-            pt_a=1, pt_s=4, dpt_a=10,
+            rpt_a=1, rpt_s=4, dpt_a=10,
             vpt_vt=[100] + [10] * 11),
         modes=dict(vpt_vt=gbkfit.params.ParamModeOffsets()))
     values = params.evaluate()
@@ -75,15 +74,13 @@ plan = group_plan([dict(
     galaxy=dict(components=[dict(
         type='thick_disk', loose=False, tilted=False,
         rnodes=list(range(0, 12)),
-        density=dict(
-            ptraits=dict(type='exponential'),
-            htraits=dict(type='sech2', zmax=8)),
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        rhtraits=dict(type='sech2', zmax=8),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines'))]))])
 params = gbkfit.params.ParamSpace.from_properties(plan.group().pdescs(), dict(
-    vsys=0, xpos=0, ypos=0, posa=30, incl=60, pt_a=1, pt_s=4, ht_s=1,
+    vsys=0, xpos=0, ypos=0, posa=30, incl=60, rpt_a=1, rpt_s=4, rht_s=1,
     vpt_rt=2, vpt_vt=150, dpt_a=20))
 np.save(sys.argv[1], plan.model_h(params.evaluate())[0]['spectra']['d'])
 """
@@ -112,15 +109,15 @@ FLAT_OBSERVATIONS = dict(
         line_disk(dict(type='arctan', direction='tan')),
         'pixel_spectra', (32, 32, 41), 'spectra',
         dict(vsys=0, xpos=0, ypos=0, posa=30, incl=45,
-             pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=100, dpt_a=10)),
+             rpt_a=1, rpt_s=4, vpt_rt=2, vpt_vt=100, dpt_a=10)),
     image=(
         dict(components=[dict(
             type='thin_disk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
-            density=dict(ptraits=dict(type='exponential')),
+            rptraits=dict(type='exponential'),
             emission=dict(type='band'))]),
         'pixel_brightness', (32, 32), 'brightness',
-        dict(xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=4)))
+        dict(xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=4)))
 
 
 @pytest.mark.parametrize('kind', FLAT_OBSERVATIONS)
@@ -165,12 +162,11 @@ def test_incompatible_observations_are_rejected_before_evaluation(
     # observation that sees none is rejected before any evaluation
     component = dict(
         type='thin_disk', loose=False, tilted=False, rnodes=[0, 1, 2],
-        density=dict(ptraits=dict(type='exponential')),
+        rptraits=dict(type='exponential'),
         emission=dict(type=emission))
     if emission == 'lines':
-        component |= dict(kinematics=dict(
-            type='traits',
-            vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')))
+        component |= dict(vptraits=dict(type='arctan', direction='tan'),
+                          dptraits=dict(type='uniform'))
     case = dict(
         driver=dict(type='host'), observable=observable,
         line_of_sight=dict(type='flat'),
@@ -194,7 +190,7 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
         galaxy=line_disk(
             dict(type='courteau', direction='tan'), rnodes=list(range(0, 8))))])
     cube = plan.model_h(dict(
-        vsys=0, xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=4,
+        vsys=0, xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=4,
         vpt_rt=-3, vpt_vt=100, vpt_b=0.4, vpt_g=2, dpt_a=10
     ))[0]['spectra']['d']
     nan = np.isnan(cube)
@@ -220,13 +216,12 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
             galaxy=dict(components=[dict(
                 type='thick_disk', loose=False, tilted=False,
                 rnodes=list(range(0, 30)),
-                density=dict(
-                    ptraits=dict(type='exponential'),
-                    htraits=dict(type='sech2', zmax=8)),
+                rptraits=dict(type='exponential'),
+                rhtraits=dict(type='sech2', zmax=8),
                 emission=dict(type='band'))]))])
         params = gbkfit.params.ParamSpace.from_properties(
             plan.group().pdescs(), dict(
-                xpos=0, ypos=0, posa=0, incl=30, pt_a=1, pt_s=6, ht_s=1))
+                xpos=0, ypos=0, posa=0, incl=30, rpt_a=1, rpt_s=6, rht_s=1))
         return plan.model_h(params.evaluate())[0]['brightness']['d']
     many = image(528384, 0.001)
     few = image(1032, 0.512)
@@ -275,7 +270,7 @@ def counted(plan):
 
 
 TWO_PARAMS = dict(
-    vsys=0, xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=4, vpt_rt=2,
+    vsys=0, xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=4, vpt_rt=2,
     vpt_vt=150, dpt_a=20, b_dx=0, b_dy=0)
 
 
@@ -299,13 +294,13 @@ def test_evaluations_skip_what_reads_no_changed_parameter(driver):
     np.testing.assert_array_equal(after[0], before[0])
     assert not np.array_equal(after[1], before[1])
     # (the disk moves them all; extra outputs evaluate all, as NaN does)
-    plan.model_h(moved | dict(pt_s=3))
+    plan.model_h(moved | dict(rpt_s=3))
     assert counts == dict(a=2, b=3)
     from gbkfit.model import Extras
-    plan.model_h(moved | dict(pt_s=3), Extras())
+    plan.model_h(moved | dict(rpt_s=3), Extras())
     assert counts == dict(a=3, b=4)
-    plan.model_h(moved | dict(pt_s=np.nan))
-    plan.model_h(moved | dict(pt_s=np.nan))
+    plan.model_h(moved | dict(rpt_s=np.nan))
+    plan.model_h(moved | dict(rpt_s=np.nan))
     assert counts == dict(a=5, b=6)
 
 

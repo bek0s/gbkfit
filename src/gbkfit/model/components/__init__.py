@@ -15,8 +15,9 @@ from ._nodal import TraitTable
 from .cones import Cone
 from .disks import Clouds, Disk, LineOpacity, ThickDisk, ThinDisk
 from .spheroids import (
-    JeansKinematics, LightMGE, LightSersic, SchwarzschildKinematics,
-    Spheroid, SpheroidKinematics, SpheroidTraitsKinematics)
+    JeansKinematics, JeansSpheroid, LightMGE, LightSersic, OrbitSpheroid,
+    SchwarzschildKinematics, Spheroid, SpheroidKinematics,
+    SpheroidTraitsKinematics, TraitSpheroid)
 
 from .cones._detail import CONE_TRAITS as _CONE_TRAITS
 from .disks._detail import (

@@ -20,17 +20,16 @@ from gbkfit.params import ParamSpace
 GALAXY = dict(components=[
     dict(type='thin_disk', name='disk', loose=False, tilted=False,
          rnodes=list(range(0, 12)),
-         density=dict(ptraits=dict(type='exponential')),
-         kinematics=dict(
-             type='traits', vptraits=dict(type='arctan', direction='tan'),
-             dptraits=dict(type='uniform')),
+         rptraits=dict(type='exponential'),
+         vptraits=dict(type='arctan', direction='tan'),
+         dptraits=dict(type='uniform'),
          emission=dict(type='lines')),
     dict(type='point', name='core',
          emission=dict(type='lines'))])
 
 PARAMS = dict(
     disk_vsys=0, disk_xpos=0, disk_ypos=0, disk_posa=30, disk_incl=60,
-    disk_pt_a=1, disk_pt_s=4, disk_vpt_rt=2, disk_vpt_vt=40, disk_dpt_a=20,
+    disk_rpt_a=1, disk_rpt_s=4, disk_vpt_rt=2, disk_vpt_vt=40, disk_dpt_a=20,
     core_xpos=0.5, core_ypos=-1, core_vsys=10, core_flux=5, core_disp=30)
 
 

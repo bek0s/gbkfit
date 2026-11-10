@@ -22,15 +22,14 @@ GRID = dict(type='grid')
 COMPONENT = dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))
 
 PROPERTIES = dict(
     vsys=100, xpos=0.3, ypos=-0.6, posa=50, incl=60,
-    pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
+    rpt_a=1, rpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 INSTRUMENT = dict(
     psf=dict(type='gauss', sigma=1.5),
@@ -122,10 +121,9 @@ def test_lines_of_a_monte_carlo_disk_share_the_clouds(driver):
     # With the same clouds, the flux of the cube is (1 + ratio) times that
     # of one line
     component = dict(
-        COMPONENT, type='thick_disk', clouds=dict(cflux=1e-2), density=dict(
-            ptraits=dict(type='exponential'),
-            htraits=dict(type='sech2', zmax=8)))
-    properties = PROPERTIES | dict(ht_s=1)
+        COMPONENT, type='thick_disk', clouds=dict(cflux=1e-2),
+        rptraits=dict(type='exponential'), rhtraits=dict(type='sech2', zmax=8))
+    properties = PROPERTIES | dict(rht_s=1)
     lines = [dict(name='ha', rest='6562.8 Angstrom'),
              dict(name='nii6583', rest='6583.45 Angstrom')]
     rest = '6562.8 Angstrom'

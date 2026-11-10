@@ -18,10 +18,9 @@ def _thin_disk(**options: Any) -> dict[str, Any]:
     """A thin disk of rings, emitting lines, with the given options."""
     return dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 13)),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits', vptraits=dict(type='arctan', direction='tan'),
-            dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines')) | options
 
 
@@ -49,13 +48,13 @@ _LSF = dict(type='gauss', sigma='20 km/s')
 _DISK = [dict(components=[_thin_disk()])]
 
 _DISK_TRUTH = dict(
-    xpos=0.3, ypos=-0.4, posa=40, incl=55, vsys=10, pt_a=1, pt_s=3,
+    xpos=0.3, ypos=-0.4, posa=40, incl=55, vsys=10, rpt_a=1, rpt_s=3,
     vpt_rt=2, vpt_vt=150, dpt_a=25)
 
 _DISK_TRIAL = dict(
     xpos=0.2, ypos=-0.3, posa=dict(value=42, min=0, max=90),
     incl=dict(value=50, min=10, max=80), vsys=dict(value=8, min=-50, max=50),
-    pt_a=1, pt_s=3.2, vpt_rt=2.2, vpt_vt=dict(value=140, min=50, max=300),
+    rpt_a=1, rpt_s=3.2, vpt_rt=2.2, vpt_vt=dict(value=140, min=50, max=300),
     dpt_a=dict(value=30, min=5, max=80))
 
 _CUBE = _sky(
@@ -74,9 +73,8 @@ _MOMENTS = _sky(
 # A flattened Sersic spheroid of stars, of Jeans kinematics, whose mass
 # (with that of an NFW halo) holds it up
 _STARS = dict(
-    type='spheroid', name='stars', rmax=8, emission=dict(type='stars'),
-    profile=dict(type='sersic'), shape=dict(type='flattened'),
-    kinematics=dict(type='jeans'))
+    type='jeans_spheroid', name='stars', rmax=8, emission=dict(type='stars'),
+    profile=dict(type='sersic'), shape=dict(type='flattened'))
 
 _STARS_TRUTH = dict(
     stars_xpos=0.3, stars_ypos=-0.4, stars_posa=40, stars_incl=60,
@@ -95,16 +93,17 @@ _STARS_TRIAL = _STARS_TRUTH | dict(
     mass_halo_log_m=dict(value=11.8, min=10, max=14))
 
 
-def _mge_stars(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
+def _mge_stars(kind: str, **options: Any) -> list[dict[str, Any]]:
     """
     A galaxy of a spheroid of stars of two Gaussians of light, of the
-    given kinematics in the gravity of its light and a black hole.
+    given kind (jeans_spheroid or orbit_spheroid) and options, in the
+    gravity of its light and a black hole.
     """
     return [dict(
         components=[dict(
-            type='spheroid', name='stars', rmax=20,
+            type=kind, name='stars', rmax=20,
             emission=dict(type='stars'), profile=dict(type='mge', ngauss=2),
-            kinematics=kinematics)],
+            **options)],
         mass=[dict(type='light_spheroid', name='lum', component='stars'),
               dict(type='point', name='bh')],
         distance=dict(type='direct', cosmology='Planck18'))]
@@ -141,7 +140,7 @@ def _band_disk() -> dict[str, Any]:
     return dict(
         type='thin_disk', loose=False, tilted=False,
         rnodes=[round(0.1 * i, 1) for i in range(13)],
-        density=dict(ptraits=dict(type='exponential')),
+        rptraits=dict(type='exponential'),
         emission=dict(type='band'))
 
 
@@ -252,7 +251,7 @@ def _user_likelihood(func: str, form: str, *params: str) -> dict[str, Any]:
 # --- The recipes ---------------------------------------------------------
 
 _LENS_TRUTH = dict(
-    xpos=0.1, ypos=-0.05, posa=40, incl=55, pt_a=1, pt_s=0.2,
+    xpos=0.1, ypos=-0.05, posa=40, incl=55, rpt_a=1, rpt_s=0.2,
     hst_lens_main_theta_e=1.0, hst_lens_main_slope=2.1,
     hst_lens_main_q=0.8, hst_lens_main_pa=30, hst_lens_main_x=0,
     hst_lens_main_y=0,
@@ -262,7 +261,7 @@ _LENS_TRUTH = dict(
     hst_lens_shear_gamma=0.05, hst_lens_shear_pa=70)
 
 _LENS_TRIAL = _LENS_TRUTH | dict(
-    pt_s=dict(value=0.22, min=0.05, max=1),
+    rpt_s=dict(value=0.22, min=0.05, max=1),
     posa=dict(value=45, min=0, max=90),
     hst_lens_main_theta_e=dict(value=1.03, min=0.5, max=2),
     hst_lens_main_q=dict(value=0.78, min=0.5, max=1),
@@ -279,27 +278,25 @@ _LENS_TRIAL = _LENS_TRUTH | dict(
 _CLUMPY_DISK = dict(
     type='thick_disk', loose=False, tilted=False,
     rnodes=[0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6],
-    density=dict(
-        ptraits=[
-            dict(type='exponential'),
-            dict(type='mixture_exponential', nblobs=3)],
-        htraits=[dict(type='sech2', zmax=4)] * 2),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=[
+        dict(type='exponential'),
+        dict(type='mixture_exponential', nblobs=3)],
+    rhtraits=[dict(type='sech2', zmax=4)] * 2,
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines', lines=['halpha', 'nii6583']))
 
 _CLUMPY_TRUTH = dict(
-    xpos=0.03, ypos=-0.04, posa=40, incl=55, vsys=10, pt_a=1, pt_s=0.4,
-    pt1_r=[0.25, 0.5, 0.7], pt1_t=[30, 160, 260], pt1_a=[0.8, 0.6, 0.5],
-    pt1_s=[0.06, 0.08, 0.05], pt1_q=[1, 1, 1], pt1_p=[0, 0, 0],
-    ht_s=0.08, ht1_s=0.06, vpt_rt=0.15, vpt_vt=200, dpt_a=50,
+    xpos=0.03, ypos=-0.04, posa=40, incl=55, vsys=10, rpt_a=1, rpt_s=0.4,
+    rpt2_r=[0.25, 0.5, 0.7], rpt2_t=[30, 160, 260], rpt2_a=[0.8, 0.6, 0.5],
+    rpt2_s=[0.06, 0.08, 0.05], rpt2_q=[1, 1, 1], rpt2_p=[0, 0, 0],
+    rht_s=0.08, rht2_s=0.06, vpt_rt=0.15, vpt_vt=200, dpt_a=50,
     nii6583_ratio=0.3)
 
 _CLUMPY_TRIAL = _CLUMPY_TRUTH | dict(
     xpos=0.02, ypos=-0.03, posa=dict(value=43, min=0, max=90),
     incl=dict(value=50, min=10, max=80), vsys=dict(value=6, min=-50, max=50),
-    pt1_a=[dict(value=0.7, min=0, max=5), 0.6, 0.5],
+    rpt2_a=[dict(value=0.7, min=0, max=5), 0.6, 0.5],
     vpt_vt=dict(value=185, min=50, max=400),
     dpt_a=dict(value=45, min=5, max=150),
     nii6583_ratio=dict(value=0.35, min=0, max=2))
@@ -468,9 +465,8 @@ CASES: list[dict[str, Any]] = [
             "fitted to them: the weights of their orbits solved, of a prior "
             "whose width the AICp chooses. The data are of its rotating "
             "Jeans kinematics in the gravity of its light and a black hole.",
-        galaxies=_mge_stars(dict(type='schwarzschild', norbits=200,
-                                 turns=20)),
-        mock_galaxies=_mge_stars(dict(type='jeans')),
+        galaxies=_mge_stars('orbit_spheroid', norbits=200, turns=20),
+        mock_galaxies=_mge_stars('jeans_spheroid'),
         per_driver=(
             "orbits are chaotic: each driver integrates them in its own "
             "rounding, so that their libraries differ as much as the noise "

@@ -18,15 +18,14 @@ from modelutils import group_plan, observation_group
 GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 10)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))])
 
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
-    pt_a=1, pt_s=3, vpt_rt=2, vpt_vt=150, dpt_a=20)
+    rpt_a=1, rpt_s=3, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 # A trace of one pixel along x per channel of 30 km/s at 4 um (a channel
 # spans 4 um * 30 / c = 4e-4 um), centred on the image at the centre of
@@ -394,7 +393,7 @@ def test_an_aperture_lets_the_spectrograph_blur_the_spectra(driver):
 
 def test_resampled_spectra_spread_the_light_by_a_pixel_more(driver):
     # (of the same light in total, of a galaxy within the image)
-    compact = PROPERTIES | dict(pt_s=1, vpt_vt=60)
+    compact = PROPERTIES | dict(rpt_s=1, vpt_vt=60)
     plain = evaluate(driver, SLITLESS, compact)
     resampled = evaluate(driver, SLITLESS | dict(resampled=True), compact)
     assert resampled.sum() == pytest.approx(plain.sum(), rel=1e-3)

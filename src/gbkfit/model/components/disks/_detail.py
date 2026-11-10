@@ -9,7 +9,7 @@ from typing import Any
 import astropy.units
 import numpy as np
 
-from gbkfit.config import item_prefixes, warn
+from gbkfit.config import warn
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamValues
@@ -18,7 +18,7 @@ from .. import traits
 from .._detail import dump_name
 from .._native import EmissionSetup, NativeComponentPlan, emission_setup
 from .._nodal import (
-    MAX_TRAITS, TraitTable, parse_component_rnode_args,
+    MAX_TRAITS, TraitTable, parse_component_rnode_args, trait_prefixes,
     with_default_height_traits)
 from .. import _units
 from .._units import DataUnit
@@ -31,9 +31,7 @@ from . import _disk
 from .clouds import CloudDisk, Clouds
 from .smooth import SmoothDisk
 from .opacity import LineOpacity
-from ..parts import (
-    Density, ThickDiskTraitsKinematics, ThinDensity,
-    ThinDiskTraitsKinematics)
+from ..parts import Equilibrium, KinematicTraits, equilibrium_parser
 
 
 __all__ = [
@@ -55,11 +53,6 @@ _log = logging.getLogger(__name__)
 _MAX_CUT = 0.01
 _CUT_AZIMUTHS = 64
 
-
-# The prefix of the parameters of the traits of each kind
-TRAIT_PREFIXES = dict(
-    rpt='pt', rht='ht', vpt='vpt', vht='vht', dpt='dpt', dht='dht',
-    zpt='zpt', spt='spt')
 
 # The traits that the thick disks take: every type, along every
 # direction, and the planar velocity traits, in their plane; dispersion
@@ -89,9 +82,8 @@ def dump_disk_component(
         component: Component,
         disk: _disk.NodalDisk,
         rnodes: Nodes,
-        density: ThinDensity | Density,
-        kinematics: ThinDiskTraitsKinematics | ThickDiskTraitsKinematics
-        | None
+        kinematics: KinematicTraits | None,
+        equilibrium: Equilibrium | None
 ) -> dict[str, Any]:
     """
     Return the configuration of a disk component made of the given disk,
@@ -101,9 +93,17 @@ def dump_disk_component(
     info.update(
         loose=disk.loose(), tilted=disk.tilted(),
         rnodes=rnodes.dump(), rstep=disk.rstep(),
-        interp=disk.interp().type(), density=density.dump())
+        interp=disk.interp().type(),
+        rptraits=traits.rpt_parser.dump(list(disk.traits('rpt'))))
+    if disk.traits('rht'):
+        # (a shared height trait once)
+        count = 1 if disk.shared('rht') else None
+        info.update(rhtraits=traits.rht_parser.dump(
+            list(disk.traits('rht')[:count])))
     if kinematics is not None:
-        info.update(kinematics=kinematics.dump())
+        info.update(kinematics.dump())
+    if equilibrium is not None:
+        info.update(equilibrium=equilibrium_parser.dump(equilibrium))
     if component.emission() is not None:
         info.update(emission=emission_parser.dump(component.emission()))
     if component.opacity() is not None:
@@ -117,13 +117,15 @@ def dump_disk_component(
 
 
 def make_disk(
-        density: ThinDensity | Density,
-        kinematics: ThinDiskTraitsKinematics | ThickDiskTraitsKinematics
-        | None,
+        rptraits: tuple[traits.RPTrait, ...],
+        rhtraits: tuple[traits.RHTrait, ...],
+        kinematics: KinematicTraits | None,
+        equilibrium: Equilibrium | None,
         emission: Emission | None,
         opacity: Opacity | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
+        thick: bool,
         loose: bool,
         tilted: bool,
         rnodes: Nodes,
@@ -132,13 +134,11 @@ def make_disk(
         clouds: Clouds | None
 ) -> _disk.NodalDisk:
     """
-    Return the disk of a disk component, made of its parts (see ThinDisk
+    Return the disk of a disk component, made of its traits (see ThinDisk
     and ThickDisk for the options): smooth, or made of its clouds (a thick
-    one). A thick disk (of a Density, with height traits) takes the
-    default height traits of its velocity and dispersion traits where it
-    has none; the parts of a thin one (ThinDensity and
-    ThinDiskTraitsKinematics) have none, and it has no opacity, vertical
-    distortions or clouds.
+    one). A thick disk takes the default height traits of its velocity
+    and dispersion traits where it has none; a thin one has no height
+    traits, opacity, vertical distortions or clouds.
 
     Raises
     ------
@@ -146,11 +146,10 @@ def make_disk(
         If the options are not valid, or the parts and roles do not go
         together (e.g. lines without kinematics).
     """
-    thick = isinstance(density, Density)
     node_args = parse_component_rnode_args(
         rnodes=rnodes, rstep=rstep, interp=interp)
     traits_ = _disk_traits(
-        density, kinematics, emission, zptraits, sptraits, thick)
+        rptraits, rhtraits, kinematics, emission, zptraits, sptraits, thick)
     (THICK_DISK_TRAITS if thick else THIN_DISK_TRAITS).check(traits_)
     _check_waves(traits_)
     # (not the coefficients of line opacity: a uniform one is common, e.g.
@@ -162,13 +161,12 @@ def make_disk(
         traits_.update(opt=opacity_traits)
     options = dict(
         loose=loose, tilted=tilted, **node_args,
-        traits_=traits_, prefixes=TRAIT_PREFIXES | dict(opt=opacity_prefixes),
+        traits_=traits_, prefixes=dict(opt=opacity_prefixes),
         density_units=dict(
             rpt=_units.density_unit(emission),
             opt=_units.line_opacity_unit(emission)),
         opacity_lines=opacity_lines,
-        equilibrium=kinematics.equilibrium()
-        if isinstance(kinematics, ThickDiskTraitsKinematics) else None)
+        equilibrium=equilibrium)
     if clouds is None:
         return SmoothDisk(**options)
     return CloudDisk(clouds, **options)
@@ -198,7 +196,7 @@ def line_opacity_traits(
     """
     Return the coefficient traits of the line opacity of a disk component,
     if any (see LineOpacity), the prefix of the parameters of each (e.g.
-    'op_' for one line without a name, 'op1_halpha_' for the second trait
+    'op_' for one line without a name, 'op2_halpha_' for the second trait
     of the line halpha), and its line (its index among the lines of the
     emission).
 
@@ -243,8 +241,8 @@ def line_opacity_traits(
         lines = [(f'{name}_', coefficients[name]) for name in names]
     result = ([], [], [])
     for index, (suffix, line_traits) in enumerate(lines):
-        prefixes = item_prefixes(
-            [trait.name() for trait in line_traits], 'traits', 'op', True)
+        prefixes = trait_prefixes(
+            [trait.name() for trait in line_traits], 'op')
         for trait, prefix in zip(line_traits, prefixes):
             if not isinstance(trait, traits.RPTrait):
                 raise ValueError(
@@ -260,9 +258,9 @@ def line_opacity_traits(
 
 
 def _disk_traits(
-        density: ThinDensity | Density,
-        kinematics: ThinDiskTraitsKinematics | ThickDiskTraitsKinematics
-        | None,
+        rptraits: tuple[traits.RPTrait, ...],
+        rhtraits: tuple[traits.RHTrait, ...],
+        kinematics: KinematicTraits | None,
         emission: Emission | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
@@ -270,12 +268,14 @@ def _disk_traits(
 ) -> dict[str, tuple[traits.Trait, ...]]:
     """
     Return the traits of a disk by kind (see _disk.TRAIT_KINDS): those of
-    its parts, and of a thick one, the default height traits of its
+    its options, and of a thick one, the default height traits of its
     velocity and dispersion traits where it has none. Raise ValueError if
-    the parts and roles do not go together.
+    the traits and roles do not go together.
     """
     if isinstance(emission, LineEmission) and kinematics is None:
-        raise ValueError("a disk that emits lines needs kinematics")
+        raise ValueError(
+            "a disk that emits lines needs kinematics: give it vptraits and "
+            "dptraits")
     zptraits = iterutils.tuplify(zptraits)
     sptraits = iterutils.tuplify(sptraits)
     for name, value in (('zptraits', zptraits), ('sptraits', sptraits)):
@@ -284,8 +284,7 @@ def _disk_traits(
                 f"at most {MAX_TRAITS} {name} are supported; "
                 f"{len(value)} were given")
     result = dict(
-        rpt=density.ptraits(), rht=density.htraits() if thick else (),
-        zpt=zptraits, spt=sptraits)
+        rpt=rptraits, rht=rhtraits, zpt=zptraits, spt=sptraits)
     if kinematics is None:
         return result
     result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
@@ -303,9 +302,9 @@ def _disk_traits(
                 f"density height traits, {zmax}; it is {trait.zmax()}")
     result.update(
         vht=with_default_height_traits(
-            vhtraits, len(result['vpt']), traits.VHTraitOne),
+            vhtraits, traits.VHTraitOne),
         dht=with_default_height_traits(
-            dhtraits, len(result['dpt']), traits.DHTraitOne))
+            dhtraits, traits.DHTraitOne))
     return result
 
 
@@ -415,9 +414,11 @@ def _height_cuts(
     """
     radii = np.asarray(disk.rnodes())
     trait_params = disk.trait_params('rht')
+    # (a shared height trait once)
+    count = 1 if disk.shared('rht') else None
     cuts = []
     for index, (trait, names) in enumerate(zip(
-            disk.traits('rht'), trait_params.pnames)):
+            disk.traits('rht')[:count], trait_params.pnames)):
         values = [
             _at_radii(disk, params[names[name]], radii)
             for name in ('s', 'b') if name in names]

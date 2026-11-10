@@ -62,16 +62,15 @@ def evaluate_mmaps(driver, observable, **properties):
     galaxy = galaxy_parser.load(dict(components=[dict(
         type='thin_disk', loose=False, tilted=False,
         rnodes=list(range(0, 12)),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits', vptraits=dict(type='arctan', direction='tan'),
-            dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type='lines'))]))
     group = ObservationGroup(
         [galaxy], [ObservationSky(observable, LineOfSightFlat())])
     params = ParamSpace.from_properties(group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
-        pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
+        rpt_a=1, rpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
     return group.plan(driver).model_h(params.evaluate())[0]
 
 

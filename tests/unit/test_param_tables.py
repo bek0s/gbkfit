@@ -12,19 +12,18 @@ def test_mixture_blobs_are_tables_of_their_galaxy():
     # their blobs as the galaxy names them, of the empty blob
     disk = dict(
         type='thin_disk', loose=False, tilted=False, rnodes=[0, 5, 10],
-        density=dict(ptraits=[
-            dict(type='exponential'), dict(type='mixture_gauss', nblobs=3)]),
-        kinematics=dict(
-            type='traits', vptraits=dict(type='uniform', direction='tan'),
-            dptraits=[
-                dict(type='uniform'),
-                dict(type='mixture_ggauss', nblobs=2)]),
+        rptraits=[
+            dict(type='exponential'), dict(type='mixture_gauss', nblobs=3)],
+        vptraits=dict(type='uniform', direction='tan'),
+        dptraits=[
+            dict(type='uniform'),
+            dict(type='mixture_ggauss', nblobs=2)],
         emission=dict(type='lines'))
     galaxy = galaxy_parser.load(dict(components=[disk]))
     (blobs, columns), (dblobs, dcolumns) = param_tables(galaxy.pdescs())
-    assert columns == {name: f'pt1_{name}' for name in 'rtasqp'}
-    assert dcolumns == {name: f'dpt1_{name}' for name in 'rtasbqp'}
+    assert columns == {name: f'rpt2_{name}' for name in 'rtasqp'}
+    assert dcolumns == {name: f'dpt2_{name}' for name in 'rtasbqp'}
     assert blobs is not dblobs
     assert blobs.desc() == 'blob'
     assert blobs.empty() == dict(a=0.0)
-    assert galaxy.pdescs()['pt1_r'].size() == 3
+    assert galaxy.pdescs()['rpt2_r'].size() == 3

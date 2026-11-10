@@ -9,13 +9,13 @@ their radial nodes (parse_component_rnode_args).
 
 import typing
 from collections.abc import Mapping, Sequence
+import dataclasses
 from dataclasses import dataclass
 from typing import Any
 
 import astropy.units
 import numpy as np
 
-from gbkfit.config import item_prefixes
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math import interpolation
 from gbkfit.math.interpolation import Interpolator
@@ -36,12 +36,11 @@ MAX_TRAITS = 16
 
 # The options of the traits of each kind in the configurations of the
 # components that have them (see NodalTraits.owners): disks, cones and
-# spheroids, whose kinematics hold their traits as those of disks do; the
-# coefficients of line opacity, in the order of their lines
+# spheroids, which take them as options of their own; the coefficients of
+# line opacity, in the order of their lines
 TRAIT_OPTIONS = dict(
-    rpt=('density', 'ptraits'), rht=('density', 'htraits'),
-    vpt=('kinematics', 'vptraits'), vht=('kinematics', 'vhtraits'),
-    dpt=('kinematics', 'dptraits'), dht=('kinematics', 'dhtraits'),
+    rpt=('rptraits',), rht=('rhtraits',), vpt=('vptraits',),
+    vht=('vhtraits',), dpt=('dptraits',), dht=('dhtraits',),
     zpt=('zptraits',), spt=('sptraits',), opt=('opacity',))
 
 
@@ -62,15 +61,8 @@ class TraitTable:
     def check(self, traits_: dict[str, Sequence[Trait]]) -> None:
         """
         Raise ValueError if the component does not take one of the given
-        traits (by kind), or two of them share a name.
+        traits (by kind).
         """
-        names = [
-            trait.name() for values in traits_.values() for trait in values
-            if trait.name() is not None]
-        if repeated := sorted({n for n in names if names.count(n) > 1}):
-            raise ValueError(
-                f"two traits of a {self.component} cannot share a name; "
-                f"repeated: {repeated}")
         for kind, values in traits_.items():
             classes = self.classes[kind]
             for trait in values:
@@ -93,17 +85,22 @@ class TraitTable:
                         f"along {trait.direction()!r}")
 
 
+# The kinds of the height traits, each with the kind of the polar traits
+# it pairs with
+HEIGHT_KINDS = dict(rht='rpt', vht='vpt', dht='dpt')
+
+
 def with_default_height_traits(
         value: tuple[HTrait | None, ...] | None,
-        npolar: int,
         default: type[HTrait]
 ) -> tuple[HTrait, ...]:
     """
-    Return height traits, one for each of npolar polar traits, with the
-    missing ones (None, or all if value is None) of the default type.
+    Return height traits, one for each polar trait or one that they share
+    (see NodalTraits), with the missing ones (None items) of the default
+    type, and one of it, shared, if value is None.
     """
     if value is None:
-        value = (None,) * npolar
+        value = (None,)
     return tuple(default() if trait is None else trait for trait in value)
 
 
@@ -136,9 +133,37 @@ class TraitParams:
     image: tuple[str, ...]
 
 
+def trait_prefixes(names: Sequence[str | None], kind: str) -> list[str]:
+    """
+    Return the prefixes of the parameter names of a list of traits of one
+    kind (e.g. 'rpt'), from their names if every trait has one, or else
+    from their positions: the kind for the first, then the kind and the
+    position from 2 (e.g. 'rpt_', 'rpt2_', 'rpt3_'), so that a trait added
+    at the end renames none of the others; or the kind and the name (e.g.
+    'rpt_ring_'), so that traits of other kinds can share a name.
+
+    Raises
+    ------
+    ValueError
+        If only some of the traits have a name, or two share one.
+    """
+    named = [name is not None for name in names]
+    if not any(named):
+        return [f'{kind}{i + 1 if i else ""}_' for i in range(len(names))]
+    if not all(named):
+        raise ValueError(
+            f"either all or none of the traits must have a name; only "
+            f"{sum(named)} of {len(names)} have one")
+    if repeated := sorted({name for name in names if names.count(name) > 1}):
+        raise ValueError(
+            f"two traits of a list cannot share a name; repeated: "
+            f"{repeated}")
+    return [f'{kind}_{name}_' for name in names]
+
+
 def _trait_params(
         traits_: Sequence[Trait],
-        prefix: str | Sequence[str] | None,
+        prefix: str | Sequence[str],
         nrnodes: int,
         nsubrnodes: int,
         ntail: int,
@@ -146,12 +171,12 @@ def _trait_params(
 ) -> TraitParams:
     """
     Return the parameters of the traits of one kind, of the given prefix
-    (followed by the index of each trait after the first), or of the given
-    prefix of each trait. A node-wise parameter has a value for each node,
-    or for each subnode if its trait samples it at the subnodes, and also
-    for each of the ntail radii of the tail if beyond (see SAMPLING_TAIL).
-    The amplitudes of density polar traits are in the given unit of their
-    density (None if not known).
+    (see trait_prefixes), or of the given prefix of each trait. A
+    node-wise parameter has a value for each node, or for each subnode if
+    its trait samples it at the subnodes, and also for each of the ntail
+    radii of the tail if beyond (see SAMPLING_TAIL). The amplitudes of
+    density polar traits are in the given unit of their density (None if
+    not known).
     """
     params_list = []
     for trait in traits_:
@@ -166,8 +191,7 @@ def _trait_params(
             {name: (pdesc, None) for name, pdesc in params_sm.items()}
             | {name: (pdesc, sampling) for name, pdesc in params_rnw.items()})
     prefixes = list(prefix) if iterutils.is_sequence(prefix) \
-        else item_prefixes(
-            [trait.name() for trait in traits_], 'traits', prefix, True)
+        else trait_prefixes([trait.name() for trait in traits_], prefix)
     params, mappings = iterutils.merge_with_prefixes(params_list, prefixes)
     inputs = [
         (trait.from_galaxy(), mapping)
@@ -306,21 +330,22 @@ def tail_radii(subrnodes: Sequence[float]) -> tuple[float, ...]:
 class NodalTraits:
     """
     The traits of a component on radial nodes, by kind, and their
-    parameters (see TraitParams): named with the prefix of their kind in
-    prefixes (e.g. 'pt' for the density polar traits), or with that of
-    each trait (e.g. 'op_halpha_'), and those node-wise with a value for
-    each node, or for each subnode where their trait samples them. A kind
-    without traits has no parameters. The amplitudes of the density polar
-    traits of a kind (see RPTrait.amplitudes) are in the unit of their
-    density in density_units (e.g. of 'rpt', that of the light of a
-    component that emits), or have none if it is not known (or not given).
+    parameters (see TraitParams): named after their kind (e.g. 'rpt_*',
+    'rpt2_*' for the density polar traits; see trait_prefixes), or with
+    the prefix of each trait in prefixes (e.g. 'op_halpha_'), and those
+    node-wise with a value for each node, or for each subnode where their
+    trait samples them. A kind without traits has no parameters. The
+    amplitudes of the density polar traits of a kind (see
+    RPTrait.amplitudes) are in the unit of their density in density_units
+    (e.g. of 'rpt', that of the light of a component that emits), or have
+    none if it is not known (or not given).
     """
 
     def __init__(
             self,
             kinds: Sequence[str],
             traits_: dict[str, Sequence[Trait]],
-            prefixes: dict[str, str | Sequence[str]],
+            prefixes: Mapping[str, Sequence[str]],
             density_units: Mapping[str, astropy.units.UnitBase | None],
             rnodes: Sequence[float],
             subrnodes: Sequence[float],
@@ -330,12 +355,26 @@ class NodalTraits:
         self._subrnodes = subrnodes
         self._tail = tail_radii(subrnodes)
         self._interp = interp
-        self._traits = {kind: traits_.get(kind, ()) for kind in kinds}
+        self._traits = {kind: tuple(traits_.get(kind, ())) for kind in kinds}
         self._params = {
             kind: _trait_params(
-                traits_of_kind, prefixes.get(kind), len(rnodes),
+                traits_of_kind, prefixes.get(kind, kind), len(rnodes),
                 len(subrnodes), len(self._tail), density_units.get(kind))
             for kind, traits_of_kind in self._traits.items()}
+        # A height trait that several polar traits share (one of its kind)
+        # has one set of parameters; the native kernels pair the traits of
+        # the two kinds by position, so that it is repeated, with each
+        # copy of the same parameters (see fill)
+        self._shared = {
+            height: len(self._traits[polar])
+            for height, polar in HEIGHT_KINDS.items()
+            if height in self._traits and polar in self._traits
+            and len(self._traits[height]) == 1
+            and len(self._traits[polar]) > 1}
+        for kind, count in self._shared.items():
+            self._traits[kind] *= count
+            self._params[kind] = dataclasses.replace(
+                self._params[kind], pnames=self._params[kind].pnames * count)
         # The parameters whose values are the circular velocity of the
         # mass of their galaxy, and the radii of their values
         radii = {'subrings': tuple(subrnodes),
@@ -368,16 +407,26 @@ class NodalTraits:
         """Return the parameters of the traits of one kind."""
         return self._params[kind]
 
+    def shared(self, kind: str) -> bool:
+        """
+        Check whether the traits of one kind are one height trait that the
+        polar traits share (see traits; repeated in traits, one for each
+        polar trait, with the same parameters).
+        """
+        return kind in self._shared
+
     def owners(self) -> dict[str, tuple[str | int, ...]]:
         """
         Return the option of each parameter of its traits (see
         Component.param_owners), by name: the option of the traits of its
-        kind (see TRAIT_OPTIONS) and the index of its trait.
+        kind (see TRAIT_OPTIONS) and the index of its trait (0 of a shared
+        height trait).
         """
         return {
             name: (*TRAIT_OPTIONS[kind], index)
             for kind, params in self._params.items()
-            for index, names in enumerate(params.pnames)
+            for index, names in enumerate(
+                params.pnames[:1] if kind in self._shared else params.pnames)
             for name in names.values()}
 
     def pdescs(self) -> dict[str, ParamDesc]:
@@ -485,10 +534,14 @@ class NodalTraits:
         (see fill_param_values).
         """
         for kind, trait_params in self._params.items():
+            values = buffer.host(kind)
             fill_param_values(
-                buffer.host(kind), params, trait_params.pdescs,
-                trait_params.sampling, self._rnodes, self._subrnodes,
-                self._interp)
+                values, params, trait_params.pdescs, trait_params.sampling,
+                self._rnodes, self._subrnodes, self._interp)
+            # (a shared height trait: the same values for each copy)
+            if count := self._shared.get(kind):
+                one = len(values) // count
+                values[one:] = np.tile(values[:one], count - 1)
 
 
 def native_traits(

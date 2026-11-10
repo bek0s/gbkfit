@@ -11,16 +11,16 @@ from gbkfit.observation import ObservationGroup, observation_parser
 
 
 KINEMATICS = dict(
-    type='traits',
     vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform'))
 THIN_DISK = dict(
     type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
-    density=dict(ptraits=dict(type='exponential')), kinematics=KINEMATICS,
+    rptraits=dict(type='exponential'), **KINEMATICS,
     emission=dict(type='lines'))
-THICK_DISK = THIN_DISK | dict(type='thick_disk', density=dict(
-    ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8)))
+THICK_DISK = THIN_DISK | dict(type='thick_disk',
+                              rptraits=dict(type='exponential'),
+                              rhtraits=dict(type='sech2', zmax=8))
 PROPERTIES = dict(
-    vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, pt_a=1, pt_s=2.5,
+    vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, rpt_a=1, rpt_s=2.5,
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 GAUSS_PSF = dict(type='gauss', sigma=1.3)
 GAUSS_LSF = dict(type='gauss', sigma='17 km/s')
@@ -65,7 +65,7 @@ def evaluate(driver, case, dtype, fft_dtype='float64'):
             observable=observable, line_of_sight=line_of_sight,
             instrument=instrument, dtype=dtype, fft_dtype=fft_dtype))])
     # (the disk on a grid is thick: it has a scale height)
-    properties = PROPERTIES | (dict(ht_s=0.5) if '3d' in case else {})
+    properties = PROPERTIES | (dict(rht_s=0.5) if '3d' in case else {})
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), properties).evaluate()
     return {key: value['d'].copy()

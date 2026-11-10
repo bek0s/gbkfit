@@ -14,12 +14,12 @@ from gbkfit.objective import Objective
 
 GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False, rnodes=dict(max=4, sep=1),
-    density=dict(ptraits=dict(type='exponential')),
+    rptraits=dict(type='exponential'),
     emission=dict(type='band'))])
 
 PARAMS = dict(properties=dict(
-    xpos=0, ypos=0, posa=30, incl=50, pt_a=1,
-    pt_s=dict(value=2, min=1, max=4)))
+    xpos=0, ypos=0, posa=30, incl=50, rpt_a=1,
+    rpt_s=dict(value=2, min=1, max=4)))
 
 HOST = dict(type='host')
 
@@ -107,7 +107,7 @@ def test_the_outputs_of_an_evaluation_are_its_own():
     first = loaded.outputs(loaded.evaluate())
     model = next(o for o in first.values() if o.kind == 'model')
     before = np.array(model.value.data)
-    loaded.outputs(loaded.evaluate(dict(pt_s=3.0)))
+    loaded.outputs(loaded.evaluate(dict(rpt_s=3.0)))
     np.testing.assert_array_equal(model.value.data, before)
 
 
@@ -200,10 +200,8 @@ def test_observations_use_the_drivers_of_the_configuration():
 MASSIVE = dict(
     components=[dict(
         type='thin_disk', loose=False, tilted=False, rnodes=dict(max=4, sep=1),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits',
-            vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
         emission=dict(type='lines'))],
     mass=[dict(type='spheroid', name='halo', profile=dict(
         type='pseudo_isothermal', parameters='density_radius'))],
@@ -306,7 +304,7 @@ def test_a_configuration_is_described_without_devices(tmp_path):
         observations=[observation()], params=PARAMS)
     description = gbkfit.describe(config)
     assert description.problems == ()
-    assert set(description.params.pdescs()) >= {'xpos', 'pt_s'}
+    assert set(description.params.pdescs()) >= {'xpos', 'rpt_s'}
     stars = dict(
         type='sky', lines=['stars'], line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_spectra', size=[8, 8], spectral=dict(
@@ -328,7 +326,7 @@ def test_describe_checks_the_rules_of_a_fit():
     # (an optimizer without a start passed describe, and failed at load:
     # audit 2026-10-31 #26)
     params = dict(properties=PARAMS['properties'] | dict(
-        pt_s=dict(min=1, max=4)))
+        rpt_s=dict(min=1, max=4)))
     description = gbkfit.describe(dict(
         version=VERSION, galaxies=[GALAXY], observations=[observation()],
         params=params, fitter=dict(type='scipy.least_squares')))

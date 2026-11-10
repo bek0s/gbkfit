@@ -7,7 +7,7 @@
 // parameters its option makes (see Param.owner).
 import { asList, asOneOrList, getAt, isObject, setAt, type Options, type Path } from './options';
 
-export type ComponentType = 'thin_disk' | 'thick_disk' | 'cone' | 'spheroid' | 'point' | 'particles';
+export type ComponentType = 'thin_disk' | 'thick_disk' | 'cone' | 'spheroid' | 'jeans_spheroid' | 'orbit_spheroid' | 'point' | 'particles';
 
 export interface Part {
   key: string;
@@ -39,6 +39,12 @@ export function isDisk(type: unknown): boolean {
   return DISK_TYPES.includes(String(type));
 }
 
+// The types of the spheroids: of traits (or still), of Jeans kinematics,
+// or of orbits
+export function isSpheroid(type: unknown): boolean {
+  return String(type).endsWith('spheroid');
+}
+
 export function isThick(component: Options): boolean {
   return component.type === 'thick_disk';
 }
@@ -46,17 +52,16 @@ export function isThick(component: Options): boolean {
 // The height a thick disk gives each of its density traits at first
 export const HEIGHT_START: Options = { type: 'sech2', zmax: 6 };
 
-// The options only a thick disk has, of the disk and of its density and
-// kinematics, and what each is to people (a thick disk made thin loses
-// them)
+// The options only a thick disk has, and what each is to people (a thick
+// disk made thin loses them)
 const THICK_OPTIONS: { path: Path; what: string }[] = [
-  { path: ['density', 'htraits'], what: 'the heights of its density' },
-  { path: ['kinematics', 'vhtraits'], what: 'the heights of its motions' },
-  { path: ['kinematics', 'dhtraits'], what: 'the heights of its dispersion' },
+  { path: ['rhtraits'], what: 'the heights of its density' },
+  { path: ['vhtraits'], what: 'the heights of its motions' },
+  { path: ['dhtraits'], what: 'the heights of its dispersion' },
   { path: ['zptraits'], what: 'its warps' },
   { path: ['opacity'], what: 'its opacity' },
   { path: ['clouds'], what: 'its clouds' },
-  { path: ['kinematics', 'equilibrium'], what: 'its equilibrium' },
+  { path: ['equilibrium'], what: 'its equilibrium' },
 ];
 
 // What a thick disk has that it would lose if made thin
@@ -69,8 +74,8 @@ export function lostIfThin(disk: Options): string[] {
 export function withThickness(disk: Options, thick: boolean): Options {
   let next: Options = { ...disk, type: thick ? 'thick_disk' : 'thin_disk' };
   if (thick) {
-    const count = Math.max(1, asList(getAt(disk, ['density', 'ptraits'])).length);
-    return setAt(next, ['density', 'htraits'], asOneOrList(Array.from({ length: count }, () => ({ ...HEIGHT_START }))));
+    const count = Math.max(1, asList(getAt(disk, ['rptraits'])).length);
+    return setAt(next, ['rhtraits'], asOneOrList(Array.from({ length: count }, () => ({ ...HEIGHT_START }))));
   }
   // (those it has: setAt would make the options they are in)
   for (const { path } of THICK_OPTIONS) if (getAt(next, path) !== undefined) next = setAt(next, path, undefined);
@@ -88,25 +93,25 @@ function diskParts(thick: boolean): Part[] {
       key: 'density',
       title: 'Density',
       hint: thick ? 'How its light is spread over its plane, and its height' : 'How its light is spread over its plane',
-      option: ['density', 'ptraits'],
+      option: ['rptraits'],
       family: 'rpt',
-      heights: height(['density', 'htraits'], 'rht', false),
+      heights: height(['rhtraits'], 'rht', false),
     },
     {
       key: 'motions',
       title: 'Motions',
       hint: 'Its velocities: rotation, inflow, outflow, ...',
-      option: ['kinematics', 'vptraits'],
+      option: ['vptraits'],
       family: 'vpt',
-      heights: height(['kinematics', 'vhtraits'], 'vht', true),
+      heights: height(['vhtraits'], 'vht', true),
     },
     {
       key: 'dispersion',
       title: 'Dispersion',
       hint: 'The spread of its velocities',
-      option: ['kinematics', 'dptraits'],
+      option: ['dptraits'],
       family: 'dpt',
-      heights: height(['kinematics', 'dhtraits'], 'dht', true),
+      heights: height(['dhtraits'], 'dht', true),
     },
     { key: 'warps', title: 'Warps', hint: 'Its plane bent up and down', option: ['zptraits'], family: 'zpt', optional: true, start: [{ type: 'nw_harmonic', order: 1, zmax: 6 }], needs: needsThick },
     { key: 'selections', title: 'Selections', hint: 'Only some of it: a range of radii or azimuths', option: ['sptraits'], family: 'spt', optional: true, start: [{ type: 'rrange' }] },
@@ -121,24 +126,36 @@ const CONE: Part[] = [
     key: 'density',
     title: 'Density',
     hint: 'How its light is spread over its walls',
-    option: ['density', 'ptraits'],
+    option: ['rptraits'],
     family: 'rpt',
-    heights: { option: ['density', 'htraits'], family: 'rht', title: 'Across its walls', nullable: false },
+    heights: { option: ['rhtraits'], family: 'rht', title: 'Across its walls', nullable: false },
   },
-  { key: 'motions', title: 'Motions', hint: 'Its velocities: out of its apex, or about its axis', option: ['kinematics', 'vptraits'], family: 'vpt' },
-  { key: 'dispersion', title: 'Dispersion', hint: 'The spread of its velocities', option: ['kinematics', 'dptraits'], family: 'dpt' },
+  { key: 'motions', title: 'Motions', hint: 'Its velocities: out of its apex, or about its axis', option: ['vptraits'], family: 'vpt' },
+  { key: 'dispersion', title: 'Dispersion', hint: 'The spread of its velocities', option: ['dptraits'], family: 'dpt' },
   { key: 'selections', title: 'Selections', hint: 'Only some of it: a range of radii or azimuths', option: ['sptraits'], family: 'spt', optional: true, start: [{ type: 'rrange' }] },
   { key: 'light', title: 'Light', hint: 'What it emits: lines, or light in bands', option: ['emission'], typed: 'emission' },
   { key: 'opacity', title: 'Opacity', hint: 'Dust in its walls', option: ['opacity'], typed: 'opacity', optional: true, start: { type: 'dust' } },
 ];
 
-const SPHEROID: Part[] = [
+// The parts every spheroid has; one of traits (type spheroid) can have
+// motions as traits give (both its velocity and dispersion traits, or
+// neither: a spheroid that does not move), one of Jeans or orbits moves in
+// the gravity of the galaxy
+const SPHEROID_COMMON: Part[] = [
   { key: 'geometry', title: 'Geometry', hint: 'Its centre, orientation and extent', option: [] },
   { key: 'profile', title: 'Profile', hint: 'How its light falls with radius', option: ['profile'], typed: 'light_profile' },
   { key: 'shape', title: 'Shape', hint: 'Round, or flattened', option: ['shape'], typed: 'spheroid_shape', optional: true, start: { type: 'flattened' } },
-  { key: 'motions', title: 'Motions', hint: 'Its stars: in equilibrium (Jeans), on orbits, or as traits', option: ['kinematics'], typed: 'spheroid_kinematics', optional: true, start: { type: 'jeans' } },
-  { key: 'light', title: 'Light', hint: 'Its light in bands, or its stars', option: ['emission'], typed: 'emission' },
 ];
+const SPHEROID_LIGHT: Part = { key: 'light', title: 'Light', hint: 'Its light in bands, or its stars', option: ['emission'], typed: 'emission' };
+
+const SPHEROID: Part[] = [
+  ...SPHEROID_COMMON,
+  { key: 'motions', title: 'Motions', hint: 'Its velocities about its axis', option: ['vptraits'], family: 'vpt', optional: true, start: [{ type: 'uniform', direction: 'tan' }] },
+  { key: 'dispersion', title: 'Dispersion', hint: 'The spread of its velocities', option: ['dptraits'], family: 'dpt', optional: true, start: [{ type: 'uniform' }] },
+  SPHEROID_LIGHT,
+];
+
+const MOVING_SPHEROID: Part[] = [...SPHEROID_COMMON, SPHEROID_LIGHT];
 
 const POINT: Part[] = [
   { key: 'geometry', title: 'Position', hint: 'Where it is', option: [] },
@@ -150,6 +167,8 @@ export const PARTS: Record<string, Part[]> = {
   thick_disk: diskParts(true),
   cone: CONE,
   spheroid: SPHEROID,
+  jeans_spheroid: MOVING_SPHEROID,
+  orbit_spheroid: MOVING_SPHEROID,
   point: POINT,
   particles: POINT,
 };
@@ -191,33 +210,39 @@ export function partsOf(component: Options | undefined): Part[] {
 }
 
 // The order of the types of components, to add one (others after them)
-export const COMPONENT_ORDER = ['thin_disk', 'thick_disk', 'cone', 'spheroid', 'point', 'particles'];
+export const COMPONENT_ORDER = ['thin_disk', 'thick_disk', 'cone', 'spheroid', 'jeans_spheroid', 'orbit_spheroid', 'point', 'particles'];
 
 // The name a new component of a type is given (made unique): a disk is a
-// disk, thin or thick
+// disk, thin or thick, and a spheroid of any kind a spheroid
 export function nameBase(type: string): string {
-  return isDisk(type) ? 'disk' : type;
+  return isDisk(type) ? 'disk' : isSpheroid(type) ? 'spheroid' : type;
 }
 
 // What each type of component starts with: the least that shows (light,
 // and of a disk or cone of lines, its motions)
 const DISK_START: Options = {
   rnodes: { max: 16, sep: 2 },
-  density: { ptraits: { type: 'exponential' } },
-  kinematics: { type: 'traits', vptraits: { type: 'arctan', direction: 'tan' }, dptraits: { type: 'uniform' } },
+  rptraits: { type: 'exponential' },
+  vptraits: { type: 'arctan', direction: 'tan' },
+  dptraits: { type: 'uniform' },
   emission: { type: 'lines' },
 };
+const SPHEROID_START: Options = { rmax: 10, profile: { type: 'sersic' }, emission: { type: 'band' } };
 
 export const COMPONENT_STARTS: Record<string, Options> = {
   thin_disk: DISK_START,
-  thick_disk: { ...DISK_START, density: { ptraits: { type: 'exponential' }, htraits: HEIGHT_START } },
+  thick_disk: { ...DISK_START, rhtraits: HEIGHT_START },
   cone: {
     rnodes: { max: 6, sep: 1 },
-    density: { ptraits: { type: 'uniform' }, htraits: { type: 'gauss', zmax: 2 } },
-    kinematics: { type: 'traits', vptraits: { type: 'uniform', direction: 'out' }, dptraits: { type: 'uniform' } },
+    rptraits: { type: 'uniform' },
+    rhtraits: { type: 'gauss', zmax: 2 },
+    vptraits: { type: 'uniform', direction: 'out' },
+    dptraits: { type: 'uniform' },
     emission: { type: 'lines' },
   },
-  spheroid: { rmax: 10, profile: { type: 'sersic' }, emission: { type: 'band' } },
+  spheroid: SPHEROID_START,
+  jeans_spheroid: { ...SPHEROID_START, emission: { type: 'stars' } },
+  orbit_spheroid: { ...SPHEROID_START, emission: { type: 'stars' } },
   point: { emission: { type: 'band' } },
 };
 

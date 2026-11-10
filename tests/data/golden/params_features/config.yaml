@@ -1,6 +1,6 @@
 # params_features: Two gas disks (cold and warm) of one warp (the geometric parameters of the warm one tied to those of the cold one) and a nucleus, in a cube: the position angles of the warp given as offsets (mode), ties, extra parameters of the section pdescs (the flux of the nucleus, exp(mu + sigma z)), derived values, and priors on several parameters (gauss on an expression, smooth over the warp).
 # (written by make_golden.py; do not edit)
-version: 7
+version: 8
 driver: {type: host}
 galaxies:
 - components:
@@ -9,24 +9,18 @@ galaxies:
     loose: false
     tilted: true
     rnodes: [0, 1.5, 3, 5, 7, 9.5, 12]
-    density:
-      ptraits: {type: exponential}
-    kinematics:
-      type: traits
-      vptraits: {type: arctan, direction: tan}
-      dptraits: {type: uniform}
+    rptraits: {type: exponential}
+    vptraits: {type: arctan, direction: tan}
+    dptraits: {type: uniform}
     emission: {type: lines}
   - type: thin_disk
     name: warm
     loose: false
     tilted: true
     rnodes: [0, 1.5, 3, 5, 7, 9.5, 12]
-    density:
-      ptraits: {type: exponential}
-    kinematics:
-      type: traits
-      vptraits: {type: arctan, direction: tan}
-      dptraits: {type: uniform}
+    rptraits: {type: exponential}
+    vptraits: {type: arctan, direction: tan}
+    dptraits: {type: uniform}
     emission: {type: lines}
   - type: point
     name: nucleus
@@ -52,7 +46,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20 km/s}
+    lsf: {type: gauss, sigma: 20.0 km s-1}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   dtype: float64
@@ -71,13 +65,13 @@ params:
     - {value: 12, min: -30, max: 30}
     - {value: 16, min: -30, max: 30}
     cold_incl: {value: 50, min: 10, max: 80}
-    cold_pt_a: 1
-    cold_pt_s: 3
+    cold_rpt_a: 1
+    cold_rpt_s: 3
     cold_vpt_rt: 2
     cold_vpt_vt: {value: 140, min: 50, max: 300}
     cold_dpt_a: 15
-    warm_pt_a: 0.5
-    warm_pt_s: 4
+    warm_rpt_a: 0.5
+    warm_rpt_s: 4
     warm_vpt_rt: cold_vpt_rt
     warm_vpt_vt: {value: 110, min: 50, max: 300}
     warm_dpt_a: cold_dpt_a * 2.5

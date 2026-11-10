@@ -52,7 +52,7 @@ class FitterDNest4(Fitter):
 
     Only the rows of a table that share all their settings are
     interchangeable, and only they can be dropped: a row with settings of
-    its own (see ParamSpace.own_settings: e.g. 'pt1_r[0]') is always
+    its own (see ParamSpace.own_settings: e.g. 'rpt2_r[0]') is always
     used, and so are the rows whose empty columns are not free (e.g.
     blobs of a fixed amplitude), and all those of a table of a parameter
     with a mode.
@@ -92,7 +92,7 @@ class FitterDNest4(Fitter):
         The number of saved particles at which the run ends.
     min_rows : Mapping[str, int], optional
         The least rows used of tables, by the name of the table: that of
-        its parameters without their column (e.g. 'pt1' of 'pt1_r'); 0
+        its parameters without their column (e.g. 'rpt2' of 'rpt2_r'); 0
         by default.
     verbose : bool, optional
         Whether to print the progress: the levels, the saves, the

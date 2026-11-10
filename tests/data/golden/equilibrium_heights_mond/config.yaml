@@ -1,6 +1,6 @@
 # equilibrium_heights_mond: A thick gas disk held up by the Jeans vertical equilibrium, rotating at each height in the gravity of its mass (a stellar bulge, and a disk that follows the gas) in MOND (gravity_a0); a small cube.
 # (written by make_golden.py; do not edit)
-version: 7
+version: 8
 driver: {type: host}
 galaxies:
 - components:
@@ -9,18 +9,15 @@ galaxies:
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    density:
-      ptraits: {type: exponential}
-      htraits: {type: sech2, zmax: 6}
-    kinematics:
-      type: traits
-      vptraits:
-        type: mass
-        pressure_support: {type: jeans}
-      dptraits: {type: uniform}
-      equilibrium: {type: jeans}
-      vhtraits: {type: mass, zmax: 6}
+    rptraits: {type: exponential}
+    vptraits:
+      type: mass
+      pressure_support: {type: jeans}
+    dptraits: {type: uniform}
     emission: {type: lines}
+    rhtraits: {type: sech2, zmax: 6}
+    equilibrium: {type: jeans}
+    vhtraits: {type: mass, zmax: 6}
   mass:
   - type: spheroid
     name: bulge
@@ -50,7 +47,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20 km/s}
+    lsf: {type: gauss, sigma: 20.0 km s-1}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   dtype: float64
@@ -62,9 +59,9 @@ params:
     gas_posa: {value: 43, min: 0, max: 90}
     gas_incl: {value: 50, min: 10, max: 80}
     gas_vsys: {value: 12, min: -50, max: 50}
-    gas_pt_a: 1
-    gas_pt_s: 3
-    gas_ht_s: {value: 0.8, min: 0.1, max: 3}
+    gas_rpt_a: 1
+    gas_rpt_s: 3
+    gas_rht_s: {value: 0.8, min: 0.1, max: 3}
     gas_dpt_a: 10
     distance: 80
     mass_bulge_log_m: {value: 10.2, min: 9, max: 12}

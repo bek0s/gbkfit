@@ -13,15 +13,14 @@ from gbkfit.model import Extras
 
 DISK = dict(
     type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 8)),
-    density=dict(ptraits=dict(type='exponential')),
+    rptraits=dict(type='exponential'),
     emission=dict(type='band'))
 LINE_DISK = DISK | dict(
-    kinematics=dict(
-        type='traits',
-        vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines'))
 PROPERTIES = dict(
-    xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=3, vsys=0,
+    xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=3, vsys=0,
     vpt_rt=2, vpt_vt=100, dpt_a=20)
 
 # A case of each observable with a PSF (so that the high-res grid is padded):
@@ -139,13 +138,14 @@ def test_the_cube_of_moments_is_per_km_s_of_their_unit():
 def test_grid_extras_have_a_line_of_sight_axis(evaluate_cases):
     # The depth axis of a grid is along the line of sight, centred on 0
     observable, _, _, _ = CASES['pixel_spectra']
-    thick_disk = LINE_DISK | dict(type='thick_disk', density=dict(
-        ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8)))
+    thick_disk = LINE_DISK | dict(type='thick_disk',
+                                  rptraits=dict(type='exponential'),
+                                  rhtraits=dict(type='sech2', zmax=8))
     case = dict(
         driver=dict(type='host'), observable=observable,
         line_of_sight=dict(type='grid', depth=dict(extent=5.0, step=0.5)),
         galaxy=dict(components=[thick_disk]))
-    _, extra = evaluate_cases([case], PROPERTIES | dict(ht_s=1))
+    _, extra = evaluate_cases([case], PROPERTIES | dict(rht_s=1))
     bdata = extra.get('bdata', component='component0')
     assert bdata.data.shape[0] == 10 and bdata.spectral_axis is None
     sky = extra.get('dcube_hi').coords.axes(0, 1)._replace(convention=None)

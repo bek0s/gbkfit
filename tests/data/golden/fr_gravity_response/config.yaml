@@ -1,6 +1,6 @@
 # fr_gravity_response: A gas disk rotating in Hu-Sawicki f(R) gravity (log_fr0) of a stellar disk, and an NFW halo contracted by it (gnedin04, screened); a profile observation of vcirc and the rotation of the gas at radii in arcsec, and small moment maps.
 # (written by make_golden.py; do not edit)
-version: 7
+version: 8
 driver: {type: host}
 galaxies:
 - components:
@@ -9,12 +9,9 @@ galaxies:
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-    density:
-      ptraits: {type: exponential}
-    kinematics:
-      type: traits
-      vptraits: {type: mass}
-      dptraits: {type: uniform}
+    rptraits: {type: exponential}
+    vptraits: {type: mass}
+    dptraits: {type: uniform}
     emission: {type: lines}
   mass:
   - type: disk
@@ -56,7 +53,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20 km/s}
+    lsf: {type: gauss, sigma: 20.0 km s-1}
   observable:
     type: pixel_moments
     spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
@@ -73,8 +70,8 @@ params:
     gas_posa: {value: 43, min: 0, max: 90}
     gas_incl: {value: 50, min: 10, max: 80}
     gas_vsys: {value: 12, min: -50, max: 50}
-    gas_pt_a: 1
-    gas_pt_s: 3
+    gas_rpt_a: 1
+    gas_rpt_s: 3
     gas_dpt_a: 20
     distance: 80
     mass_stars_log_m: {value: 10.4, min: 9, max: 12}

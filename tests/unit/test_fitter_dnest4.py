@@ -20,14 +20,14 @@ from gbkfit.params import ParamSpace
 
 GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False, rnodes=[0, 5, 10],
-    density=dict(ptraits=[
-        dict(type='exponential'), dict(type='mixture_gauss', nblobs=3)]),
+    rptraits=[
+        dict(type='exponential'), dict(type='mixture_gauss', nblobs=3)],
     emission=dict(type='band'))])
 
 PROPERTIES = dict(
-    xpos=0, ypos=0, posa=30, incl=60, pt_a=dict(min=0, max=2), pt_s=2,
-    pt1_r=dict(min=0, max=10), pt1_t=dict(min=0, max=360),
-    pt1_a=dict(min=0, max=2), pt1_s=1, pt1_q=1, pt1_p=0)
+    xpos=0, ypos=0, posa=30, incl=60, rpt_a=dict(min=0, max=2), rpt_s=2,
+    rpt2_r=dict(min=0, max=10), rpt2_t=dict(min=0, max=360),
+    rpt2_a=dict(min=0, max=2), rpt2_s=1, rpt2_q=1, rpt2_p=0)
 
 
 def layout(properties, min_rows=None):
@@ -42,29 +42,29 @@ def layout(properties, min_rows=None):
 def test_rows_that_share_their_settings_are_varied():
     lay, names = layout(PROPERTIES)
     (table,) = lay.tables
-    assert table.name == 'pt1' and table.columns == ('r', 't', 'a')
+    assert table.name == 'rpt2' and table.columns == ('r', 't', 'a')
     assert [[names[i] for i in row] for row in table.elements] == [
-        [f'pt1_{c}[{i}]' for c in 'rta'] for i in range(3)]
-    assert [names[i] for i in lay.fixed] == ['pt_a']
+        [f'rpt2_{c}[{i}]' for c in 'rta'] for i in range(3)]
+    assert [names[i] for i in lay.fixed] == ['rpt_a']
     # Rows with settings of their own are always used
-    own = {k: v for k, v in PROPERTIES.items() if k != 'pt1_r'} | {
-        'pt1_r[0]': dict(min=2, max=3), 'pt1_r[1:]': dict(min=0, max=10)}
+    own = {k: v for k, v in PROPERTIES.items() if k != 'rpt2_r'} | {
+        'rpt2_r[0]': dict(min=2, max=3), 'rpt2_r[1:]': dict(min=0, max=10)}
     lay, names = layout(own)
     assert not lay.tables
-    assert 'pt1_r[0]' in [names[i] for i in lay.fixed]
+    assert 'rpt2_r[0]' in [names[i] for i in lay.fixed]
     # Blobs of a fixed amplitude cannot be dropped
-    assert not layout(PROPERTIES | dict(pt1_a=1))[0].tables
+    assert not layout(PROPERTIES | dict(rpt2_a=1))[0].tables
 
 
 def test_min_rows_keeps_the_first_rows_always_used():
-    lay, names = layout(PROPERTIES, dict(pt1=1))
+    lay, names = layout(PROPERTIES, dict(rpt2=1))
     (table,) = lay.tables
     assert table.always == 1 and table.rows() == 2
     assert [names[i] for i in lay.fixed] == [
-        'pt_a', 'pt1_r[0]', 'pt1_t[0]', 'pt1_a[0]']
-    assert not layout(PROPERTIES, dict(pt1=3))[0].tables
+        'rpt_a', 'rpt2_r[0]', 'rpt2_t[0]', 'rpt2_a[0]']
+    assert not layout(PROPERTIES, dict(rpt2=3))[0].tables
     with pytest.raises(ValueError, match='which has 3'):
-        layout(PROPERTIES, dict(pt1=4))
+        layout(PROPERTIES, dict(rpt2=4))
     with pytest.raises(ValueError, match='cannot vary'):
         layout(PROPERTIES, dict(pt2=1))
 
@@ -75,9 +75,9 @@ def test_rows_used_go_first_and_the_others_get_the_empty_row():
     unused = lay.unused([1])
     values[unused] = lay.unused_values()[unused]
     values = dict(zip(names, values))
-    assert values['pt_a'] == 1.5
-    assert [values[f'pt1_a[{i}]'] for i in range(3)] == [0.5, 0.0, 0.0]
-    assert [values[f'pt1_r[{i}]'] for i in range(3)] == [1.0, 1.0, 1.0]
+    assert values['rpt_a'] == 1.5
+    assert [values[f'rpt2_a[{i}]'] for i in range(3)] == [0.5, 0.0, 0.0]
+    assert [values[f'rpt2_r[{i}]'] for i in range(3)] == [1.0, 1.0, 1.0]
 
 
 def test_posterior_of_the_number_of_rows_and_the_evidence(tmp_path):
@@ -169,8 +169,8 @@ def blob_objective():
     shape = (16, 16)
     image = group(DatasetPixelBrightness(Data(np.zeros(shape))))
     truth = {k: v for k, v in PROPERTIES.items() if not isinstance(v, dict)}
-    truth |= dict(pt_a=1.0, pt1_r=[3, 5, 5], pt1_t=[30, 0, 0],
-                  pt1_a=[1, 0, 0])
+    truth |= dict(rpt_a=1.0, rpt2_r=[3, 5, 5], rpt2_t=[30, 0, 0],
+                  rpt2_a=[1, 0, 0])
     model = image.model_h(
         ParamSpace.from_properties(
             image.group().pdescs(), truth).evaluate())[0]
@@ -188,11 +188,11 @@ def test_a_stopped_fit_keeps_its_saves():
         new_level_interval=200, save_interval=50, max_saves=1000)
     result = fitter.fit(objective, params, control=StopAfter(2000))
     assert not result.success and 'stopped after' in result.message
-    rows = result.diagnostics['rows']['pt1']
+    rows = result.diagnostics['rows']['rpt2']
     assert len(rows) == 4 and sum(rows) == pytest.approx(1)
     # The rows a sample does not use are NaN
     samples = result.posterior.samples
-    a = samples[:, [result.posterior.names.index(f'pt1_a[{i}]')
+    a = samples[:, [result.posterior.names.index(f'rpt2_a[{i}]')
                     for i in range(3)]]
     used = ~np.isnan(a)
     assert np.all(used[:, :-1] >= used[:, 1:])

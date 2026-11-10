@@ -72,8 +72,8 @@ class NodalCone(abc.ABC):
         """
         traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
         can leave kinds out (no traits); prefixes has the prefix of the
-        parameters of the traits of each kind in traits_ (e.g. 'pt' for the
-        density polar traits); density_units has the unit of the density
+        parameters of each trait of the kinds that are not named after
+        their kind (see NodalTraits); density_units has the unit of the density
         of the density polar traits, if known (see NodalTraits).
         """
         subrnodes = subring_radii(rnodes, rstep)
@@ -115,6 +115,13 @@ class NodalCone(abc.ABC):
 
     def traits(self, kind: str) -> tuple[Trait, ...]:
         return self._traits.traits(kind)
+
+    def shared(self, kind: str) -> bool:
+        """
+        Check whether the traits of one kind are one height trait that the
+        polar traits share (see NodalTraits.shared).
+        """
+        return self._traits.shared(kind)
 
     def frame_params(self) -> FrameParams:
         """Return its parameters that place it in a frame."""

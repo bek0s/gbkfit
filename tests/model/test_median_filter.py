@@ -18,17 +18,17 @@ from gbkfit.params import ParamSpace
 def disk(emission):
     """A thin exponential disk of the given emission, rotating."""
     kinematics = dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
+        vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'))
     return galaxy_parser.load(dict(components=[dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
-        density=dict(ptraits=dict(type='exponential')),
+        rptraits=dict(type='exponential'),
         emission=dict(type=emission))
-        | (dict(kinematics=kinematics) if emission == 'lines' else {})]))
+        | (dict(**kinematics) if emission == 'lines' else {})]))
 
 
 PARAMS = dict(
-    xpos=0.3, ypos=-0.6, posa=30, incl=60, pt_a=1, pt_s=3, vsys=0,
+    xpos=0.3, ypos=-0.6, posa=30, incl=60, rpt_a=1, rpt_s=3, vsys=0,
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 

@@ -11,7 +11,7 @@ import { choicesOf, SchemaForm, type Defs, type Schema } from '../../components/
 import { Close } from '../../components/ui/basics';
 import { Check, Choice, Segments } from '../../components/ui/inputs';
 import { DropMenu } from '../../components/ui/overlays';
-import { HEAD_OPTIONS, HEIGHT_START, isDisk, ITEM_STARTS, MASS_HEAD_OPTIONS, type Part } from './catalogue';
+import { HEAD_OPTIONS, HEIGHT_START, isDisk, isSpheroid, ITEM_STARTS, MASS_HEAD_OPTIONS, type Part } from './catalogue';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { ParamField } from './ParamField';
 import { asList, asOneOrList, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
@@ -113,8 +113,12 @@ const COMPONENT_HANDLED = new Set([
   'loose',
   'tilted',
   'rmax',
-  'density',
-  'kinematics',
+  'rptraits',
+  'rhtraits',
+  'vptraits',
+  'vhtraits',
+  'dptraits',
+  'dhtraits',
   'emission',
   'opacity',
   'zptraits',
@@ -262,7 +266,7 @@ function ListPart({
   const allowed = traits?.[kind]?.traits[family] ?? null;
   const heights = part.heights;
   const spheroids = asList(options.components)
-    .filter((c) => c.type === 'spheroid')
+    .filter((c) => isSpheroid(c.type))
     .map((c) => String(c.name ?? ''));
   const names = items.map((item) => String(item.name ?? ''));
   const end = useRef<HTMLSpanElement>(null);
@@ -270,14 +274,27 @@ function ListPart({
   useEffect(() => {
     if (added > 0) (end.current?.previousElementSibling as HTMLElement | null)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [added]);
+  // (one height trait that every item shares: a list of one, or one
+  // alone, of several items; else one for each item)
+  const hpathOf = heights ? [...base, ...heights.option] : null;
+  const given = hpathOf ? getAt(options, hpathOf) : undefined;
+  const shared = !!heights && items.length > 1 && given !== undefined && given !== null && asList(given).length === 1;
+  const share = (one: boolean) =>
+    draft.edit((s) => {
+      const current = asList(getAt(s.options, hpathOf!));
+      const first = current[0] ?? (heights!.nullable ? null : { ...HEIGHT_START });
+      const next = one ? first : items.map((_, i) => structuredClone(current[i] ?? first));
+      return { ...s, options: setAt(s.options, hpathOf!, next) };
+    });
   const add = (type: string) => {
     setAdded((n) => n + 1);
     const follows = family === 'mass_component' && type === 'light_spheroid';
     const start = startOf(defs, family, type, names, follows ? { component: spheroids[0] } : {});
     draft.edit((s) => {
       let next = setAt(s.options, listPath, asOneOrList([...asList(getAt(s.options, listPath)), start]) ?? []);
-      // (a density trait of a thick disk or a cone comes with its height)
-      if (heights && !heights.nullable) {
+      // (a density trait of a thick disk or a cone comes with its height,
+      // unless they share one)
+      if (heights && !heights.nullable && !shared) {
         const hpath = [...base, ...heights.option];
         next = setAt(next, hpath, asOneOrList([...asList(getAt(next, hpath)), { ...HEIGHT_START }]));
       }
@@ -285,7 +302,7 @@ function ListPart({
     });
   };
   const remove = (index: number) => {
-    const hpath = heights ? [...base, ...heights.option] : null;
+    const hpath = heights && !shared ? [...base, ...heights.option] : null;
     const moves = [removedFrom(listPath, index), ...(hpath ? [removedFrom(hpath, index)] : [])];
     draft.edit(
       (s) => {
@@ -316,12 +333,24 @@ function ListPart({
           allowed={allowed}
           directions={family === 'vpt' ? (traits?.[kind]?.directions ?? null) : family === 'dpt' ? (traits?.[kind]?.dispersion_directions ?? null) : null}
           spheroids={spheroids}
-          heights={heights ? { ...heights, path: [...base, ...heights.option, i], allowed: traits?.[kind]?.traits[heights.family] ?? null } : undefined}
+          heights={heights && !shared ? { ...heights, path: [...base, ...heights.option, i], count: items.length, allowed: traits?.[kind]?.traits[heights.family] ?? null } : undefined}
           rings={rings}
           onRemove={removable ? () => remove(i) : undefined}
           moreOpen={family === 'mass_component'}
         />
       ))}
+      {heights && shared && (
+        <HeightRow
+          ctx={ctx}
+          heights={{ ...heights, title: `${heights.title} of all`, path: [...hpathOf!, 0], count: 1, allowed: traits?.[kind]?.traits[heights.family] ?? null }}
+          rings={rings}
+        />
+      )}
+      {heights && items.length > 1 && (shared || given !== undefined) && (
+        <button className="gx-link" onClick={() => share(!shared)}>
+          {shared ? `A ${heights.title.toLowerCase()} for each` : `One ${heights.title.toLowerCase()} for all`}
+        </button>
+      )}
       <span ref={end} hidden />
       {head &&
         createPortal(
@@ -383,7 +412,7 @@ function ItemCard({
   allowed: string[] | null;
   directions: string[] | null;
   spheroids: string[];
-  heights?: { path: Path; family: string; title: string; nullable: boolean; allowed: string[] | null };
+  heights?: { path: Path; family: string; title: string; nullable: boolean; count: number; allowed: string[] | null };
   rings: number[] | null;
   onRemove?: () => void;
   moreOpen: boolean;
@@ -440,18 +469,19 @@ function omitKey(options: Options, key: string): Options {
 
 // The height trait paired with an item (of a thick disk or a cone): its
 // type (or none, if it can be), its parameters and options
-function HeightRow({ ctx, heights, rings }: { ctx: Context; heights: { path: Path; family: string; title: string; nullable: boolean; allowed: string[] | null }; rings: number[] | null }) {
+function HeightRow({ ctx, heights, rings }: { ctx: Context; heights: { path: Path; family: string; title: string; nullable: boolean; count: number; allowed: string[] | null }; rings: number[] | null }) {
   const { defs, draft, options, params } = ctx;
   const value = getAt(options, heights.path);
   const item = isObject(value) ? value : null;
   const set = (next: unknown) =>
     draft.edit((s) => {
-      // (a list of heights of nulls up to this one, as it is one of a list)
+      // (a list of a height for each item, of nulls but this one; one
+      // alone is the one they share)
       const list = heights.path.slice(0, -1);
       const index = heights.path[heights.path.length - 1] as number;
       const current = getAt(s.options, list);
       const items: unknown[] = Array.isArray(current) ? [...current] : current === undefined ? [] : [current];
-      while (items.length <= index) items.push(null);
+      while (items.length < Math.max(heights.count, index + 1)) items.push(null);
       items[index] = next;
       const trimmed = items.every((h) => h === null) ? undefined : items.length === 1 ? items[0] : items;
       return { ...s, options: setAt(s.options, list, trimmed) };
@@ -516,7 +546,7 @@ function NameField({ value, onCommit, required }: { value: string; onCommit: (na
 // a spheroid is drawn
 function GeometryFields({ component, onChange }: { component: Options; onChange: (component: Options) => void }) {
   const type = component.type;
-  if (type === 'spheroid') {
+  if (isSpheroid(type)) {
     return (
       <div className="gx-row">
         <span className="gx-row-label">Drawn to</span>

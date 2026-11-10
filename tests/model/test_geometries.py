@@ -15,10 +15,9 @@ RNODES = [0, 2, 4, 6, 8, 10]
 LINES = dict(type='lines')
 
 PARTS = dict(
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits',
-        vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=LINES)
 
 OBSERVABLE = dict(
@@ -30,8 +29,8 @@ GEOMETRY = dict(
     vsys=10, xpos=0.5, ypos=-0.5, posa=[30, 32, 34, 36, 38, 40],
     incl=[60, 58, 56, 54, 52, 50])
 TRAIT_PROPERTIES = dict(
-    hi_pt_a=1, hi_pt_s=4, hi_vpt_rt=2, hi_vpt_vt=150, hi_dpt_a=20,
-    ha_pt_a=2, ha_pt_s=2, ha_vpt_rt=3, ha_vpt_vt=120, ha_dpt_a=40)
+    hi_rpt_a=1, hi_rpt_s=4, hi_vpt_rt=2, hi_vpt_vt=150, hi_dpt_a=20,
+    ha_rpt_a=2, ha_rpt_s=2, ha_vpt_rt=3, ha_vpt_vt=120, ha_dpt_a=40)
 
 
 def disk(name, **options):
@@ -64,12 +63,10 @@ def test_a_tied_geometry_is_the_geometry_it_is_tied_to(
 GAS = dict(type='thin_disk', name='gas', rnodes=RNODES, **PARTS)
 OUTFLOW = dict(
     type='cone', name='outflow', rnodes=[0, 1, 3, 6],
-    density=dict(
-        ptraits=dict(type='exponential'),
-        htraits=dict(type='gauss', zmax=1)),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='uniform', direction='out'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    rhtraits=dict(type='gauss', zmax=1),
+    vptraits=dict(type='uniform', direction='out'),
+    dptraits=dict(type='uniform'),
     emission=LINES)
 NUCLEUS = dict(type='point', name='nucleus', emission=LINES)
 

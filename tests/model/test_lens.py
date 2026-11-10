@@ -22,11 +22,11 @@ from gbkfit.observation import (
 DISK = dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
-    density=dict(ptraits=dict(type='exponential')))
+    rptraits=dict(type='exponential'))
 
 GALAXY = dict(components=[DISK | dict(emission=dict(type='band'))])
 
-PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, pt_a=1, pt_s=2)
+PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, rpt_a=1, rpt_s=2)
 
 IMAGE = dict(type='pixel_brightness', size=[32, 41], step=[1, 1])
 
@@ -85,9 +85,9 @@ def divergence(mass, grid, params, h=1e-4):
 # A smooth disk, whose bilinear interpolation on a source grid of half
 # the pixels of the image is within 1% of its peak
 SMOOTH_GALAXY = dict(components=[
-    GALAXY['components'][0] | dict(density=dict(ptraits=dict(type='gauss')))])
+    GALAXY['components'][0] | dict(rptraits=dict(type='gauss'))])
 
-SMOOTH_PROPERTIES = PROPERTIES | dict(pt_s=4)
+SMOOTH_PROPERTIES = PROPERTIES | dict(rpt_s=4)
 
 
 def test_no_deflection_is_no_lens(driver):
@@ -141,9 +141,8 @@ def test_constant_deflection_moves_the_source(driver, observable):
     properties = PROPERTIES
     if observable['type'] == 'pixel_spectra':
         galaxy = dict(components=[DISK | dict(
-            kinematics=dict(
-                type='traits', vptraits=dict(type='arctan', direction='tan'),
-                dptraits=dict(type='uniform')),
+            vptraits=dict(type='arctan', direction='tan'),
+            dptraits=dict(type='uniform'),
             emission=dict(type='lines'))])
         properties = PROPERTIES | dict(
             vsys=0, vpt_rt=2, vpt_vt=150, dpt_a=20)
@@ -182,7 +181,7 @@ def test_point_mass_makes_an_einstein_ring(driver):
     lens = deflection_lens(
         einstein ** 2 * x / radius2, einstein ** 2 * y / radius2,
         (80, 80), (0.25, 0.25), step=0.25)
-    properties = PROPERTIES | dict(incl=0, pt_s=0.8)
+    properties = PROPERTIES | dict(incl=0, rpt_s=0.8)
     image = dict(type='pixel_brightness', size=[64, 64], step=[0.5, 0.5])
     source = evaluate(driver, None, properties, image)
     lensed = evaluate(driver, lens, properties, image)
@@ -319,7 +318,7 @@ def test_an_isothermal_sphere_makes_an_einstein_ring(driver):
     # centre, makes a ring at theta_e)
     einstein = 6.0
     lens = Foreground(Lens((80, 80), (0.25, 0.25), LensSIE()))
-    properties = PROPERTIES | dict(incl=0, pt_s=0.8) | lens_params(
+    properties = PROPERTIES | dict(incl=0, rpt_s=0.8) | lens_params(
         theta_e=einstein, q=1, pa=0, x=0, y=0)
     image = dict(type='pixel_brightness', size=[64, 64], step=[0.5, 0.5])
     lensed = evaluate(driver, lens, properties, image)

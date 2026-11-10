@@ -1,6 +1,6 @@
 // The options of a galaxy as plain data (as its block holds them), and how
 // the screen reads and changes them: by paths of keys and indices (e.g.
-// ['components', 0, 'kinematics', 'vptraits', 1]), each change a copy.
+// ['components', 0, 'vptraits', 1]), each change a copy.
 // Several options of the library are one item or a list of them (e.g.
 // components, ptraits, the lines of an emission): read as lists, and
 // written back as one item when one is left.

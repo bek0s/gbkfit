@@ -15,7 +15,7 @@ yaml = ruamel.yaml.YAML(typ='safe')
 PIECES = {
     'galaxies/disk.yaml': dict(components=[dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(8)),
-        density=dict(ptraits=dict(type='exponential')),
+        rptraits=dict(type='exponential'),
         emission=dict(type='band'))]),
     'observations/image.yaml': dict(
         type='sky',
@@ -23,7 +23,7 @@ PIECES = {
         line_of_sight=dict(type='flat')),
     'params/disk.yaml': dict(properties=dict(
         xpos=0, ypos=0, posa=30, incl=dict(value=45, min=0, max=90),
-        pt_a=1, pt_s=3)),
+        rpt_a=1, rpt_s=3)),
     'setups/disk.yaml': dict(
         driver=dict(type='host'), galaxies=['disk'], observations='image',
         params=['disk'])}

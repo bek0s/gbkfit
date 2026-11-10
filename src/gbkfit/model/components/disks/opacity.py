@@ -54,9 +54,9 @@ class LineOpacity(Opacity):
     coefficients : RPTrait, Sequence of RPTrait, or Mapping of str to them
         The coefficient of each line: density polar traits, which add up
         (so it can vary in the disk). For an emission of one line without
-        a name, its traits (parameters 'op_*', 'op1_*', ...); for named
+        a name, its traits (parameters 'op_*', 'op2_*', ...); for named
         lines, a mapping of each line to its traits (parameters
-        'op_{line}_*', 'op1_{line}_*', ...). Every line needs one (0 for
+        'op_{line}_*', 'op2_{line}_*', ...). Every line needs one (0 for
         a line that does not absorb; see the disks).
 
     Raises

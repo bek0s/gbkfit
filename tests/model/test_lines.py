@@ -28,15 +28,14 @@ def line_flux(driver, evaluate_cases, dispersion):
         galaxy=dict(components=[dict(
             type='thin_disk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
-            density=dict(ptraits=dict(type='exponential')),
-            kinematics=dict(
-                type='traits', vptraits=dict(type='arctan', direction='tan'),
-                dptraits=dict(type='uniform')),
+            rptraits=dict(type='exponential'),
+            vptraits=dict(type='arctan', direction='tan'),
+            dptraits=dict(type='uniform'),
             emission=dict(type='lines'))]))
     # A systemic velocity between two channel centres
     properties = dict(
         vsys=3, xpos=0, ypos=0, posa=30, incl=45,
-        pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=dispersion)
+        rpt_a=1, rpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=dispersion)
     data, _ = evaluate_cases([case], properties)
     scube = data[0]['spectra']['d']
     assert np.isfinite(scube).all()
@@ -76,10 +75,9 @@ def lines_config(lines, catalogue=None):
     config = dict(
         galaxies=[dict(components=[dict(
             type='thin_disk', rnodes=[0, 2, 4],
-            density=dict(ptraits=dict(type='exponential')),
-            kinematics=dict(
-                type='traits', vptraits=dict(type='arctan', direction='tan'),
-                dptraits=dict(type='uniform')),
+            rptraits=dict(type='exponential'),
+            vptraits=dict(type='arctan', direction='tan'),
+            dptraits=dict(type='uniform'),
             emission=dict(type='lines', lines=lines))])],
         observations=[dict(
             type='sky',
@@ -216,15 +214,13 @@ def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
             galaxy=dict(components=[dict(
                 type='thin_disk', loose=False, tilted=False,
                 rnodes=list(range(0, 5)),
-                density=dict(ptraits=dict(type='uniform')),
-                kinematics=dict(
-                    type='traits',
-                    vptraits=dict(type='arctan', direction='tan'),
-                    dptraits=dict(type='uniform')),
+                rptraits=dict(type='uniform'),
+                vptraits=dict(type='arctan', direction='tan'),
+                dptraits=dict(type='uniform'),
                 emission=dict(type='lines', lines=['hi21']))]))
         properties = dict(
             vsys=vsys, xpos=0, ypos=0, posa=0, incl=45,
-            pt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
+            rpt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
         data, _ = evaluate_cases([case], properties)
         spectrum = data[0]['spectra']['d'].sum(axis=(1, 2))
         velocity = centre + 2 * (np.arange(201) - 100)
@@ -258,15 +254,13 @@ def test_the_lsf_is_in_km_s_of_the_light(driver, evaluate_cases):
             galaxy=dict(redshift=1.5, components=[dict(
                 type='thin_disk', loose=False, tilted=False,
                 rnodes=list(range(0, 5)),
-                density=dict(ptraits=dict(type='uniform')),
-                kinematics=dict(
-                    type='traits',
-                    vptraits=dict(type='arctan', direction='tan'),
-                    dptraits=dict(type='uniform')),
+                rptraits=dict(type='uniform'),
+                vptraits=dict(type='arctan', direction='tan'),
+                dptraits=dict(type='uniform'),
                 emission=dict(type='lines', lines=['halpha']))]))
         properties = dict(
             vsys=0, xpos=0, ypos=0, posa=0, incl=45,
-            pt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
+            rpt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
         data, _ = evaluate_cases([case], properties)
         spectrum = data[0]['spectra']['d'].sum(axis=(1, 2))
         velocity = centre + step * (np.arange(201) - 100)

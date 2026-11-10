@@ -17,15 +17,14 @@ from modelutils import group_plan
 def disk(emission):
     return dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 10)),
-        density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(
-            type='traits', vptraits=dict(type='arctan', direction='tan'),
-            dptraits=dict(type='uniform')),
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
         emission=dict(type=emission))
 
 
 PROPERTIES = dict(
-    vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60, pt_a=1, pt_s=3,
+    vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60, rpt_a=1, rpt_s=3,
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 # The recorded data, of noise of rms 0.01 (pixel_brightness and

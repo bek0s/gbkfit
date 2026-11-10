@@ -22,14 +22,13 @@ SIZE = (12, 12, 31)
 STEP = (1, 1, 20)
 SPECTRAL = SpectralAxis(step=STEP[2], convention='relativistic')
 PARAMS = dict(
-    xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=3, vpt_rt=2,
+    xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=3, vpt_rt=2,
     vpt_vt=150, dpt_a=30)
 GALAXY = dict(components=dict(
     type='thin_disk', rnodes=list(range(0, 11)),
-    density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(
-        type='traits', vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform')),
+    rptraits=dict(type='exponential'),
+    vptraits=dict(type='arctan', direction='tan'),
+    dptraits=dict(type='uniform'),
     emission=dict(type='lines')))
 
 

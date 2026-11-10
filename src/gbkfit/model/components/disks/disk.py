@@ -4,12 +4,12 @@ thick (ThickDisk), smooth or made of clouds (a thick one; see Clouds).
 """
 
 import abc
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any, Self
 
 import numpy as np
 
-from gbkfit.config import check_options, config_path, report_unknown
+from gbkfit.config import check_options, report_unknown
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
@@ -26,8 +26,7 @@ from ..roles import STARS, Emission, Opacity
 from . import _detail, _disk, _stage
 from .clouds import Clouds
 from ..parts import (
-    Density, ThickDiskTraitsKinematics, ThinDensity,
-    ThinDiskTraitsKinematics)
+    Equilibrium, KinematicTraits, density_traits, kinematic_traits)
 
 
 __all__ = [
@@ -37,12 +36,10 @@ __all__ = [
 ]
 
 
-# The options of a thick disk that a thin one does not take, by the
-# option of the disk they are in ('': the disk itself)
-_THICK_OPTIONS = {
-    '': ('opacity', 'zptraits', 'clouds'),
-    'density': ('htraits',),
-    'kinematics': ('vhtraits', 'dhtraits', 'equilibrium')}
+# The options of a thick disk that a thin one does not take
+_THICK_OPTIONS = (
+    'rhtraits', 'vhtraits', 'dhtraits', 'equilibrium', 'opacity',
+    'zptraits', 'clouds')
 
 
 class Disk(Component, abc.ABC):
@@ -59,16 +56,23 @@ class Disk(Component, abc.ABC):
 
     def dump(self) -> dict[str, Any]:
         info = _detail.dump_disk_component(
-            self, self._disk, self._rnodes, self._density, self._kinematics)
+            self, self._disk, self._rnodes, self._kinematics,
+            self._equilibrium)
         if self._clouds is not None:
             info['clouds'] = self._clouds.dump()
         return info
 
     def __init__(
             self,
-            density: ThinDensity | Density,
-            kinematics:
-            ThinDiskTraitsKinematics | ThickDiskTraitsKinematics | None,
+            rptraits: traits.RPTrait | Sequence[traits.RPTrait],
+            rhtraits: traits.RHTrait | Sequence[traits.RHTrait] | None,
+            vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None,
+            dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None,
+            vhtraits:
+            traits.VHTrait | Sequence[traits.VHTrait | None] | None,
+            dhtraits:
+            traits.DHTrait | Sequence[traits.DHTrait | None] | None,
+            equilibrium: Equilibrium | None,
             emission: Emission | None,
             opacity: Opacity | None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
@@ -83,22 +87,24 @@ class Disk(Component, abc.ABC):
     ):
         # (the options are checked by the constructor of the subclass)
         super().__init__(name, emission, opacity)
-        self._density = density
-        self._kinematics = kinematics
+        thick = self.thick(Emission)
+        rptraits, rhtraits = density_traits(rptraits, rhtraits, thick)
+        self._kinematics = kinematics = kinematic_traits(
+            vptraits, dptraits, vhtraits, dhtraits)
+        if equilibrium is not None and kinematics is None:
+            raise ValueError(
+                "the vertical equilibrium of a disk is that of its "
+                "kinematics: give it vptraits and dptraits")
+        self._equilibrium = equilibrium
         self._clouds = clouds
         # In the form it was given in, for its configuration (see dump)
         self._rnodes = rnodes = as_nodes(rnodes)
         self._disk = _detail.make_disk(
-            density, kinematics, emission, opacity, zptraits, sptraits,
-            loose=loose, tilted=tilted, rnodes=rnodes, rstep=rstep,
-            interp=interp,
-            clouds=clouds)
+            rptraits, rhtraits, kinematics, equilibrium, emission, opacity,
+            zptraits, sptraits, thick=thick, loose=loose, tilted=tilted,
+            rnodes=rnodes, rstep=rstep, interp=interp, clouds=clouds)
         self._lines = make_lines(self._disk.pdescs(), emission)
         self._bands = make_bands(self._disk.pdescs(), emission)
-
-    def density(self) -> ThinDensity | Density:
-        """Return its density."""
-        return self._density
 
     def check_lines(self, lines: tuple[str, ...] | None) -> None:
         if lines is not None and STARS in lines and self.kinematics() is None:
@@ -106,11 +112,13 @@ class Disk(Component, abc.ABC):
                 "a spectral cube sees the stars of a disk with kinematics "
                 "only (its stars have no velocities to place in channels)")
 
-    def kinematics(
-            self
-    ) -> ThinDiskTraitsKinematics | ThickDiskTraitsKinematics | None:
-        """Return its kinematics, if any."""
+    def kinematics(self) -> KinematicTraits | None:
+        """Return its kinematic traits, if it moves."""
         return self._kinematics
+
+    def equilibrium(self) -> Equilibrium | None:
+        """Return its vertical equilibrium, if any (a thick disk's)."""
+        return self._equilibrium
 
     def clouds(self) -> Clouds | None:
         """Return its clouds, if it is made of clouds."""
@@ -193,10 +201,18 @@ class ThinDisk(Disk):
 
     Parameters
     ----------
-    density : ThinDensity
-        Its density.
-    kinematics : ThinDiskTraitsKinematics, optional
-        How it moves; required to emit lines.
+    rptraits : RPTrait or Sequence of RPTrait
+        Its density polar traits: the density per unit area of its plane,
+        seen face-on (parameters 'rpt_*'). What the density is depends on
+        its roles: light for a disk that emits.
+    vptraits : VPTrait or Sequence of VPTrait, optional
+        Its velocity polar traits (parameters 'vpt_*'; see
+        parts.KinematicTraits). A disk with vptraits and dptraits moves;
+        one that emits lines must.
+    dptraits : DPTrait or Sequence of DPTrait, optional
+        Its velocity dispersion polar traits (parameters 'dpt_*'),
+        isotropic or each along a direction: once one is along a
+        direction, every direction needs its own or an isotropic one.
     emission : Emission, optional
         The light it emits.
     sptraits : SPTrait or Sequence of SPTrait, optional
@@ -243,24 +259,18 @@ class ThinDisk(Disk):
     def load(cls, info: dict[str, Any]) -> Self:
         # The options of a thick disk are reported as such, not as unknown
         # ones (left out in lenient mode, as unknown ones are)
-        info = dict(info)
-        for option, names in _THICK_OPTIONS.items():
-            part = info.get(option, {}) if option else info
-            if not isinstance(part, Mapping) \
-                    or not (given := [n for n in names if n in part]):
-                continue
-            with config_path(*([option] if option else [])):
-                report_unknown(
-                    "options of a thick disk (type: thick_disk), which a "
-                    "thin disk does not take", given, ())
-            kept = {k: v for k, v in part.items() if k not in given}
-            info = info | {option: kept} if option else kept
+        if given := [name for name in _THICK_OPTIONS if name in info]:
+            report_unknown(
+                "options of a thick disk (type: thick_disk), which a thin "
+                "disk does not take", given, ())
+            info = {k: v for k, v in info.items() if k not in given}
         return super().load(info)
 
     def __init__(
             self,
-            density: ThinDensity,
-            kinematics: ThinDiskTraitsKinematics | None = None,
+            rptraits: traits.RPTrait | Sequence[traits.RPTrait],
+            vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None = None,
+            dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None = None,
             emission: Emission | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             loose: bool = False,
@@ -272,16 +282,9 @@ class ThinDisk(Disk):
     ):
         check_options(ThinDisk.__init__, locals())
         super().__init__(
-            density, kinematics, emission, None, None, sptraits, loose,
-            tilted, rnodes, rstep, interp, None, name)
-
-    def density(self) -> ThinDensity:
-        """Return its density."""
-        return self._density
-
-    def kinematics(self) -> ThinDiskTraitsKinematics | None:
-        """Return its kinematics, if any."""
-        return self._kinematics
+            rptraits, None, vptraits, dptraits, None, None, None, emission,
+            None, None, sptraits, loose, tilted, rnodes, rstep, interp, None,
+            name)
 
     def thick(self, seen_by: 'type[Emission]') -> bool:
         return False
@@ -297,11 +300,28 @@ class ThickDisk(Disk):
 
     Parameters
     ----------
-    density : Density
-        Its density, with height traits.
-    kinematics : ThickDiskTraitsKinematics, optional
-        How it moves (with its vertical equilibrium, if any); required to
-        emit lines.
+    rptraits : RPTrait or Sequence of RPTrait
+        Its density polar traits: the density per unit area of its plane,
+        seen face-on (parameters 'rpt_*'). What the density is depends on
+        its roles: light for a disk that emits, the optical depth for
+        dust.
+    rhtraits : RHTrait or Sequence of RHTrait
+        Its density height traits, the probability density of the
+        distance from its plane: one that every polar trait shares
+        (parameters 'rht_*'), or one for each polar trait, in their order
+        (parameters 'rht_*', 'rht2_*', ...).
+    vptraits, dptraits : optional
+        Its velocity and dispersion polar traits (as those of ThinDisk).
+        A disk with both moves; one that emits lines must.
+    vhtraits : VHTrait or Sequence of VHTrait, optional
+        Its velocity height traits, one shared or one for each velocity
+        polar trait (as rhtraits; None items or none at all: the velocity
+        does not change with the height).
+    dhtraits : DHTrait or Sequence of DHTrait, optional
+        Its dispersion height traits, one shared or one for each
+        dispersion polar trait (as vhtraits).
+    equilibrium : Equilibrium, optional
+        Its vertical equilibrium, if it moves; none by default.
     emission : Emission, optional
         The light it emits.
     opacity : Opacity, optional
@@ -353,8 +373,15 @@ class ThickDisk(Disk):
 
     def __init__(
             self,
-            density: Density,
-            kinematics: ThickDiskTraitsKinematics | None = None,
+            rptraits: traits.RPTrait | Sequence[traits.RPTrait],
+            rhtraits: traits.RHTrait | Sequence[traits.RHTrait],
+            vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None = None,
+            dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None = None,
+            vhtraits:
+            traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
+            dhtraits:
+            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
+            equilibrium: Equilibrium | None = None,
             emission: Emission | None = None,
             opacity: Opacity | None = None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
@@ -369,16 +396,9 @@ class ThickDisk(Disk):
     ):
         check_options(ThickDisk.__init__, locals())
         super().__init__(
-            density, kinematics, emission, opacity, zptraits, sptraits,
-            loose, tilted, rnodes, rstep, interp, clouds, name)
-
-    def density(self) -> Density:
-        """Return its density."""
-        return self._density
-
-    def kinematics(self) -> ThickDiskTraitsKinematics | None:
-        """Return its kinematics, if any."""
-        return self._kinematics
+            rptraits, rhtraits, vptraits, dptraits, vhtraits, dhtraits,
+            equilibrium, emission, opacity, zptraits, sptraits, loose, tilted,
+            rnodes, rstep, interp, clouds, name)
 
     def thick(self, seen_by: 'type[Emission]') -> bool:
         return True

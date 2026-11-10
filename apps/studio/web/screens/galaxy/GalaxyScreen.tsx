@@ -14,7 +14,7 @@ import { useBlockHead } from '../../shell/BlockMenu';
 import { useRemembered } from '../../shell/remember';
 import { useStudio } from '../../studio';
 import { useUnsaved } from '../editing';
-import { COMPONENT_STARTS, GALAXY_PARTS, nameBase, partsOf, withThickness, type Part } from './catalogue';
+import { COMPONENT_STARTS, GALAXY_PARTS, isSpheroid, nameBase, partsOf, withThickness, type Part } from './catalogue';
 import { useGalaxyDraft } from './draft';
 import { Inspector, inPlace, removedFrom } from './Inspector';
 import { componentName, componentsOf, freshName, getAt, ringRadii, setAt } from './options';
@@ -89,7 +89,7 @@ export function GalaxyScreen({ name }: { name: string }) {
 
   // The field of the view (half its width, arcsec), for the reach of the
   // sliders of lengths and positions
-  const radii = components.flatMap((c) => (c.type === 'spheroid' ? [Number(c.rmax) || 0] : ringRadii(c.rnodes).slice(-1)));
+  const radii = components.flatMap((c) => (isSpheroid(c.type) ? [Number(c.rmax) || 0] : ringRadii(c.rnodes).slice(-1)));
   const field = Math.max(...radii, 0) * MARGIN || 20;
 
   const addPart = (component: number | null, p: Part) => {
