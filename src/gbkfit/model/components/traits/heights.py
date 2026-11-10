@@ -15,6 +15,8 @@ from pydantic import FiniteFloat
 from gbkfit.config import Unit, check_options
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .base import DHTrait, RHTrait, RotationFactorsInput, VHTrait
+from .shapes import (
+    ExponentialFactor, GaussFactor, LinearFactor, OneFactor)
 from .options import (
     SAMPLING_DEFAULT, Nodewise, Sampling, SamplingChoice, Zmax)
 
@@ -24,7 +26,6 @@ __all__ = [
     'DHTraitGauss',
     'DHTraitLinear',
     'DHTraitOne',
-    'DHTraitP1',
     'RHTraitExponential',
     'RHTraitGGauss',
     'RHTraitGauss',
@@ -38,8 +39,7 @@ __all__ = [
     'VHTraitGauss',
     'VHTraitLinear',
     'VHTraitMass',
-    'VHTraitOne',
-    'VHTraitP1'
+    'VHTraitOne'
 ]
 
 
@@ -52,16 +52,10 @@ RHT_UID_LORENTZ = 5
 RHT_UID_MOFFAT = 6
 RHT_UID_SECH2 = 7
 
-VHT_UID_ONE = 1
-VHT_UID_LINEAR = 2
-VHT_UID_EXP = 3
-VHT_UID_GAUSS = 4
+# The uid of the velocity height trait 'mass' (of the velocity alone; the
+# factors that the velocity and the dispersion share are in shapes)
 VHT_UID_MASS = 5
 
-DHT_UID_ONE = 1
-DHT_UID_LINEAR = 2
-DHT_UID_EXP = 3
-DHT_UID_GAUSS = 4
 
 # The heights of the table of the velocity height trait 'mass' (see
 # VHTraitMass): this many, from 0 to its zmax
@@ -73,9 +67,6 @@ VHT_MASS_NHEIGHTS = 33
 _SCALE_HEIGHT = "the height that sets the thickness of the profile"
 _SHAPE = "the power of the profile, which sets its shape"
 
-# The titles and descriptions of the parameters of the velocity and the
-# dispersion height traits of one parameter, by name (see
-# VHTraitP1.param_name and DHTraitP1.param_name)
 _P1_PARAMS = dict(
     z0=('Onset height', "the height above which the factor grows"),
     s=('Scale height', "the height over which the factor falls"))
@@ -456,7 +447,7 @@ class RHTraitSech2(RHTraitP1):
         return 0.5 * (1 + np.tanh(z / s))
 
 
-class VHTraitOne(VHTrait):
+class VHTraitOne(OneFactor, VHTrait):
     """
     No change of the velocity with the height: the factor 1 (the default).
 
@@ -465,18 +456,6 @@ class VHTraitOne(VHTrait):
     name : str, optional
         Its name, which prefixes its parameters (see Trait).
     """
-
-    @staticmethod
-    def type() -> str:
-        return 'one'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Constant'
-
-    @staticmethod
-    def uid() -> int:
-        return VHT_UID_ONE
 
     def __init__(self, name: str | None = None):
         check_options(VHTraitOne.__init__, locals())
@@ -572,41 +551,7 @@ class VHTraitMass(VHTrait):
             tuple(heights.tolist()))
 
 
-class VHTraitP1(VHTrait, abc.ABC):
-    """
-    A velocity height trait: a factor of the height, of one parameter
-    (param_name), node-wise if nodewise.
-    """
-
-    def __init__(
-            self,
-            nodewise: bool = False,
-            sampling: SamplingChoice = SAMPLING_DEFAULT,
-            name: str | None = None
-    ):
-        check_options(VHTraitP1.__init__, locals())
-        super().__init__(Nodewise(nodewise), Sampling(sampling), name=name)
-
-    @staticmethod
-    @abc.abstractmethod
-    def param_name() -> str:
-        """Return the name of its parameter."""
-        pass
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        title, desc = _P1_PARAMS[self.param_name()]
-        return {} if self.nodewise() else {
-            self.param_name(): ParamScalarDesc(
-                title=title, desc=desc, unit='arcsec', default=1)}
-
-    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
-        title, desc = _P1_PARAMS[self.param_name()]
-        return {} if not self.nodewise() else {
-            self.param_name(): ParamVectorDesc(
-                nrnodes, title=title, desc=desc, unit='arcsec', default=1)}
-
-
-class VHTraitLinear(VHTraitP1):
+class VHTraitLinear(LinearFactor, VHTrait):
     """
     A change of the velocity that grows linearly above a height (e.g. a
     lag): the factor max(0, |z| - z0). It goes with a polar trait of the
@@ -630,24 +575,8 @@ class VHTraitLinear(VHTraitP1):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'linear'
 
-    @staticmethod
-    def type_title() -> str:
-        return 'Linear'
-
-    @staticmethod
-    def uid() -> int:
-        return VHT_UID_LINEAR
-
-    @staticmethod
-    def param_name() -> str:
-        return 'z0'
-
-
-class VHTraitExponential(VHTraitP1):
+class VHTraitExponential(ExponentialFactor, VHTrait):
     """
     The factor exp(-|z| / s), which falls with the scale height s. Its
     parameter: s.
@@ -669,24 +598,8 @@ class VHTraitExponential(VHTraitP1):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'exponential'
 
-    @staticmethod
-    def type_title() -> str:
-        return 'Exponential'
-
-    @staticmethod
-    def uid() -> int:
-        return VHT_UID_EXP
-
-    @staticmethod
-    def param_name() -> str:
-        return 's'
-
-
-class VHTraitGauss(VHTraitP1):
+class VHTraitGauss(GaussFactor, VHTrait):
     """
     The factor exp(-z^2 / (2 s^2)), which falls with the scale height s.
     Its parameter: s.
@@ -708,24 +621,8 @@ class VHTraitGauss(VHTraitP1):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'gauss'
 
-    @staticmethod
-    def type_title() -> str:
-        return 'Gaussian'
-
-    @staticmethod
-    def uid() -> int:
-        return VHT_UID_GAUSS
-
-    @staticmethod
-    def param_name() -> str:
-        return 's'
-
-
-class DHTraitOne(DHTrait):
+class DHTraitOne(OneFactor, DHTrait):
     """
     No change of the dispersion with the height: the factor 1 (the
     default).
@@ -736,58 +633,12 @@ class DHTraitOne(DHTrait):
         Its name, which prefixes its parameters (see Trait).
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'one'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Constant'
-
-    @staticmethod
-    def uid() -> int:
-        return DHT_UID_ONE
-
     def __init__(self, name: str | None = None):
         check_options(DHTraitOne.__init__, locals())
         super().__init__(name=name)
 
 
-class DHTraitP1(DHTrait, abc.ABC):
-    """
-    A dispersion height trait: a factor of the height, of one parameter
-    (param_name), node-wise if nodewise.
-    """
-
-    def __init__(
-            self,
-            nodewise: bool = False,
-            sampling: SamplingChoice = SAMPLING_DEFAULT,
-            name: str | None = None
-    ):
-        check_options(DHTraitP1.__init__, locals())
-        super().__init__(Nodewise(nodewise), Sampling(sampling), name=name)
-
-    @staticmethod
-    @abc.abstractmethod
-    def param_name() -> str:
-        """Return the name of its parameter."""
-        pass
-
-    def params_sm(self) -> dict[str, ParamDesc]:
-        title, desc = _P1_PARAMS[self.param_name()]
-        return {} if self.nodewise() else {
-            self.param_name(): ParamScalarDesc(
-                title=title, desc=desc, unit='arcsec', default=1)}
-
-    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
-        title, desc = _P1_PARAMS[self.param_name()]
-        return {} if not self.nodewise() else {
-            self.param_name(): ParamVectorDesc(
-                nrnodes, title=title, desc=desc, unit='arcsec', default=1)}
-
-
-class DHTraitLinear(DHTraitP1):
+class DHTraitLinear(LinearFactor, DHTrait):
     """
     A change of the dispersion that grows linearly above a height: the
     factor max(0, |z| - z0). It goes with a polar trait of the change per
@@ -811,24 +662,8 @@ class DHTraitLinear(DHTraitP1):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'linear'
 
-    @staticmethod
-    def type_title() -> str:
-        return 'Linear'
-
-    @staticmethod
-    def uid() -> int:
-        return DHT_UID_LINEAR
-
-    @staticmethod
-    def param_name() -> str:
-        return 'z0'
-
-
-class DHTraitExponential(DHTraitP1):
+class DHTraitExponential(ExponentialFactor, DHTrait):
     """
     The factor exp(-|z| / s), which falls with the scale height s. Its
     parameter: s.
@@ -850,24 +685,8 @@ class DHTraitExponential(DHTraitP1):
         If an option is not valid.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'exponential'
 
-    @staticmethod
-    def type_title() -> str:
-        return 'Exponential'
-
-    @staticmethod
-    def uid() -> int:
-        return DHT_UID_EXP
-
-    @staticmethod
-    def param_name() -> str:
-        return 's'
-
-
-class DHTraitGauss(DHTraitP1):
+class DHTraitGauss(GaussFactor, DHTrait):
     """
     The factor exp(-z^2 / (2 s^2)), which falls with the scale height s.
     Its parameter: s.
@@ -888,19 +707,3 @@ class DHTraitGauss(DHTraitP1):
     ValueError
         If an option is not valid.
     """
-
-    @staticmethod
-    def type() -> str:
-        return 'gauss'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Gaussian'
-
-    @staticmethod
-    def uid() -> int:
-        return DHT_UID_GAUSS
-
-    @staticmethod
-    def param_name() -> str:
-        return 's'

@@ -13,13 +13,19 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from gbkfit.config import check_options
 from gbkfit.params import ParamDesc
-from gbkfit.params.pdescs import ParamScalarDesc
+from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from .base import Amplitude, params_nw_distortion, splits_nw_distortion
-from .options import Blobs, Harmonic
+from .options import (
+    SAMPLING_DEFAULT, Blobs, Harmonic, Nodewise, Sampling, SamplingChoice)
 
 
 __all__ = [
+    'HT_UID_EXP',
+    'HT_UID_GAUSS',
+    'HT_UID_LINEAR',
+    'HT_UID_ONE',
     'PT_UID_EXP',
     'PT_UID_GAUSS',
     'PT_UID_GGAUSS',
@@ -34,9 +40,12 @@ __all__ = [
     'PT_UID_NW_UNIFORM',
     'PT_UID_SECH2',
     'PT_UID_UNIFORM',
+    'ExponentialFactor',
     'ExponentialShape',
+    'GaussFactor',
     'GaussShape',
     'GGaussShape',
+    'LinearFactor',
     'LorentzShape',
     'MixtureExponentialShape',
     'MixtureGaussShape',
@@ -46,6 +55,7 @@ __all__ = [
     'NWDistortionShape',
     'NWHarmonicShape',
     'NWUniformShape',
+    'OneFactor',
     'Sech2Shape',
     'UniformShape'
 ]
@@ -396,3 +406,127 @@ class NWDistortionShape(_Shape):
             subrnodes: Sequence[float]
     ) -> np.ndarray | None:
         return splits_nw_distortion(r, params, subrnodes)
+
+
+# The uids of the factors of the height in the native kernels
+# (traits.hpp HT_UID_*): the same for the velocity (vht) and the
+# dispersion (dht); vht_mass, of the velocity alone, has its own
+HT_UID_ONE = 1
+HT_UID_LINEAR = 2
+HT_UID_EXP = 3
+HT_UID_GAUSS = 4
+
+# The titles and descriptions of the parameters of the factors of one
+# parameter, by name
+_FACTOR_PARAMS = dict(
+    z0=('Onset height', "the height above which the factor grows"),
+    s=('Scale height', "the height over which the factor falls"))
+
+
+class OneFactor:
+    """The factor 1 of the height: no change with it."""
+
+    @staticmethod
+    def type() -> str:
+        return 'one'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Constant'
+
+    @staticmethod
+    def uid() -> int:
+        return HT_UID_ONE
+
+
+class _FactorP1:
+    """
+    A factor of the height of one parameter (param_name), node-wise if
+    nodewise: of a velocity or a dispersion height trait (vht, dht).
+    """
+
+    def __init__(
+            self,
+            nodewise: bool = False,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
+            name: str | None = None
+    ):
+        check_options(_FactorP1.__init__, locals())
+        super().__init__(Nodewise(nodewise), Sampling(sampling), name=name)
+
+    @staticmethod
+    def param_name() -> str:
+        """Return the name of its parameter."""
+        raise NotImplementedError
+
+    def params_sm(self) -> dict[str, ParamDesc]:
+        title, desc = _FACTOR_PARAMS[self.param_name()]
+        return {} if self.nodewise() else {
+            self.param_name(): ParamScalarDesc(
+                title=title, desc=desc, unit='arcsec', default=1)}
+
+    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        title, desc = _FACTOR_PARAMS[self.param_name()]
+        return {} if not self.nodewise() else {
+            self.param_name(): ParamVectorDesc(
+                nrnodes, title=title, desc=desc, unit='arcsec', default=1)}
+
+
+class LinearFactor(_FactorP1):
+    """The factor max(0, |z| - z0), which grows above the height z0."""
+
+    @staticmethod
+    def type() -> str:
+        return 'linear'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Linear'
+
+    @staticmethod
+    def uid() -> int:
+        return HT_UID_LINEAR
+
+    @staticmethod
+    def param_name() -> str:
+        return 'z0'
+
+
+class ExponentialFactor(_FactorP1):
+    """The factor exp(-|z| / s), which falls with the scale height s."""
+
+    @staticmethod
+    def type() -> str:
+        return 'exponential'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Exponential'
+
+    @staticmethod
+    def uid() -> int:
+        return HT_UID_EXP
+
+    @staticmethod
+    def param_name() -> str:
+        return 's'
+
+
+class GaussFactor(_FactorP1):
+    """The factor exp(-z^2 / (2 s^2)), which falls with the scale height s."""
+
+    @staticmethod
+    def type() -> str:
+        return 'gauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
+    @staticmethod
+    def uid() -> int:
+        return HT_UID_GAUSS
+
+    @staticmethod
+    def param_name() -> str:
+        return 's'
