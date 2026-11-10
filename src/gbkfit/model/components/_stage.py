@@ -77,7 +77,8 @@ class GalaxyMass:
     parameters of the mass and the gravity of the galaxy, the context of
     the mass, the length of an arcsec in the galaxy (kpc; None without a
     distance, which only what takes it needs, see Capability.DISTANCE),
-    and the field of the mass in the gravity of the galaxy (see Gravity).
+    and the field of the mass in the gravity of the galaxy (see Gravity;
+    None while the mass is built, see ComponentStage.thickness).
     """
     model: MassModel
     params: ParamValues
@@ -403,6 +404,18 @@ class GalaxyStage:
                     lights[i], scale)
                 for i in self._followed},
             baryon_fraction=epoch.baryon_fraction, kpc_per_arcsec=scale)
+        # (the thicknesses that the mass sets of the components that it
+        # follows, of the surface densities of their fluids, which do not
+        # take them: then the densities of those thicknesses)
+        built = GalaxyMass(mass_model, view, context, scale, None)
+        thicknesses = {
+            i: self._stages[i].thickness(lights[i], built)
+            for i in self._followed}
+        if any(thicknesses.values()):
+            context = dataclasses.replace(context, densities={
+                components[i].name(): self._stages[i].density(
+                    lights[i] | thicknesses[i], scale)
+                for i in self._followed})
         return GalaxyMass(
             mass_model, view, context, scale,
             component_set.gravity().field(mass_model, view, context))

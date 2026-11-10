@@ -195,6 +195,23 @@ class DiskStage(ComponentStage):
             or disk.wave_params() or disk.pressure_supported_params()
         self._plan = disk.plan(driver, 0, np.float64) if sampled else None
 
+    def thickness(
+            self, values: ParamValues, mass: GalaxyMass
+    ) -> ParamValues:
+        """
+        Return the scale heights of the vertical equilibrium of the
+        thickness of its disk at its subnodes, if it draws one (see
+        _height_scales; by the names of their parameters, see
+        NodalDisk.height_params), in the mass of its galaxy as it is built:
+        of the surface density of its fluid, which does not take them
+        (the equilibrium 'sheet'; 'rotation' is of a galaxy without mass).
+        """
+        if not self._disk.height_params():
+            return {}
+        return dict.fromkeys(
+            self._disk.height_params(),
+            self._height_scales(values, mass, None))
+
     def light_params(self) -> tuple[str, ...]:
         """
         Return the names of all the parameters of its disk: its plan, which

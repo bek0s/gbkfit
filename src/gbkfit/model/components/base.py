@@ -455,6 +455,20 @@ class ComponentStage(abc.ABC):
         """
         return None
 
+    def thickness(
+            self, values: ParamValues, mass: 'GalaxyMass'
+    ) -> ParamValues:
+        """
+        Return the values of the parameters of its thickness that the mass
+        of its galaxy sets, by name (e.g. the scale heights of the
+        vertical equilibrium of a disk), at the values of the parameters
+        of its light (see values), in the mass of its galaxy as it is
+        built (its model, parameters, context and length of an arcsec,
+        without its field): its density of them is what the mass that
+        follows it takes (see density); none here.
+        """
+        return {}
+
     def state_params(self) -> tuple[str, ...]:
         """
         Return the names of its parameters (its own names) that its state

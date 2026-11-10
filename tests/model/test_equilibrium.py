@@ -437,6 +437,39 @@ FOLLOWED = dict(mass=[dict(type='traced_disk', name='gas', component='gas')],
                 distance=dict(type='parameter'))
 
 
+def test_the_mass_in_the_layer_of_a_thick_disk_takes_its_sheet():
+    # A mass disk in the layer of a thick disk in the sheet of that mass
+    # (e.g. the gas and its mass) takes the heights of the sheet, z0 =
+    # sigma^2 / (pi G Sigma) of Sigma = upsilon S, which do not change
+    # Sigma: its density is that of the mass disk of a disk of node-wise
+    # sech^2 heights of those scales
+    disk = unbalanced(DISK, dict(type='uniform')) | dict(
+        name='gas', rhtraits=dict(
+            type='equilibrium', gravity='sheet', zmax=10))
+    balanced = galaxy(disk, **FOLLOWED)
+    given = galaxy(disk | dict(rhtraits=dict(
+        type='sech2', zmax=10, nodewise=True, sampling='subrings')),
+        **FOLLOWED)
+    params = {f'gas_{key}': value for key, value in PROPERTIES.items()
+              if key != 'rht_s'} \
+        | dict(gas_dpt_a=20, distance=10, mass_gas_upsilon=1e9)
+    extra = Extras()
+    balanced.plan_stage().evaluate(params, extra)
+    scale = np.asarray(extra.get('equilibrium', component='gas')['height'])
+    R, z = np.meshgrid(
+        np.linspace(0.05, 1, 7), np.linspace(-0.05, 0.05, 5), indexing='ij')
+
+    def density(galaxy_, values):
+        mass = galaxy_.plan_stage().mass(values)
+        return mass.model.component('gas').density(
+            R, z, mass.model.component_params('gas', mass.params),
+            mass.context)
+    expected = density(given, params | dict(gas_rht_s=scale))
+    assert np.max(expected) > 0
+    np.testing.assert_allclose(
+        density(balanced, params), expected, rtol=1e-10)
+
+
 @pytest.mark.parametrize('disk, info, message', [
     (DISK | dict(rhtraits=[
         dict(type='equilibrium', gravity='rotation', zmax=10),
@@ -461,9 +494,6 @@ FOLLOWED = dict(mass=[dict(type='traced_disk', name='gas', component='gas')],
     (THIN, dict(mass=[dict(type='point', name='bh')],
                 distance=dict(type='parameter')),
      "give it a fluid, or a mass disk that follows it"),
-    (unbalanced(DISK, dict(type='uniform')) | dict(name='gas', rhtraits=dict(
-        type='equilibrium', gravity='sheet', zmax=10)), FOLLOWED,
-     "not supported yet"),
     (unbalanced(DISK, dict(type='uniform')) | dict(rhtraits=dict(
         type='equilibrium', gravity='rotation', zmax=10)), POINT,
      "equilibrium 'rotation' of the component"),
