@@ -126,7 +126,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
         galaxy |= dict(
             mass=[dict(type='traced_spheroid', name='stars', component='core')]
             if 'mass' in change else [dict(type='point', name='bh')],
-            distance=dict(type='direct', cosmology='Planck18'))
+            distance=dict(type='parameter'))
     data = np.zeros((16, 16))
     observable = None
     if 'moments' in change:

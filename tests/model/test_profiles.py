@@ -43,7 +43,7 @@ GAS_PARAMS = dict(
 
 def mass_galaxy(**info):
     return galaxy_parser.load(
-        dict(mass=copy.deepcopy(MASS), distance=dict(type='direct')) | info)
+        dict(mass=copy.deepcopy(MASS), distance=dict(type='parameter')) | info)
 
 
 def model(group, params):
@@ -161,7 +161,7 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
         rptraits=dict(type='exponential'),
         emission=dict(type='band'))
     galaxy = galaxy_parser.load(dict(
-        components=[light], distance=dict(type='direct'),
+        components=[light], distance=dict(type='parameter'),
         mass=[dict(type='traced_disk', name='stellar', component='stars',
                    vertical=dict(type='thin'))]))
     image = ObservationSky(
@@ -261,7 +261,7 @@ def test_table_mass_of_its_curve(tmp_path):
     gas = mass_component_parser.load(
         dict(type='table', name='gas') | rotmod_info(file, 'col4'))
     galaxy = galaxy_parser.load(dict(
-        mass=[mass_component_parser.dump(gas)], distance=dict(type='direct')))
+        mass=[mass_component_parser.dump(gas)], distance=dict(type='parameter')))
     assert 'mass' not in galaxy.plan_functions().names()
     radii = np.array([0.5, 1.0, 2.0, 4.0])
     gas_v = np.array([-3.0, 5.0, 12.0, 20.0])
@@ -284,7 +284,7 @@ def test_rotation_curve_of_sparc(tmp_path):
         mass=[dict(type='table', name='gas') | rotmod_info(file, 'col4'),
               dict(type='table', name='disk') | rotmod_info(file, 'col5'),
               dict(type='halo', name='halo', profile=dict(type='nfw'))],
-        distance=dict(type='direct')))
+        distance=dict(type='parameter')))
     observation = observation_parser.load(dict(
         type='profile', name='rc', inclination=60,
         data=dict(

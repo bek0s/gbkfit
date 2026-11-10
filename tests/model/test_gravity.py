@@ -9,6 +9,7 @@ import copy
 import numpy as np
 import pytest
 
+import gbkfit.cosmology
 from gbkfit.config import ConfigError
 from gbkfit.model import Extras, GravityHuSawicki, GravityNewton, galaxy_parser
 from gbkfit.model.mass import MassContext, MassModel
@@ -34,7 +35,7 @@ MASS = [dict(
     type='disk', name='stars', surface=dict(type='exponential'),
     vertical=dict(type='thin'))]
 POINT = [dict(type='point', name='bh')]
-DISTANCE = dict(type='direct', cosmology='Planck18')
+DISTANCE = dict(type='parameter')
 PARAMS = dict(
     gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60, gas_vsys=0,
     gas_rpt_a=1, gas_rpt_s=4, gas_rht_s=0.5, gas_dpt_a=10, distance=10,
@@ -102,7 +103,8 @@ def test_mond_circular_velocity(interpolation, form, rtol):
         rtol=1e-12)
     np.testing.assert_allclose(states[0].rotation['vpt_vt'], table['vcirc'].value)
     equilibrium = extra.get('equilibrium', component='gas')
-    kpc_per_arcsec = mond.distance().kpc_per_arcsec(PARAMS, 0)
+    kpc_per_arcsec = mond.distance().kpc_per_arcsec(
+        PARAMS, 0, gbkfit.cosmology.DEFAULT)
     np.testing.assert_allclose(
         equilibrium['vcirc'].value[1:],
         bound['vcirc'](equilibrium['radius'].value[1:] * kpc_per_arcsec),
@@ -198,7 +200,7 @@ def test_qumond_solves_newtonian_gravity(vertical):
         type='disk', name='stars', surface=dict(type='exponential'),
         vertical=vertical)]))
     params = dict(mass_stars_log_m=10, mass_stars_rd=3, mass_stars_hz=0.3)
-    context = MassContext(1.0, 0.308)
+    context = MassContext(1.0, 0.308, 0.0, 0.0)
 
     def masses(r_edges, b_edges):
         return model.cell_masses(r_edges, b_edges, params, context)

@@ -152,24 +152,26 @@ class SpheroidDensity:
 @dataclasses.dataclass(frozen=True)
 class MassContext:
     """
-    What mass components need besides their parameters: the critical
-    density of the universe (Msun/kpc^3) and its matter density
-    parameter, at the epoch of the galaxy (for the overdensities that
-    define the masses of halos), the densities of the components of the
-    galaxy that they follow, by the names of the components, and the
-    squared circular velocities of the mass components that they respond
-    to (see MassComponent.responds_to), as functions of the radius (kpc),
-    by their names, and their masses within spheres (Msun) of the radii
-    (kpc), of those that give them (see MassComponent.enclosed_mass); the
-    cosmic baryon fraction Omega_b / Omega_m, if
-    known (for the contractions of halos that take it); the Ricci
-    scalar of the background universe (kpc^-2) at the epoch of the galaxy
-    and today, if known (for f(R) gravity); and the length of an arcsec in
-    the galaxy (kpc), if known (for tables measured at a distance, see
+    What mass components need besides their parameters. Of the universe
+    at the epoch of the galaxy (see gbkfit.cosmology): its critical
+    density (Msun/kpc^3) and its matter density parameter (for the
+    overdensities that define the masses of halos), and its Ricci scalar
+    (kpc^-2) then and today (for f(R) gravity). Of the galaxy: the
+    densities of its components that they follow, by the names of the
+    components, and the squared circular velocities of the mass
+    components that they respond to (see MassComponent.responds_to), as
+    functions of the radius (kpc), by their names, and their masses
+    within spheres (Msun) of the radii (kpc), of those that give them
+    (see MassComponent.enclosed_mass); the cosmic baryon fraction Omega_b
+    / Omega_m, if its cosmology has Omega_b (for the contractions of
+    halos that take it); and the length of an arcsec in the galaxy
+    (kpc), if it has a distance (for tables measured at a distance, see
     MassTable).
     """
     critical_density: float
     omega_m: float
+    ricci_scalar: float
+    ricci_scalar_today: float
     densities: Mapping[str, ComponentDensity] = dataclasses.field(
         default_factory=dict)
     vcirc2s: Mapping[str, Callable[[np.ndarray], np.ndarray]] = \
@@ -177,8 +179,6 @@ class MassContext:
     enclosed_masses: Mapping[str, Callable[[np.ndarray], np.ndarray]] = \
         dataclasses.field(default_factory=dict)
     baryon_fraction: float | None = None
-    ricci_scalar: float | None = None
-    ricci_scalar_today: float | None = None
     kpc_per_arcsec: float | None = None
 
     def density(self, component: str) -> ComponentDensity:
@@ -465,6 +465,15 @@ class MassComponent(TypedSerializable, abc.ABC):
         vertical_force); here, it does.
         """
         return True
+
+    def takes_baryon_fraction(self) -> bool:
+        """
+        Check whether it takes the cosmic baryon fraction of its context
+        (e.g. a halo of the contraction cautun20), which the cosmology of
+        its galaxy must give (see MassModel.check_cosmology); here, it
+        does not.
+        """
+        return False
 
     def takes_shares(self) -> bool:
         """

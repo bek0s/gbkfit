@@ -13,6 +13,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 __all__ = [
     'Change',
+    'PiecesView',
     'Rule',
     'components',
     'flow',
@@ -31,6 +32,16 @@ class Change(NamedTuple):
     """
     path: list[str | int]
     message: str
+
+
+class PiecesView(dict):
+    """
+    The pieces of a project, together, as rules rewrite them (see
+    migrate_project): a configuration whose sections are lists of the
+    pieces. Not one setup: a rule that makes a choice for a whole setup
+    (e.g. its cosmology, from those of its galaxies) leaves it to the
+    setups, which it sees with their galaxies.
+    """
 
 
 class Rule(abc.ABC):

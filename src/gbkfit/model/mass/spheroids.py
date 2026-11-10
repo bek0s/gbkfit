@@ -393,6 +393,10 @@ class Halo(_ShapedMass):
     def takes_enclosed_masses(self) -> bool:
         return self._responds()
 
+    def takes_baryon_fraction(self) -> bool:
+        return self._contraction is not None \
+            and self._contraction.takes_baryon_fraction()
+
     def pdescs(self) -> dict[str, ParamDesc]:
         pdescs = self._profile.pdescs() | self._shape.pdescs()
         if self._contraction is not None:

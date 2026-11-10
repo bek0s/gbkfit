@@ -54,7 +54,7 @@ def gas_galaxy(**info):
     """The galaxy of the gas disk in its mass."""
     return galaxy_parser.load(dict(
         components=[copy.deepcopy(GAS)], mass=copy.deepcopy(MASS),
-        distance=dict(type='direct', cosmology='Planck18')) | info)
+        distance=dict(type='parameter')) | info)
 
 
 def test_circular_velocity_of_the_mass():
@@ -209,7 +209,7 @@ def test_functions_of_a_galaxy_of_mass_alone():
     from gbkfit.observation import (
         LineOfSightFlat, ObservationGroup, ObservationSky)
     from gbkfit.observation import PixelBrightness
-    info = dict(mass=copy.deepcopy(MASS), distance=dict(type='direct'))
+    info = dict(mass=copy.deepcopy(MASS), distance=dict(type='parameter'))
     galaxy = galaxy_parser.load(copy.deepcopy(info))
     assert galaxy.components() == ()
     assert set(galaxy.pdescs()) == {

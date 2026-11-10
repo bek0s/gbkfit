@@ -20,7 +20,8 @@ LIGHT = Hernquist(total=2.5e10, a=1.5)
 UPSILON = 4.0
 BH_MASS = 5e8
 # (the context is not used by these mass models)
-CONTEXT = MassContext(critical_density=1.0, omega_m=0.3)
+CONTEXT = MassContext(
+    critical_density=1.0, omega_m=0.3, ricci_scalar=0.0, ricci_scalar_today=0.0)
 
 
 def jeans_pressure(galaxy: MockGalaxy, r: float) -> float:

@@ -25,7 +25,8 @@ A = 1.5
 M = 1e11
 BH = 5e8
 # (the context is not used by these mass models)
-CONTEXT = MassContext(critical_density=1.0, omega_m=0.3)
+CONTEXT = MassContext(
+    critical_density=1.0, omega_m=0.3, ricci_scalar=0.0, ricci_scalar_today=0.0)
 # The geometry of the spheroid on the sky (see test_spheroids)
 GEOMETRY = dict(xpos=1.5, ypos=-1, posa=30, incl=60)
 

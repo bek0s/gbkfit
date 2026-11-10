@@ -14,7 +14,7 @@ galaxies:
   mass:
   - {type: traced_spheroid, name: lum, component: stars}
   - {type: point, name: bh}
-  distance: {type: direct, cosmology: Planck18}
+  distance: {type: parameter}
 observations:
 - type: sky
   lines: [stars]

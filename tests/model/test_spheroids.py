@@ -304,7 +304,7 @@ BULGE = dict(
     type='spheroid', name='bulge', rmax=10, emission=BAND,
     profile=dict(type='sersic'), shape=dict(type='flattened'))
 STARS = dict(type='traced_spheroid', name='stars', component='bulge')
-DISTANCE = dict(type='direct', cosmology='Planck18')
+DISTANCE = dict(type='parameter')
 BULGE_PROPERTIES = dict(
     bulge_xpos=0, bulge_ypos=0, bulge_posa=30, bulge_incl=60, bulge_ie=2,
     bulge_re=1.5, bulge_n=3, bulge_q=0.6, mass_stars_upsilon=4e6,

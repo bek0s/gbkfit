@@ -9,11 +9,15 @@ from typing import Any
 
 from ruamel.yaml.comments import CommentedMap
 
-from .rules import Change, Rule, components, items, rename
+import gbkfit.cosmology
+from gbkfit.config import ConfigError
+from .rules import (
+    Change, PiecesView, Rule, components, items, rename)
 
 
 __all__ = [
     'RULES',
+    'Cosmologies',
     'FlatComponents',
     'Halos',
     'TracedMass',
@@ -413,7 +417,7 @@ class Halos(Rule):
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
         changes = []
         renames: dict[str, str] = {}
-        additions: dict[str, dict[str, float]] = {}
+        additions: dict[str, tuple[dict[str, float], str]] = {}
         for galaxy_path, galaxy in items(config, 'galaxies'):
             galaxy_prefix = f"{galaxy['name']}_" if 'name' in galaxy else ''
             for path, mass in items(galaxy, 'mass'):
@@ -423,7 +427,9 @@ class Halos(Rule):
                 prefix = f"{galaxy_prefix}mass_{mass.get('name')}_"
                 renames |= _halo_renames(mass, prefix)
                 if _gnedin04(mass):
-                    additions[prefix] = _GNEDIN04
+                    additions[prefix] = (_GNEDIN04, (
+                        "the parameters of the contraction gnedin04, at "
+                        "its values before"))
                 changes += _halo(mass, path)
         for params_path, params in items(config, 'params'):
             if isinstance(params.get('properties'), MutableMapping):
@@ -451,16 +457,18 @@ def _gnedin04(mass: Mapping[str, Any]) -> bool:
 def _added_names(
         params: MutableMapping[str, Any],
         path: list[str | int],
-        additions: dict[str, dict[str, Any]]
+        additions: dict[str, tuple[dict[str, Any], str]]
 ) -> list[Change]:
     """
     Add parameters to the properties of a params section, in place: of
-    each prefix (of a halo) whose parameters it gives, the parameters of
-    the given names and values, after its last one, unless it gives them.
+    each prefix (e.g. of a halo) whose parameters it gives, the
+    parameters of the given names and values, after its last one, unless
+    it gives them, with why (e.g. "the parameters of the contraction
+    gnedin04, at its values before").
     """
     changes = []
     properties = params['properties']
-    for prefix, values in additions.items():
+    for prefix, (values, why) in additions.items():
         keys = [key for key in properties if key.startswith(prefix)]
         missing = [(prefix + name, value) for name, value in values.items()
                    if prefix + name not in properties]
@@ -468,9 +476,7 @@ def _added_names(
             _splice(properties, keys[-1],
                     [(keys[-1], properties[keys[-1]])] + missing)
             changes.append(Change(path + ['properties'], (
-                f"{', '.join(name for name, _ in missing)} added, the "
-                f"parameters of the contraction gnedin04, at its values "
-                f"before")))
+                f"{', '.join(name for name, _ in missing)} added, {why}")))
     return changes
 
 
@@ -603,6 +609,99 @@ def _renamed_names(
     return changes
 
 
+class Cosmologies(Rule):
+    """
+    The cosmology (2026-11-11) is that of the setup (its section
+    cosmology), not of the distances of its galaxies.
+    - The cosmology of the distances of the galaxies of a configuration
+      is its cosmology, {type: published, name: ...}, but Planck18 (its
+      default); one whose galaxies have different cosmologies is refused
+      (a ConfigError: give them one). Galaxy pieces leave theirs to the
+      setups (see PiecesView).
+    - The distance direct is parameter, and redshift cosmological. One by
+      a redshift of its own is parameter, its value added to the params
+      sections that give the parameters of the galaxy, fixed at the
+      angular diameter distance of that redshift in the cosmology; its
+      epoch, that redshift, is now that of the galaxy.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 8
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        additions: dict[str, tuple[dict[str, float], str]] = {}
+        cosmologies: dict[str, list] = {}
+        for galaxy_path, galaxy in items(config, 'galaxies'):
+            distance = galaxy.get('distance')
+            if not isinstance(distance, MutableMapping):
+                continue
+            path = galaxy_path + ['distance']
+            name = distance.pop('cosmology', 'Planck18')
+            cosmologies.setdefault(name, []).append(galaxy_path)
+            kind = distance.get('type')
+            if kind == 'direct':
+                distance['type'] = 'parameter'
+                changes.append(Change(path, "type direct -> parameter"))
+            elif kind == 'redshift' and 'redshift' in distance:
+                redshift = distance.pop('redshift')
+                value = gbkfit.cosmology.CosmologyPublished(
+                    name).angular_diameter_distance(redshift)
+                distance['type'] = 'parameter'
+                prefix = f"{galaxy['name']}_" if 'name' in galaxy else ''
+                additions[prefix] = (dict(distance=round(value, 6)), (
+                    f"fixed: the angular diameter distance (Mpc) of the "
+                    f"redshift {redshift} of the distance"))
+                changes.append(Change(path, (
+                    f"type redshift of the redshift {redshift} -> "
+                    f"parameter, fixed at {value:.6g} Mpc; its epoch is "
+                    f"now the redshift of the galaxy")))
+            elif kind == 'redshift':
+                distance['type'] = 'cosmological'
+                changes.append(Change(path, "type redshift -> cosmological"))
+        for params_path, params in items(config, 'params'):
+            if isinstance(params.get('properties'), MutableMapping):
+                changes += _added_names(params, params_path, additions)
+        changes += _setup_cosmology(config, cosmologies)
+        return changes
+
+
+def _setup_cosmology(
+        config: MutableMapping[str, Any],
+        cosmologies: dict[str, list]
+) -> list[Change]:
+    """
+    Give a configuration of version 7 the cosmology of the distances of
+    its galaxies, of their paths by its name (see Cosmologies), in place,
+    and return the changes.
+
+    Raises
+    ------
+    ConfigError
+        If its galaxies have different cosmologies.
+    """
+    if isinstance(config, PiecesView):
+        return [
+            Change(path + ['distance'], (
+                f"cosmology {name} -> that of the setups of the galaxy "
+                f"(section cosmology)"))
+            for name, paths in cosmologies.items() if name != 'Planck18'
+            for path in paths]
+    if len(cosmologies) > 1:
+        raise ConfigError(
+            f"the distances of the galaxies of a configuration have "
+            f"different cosmologies ({', '.join(sorted(cosmologies))}); a "
+            f"configuration now has one (its section cosmology): give its "
+            f"galaxies one, then migrate it")
+    if not cosmologies or 'Planck18' in cosmologies:
+        return []
+    name = next(iter(cosmologies))
+    config['cosmology'] = dict(type='published', name=name)
+    return [Change(['cosmology'], (
+        f"the cosmology of the distances of its galaxies ({name})"))]
+
+
 # The rules, in the order of the changes: TraitParameterNames reads the
 # trait options that FlatComponents takes up
 RULES: tuple[Rule, ...] = (
@@ -610,4 +709,5 @@ RULES: tuple[Rule, ...] = (
     TraitParameterNames(),
     TracedMass(),
     Halos(),
+    Cosmologies(),
 )

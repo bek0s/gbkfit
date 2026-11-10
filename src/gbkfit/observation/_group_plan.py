@@ -147,7 +147,8 @@ class GroupPlan:
         for g, (galaxy, driver) in enumerate(
                 zip(galaxies, self._galaxy_drivers)):
             with config_path('galaxies', g):
-                stages.append(galaxy.plan_stage(group.sky_origin(), driver))
+                stages.append(galaxy.plan_stage(
+                    group.sky_origin(), driver, group.cosmology()))
         self._stages = tuple(stages)
         self._lock = threading.RLock()
         self._init_recordings()
@@ -867,7 +868,8 @@ class _GroupFunctions(ParamFunctions):
         with self._lock:
             if self._functions is None:
                 self._functions = tuple(
-                    galaxy.plan_functions(group.sky_origin(), driver)
+                    galaxy.plan_functions(
+                        group.sky_origin(), driver, group.cosmology())
                     for galaxy, driver in zip(
                         group.galaxies(), self._drivers))
         bound: dict[str, Any] = dict(G=G)

@@ -13,6 +13,7 @@ from astropy.coordinates import SkyCoord
 
 from gbkfit.config import (
     check_name, config_path, item_prefixes, warn)
+from gbkfit.cosmology import DEFAULT, Cosmology
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import DepthUnit, Galaxy
@@ -139,6 +140,10 @@ class ObservationGroup:
         which it needs when one of them has opacity (the light of each is
         dimmed by the opacity of those in front of it), and then of all of
         them. In configurations, a group is {name: [galaxies]}.
+    cosmology : Cosmology, optional
+        The cosmology of the galaxies, that of their setup (see
+        Galaxy.plan_stage); Planck18 by default (see
+        gbkfit.cosmology.DEFAULT).
 
     Raises
     ------
@@ -156,7 +161,8 @@ class ObservationGroup:
             self,
             galaxies: Galaxy | Sequence[Galaxy],
             observations: Observation | Sequence[Observation],
-            depth_order: Sequence[str | DepthGroup] | None = None
+            depth_order: Sequence[str | DepthGroup] | None = None,
+            cosmology: Cosmology | None = None
     ):
         self._galaxies = iterutils.tuplify(galaxies)
         self._observations = iterutils.tuplify(observations)
@@ -180,6 +186,7 @@ class ObservationGroup:
                 f"the galaxies and the observations must have different "
                 f"names; repeated: {repeated}")
         # (as given, for copies; see with_data)
+        self._cosmology = DEFAULT if cosmology is None else cosmology
         self._given_depth_order = \
             None if depth_order is None else tuple(depth_order)
         self._depth_order = _depth_order(
@@ -334,7 +341,8 @@ class ObservationGroup:
             tuple(self._galaxies[j] for j in seen),
             tuple(self._mappings[j] for j in seen),
             tuple(self._galaxy_labels[j] for j in seen),
-            None if order is None else tuple(order), self._sky_origin)
+            None if order is None else tuple(order), self._sky_origin,
+            self._cosmology)
 
     def plan(
             self,
@@ -427,7 +435,8 @@ class ObservationGroup:
         if any(new.pdescs().keys() != old.pdescs().keys()
                for new, old in zip(observations, self._observations)):
             return type(self)(
-                self._galaxies, observations, self._given_depth_order)
+                self._galaxies, observations, self._given_depth_order,
+                self._cosmology)
         group = copy.copy(self)
         group._observations = tuple(observations)
         return group
@@ -496,6 +505,10 @@ class ObservationGroup:
         '_', or none for one galaxy without a name).
         """
         return tuple(self._prefixes)
+
+    def cosmology(self) -> Cosmology:
+        """Return the cosmology of the galaxies."""
+        return self._cosmology
 
     def sky_origin(self) -> tuple[float, float] | None:
         """

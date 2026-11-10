@@ -16,11 +16,12 @@ import pytest
 import scipy.integrate
 import scipy.special
 
+import gbkfit.cosmology
 from gbkfit.config import ConfigError
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.model.distance import (
-    KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
+    KPC_PER_ARCSEC_MPC, DistanceCosmological, DistanceParameter)
 from gbkfit.model.mass import (
     ContractionBlumenthal86, ContractionGnedin04, Halo, HaloProfile,
     MassContext, MassDisk, MassModel, MassPoint, MassSpheroid, MassUser,
@@ -42,7 +43,9 @@ G = 4.30091727e-6
 CONTEXT = MassContext(
     critical_density=astropy.cosmology.Planck18.critical_density0.to_value(
         'solMass / kpc3'),
-    omega_m=astropy.cosmology.Planck18.Om0)
+    omega_m=astropy.cosmology.Planck18.Om0,
+    ricci_scalar=gbkfit.cosmology.DEFAULT.ricci_scalar(0.0),
+    ricci_scalar_today=gbkfit.cosmology.DEFAULT.ricci_scalar(0.0))
 
 # The vertical laws, by type
 LAWS = dict(
@@ -469,7 +472,7 @@ def test_a_traced_disk_in_its_layer_has_the_density_of_its_gravity():
     # linear shape, which differs for a flaring disk of two terms); its
     # column is its surface density, and 0 beyond the subnodes
     layers = Layers(flare=1)
-    context = MassContext(1, 1, dict(hi=layers))
+    context = MassContext(1, 1, 0, 0, dict(hi=layers))
     disk = TracedDisk('gas', 'hi')
     params = dict(upsilon=2.0)
     knots = layers.knots(None)
@@ -505,7 +508,7 @@ def test_a_traced_disk_in_the_layer_of_another_component():
     # Its surface density, in the shape of the other component's layer:
     # as a disk of that surface density as a law in that layer
     co, hi = Layers(flare=0), Layers(flare=1)
-    context = MassContext(1, 1, dict(co=co, hi=hi))
+    context = MassContext(1, 1, 0, 0, dict(co=co, hi=hi))
     h2 = TracedDisk('h2', 'co', vertical=VerticalComponent('hi'))
     params = dict(upsilon=1.0)
     knots = co.knots(None)
@@ -530,7 +533,7 @@ def test_vertical_structure_of_a_component():
     class Gap(Layers):
         def surface_densities(self, R):
             return super().surface_densities(R) * (np.abs(R - 5) > 0.3)
-    context = MassContext(1, 1, dict(hi=Gap(flare=1)))
+    context = MassContext(1, 1, 0, 0, dict(hi=Gap(flare=1)))
     knots = Gap(flare=1).knots(None)
     z = np.array([0, 0.2, 1])
     shapes = VerticalComponent('hi').shapes(
@@ -556,7 +559,7 @@ def test_disks_as_thick_as_a_component(surface, flare):
     # Of one layer of constant thickness, the disk of its vertical law;
     # flaring, of two layers, the pull of its rings out to 40 rd (where
     # the exponential is negligible)
-    context = MassContext(1, 1, dict(hi=Layers(flare)))
+    context = MassContext(1, 1, 0, 0, dict(hi=Layers(flare)))
     radius = np.geomspace(0.05, 30, 40)
     vertical = VerticalComponent('hi')
     if surface == 'exponential':
@@ -1113,11 +1116,13 @@ def test_gnedin_and_cautun_contractions(a0, w):
     np.testing.assert_allclose(
         parts['cautun20']['halo'],
         before * (0.45 + 0.38 * (eta + 1.16) ** 0.53), rtol=1e-10)
-    with pytest.raises(ValueError, match="cosmic baryon fraction"):
-        mass_model(BARYONS + [
-            responding_halo(contraction=dict(type='cautun20'))]
-        ).vcirc2(radius, BARYON_VALUES | dict(
-            mass_halo_log_m=12, mass_halo_c=5), CONTEXT)
+    # (of a cosmology of Omega_b: when the galaxy is planned)
+    galaxy = galaxy_parser.load(dict(
+        mass=BARYONS + [responding_halo(contraction=dict(type='cautun20'))],
+        distance=dict(type='parameter')))
+    with pytest.raises(ValueError, match="take the cosmic baryon fraction"):
+        galaxy.plan_stage(
+            cosmology=gbkfit.cosmology.CosmologyFlatLambdaCDM(70, 0.3))
     # (any parameterisation: the virial radius is that of the profile)
     Halo('h', ProfileNFW('density_radius'), baryons=['stars'],
          contraction=ContractionGnedin04())
@@ -1418,7 +1423,7 @@ def test_disks_as_thick_as_a_component_enclose_their_density():
     # 2 pi int R int_-h^h rho dz dR (h = sqrt(r^2 - R^2)), with R = r
     # sin(phi), by Gauss-Legendre rules between its subnodes, where its
     # shape bends
-    context = MassContext(1, 1, dict(hi=Layers(flare=1)))
+    context = MassContext(1, 1, 0, 0, dict(hi=Layers(flare=1)))
     vertical = VerticalComponent('hi')
     disk = MassDisk('d', SurfaceExponential(), vertical)
     params = dict(log_m=10, rd=2)
@@ -1534,41 +1539,59 @@ def test_mass_model_adds_its_components():
 
 
 def test_distances_give_the_length_of_an_arcsec():
-    # At 10 Mpc, an arcsec is 48.48 pc; by a redshift, the angular
-    # diameter distance of the cosmology; a distance sets no redshift
-    # The redshift of the galaxy (0.5 here) gives the distance of
-    # DistanceRedshift, unless it has its own (for the distance only), and
-    # the epoch of both
-    direct = DistanceDirect()
-    assert list(direct.pdescs()) == ['distance']
-    assert direct.kpc_per_arcsec(dict(distance=10), 0.5) \
+    # At 10 Mpc, an arcsec is 48.48 pc; cosmological, at the angular
+    # diameter distance of the redshift of the galaxy in the cosmology; a
+    # distance sets no redshift
+    parameter = DistanceParameter()
+    assert list(parameter.pdescs()) == ['distance']
+    planck = gbkfit.cosmology.DEFAULT
+    assert parameter.kpc_per_arcsec(dict(distance=10), 0.5, planck) \
         == pytest.approx(0.0484813681)
-    assert direct.epoch(dict(distance=10), 0.5) == 0.5
-    by_redshift = DistanceRedshift(cosmology='WMAP9')
-    assert by_redshift.pdescs() == {}
-
-    def kpc_per_arcsec(redshift):
-        distance = astropy.cosmology.WMAP9.angular_diameter_distance(redshift)
-        return distance.to_value('kpc') * np.pi / (180 * 3600)
-    assert by_redshift.kpc_per_arcsec({}, 0.5) == pytest.approx(
-        kpc_per_arcsec(0.5))
-    assert by_redshift.epoch({}, 0.5) == 0.5
-    own = DistanceRedshift(redshift=0.4, cosmology='WMAP9')
-    assert own.kpc_per_arcsec({}, 0.5) == pytest.approx(kpc_per_arcsec(0.4))
-    assert own.epoch({}, 0.5) == 0.4
-    assert own.dump()['redshift'] == 0.4
-    # (a redshift of 0 gave a distance of 0)
-    with pytest.raises(ValueError, match="'redshift' must be greater than 0"):
-        DistanceRedshift(redshift=0)
-    with pytest.raises(ValueError, match="'cosmology' must be one of"):
-        DistanceRedshift(cosmology='Planck99')
-    # (by the redshift of a galaxy without one, or blueshifted: no length)
+    cosmological = DistanceCosmological()
+    assert cosmological.pdescs() == {}
+    wmap = gbkfit.cosmology.CosmologyPublished('WMAP9')
+    distance = astropy.cosmology.WMAP9.angular_diameter_distance(0.5)
+    assert cosmological.kpc_per_arcsec({}, 0.5, wmap) == pytest.approx(
+        distance.to_value('kpc') * np.pi / (180 * 3600))
+    # (of a galaxy without a redshift, or blueshifted: no length)
     for redshift in ({}, dict(redshift=-0.001)):
-        with pytest.raises(ValueError, match="needs a redshift above 0"):
+        with pytest.raises(ValueError, match="needs the galaxy to have"):
             galaxy_parser.load(dict(
                 components=[], mass=[dict(type='point', name='bh')],
-                distance=dict(type='redshift')) | redshift)
+                distance=dict(type='cosmological')) | redshift)
 
+
+def test_cosmologies_give_their_epochs():
+    # Published (Planck18 by default), or flat Lambda-CDM of given
+    # parameters, as astropy's; Omega_m with the massive neutrinos, as
+    # Planck's
+    planck = gbkfit.cosmology.cosmology_parser.load(dict(type='published'))
+    assert planck.dump() == dict(type='published', name='Planck18')
+    reference = astropy.cosmology.Planck18
+    assert planck.omega_m(0.0) == pytest.approx(
+        reference.Om0 + reference.Onu0)
+    assert planck.critical_density(1.5) == pytest.approx(
+        reference.critical_density(1.5).to_value('solMass / kpc3'))
+    info = dict(type='flat_lambda_cdm', hubble_constant=70,
+                omega_matter=0.3, omega_baryon=0.05)
+    flat = gbkfit.cosmology.cosmology_parser.load(copy.deepcopy(info))
+    assert flat.dump() == info
+    assert flat.h() == pytest.approx(0.7)
+    assert flat.baryon_fraction() == pytest.approx(0.05 / 0.3)
+    reference = astropy.cosmology.FlatLambdaCDM(H0=70, Om0=0.3)
+    assert flat.angular_diameter_distance(0.5) == pytest.approx(
+        reference.angular_diameter_distance(0.5).to_value('Mpc'))
+    # (8 pi G (rho_m + 4 rho_Lambda) / c^2, of Lambda-CDM)
+    density = reference.critical_density(0.5).to_value('solMass / kpc3') * (
+        reference.Om(0.5) + 4 * reference.Ode(0.5))
+    assert flat.ricci_scalar(0.5) == pytest.approx(
+        8 * np.pi * G * density / 299792.458 ** 2, rel=1e-6)
+    assert gbkfit.cosmology.CosmologyFlatLambdaCDM(
+        70, 0.3).baryon_fraction() is None
+    with pytest.raises(ValueError, match="cannot exceed omega_matter"):
+        gbkfit.cosmology.CosmologyFlatLambdaCDM(70, 0.3, 0.4)
+    with pytest.raises(ValueError, match="'name' must be one of"):
+        gbkfit.cosmology.CosmologyPublished('Planck99')
 
 MASS = [
     dict(type='disk', name='stars', surface=dict(type='exponential'),
@@ -1580,7 +1603,7 @@ MASS = [
         type='pseudo_isothermal', parameterisation='density_radius'),
         overdensity='200c', shape=dict(type='sphere'))]
 
-DISTANCE = dict(type='direct', cosmology='Planck18')
+DISTANCE = dict(type='parameter')
 
 MASS_PROPERTIES = dict(
     distance=10, mass_stars_log_m=10.5, mass_stars_rd=0.5,
@@ -1596,9 +1619,10 @@ DISK_PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, dpt_a=15)
 
 
-def test_the_mass_of_a_galaxy_at_a_direct_distance_is_of_its_epoch():
+def test_the_mass_of_a_galaxy_is_of_its_epoch():
     # The critical density that defines its halos is that of its redshift
-    # (5.5 times that of today at z = 1.5), as by a distance of redshift
+    # (5.5 times that of today at z = 1.5), in its cosmology (Planck18
+    # by default)
     galaxy = galaxy_parser.load(dict(
         components=[DISK | dict(
             type='thin_disk', vptraits=dict(type='mass'),
@@ -1615,6 +1639,13 @@ def test_the_mass_of_a_galaxy_at_a_direct_distance_is_of_its_epoch():
     assert planck.Om0 + planck.Onu0 == pytest.approx(0.3111, abs=1e-4)
     assert mass.context.baryon_fraction == pytest.approx(
         planck.Ob0 / (planck.Om0 + planck.Onu0))
+    # (in the cosmology of its setup)
+    wmap = gbkfit.cosmology.CosmologyPublished('WMAP9')
+    mass = galaxy.plan_stage(cosmology=wmap).mass(
+        DISK_PROPERTIES | MASS_PROPERTIES)
+    assert mass.context.critical_density == pytest.approx(
+        astropy.cosmology.WMAP9.critical_density(1.5).to_value(
+            'solMass / kpc3'))
 
 
 def with_traits(component, **traits):

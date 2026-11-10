@@ -20,6 +20,7 @@ from gbkfit.config import (
     collect_problems, config_path, families, name_problem, paths_relative_to,
     report_unknown, strict_mode, warn)
 from gbkfit.config.schema import SchemaWriter
+from gbkfit.cosmology import Cosmology, cosmology_parser
 import gbkfit.model
 import gbkfit.observation
 import gbkfit.project
@@ -138,6 +139,10 @@ _SECTIONS = dict(
         Sequence[str | Mapping[str, Sequence[str]]],
         "The order of the galaxies along the line of sight: names, and "
         "groups of them as {name: [galaxies]}."),
+    cosmology=_Section(
+        Cosmology,
+        "The cosmology of the galaxies: of their epochs and of their "
+        "cosmological distances; Planck18 by default."),
     fitter=_Section(Fitter, "The fitter."),
     workers=_Section(
         Workers, "The workers of evaluations of several parameters at once."),
@@ -648,7 +653,8 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
     Return the galaxies and observations (with their data, if any) of a
     configuration, as an ObservationGroup, with the order of the galaxies
-    along the line of sight of its section 'depth_order'. The galaxies
+    along the line of sight of its section 'depth_order' and the
+    cosmology of its section 'cosmology'. The galaxies
     and observations name lines and bands of the catalogue of GBKFIT and
     of the sections 'lines' and 'bands' of the configuration (see
     LineCatalogue and lines_from). Their option driver places them on a
@@ -664,8 +670,12 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
                 _without_driver(cfg['observations']))
     with config_path('depth_order'):
         depth_order = _load_depth_order(cfg.get('depth_order'))
+    cosmology = None
+    if cfg.get('cosmology') is not None:
+        with config_path('cosmology'):
+            cosmology = cosmology_parser.load(cfg['cosmology'])
     return gbkfit.observation.ObservationGroup(
-        galaxies, observations, depth_order)
+        galaxies, observations, depth_order, cosmology)
 
 
 def _without_driver(infos: Sequence[Any]) -> list[Any]:

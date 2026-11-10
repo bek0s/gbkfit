@@ -23,7 +23,7 @@ galaxies:
     profile: {type: nfw}
     baryons: [stars]
     contraction: {type: gnedin04}
-  distance: {type: direct, cosmology: Planck18}
+  distance: {type: parameter}
   gravity:
     type: hu_sawicki
     screened: [halo]

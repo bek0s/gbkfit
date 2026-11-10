@@ -1042,3 +1042,76 @@ def test_the_setups_of_a_project_rename_the_parameters_of_its_pieces(
         dict(type='exponential'), dict(type='uniform')]
     assert study.piece('galaxies', 'gas')['components'][0]['rptraits'] \
         == [dict(type='exponential'), dict(type='uniform')]
+
+
+def test_the_cosmology_of_distances_is_that_of_the_configuration():
+    # Version 8: the cosmology of the distances of the galaxies is that
+    # of the configuration (Planck18 by default); direct is parameter,
+    # redshift cosmological, and a redshift of its own a fixed parameter
+    # of its angular diameter distance
+    import astropy.cosmology
+    galaxies = [
+        dict(name='a', mass=[dict(type='point', name='bh')],
+             distance=dict(type='direct', cosmology='WMAP9')),
+        dict(name='b', redshift=0.1, mass=[dict(type='point', name='bh')],
+             distance=dict(type='redshift', cosmology='WMAP9')),
+        dict(name='c', mass=[dict(type='point', name='bh')],
+             distance=dict(type='redshift', redshift=0.02,
+                           cosmology='WMAP9'))]
+    params = dict(properties=dict(
+        a_distance=10, a_mass_bh_log_m=8, b_mass_bh_log_m=8,
+        c_mass_bh_log_m=8))
+    config = dict(galaxies=galaxies, params=params)
+    changes = migration.migrate(config, 7)
+    assert [g['distance'] for g in galaxies] == [
+        dict(type='parameter'), dict(type='cosmological'),
+        dict(type='parameter')]
+    assert config['cosmology'] == dict(type='published', name='WMAP9')
+    distance = astropy.cosmology.WMAP9.angular_diameter_distance(0.02)
+    assert list(params['properties']) == [
+        'a_distance', 'a_mass_bh_log_m', 'b_mass_bh_log_m',
+        'c_mass_bh_log_m', 'c_distance']
+    assert params['properties']['c_distance'] == pytest.approx(
+        distance.to_value('Mpc'), rel=1e-6)
+    assert not any(c.message.startswith('by hand') for c in changes)
+    # (Planck18, the default: no section)
+    config = dict(galaxies=[dict(
+        mass=[dict(type='point', name='bh')],
+        distance=dict(type='direct', cosmology='Planck18'))])
+    migration.migrate(config, 7)
+    assert 'cosmology' not in config
+    # (galaxies of different cosmologies: refused)
+    galaxies = [
+        dict(name='a', distance=dict(type='direct', cosmology='WMAP9')),
+        dict(name='b', distance=dict(type='direct'))]
+    with pytest.raises(ConfigError, match="different cosmologies"):
+        migration.migrate(dict(galaxies=galaxies), 7)
+
+
+def test_the_setups_of_a_project_take_the_cosmology_of_their_galaxies(
+        tmp_path):
+    # Of the galaxy pieces they name; a setup whose galaxies have
+    # different cosmologies is refused, and the project is left as it was
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(dict(format=project.FORMAT, version=7),
+              tmp_path / 'study' / project.MARKER)
+    for name, cosmology in (('far', 'WMAP9'), ('near', 'Planck18')):
+        yaml.dump(dict(name=name, mass=[dict(type='point', name='bh')],
+                       distance=dict(type='direct', cosmology=cosmology)),
+                  tmp_path / 'study' / 'galaxies' / f'{name}.yaml')
+    yaml.dump(dict(galaxies='far', params=dict(properties=dict(
+        far_distance=10, far_mass_bh_log_m=8))),
+              tmp_path / 'study' / 'setups' / 'one.yaml')
+    yaml.dump(dict(galaxies=['far', 'near'], params=dict(properties={})),
+              tmp_path / 'study' / 'setups' / 'both.yaml')
+    files = sorted((tmp_path / 'study').rglob('*.yaml'))
+    before = {file: file.read_text() for file in files}
+    with pytest.raises(ConfigError, match="different cosmologies"):
+        migration.migrate_project(study.path)
+    assert {file: file.read_text() for file in files} == before
+    (tmp_path / 'study' / 'setups' / 'both.yaml').unlink()
+    migration.migrate_project(study.path)
+    one = yaml.load(tmp_path / 'study' / 'setups' / 'one.yaml')
+    assert one['cosmology'] == dict(type='published', name='WMAP9')
+    assert project.open(study.path).piece('galaxies', 'far')['distance'] \
+        == dict(type='parameter')

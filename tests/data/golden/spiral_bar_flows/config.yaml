@@ -25,7 +25,7 @@ galaxies:
   - type: halo
     name: halo
     profile: {type: nfw}
-  distance: {type: direct, cosmology: Planck18}
+  distance: {type: parameter}
 observations:
 - type: sky
   data:

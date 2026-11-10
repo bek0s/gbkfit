@@ -583,10 +583,6 @@ class GravityHuSawicki(Gravity):
             params: ParamValues,
             context: MassContext
     ) -> GravityField:
-        if context.ricci_scalar is None or context.ricci_scalar_today is None:
-            raise ValueError(
-                "f(R) gravity takes the Ricci scalar of the background "
-                "universe, which the context of the mass does not give")
         n, ricci = self._n, context.ricci_scalar
         background = 10 ** float(params['gravity_log_fr0']) * (
             context.ricci_scalar_today / ricci) ** (n + 1)

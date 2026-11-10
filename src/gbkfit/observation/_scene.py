@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import gbkfit.units
 from gbkfit.config import check_name
+from gbkfit.cosmology import Cosmology
 from gbkfit.model import (
     STARS, Band, BandEmission, Component, DataUnit, DepthUnit, Emission,
     Galaxy, LineEmission, Scene, StarsEmission,
@@ -31,15 +32,17 @@ class SeenGalaxies(NamedTuple):
     galaxies, the mapping of the parameters of each to those of the
     observation group, their labels (the id 'galaxy' of their extra
     outputs), their order along the line of sight, front to back (in
-    units, see DepthUnit; None if not given), and the RA and Dec (degrees)
-    of the origin of the frame of their parameters (that of the first
-    observation on the sky; None without one).
+    units, see DepthUnit; None if not given), the RA and Dec (degrees) of
+    the origin of the frame of their parameters (that of the first
+    observation on the sky; None without one), and their cosmology (see
+    ObservationGroup).
     """
     galaxies: tuple[Galaxy, ...]
     mappings: tuple[dict[str, str], ...]
     labels: tuple[str, ...]
     order: tuple[DepthUnit, ...] | None
     sky_origin: tuple[float, float] | None
+    cosmology: Cosmology
 
 
 def make_scene(

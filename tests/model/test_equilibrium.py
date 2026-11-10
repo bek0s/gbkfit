@@ -123,7 +123,7 @@ def test_central_equilibrium_in_the_mass_of_the_galaxy():
     # the gravity gives the disk and writes in its table
     mass = [dict(type='point', name='bh')]
     balanced = galaxy(
-        DISK, mass=mass, distance=dict(type='direct', cosmology='Planck18'))
+        DISK, mass=mass, distance=dict(type='parameter'))
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
     extra = Extras()
     states = balanced.plan_stage().evaluate(params, extra).states
@@ -153,7 +153,7 @@ def test_self_gravitating_equilibrium_in_a_mass_disk():
     balanced = galaxy(
         with_kinematics(
             DISK, equilibrium=SELF_GRAVITATING),
-        mass=mass, distance=dict(type='direct', cosmology='Planck18'))
+        mass=mass, distance=dict(type='parameter'))
     params = PROPERTIES | dict(distance=10, mass_gas_log_m=9, mass_gas_rd=0.3)
     extra = Extras()
     states = balanced.plan_stage().evaluate(params, extra).states
@@ -179,7 +179,7 @@ def test_self_gravitating_equilibrium_in_its_own_mass_disk():
         | dict(name='gas')
     balanced = galaxy(
         disk, mass=[dict(type='traced_disk', name='gas', component='gas')],
-        distance=dict(type='direct', cosmology='Planck18'))
+        distance=dict(type='parameter'))
     params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
         | dict(distance=10, mass_gas_upsilon=1e9)
     extra = Extras()
@@ -198,7 +198,7 @@ def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
     # hypot(sigma_traits, sigma_eq), where the support takes them
     info = dict(
         mass=[dict(type='point', name='bh')],
-        distance=dict(type='direct', cosmology='Planck18'))
+        distance=dict(type='parameter'))
     supported = with_kinematics(
         DISK, vptraits=dict(type='mass', pressure_support=dict(type='jeans')))
     balanced = galaxy(supported, **info)
@@ -224,7 +224,7 @@ def test_jeans_equilibrium_in_a_point_mass():
     balanced = galaxy(
         with_kinematics(DISK, equilibrium=dict(type='jeans')),
         mass=[dict(type='point', name='bh')],
-        distance=dict(type='direct', cosmology='Planck18'))
+        distance=dict(type='parameter'))
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
     extra = Extras()
     balanced.plan_stage().evaluate(params, extra)
@@ -254,7 +254,7 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
                     rhtraits=dict(type='sech2', zmax=2))
     balanced = galaxy(
         disk, mass=[dict(type='traced_disk', name='gas', component='gas')],
-        distance=dict(type='direct', cosmology='Planck18'))
+        distance=dict(type='parameter'))
     params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
         | dict(gas_rht_s=0.05, distance=10, mass_gas_upsilon=1e9)
     extra = Extras()
@@ -282,7 +282,7 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
     (with_kinematics(
         DISK, equilibrium=dict(type='self_gravitating', mass='dust')),
      dict(mass=[dict(type='point', name='gas')],
-          distance=dict(type='direct')), "which its galaxy does not have")])
+          distance=dict(type='parameter')), "which its galaxy does not have")])
 def test_self_gravitating_equilibrium_is_checked(disk, info, message):
     with pytest.raises((ConfigError, ValueError), match=message):
         galaxy(disk, **info)
@@ -296,7 +296,7 @@ def test_jeans_equilibrium_needs_vertical_forces(tmp_path):
             with_kinematics(DISK, equilibrium=dict(type='jeans')),
             mass=[dict(type='user', name='mine',
                        file=str(tmp_path / 'curve.py'), func='vcirc2')],
-            distance=dict(type='direct'))
+            distance=dict(type='parameter'))
 
 
 @pytest.mark.parametrize('disk, message', [

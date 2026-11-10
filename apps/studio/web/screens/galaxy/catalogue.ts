@@ -181,7 +181,7 @@ export const GALAXY_PARTS: Part[] = [
     option: ['distance'],
     typed: 'distance',
     optional: true,
-    start: { type: 'direct' },
+    start: { type: 'parameter' },
   },
   {
     key: 'mass',

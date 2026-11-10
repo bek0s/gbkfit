@@ -975,7 +975,7 @@ def test_the_cube_of_a_galaxy_is_rendered_and_viewed(client):
 @pytest.mark.parametrize('galaxy, request_, message', [
     (dict(components=[]), {}, "at least one component"),
     # (a galaxy of mass alone has nothing to see)
-    (dict(mass=dict(type='point', name='bh'), distance=dict(type='direct')),
+    (dict(mass=dict(type='point', name='bh'), distance=dict(type='parameter')),
      {}, "no component that emits light"),
     (RENDERED, dict(properties=dict(nonsense=1)), "unknown parameters"),
     (RENDERED, dict(view='sideways'), None)])

@@ -205,7 +205,7 @@ MASSIVE = dict(
         emission=dict(type='lines'))],
     mass=[dict(type='halo', name='halo', profile=dict(
         type='pseudo_isothermal', parameterisation='density_radius'))],
-    distance=dict(type='direct'))
+    distance=dict(type='parameter'))
 
 CUBE = dict(
     type='sky',

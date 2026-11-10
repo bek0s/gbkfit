@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.config import item_prefixes
+from gbkfit.cosmology import Cosmology
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid
 from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
@@ -80,7 +81,7 @@ def _with_mass_params(
     if distance is None:
         raise ValueError(
             "the mass of a galaxy needs its distance (e.g. distance: "
-            "{type: direct})")
+            "{type: parameter})")
     kinds = {cmp.name(): cmp.density_kind() for cmp in components
              if cmp.density_kind() is not None}
     for mass_component in mass_model.components():
@@ -265,26 +266,30 @@ class ComponentSet:
             self,
             driver: Driver,
             redshift: float,
-            sky_origin: tuple[float, float] | None = None
+            sky_origin: tuple[float, float] | None = None,
+            cosmology: Cosmology | None = None
     ) -> GalaxyStage:
         """
         Plan the stage of a galaxy of the given redshift on a driver, in
-        the frame of the given origin on the sky (see GalaxyStage).
+        the frame of the given origin on the sky and in the cosmology (see
+        GalaxyStage).
         """
-        return GalaxyStage(self, driver, redshift, sky_origin)
+        return GalaxyStage(self, driver, redshift, sky_origin, cosmology)
 
     def plan_functions(
             self,
             driver: Driver,
             redshift: float,
-            sky_origin: tuple[float, float] | None = None
+            sky_origin: tuple[float, float] | None = None,
+            cosmology: Cosmology | None = None
     ) -> GalaxyFunctions:
         """
         Plan the functions of a galaxy of the given redshift on a driver,
-        in the frame of the given origin on the sky, for the derived values
-        of its parameters (see GalaxyFunctions).
+        in the frame of the given origin on the sky and in the cosmology,
+        for the derived values of its parameters (see GalaxyFunctions).
         """
-        return GalaxyFunctions(self, driver, redshift, sky_origin)
+        return GalaxyFunctions(
+            self, driver, redshift, sky_origin, cosmology)
 
     def function_names(self) -> tuple[str, ...]:
         """

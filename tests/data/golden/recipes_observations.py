@@ -106,7 +106,7 @@ def _mge_stars(kind: str, **options: Any) -> list[dict[str, Any]]:
             **options)],
         mass=[dict(type='traced_spheroid', name='lum', component='stars'),
               dict(type='point', name='bh')],
-        distance=dict(type='direct', cosmology='Planck18'))]
+        distance=dict(type='parameter'))]
 
 
 _MGE_STARS_TRUTH = dict(
@@ -444,7 +444,7 @@ CASES: list[dict[str, Any]] = [
             components=[_STARS],
             mass=[dict(type='traced_spheroid', name='lum', component='stars'),
                   dict(type='halo', name='halo', profile=dict(type='nfw'))],
-            distance=dict(type='direct', cosmology='Planck18'))],
+            distance=dict(type='parameter'))],
         observations=[_sky(
             dict(
                 type='region_moments',

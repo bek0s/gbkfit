@@ -18,7 +18,7 @@ import ruamel.yaml
 from gbkfit.config import FORMAT_VERSION, ConfigError
 import gbkfit.project
 from . import v2, v3, v4, v5, v6, v7, v8
-from .rules import Change, Rule, insert_first
+from .rules import Change, PiecesView, Rule, insert_first
 
 
 __all__ = [
@@ -152,8 +152,11 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
 
     The pieces are migrated together, as one configuration with all of
     them (so that a rule can change a piece of observations and one of
-    parameters, as one); each setup is migrated alone. The marker of the
-    project gives their version; they have no section 'version'.
+    parameters, as one; see PiecesView); each setup is migrated alone,
+    with copies of the galaxy pieces it names. The marker of the project
+    gives their version; they have no section 'version'. Nothing is
+    written until all are rewritten: a rule that refuses a setup leaves
+    the project as it was.
 
     Parameters
     ----------
@@ -203,17 +206,19 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
         for galaxy in _listed(setup, 'galaxies')
         if isinstance(galaxy, Mapping)]
     by_piece: dict[tuple[str, int], list[Change]] = {}
-    view = dict(pieces, galaxies=pieces['galaxies'] + inline)
+    view = PiecesView(pieces, galaxies=pieces['galaxies'] + inline)
     for change in _rewrite(view, version):
         section, index, *rest = change.path
         # (not the copies of the galaxies of the setups)
         if index < len(files[section]):
             by_piece.setdefault((section, index), []).append(
                 Change(rest, change.message))
-    changes = {}
-    for (section, index), piece_changes in by_piece.items():
-        _write(files[section][index], pieces[section][index])
-        changes[files[section][index]] = piece_changes
+    changes = {
+        files[section][index]: piece_changes
+        for (section, index), piece_changes in by_piece.items()}
+    rewritten = {
+        files[section][index]: pieces[section][index]
+        for section, index in by_piece}
     for file, setup in zip(setup_files, setups):
         if not isinstance(setup, MutableMapping):
             continue
@@ -225,8 +230,12 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
         if view is not setup:
             _write_back(setup, view, named)
         if setup_changes:
-            _write(file, setup)
+            rewritten[file] = setup
             changes[file] = setup_changes
+    # (written only once all are rewritten: a rule that refuses one
+    # leaves the project as it was)
+    for file, config in rewritten.items():
+        _write(file, config)
     _mark_current(project.path)
     return {
         os.path.relpath(file, project.path): file_changes

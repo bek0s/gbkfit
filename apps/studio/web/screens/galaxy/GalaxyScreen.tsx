@@ -97,7 +97,7 @@ export function GalaxyScreen({ name }: { name: string }) {
       const base = component === null ? [] : ['components', component];
       let next = s.options;
       // (mass comes with a distance, which it needs)
-      if (p.key === 'mass' && next.distance === undefined) next = setAt(next, ['distance'], { type: 'direct' });
+      if (p.key === 'mass' && next.distance === undefined) next = setAt(next, ['distance'], { type: 'parameter' });
       if (p.key === 'mass') {
         next = setAt(next, ['mass'], [startOf(draft.defs, 'mass_component', 'halo', [], { name: 'halo' })]);
       } else next = setAt(next, [...base, ...p.option], p.start ?? {});

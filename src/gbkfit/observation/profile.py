@@ -370,7 +370,8 @@ class ObservationProfile(Observation):
 
         """
         galaxy, mapping = seen.galaxies[0], seen.mappings[0]
-        functions = galaxy.plan_functions(seen.sky_origin, driver)
+        functions = galaxy.plan_functions(
+            seen.sky_origin, driver, seen.cosmology)
         arcsec, kpc = self._radii_of()
         inclination = None
         if self._inclination is not None:

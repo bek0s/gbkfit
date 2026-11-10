@@ -15,6 +15,7 @@ import astropy.units as u
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.cosmology import Cosmology
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
 from .components._stage import GalaxyMass, GalaxyStage, GalaxyState
@@ -112,11 +113,13 @@ class GalaxyFunctions:
     driver : Driver
         The driver where the disks sample their profiles.
     redshift : float
-        The redshift of the galaxy (for its distance, see Distance).
+        The redshift of the galaxy (see GalaxyStage).
     sky_origin : tuple of float, optional
         The RA and Dec (degrees) of the origin of the frame of the
         parameters of the galaxy, which its image traits need (see
         GalaxyStage).
+    cosmology : Cosmology, optional
+        The cosmology of the galaxy (see GalaxyStage).
     """
 
     def __init__(
@@ -124,11 +127,13 @@ class GalaxyFunctions:
             component_set: 'ComponentSet',
             driver: Driver,
             redshift: float,
-            sky_origin: tuple[float, float] | None = None
+            sky_origin: tuple[float, float] | None = None,
+            cosmology: Cosmology | None = None
     ):
         components = component_set.components()
         self._component_set = component_set
-        self._stage = GalaxyStage(component_set, driver, redshift, sky_origin)
+        self._stage = GalaxyStage(
+            component_set, driver, redshift, sky_origin, cosmology)
         self._suffixes = _disk_suffixes(component_set)
         # (the components of the suffixes are disks)
         self._disks = {

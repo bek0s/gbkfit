@@ -23,7 +23,7 @@ galaxies:
     name: bulge
     profile: {type: sersic}
   - {type: traced_disk, name: gas, component: gas}
-  distance: {type: direct, cosmology: Planck18}
+  distance: {type: parameter}
   gravity: {type: mond, interpolation: simple}
 observations:
 - type: sky

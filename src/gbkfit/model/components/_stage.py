@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
+from gbkfit.cosmology import DEFAULT, Cosmology
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues, ParamView, StageCache
 from ..extras import Extras
@@ -25,8 +26,8 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    'GalaxyEpoch',
     'GalaxyMass',
-    'GalaxyScale',
     'GalaxyStage',
     'GalaxyState'
 ]
@@ -46,17 +47,27 @@ _MAX_TILT = 20.0
 
 
 @dataclasses.dataclass(frozen=True)
-class GalaxyScale:
+class GalaxyEpoch:
     """
-    The scale of a galaxy in one evaluation, from its distance (see
-    Distance): the length of an arcsec in the galaxy (kpc), and the
-    critical density (Msun/kpc^3), the matter density parameter and the
-    Ricci scalar (kpc^-2) of the universe at its epoch.
+    The universe at the epoch of a galaxy, its redshift, in a cosmology
+    (see gbkfit.cosmology): its critical density (Msun/kpc^3), its matter
+    density parameter and its Ricci scalar (kpc^-2) then, its Ricci
+    scalar today, and the cosmic baryon fraction (None if the cosmology
+    has no Omega_b).
     """
-    kpc_per_arcsec: float
     critical_density: float
     omega_m: float
     ricci_scalar: float
+    ricci_scalar_today: float
+    baryon_fraction: float | None
+
+    @classmethod
+    def of(cls, cosmology: Cosmology, redshift: float) -> 'GalaxyEpoch':
+        """Return the epoch of a redshift in a cosmology."""
+        return cls(
+            cosmology.critical_density(redshift),
+            cosmology.omega_m(redshift), cosmology.ricci_scalar(redshift),
+            cosmology.ricci_scalar(0.0), cosmology.baryon_fraction())
 
 
 @dataclasses.dataclass(frozen=True)
@@ -141,18 +152,24 @@ class GalaxyStage:
     driver : Driver
         The driver where the components evaluate their parts.
     redshift : float
-        The redshift of the galaxy (for its distance, see Distance).
+        The redshift of the galaxy: its epoch, and its distance if that is
+        cosmological (see Distance).
     sky_origin : tuple of float, optional
         The RA and Dec (degrees) of the origin of the frame of the
         parameters of the galaxy (that of the first observation on the
         sky; see ObservationGroup), which image traits need (see
         ImageMaps).
+    cosmology : Cosmology, optional
+        The cosmology of the galaxy, that of its setup: of its epoch, once
+        (see GalaxyEpoch), and its distance; Planck18 by default (see
+        gbkfit.cosmology.DEFAULT).
 
     Raises
     ------
     ValueError
         If a component cannot plan its part (e.g. it has an image trait,
-        but there is no sky origin).
+        but there is no sky origin), or its mass takes the cosmic baryon
+        fraction, which the cosmology lacks.
     """
 
     def __init__(
@@ -160,7 +177,8 @@ class GalaxyStage:
             component_set: 'ComponentSet',
             driver: Driver,
             redshift: float,
-            sky_origin: tuple[float, float] | None = None
+            sky_origin: tuple[float, float] | None = None,
+            cosmology: Cosmology | None = None
     ):
         components = component_set.components()
         mappings = component_set.mappings()
@@ -170,6 +188,11 @@ class GalaxyStage:
             for name in mass_component.followed_components()}
         self._component_set = component_set
         self._redshift = redshift
+        self._cosmology = DEFAULT if cosmology is None else cosmology
+        self._epoch: GalaxyEpoch | None = None
+        if mass_model is not None:
+            mass_model.check_cosmology(self._cosmology)
+            self._epoch = GalaxyEpoch.of(self._cosmology, redshift)
         # The part of each component that takes part, by its index, and
         # its label
         self._stages: dict[int, 'ComponentStage'] = {}
@@ -190,7 +213,7 @@ class GalaxyStage:
         lights = {
             i: StageCache(mappings[i][p] for p in stage.light_params())
             for i, stage in self._stages.items()}
-        self._scale_cache: StageCache[GalaxyScale] | None = None
+        self._scale_cache: StageCache[float] | None = None
         self._mass_cache: StageCache[GalaxyMass] | None = None
         if component_set.distance() is not None:
             self._scale_cache = StageCache(
@@ -312,7 +335,7 @@ class GalaxyStage:
         """
         if self._scale_cache is None:
             return None
-        return self._scale(self._scale_cache.view(params)).kpc_per_arcsec
+        return self._scale(self._scale_cache.view(params))
 
     def state(
             self,
@@ -335,17 +358,13 @@ class GalaxyStage:
         return self._state(
             parts.state.view(params), index, light, groundwork, mass, None)
 
-    def _scale(self, view: ParamView) -> GalaxyScale:
+    def _scale(self, view: ParamView) -> float:
         """
-        Return the scale of the galaxy, of the values of the parameters of
-        its distance.
+        Return the length of an arcsec in the galaxy (kpc), of the values
+        of the parameters of its distance.
         """
-        distance, redshift = self._component_set.distance(), self._redshift
-        return GalaxyScale(
-            distance.kpc_per_arcsec(view, redshift),
-            distance.critical_density(view, redshift),
-            distance.omega_m(view, redshift),
-            distance.ricci_scalar(view, redshift))
+        return self._component_set.distance().kpc_per_arcsec(
+            view, self._redshift, self._cosmology)
 
     def _light(self, view: ParamView, index: int) -> ParamValues:
         """
@@ -359,29 +378,28 @@ class GalaxyStage:
     def _mass(
             self,
             view: ParamView,
-            scale: GalaxyScale,
+            scale: float,
             lights: dict[int, ParamValues]
     ) -> GalaxyMass:
         """
         Return the mass of the galaxy, of the values of the parameters of
-        its mass and its gravity, its scale, and the light of each
-        component that it follows (see _light), by its index.
+        its mass and its gravity, the length of an arcsec in it (kpc; see
+        _scale), and the light of each component that it follows (see
+        _light), by its index.
         """
         component_set = self._component_set
         components = component_set.components()
         mass_model = component_set.mass_model()
-        distance = component_set.distance()
+        epoch = self._epoch
         context = MassContext(
-            scale.critical_density, scale.omega_m, {
+            epoch.critical_density, epoch.omega_m, epoch.ricci_scalar,
+            epoch.ricci_scalar_today, {
                 components[i].name(): self._stages[i].density(
-                    lights[i], scale.kpc_per_arcsec)
+                    lights[i], scale)
                 for i in self._followed},
-            baryon_fraction=distance.baryon_fraction(),
-            ricci_scalar=scale.ricci_scalar,
-            ricci_scalar_today=distance.ricci_scalar_today(),
-            kpc_per_arcsec=scale.kpc_per_arcsec)
+            baryon_fraction=epoch.baryon_fraction, kpc_per_arcsec=scale)
         return GalaxyMass(
-            mass_model, view, context, scale.kpc_per_arcsec,
+            mass_model, view, context, scale,
             component_set.gravity().field(mass_model, view, context))
 
     def _groundwork(

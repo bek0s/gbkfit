@@ -41,7 +41,7 @@ GALAXY = dict(
     mass=[dict(type='halo', name='light',
                profile=dict(type='zhao', parameterisation='density_radius')),
           dict(type='point', name='bh')],
-    distance=dict(type='direct', cosmology='Planck18'))
+    distance=dict(type='parameter'))
 PROPERTIES = dict(
     stars_xpos=0.5, stars_ypos=-0.3, stars_posa=30, stars_incl=60,
     stars_vsys=0, distance=10,

@@ -107,7 +107,7 @@ def test_the_mass_takes_the_light_of_the_image(tmp_path):
     write_truth(tmp_path / 'truth.fits')
     mass = dict(
         mass=[dict(type='halo', name='halo', profile=dict(type='nfw'))],
-        distance=dict(type='direct'))
+        distance=dict(type='parameter'))
     kinematics = dict(
         vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
         dptraits=dict(type='uniform'))
@@ -144,7 +144,7 @@ def rotating_disk_of_image(path):
     """
     trait = dict(type='image', file=str(path), size=[8, 8], step=0.2)
     galaxy = disk(trait) | dict(
-        mass=[dict(type='point', name='bh')], distance=dict(type='direct'))
+        mass=[dict(type='point', name='bh')], distance=dict(type='parameter'))
     galaxy['components'][0] |= dict(
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'))
     return galaxy

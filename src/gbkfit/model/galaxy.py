@@ -10,6 +10,7 @@ import numpy as np
 from gbkfit.config import (
     BasicParser, Serializable, TypedParser, check_name,
     check_options)
+from gbkfit.cosmology import Cosmology
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
@@ -91,8 +92,9 @@ class Galaxy(Serializable):
         Its one redshift: for what it emits and absorbs in its rest frame
         (its named lines are at their rest wavelengths times 1 + redshift,
         see Lines.factors; the dust of an image absorbs at the effective
-        wavelength of its band over 1 + redshift), and for its distance by
-        redshift (see DistanceRedshift); the systemic velocity of its
+        wavelength of its band over 1 + redshift), for its epoch (in the
+        cosmology of its setup, see plan_stage) and for its cosmological
+        distance (see DistanceCosmological); the systemic velocity of its
         components is the velocity offset from it (a relativistic radial
         velocity, the same on every spectral axis; see LinePlacement).
         With physical units, its light is dimmed by it (and by the
@@ -147,8 +149,13 @@ class Galaxy(Serializable):
         mass_model = MassModel(mass) if mass else None
         self._component_set = ComponentSet(
             components, distance, mass_model, gravity)
-        if distance is not None:
-            distance.check_redshift(redshift)
+        # (a cosmological distance of a galaxy without a redshift, or
+        # blueshifted, was of 0, or negative, silently)
+        if distance is not None and distance.needs_redshift() \
+                and not (redshift or 0) > 0:
+            raise ValueError(
+                f"a cosmological distance needs the galaxy to have a "
+                f"redshift above 0; it has {redshift}")
         if redshift is None:
             _check_redshift_not_needed(self._component_set.components())
         self._pdescs = self._component_set.pdescs()
@@ -271,7 +278,8 @@ class Galaxy(Serializable):
     def plan_stage(
             self,
             sky_origin: tuple[float, float] | None = None,
-            driver: Driver | None = None
+            driver: Driver | None = None,
+            cosmology: Cosmology | None = None
     ) -> GalaxyStage:
         """
         Plan the stage of the galaxy on a driver, in float64, evaluated
@@ -289,6 +297,11 @@ class Galaxy(Serializable):
         driver : Driver, optional
             The driver where its components sample their profiles (the
             rest of the stage runs on the host); the host by default.
+        cosmology : Cosmology, optional
+            The cosmology of its setup: of its epoch, its redshift (e.g.
+            the overdensities that define the masses of its halos), and of
+            its cosmological distance; Planck18 by default, as of a galaxy
+            on its own (see gbkfit.cosmology.DEFAULT).
 
         Returns
         -------
@@ -298,15 +311,17 @@ class Galaxy(Serializable):
         Raises
         ------
         ValueError
-            If it has image traits, but there is no sky origin.
+            If it has image traits, but there is no sky origin, or its mass
+            takes the cosmic baryon fraction, which the cosmology lacks.
         """
         return self._component_set.plan_stage(
-            _or_host(driver), self.redshift(), sky_origin)
+            _or_host(driver), self.redshift(), sky_origin, cosmology)
 
     def plan_functions(
             self,
             sky_origin: tuple[float, float] | None = None,
-            driver: Driver | None = None
+            driver: Driver | None = None,
+            cosmology: Cosmology | None = None
     ) -> GalaxyFunctions:
         """
         Plan the functions of the galaxy on a driver, in float64, for
@@ -323,6 +338,8 @@ class Galaxy(Serializable):
         driver : Driver, optional
             The driver where its components sample their profiles (see
             plan_stage); the host by default.
+        cosmology : Cosmology, optional
+            The cosmology of its setup (see plan_stage).
 
         Returns
         -------
@@ -332,10 +349,11 @@ class Galaxy(Serializable):
         Raises
         ------
         ValueError
-            If it has image traits, but there is no sky origin.
+            If it has image traits, but there is no sky origin, or its mass
+            takes the cosmic baryon fraction, which the cosmology lacks.
         """
         return self._component_set.plan_functions(
-            _or_host(driver), self.redshift(), sky_origin)
+            _or_host(driver), self.redshift(), sky_origin, cosmology)
 
     def function_names(self) -> tuple[str, ...]:
         """

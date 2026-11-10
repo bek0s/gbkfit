@@ -11,7 +11,7 @@ from typing import Any
 
 # --- Shared pieces -------------------------------------------------------
 
-_DISTANCE = dict(type='direct', cosmology='Planck18')
+_DISTANCE = dict(type='parameter')
 
 _STARS = dict(
     type='disk', name='stars', surface=dict(type='exponential'),
@@ -109,7 +109,7 @@ _C1_MASS = [
 _MASS_ROTATION_PRESSURE = dict(
     name='mass_rotation_pressure',
     doc="A gas disk that rotates in its mass (a thick disk that follows "
-        "its light, and an NFW halo; a direct distance), with the Jeans "
+        "its light, and an NFW halo; a distance parameter), with the Jeans "
         "pressure support of an anisotropic dispersion (sigma_R, "
         "sigma_phi, sigma_z); moment maps; a derived vcirc at 2.2 scale "
         "lengths, and priors on it and on sigma_phi / sigma_R.",
@@ -266,7 +266,7 @@ def _rotmod(**columns: Any) -> dict[str, Any]:
 _PROFILE_TABLE_MASS = dict(
     name='profile_table_mass',
     doc="A galaxy of mass alone: the gas and the disk of a rotmod table "
-        "of SPARC (upsilon, and D / D0 of a direct distance) and an NFW "
+        "of SPARC (upsilon, and D / D0 of a distance parameter) and an NFW "
         "halo; its rotation curve from the table (radii in kpc at 10 Mpc), "
         "deprojected at an inclination that is a parameter; a derived "
         "dark fraction.",

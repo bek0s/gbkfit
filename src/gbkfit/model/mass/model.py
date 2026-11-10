@@ -12,6 +12,7 @@ import numpy.typing as npt
 
 from gbkfit.config import (
     BasicParser, Serializable, TypedParser, check_options)
+from gbkfit.cosmology import Cosmology
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
 from .base import MassComponent, MassContext
@@ -125,6 +126,21 @@ class MassModel(Serializable):
                     f"give their circular velocity in the plane only, user "
                     f"components without a function of their mass): give "
                     f"them as mass disks of their surface densities")
+
+    def check_cosmology(self, cosmology: Cosmology) -> None:
+        """
+        Raise ValueError, saying why, unless the cosmology of its galaxy
+        gives what its components take: the cosmic baryon fraction (see
+        MassComponent.takes_baryon_fraction).
+        """
+        if cosmology.baryon_fraction() is not None:
+            return
+        if takers := [component.name() for component in self._components
+                      if component.takes_baryon_fraction()]:
+            raise ValueError(
+                f"the mass components {takers} take the cosmic baryon "
+                f"fraction, which the cosmology lacks (Omega_b): give the "
+                f"setup a cosmology with it")
 
     def components(self) -> tuple[MassComponent, ...]:
         """Return its mass components."""

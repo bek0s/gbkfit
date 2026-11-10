@@ -104,6 +104,13 @@ class Contraction(TypedSerializable, abc.ABC):
         """Return its parameters, by name; none here."""
         return {}
 
+    def takes_baryon_fraction(self) -> bool:
+        """
+        Check whether it takes the cosmic baryon fraction of the context
+        (see MassContext); here, it does not.
+        """
+        return False
+
     @abc.abstractmethod
     def vcirc2(
             self,
@@ -232,6 +239,9 @@ class ContractionCautun20(Contraction):
     def type_title() -> str:
         return 'Empirical contraction (Cautun 2020)'
 
+    def takes_baryon_fraction(self) -> bool:
+        return True
+
     def vcirc2(
             self,
             R: np.ndarray,
@@ -241,11 +251,6 @@ class ContractionCautun20(Contraction):
             context: MassContext
     ) -> np.ndarray:
         fraction = context.baryon_fraction
-        if fraction is None:
-            raise ValueError(
-                "the contraction 'cautun20' takes the cosmic baryon "
-                "fraction, which the cosmology of the galaxy lacks "
-                "(Omega_b)")
         # (G M / r of both)
         halo = halo_vcirc2(R)
         with np.errstate(divide='ignore', invalid='ignore'):
