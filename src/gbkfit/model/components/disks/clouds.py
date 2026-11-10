@@ -15,7 +15,6 @@ from gbkfit.params import ModelEvaluationError, ParamValues
 from .. import traits
 from ..base import FieldsLayout
 from . import _disk
-from ..parts import Equilibrium
 
 
 __all__ = [
@@ -100,11 +99,14 @@ class CloudDisk(_disk.NodalDisk):
             prefixes: dict[str, str | Sequence[str]],
             density_units: dict[str, astropy.units.UnitBase | None],
             opacity_lines: Sequence[int] = (),
-            equilibrium: Equilibrium | None = None
+            equilibrium: traits.DPTraitEquilibrium | None = None,
+            pressure_support: traits.PressureSupport | None = None,
+            fluid: tuple[str, ...] = ()
     ):
         super().__init__(
             loose, tilted, rnodes, rstep, interp, traits_, prefixes,
-            density_units, opacity_lines, equilibrium)
+            density_units, opacity_lines, equilibrium, pressure_support,
+            fluid)
         self._clouds = clouds
 
     def clouds(self) -> Clouds:

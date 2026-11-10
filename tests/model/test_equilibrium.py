@@ -1,7 +1,7 @@
 """
-Tests of the vertical equilibrium of disks (see parts.Equilibrium): the
-dispersion that holds a thick disk up in the gravity of its galaxy, in
-quadrature with that of its dispersion traits.
+Tests of the vertical equilibrium of disks (see
+traits.DPTraitEquilibrium): the dispersion that holds a thick disk up in
+a gravity, in quadrature with that of its other dispersion traits.
 """
 
 import copy
@@ -22,18 +22,17 @@ G = 4.30091727e-6
 KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 
 # A thick disk of a Gaussian height profile (its rms height is its s, 1
-# arcsec: its cut at zmax is 1e-22 of it), its rotation of arctan traits
+# arcsec: its cut at zmax is 1e-22 of it), its rotation of arctan traits,
+# in the equilibrium of its rotation
 DISK = dict(
     type='thick_disk', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)), rstep=0.5,
     rptraits=dict(type='exponential'),
     rhtraits=dict(type='gauss', zmax=10),
     vptraits=dict(type='arctan', direction='tan'),
-    dptraits=dict(type='uniform'), equilibrium=dict(type='central'),
+    dptraits=[
+        dict(type='uniform'), dict(type='equilibrium', gravity='rotation')],
     emission=dict(type='lines'))
-
-# The equilibrium in the gravity of the mass component 'gas'
-SELF_GRAVITATING = dict(type='self_gravitating', mass='gas')
 
 PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, rht_s=1,
@@ -49,6 +48,22 @@ def galaxy(disk, **info):
 def with_kinematics(disk, **kinematics):
     """The disk with the given options of its kinematics instead."""
     return disk | dict(kinematics)
+
+
+def balanced_by(disk, gravity, **options):
+    """
+    The disk in the equilibrium of the given gravity (and options): the
+    last of its dispersion traits.
+    """
+    fitted = [trait for trait in disk['dptraits']
+              if trait['type'] != 'equilibrium']
+    return disk | dict(dptraits=fitted + [
+        dict(type='equilibrium', gravity=gravity) | options])
+
+
+def unbalanced(disk, dptraits):
+    """The disk of the given dispersion traits instead, in no equilibrium."""
+    return disk | dict(dptraits=dptraits)
 
 
 def evaluate(driver, galaxy_, properties):
@@ -68,18 +83,17 @@ def evaluate(driver, galaxy_, properties):
 
 
 @pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])
-def test_central_equilibrium_is_the_dispersion_of_the_rotation(
+def test_rotation_equilibrium_is_the_dispersion_of_the_rotation(
         driver, disk_type):
-    # Without mass, the disk is that of node-wise dispersion traits at its
-    # subnodes of h V / R, its rotation V (of its traits) and its rms
-    # height h; at the centre, h V / R of the next subnode
+    # The disk is that of node-wise dispersion traits at its subnodes of
+    # h V / R, its rotation V (of its traits) and its rms height h; at the
+    # centre, h V / R of the next subnode
     disk = dict(DISK)
     if disk_type == 'clouds':
         disk |= dict(clouds=dict(cflux=1e-3))
     balanced = galaxy(disk)
-    given = galaxy(with_kinematics(
-        disk, dptraits=dict(type='nw_uniform', sampling='subrings'),
-        equilibrium=None))
+    given = galaxy(unbalanced(
+        disk, dict(type='nw_uniform', sampling='subrings')))
     radii = np.array(given.constants()['subrnodes'])
     rotation = 200 * 2 / np.pi * np.arctan(radii / 3)
     sigma = np.zeros_like(radii)
@@ -99,14 +113,11 @@ def test_equilibrium_along_z_is_the_dispersion_of_sigma_z(driver, disk_type):
     disk = dict(DISK)
     if disk_type == 'clouds':
         disk |= dict(clouds=dict(cflux=1e-3))
-    balanced = galaxy(with_kinematics(
-        disk, equilibrium=dict(type='central', direction='ver')))
-    given = galaxy(with_kinematics(
-        disk, dptraits=[
-            dict(type='uniform', direction='rad'),
-            dict(type='uniform', direction='tan'),
-            dict(type='nw_uniform', sampling='subrings', direction='ver')],
-        equilibrium=None))
+    balanced = galaxy(balanced_by(disk, 'rotation', direction='ver'))
+    given = galaxy(unbalanced(disk, [
+        dict(type='uniform', direction='rad'),
+        dict(type='uniform', direction='tan'),
+        dict(type='nw_uniform', sampling='subrings', direction='ver')]))
     radii = np.array(given.constants()['subrnodes'])
     rotation = 200 * 2 / np.pi * np.arctan(radii / 3)
     sigma = np.zeros_like(radii)
@@ -118,41 +129,35 @@ def test_equilibrium_along_z_is_the_dispersion_of_sigma_z(driver, disk_type):
         rtol=1e-6, atol=1e-7)
 
 
-def test_central_equilibrium_in_the_mass_of_the_galaxy():
-    # With mass (a point), sigma = h V_c / R, V_c^2 = G M / R (kpc), which
-    # the gravity gives the disk and writes in its table
-    mass = [dict(type='point', name='bh')]
-    balanced = galaxy(
-        DISK, mass=mass, distance=dict(type='parameter'))
-    params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
-    extra = Extras()
-    states = balanced.plan_stage().evaluate(params, extra).states
-    table = extra.get('equilibrium', component='component0')
-    radii = np.array(balanced.constants()['subrnodes'])
-    vcirc = np.sqrt(G * 1e10 / (radii[1:] * KPC_PER_ARCSEC))
-    np.testing.assert_allclose(table['radius'], radii)
-    np.testing.assert_allclose(table['height'], 1, rtol=1e-9)
-    np.testing.assert_allclose(table['vcirc'][1:], vcirc, rtol=1e-6)
+def test_the_equilibrium_alone_is_the_dispersion(driver):
+    # A disk whose only dispersion trait is its equilibrium is that of
+    # node-wise dispersion traits of the dispersion of the equilibrium
+    balanced = galaxy(DISK | dict(
+        dptraits=dict(type='equilibrium', gravity='rotation')))
+    given = galaxy(unbalanced(
+        DISK, dict(type='nw_uniform', sampling='subrings')))
+    radii = np.array(given.constants()['subrnodes'])
+    rotation = 200 * 2 / np.pi * np.arctan(radii / 3)
+    sigma = np.zeros_like(radii)
+    sigma[1:] = 1 * rotation[1:] / radii[1:]
+    sigma[0] = sigma[1]
+    properties = {k: v for k, v in PROPERTIES.items() if k != 'dpt_a'}
+    assert 'dpt_a' not in balanced.pdescs()
     np.testing.assert_allclose(
-        table['sigma'][1:], 1 * vcirc / radii[1:], rtol=1e-6)
-    assert table['sigma'][0] == table['sigma'][1]
-    np.testing.assert_array_equal(
-        states[0].equilibrium, table['sigma'])
-    dumped = galaxy_parser.dump(balanced)
-    assert dumped['components'][0]['equilibrium'] == \
-        dict(type='central')
+        evaluate(driver, balanced, properties),
+        evaluate(driver, given, properties | dict(dpt_a=sigma)),
+        rtol=1e-6, atol=1e-7)
 
 
-def test_self_gravitating_equilibrium_in_a_mass_disk():
-    # sigma^2 = 2 sqrt(3) G Sigma h, with Sigma the surface density of the
-    # mass component it names (an exponential disk, M / (2 pi rd^2)
-    # exp(-R / rd)) and h its rms height (kpc)
+def test_sheet_equilibrium_of_its_fluid():
+    # sigma^2 = 2 sqrt(3) G Sigma h, with Sigma the surface density of its
+    # fluid (an exponential mass disk, M / (2 pi rd^2) exp(-R / rd)) and
+    # h its rms height (kpc)
     mass = [dict(
         type='disk', name='gas', surface=dict(type='exponential'),
         vertical=dict(type='thin'))]
     balanced = galaxy(
-        with_kinematics(
-            DISK, equilibrium=SELF_GRAVITATING),
+        balanced_by(DISK, 'sheet') | dict(fluid='gas'),
         mass=mass, distance=dict(type='parameter'))
     params = PROPERTIES | dict(distance=10, mass_gas_log_m=9, mass_gas_rd=0.3)
     extra = Extras()
@@ -168,15 +173,15 @@ def test_self_gravitating_equilibrium_in_a_mass_disk():
     np.testing.assert_array_equal(
         states[0].equilibrium, table['sigma'])
     dumped = galaxy_parser.dump(balanced)['components'][0]
-    assert dumped['equilibrium'] == SELF_GRAVITATING
+    assert dumped['dptraits'][-1] == dict(type='equilibrium', gravity='sheet')
+    assert dumped['fluid'] == 'gas'
 
 
-def test_self_gravitating_equilibrium_in_its_own_mass_disk():
-    # Sigma of a mass disk that follows the disk: upsilon times its density
-    # at its subnodes (exact for its exponential there)
-    disk = with_kinematics(
-        DISK, equilibrium=SELF_GRAVITATING) \
-        | dict(name='gas')
+def test_sheet_equilibrium_of_the_mass_disk_that_follows_it():
+    # Without a fluid, Sigma of the mass disk that follows the disk:
+    # upsilon times its density at its subnodes (exact for its exponential
+    # there)
+    disk = balanced_by(DISK, 'sheet') | dict(name='gas')
     balanced = galaxy(
         disk, mass=[dict(type='traced_disk', name='gas', component='gas')],
         distance=dict(type='parameter'))
@@ -199,30 +204,32 @@ def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
     info = dict(
         mass=[dict(type='point', name='bh')],
         distance=dict(type='parameter'))
-    supported = with_kinematics(
-        DISK, vptraits=dict(type='mass', pressure_support=dict(type='jeans')))
+    supported = balanced_by(DISK, 'galaxy') | dict(
+        vptraits=dict(type='mass'), pressure_support=dict(type='jeans'))
     balanced = galaxy(supported, **info)
-    given = galaxy(with_kinematics(
-        supported, dptraits=dict(type='nw_uniform', sampling='subrings'),
-        equilibrium=None), **info)
+    given = galaxy(unbalanced(
+        supported, dict(type='nw_uniform', sampling='subrings')), **info)
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10, dpt_a=10)
     extra = Extras()
-    rotation = balanced.plan_stage().evaluate(params, extra).states[0].rotation['vpt_vt']
-    sigma = np.hypot(10, extra.get('equilibrium', component='component0')['sigma'])
+    rotation = balanced.plan_stage().evaluate(
+        params, extra).states[0].rotation['vpt_vt']
+    sigma = np.hypot(
+        10, extra.get('equilibrium', component='component0')['sigma'])
     extra = Extras()
     expected = given.plan_stage().evaluate(
         params | dict(dpt_a=sigma), extra).states[0].rotation['vpt_vt']
-    assert np.max(-extra.get('vpt_vt_rotation', component='component0')['pressure']) > 100
+    assert np.max(-extra.get(
+        'vpt_vt_rotation', component='component0')['pressure']) > 100
     np.testing.assert_allclose(rotation, expected, rtol=1e-10)
 
 
-def test_jeans_equilibrium_in_a_point_mass():
+def test_galaxy_equilibrium_in_a_point_mass():
     # sigma^2 = int_0^zmax z rho(z) G M z / (R^2 + z^2)^(3/2) dz /
     # int_0^zmax rho(z) dz (kpc), the dispersion of the column weighted by
     # its density, rho the Gaussian of the disk; at the centre, the next
     # subnode
     balanced = galaxy(
-        with_kinematics(DISK, equilibrium=dict(type='jeans')),
+        balanced_by(DISK, 'galaxy'),
         mass=[dict(type='point', name='bh')],
         distance=dict(type='parameter'))
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
@@ -245,13 +252,13 @@ def test_jeans_equilibrium_in_a_point_mass():
     assert sigma[0] == sigma[1]
 
 
-def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
+def test_galaxy_equilibrium_of_a_thin_self_gravitating_layer():
     # In its own gravity alone (a mass disk of its density), a layer thin
-    # against its radius is the isothermal slab of the self-gravitating
-    # equilibrium: sigma^2 = 2 sqrt(3) G Sigma h, to about h / rd
-    disk = with_kinematics(DISK, equilibrium=dict(type='jeans')) | dict(
+    # against its radius is the isothermal sheet: sigma^2 = 2 sqrt(3) G
+    # Sigma h, to about h / rd
+    disk = balanced_by(DISK, 'galaxy') | dict(
         name='gas', rptraits=dict(type='exponential'),
-                    rhtraits=dict(type='sech2', zmax=2))
+        rhtraits=dict(type='sech2', zmax=2))
     balanced = galaxy(
         disk, mass=[dict(type='traced_disk', name='gas', component='gas')],
         distance=dict(type='parameter'))
@@ -269,47 +276,53 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
         table['sigma'][inner] ** 2, expected[inner], rtol=2e-2)
 
 
+POINT = dict(
+    mass=[dict(type='point', name='gas')], distance=dict(type='parameter'))
+
+
 @pytest.mark.parametrize('disk, info, message', [
-    (with_kinematics(DISK, equilibrium=dict(type='central', mass='gas')),
-     {}, "unknown options"),
-    (with_kinematics(DISK, equilibrium=dict(type='self_gravitating')), {},
-     "'mass'"),
-    (with_kinematics(
-        DISK, equilibrium=SELF_GRAVITATING),
-     {}, "needs the mass of its galaxy"),
-    (with_kinematics(DISK, equilibrium=dict(type='jeans')), {},
-     "needs the mass of its galaxy"),
-    (with_kinematics(
-        DISK, equilibrium=dict(type='self_gravitating', mass='dust')),
-     dict(mass=[dict(type='point', name='gas')],
-          distance=dict(type='parameter')), "which its galaxy does not have")])
-def test_self_gravitating_equilibrium_is_checked(disk, info, message):
+    (balanced_by(DISK, 'rotation', mass='gas'), {}, "unknown options"),
+    (balanced_by(DISK, 'sheet'), {}, "needs the mass of its galaxy"),
+    (balanced_by(DISK, 'galaxy'), {}, "needs the mass of its galaxy"),
+    (balanced_by(DISK, 'sheet') | dict(fluid='dust'), POINT,
+     "which its galaxy does not have"),
+    (balanced_by(DISK, 'sheet') | dict(fluid='gas'), POINT,
+     "names mass disks; 'gas' is a point"),
+    (balanced_by(DISK, 'sheet'), POINT,
+     "give it a fluid, or a mass disk that follows it"),
+    (DISK, POINT, "equilibrium 'rotation' of the component"),
+    (balanced_by(DISK, 'galaxy') | dict(fluid='gas'), POINT,
+     "it has neither")])
+def test_balance_in_the_mass_is_checked(disk, info, message):
     with pytest.raises((ConfigError, ValueError), match=message):
         galaxy(disk, **info)
 
 
-def test_jeans_equilibrium_needs_vertical_forces(tmp_path):
+def test_galaxy_equilibrium_needs_vertical_forces(tmp_path):
     (tmp_path / 'curve.py').write_text(
         "def vcirc2(R, params):\n    return 100 * R\n")
     with pytest.raises(ValueError, match=r"\['mine'\] do not give"):
         galaxy(
-            with_kinematics(DISK, equilibrium=dict(type='jeans')),
+            balanced_by(DISK, 'galaxy'),
             mass=[dict(type='user', name='mine',
                        file=str(tmp_path / 'curve.py'), func='vcirc2')],
             distance=dict(type='parameter'))
 
 
 @pytest.mark.parametrize('disk, message', [
-    (with_kinematics(DISK, equilibrium=dict(type='thin')), "'thin'"),
-    (DISK | dict(
-        type='thin_disk', rptraits=dict(type='exponential')),
-     r"options of a thick disk \(type: thick_disk\), which a thin disk "
-     r"does not take: 'equilibrium'"),
-    (with_kinematics(DISK, vptraits=dict(type='arctan', direction='rad')),
-     "it has neither"),
+    (balanced_by(DISK, 'thin'), "'thin'"),
+    (balanced_by(DISK, 'rotation', direction='rad'), "'rad'"),
+    ({key: value for key, value in DISK.items() if key != 'rhtraits'}
+     | dict(type='thin_disk'), "a thin disk has none"),
+    (DISK | dict(vptraits=dict(type='arctan', direction='rad')),
+     "it has none"),
+    (DISK | dict(dptraits=list(reversed(DISK['dptraits']))),
+     "the last of its dptraits"),
+    (DISK | dict(dptraits=dict(type='equilibrium', gravity='rotation'),
+                 dhtraits=dict(type='one')), "takes none"),
     ({key: value for key, value in DISK.items()
       if key not in ('loose', 'tilted')} | dict(type='cone'),
-     "unknown options")])
+     "equilibrium")])
 def test_equilibrium_is_checked(disk, message):
     with pytest.raises((ConfigError, ValueError), match=message):
         galaxy(disk)

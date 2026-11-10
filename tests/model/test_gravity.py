@@ -9,7 +9,6 @@ import copy
 import numpy as np
 import pytest
 
-import gbkfit.cosmology
 from gbkfit.config import ConfigError
 from gbkfit.model import Extras, GravityHuSawicki, GravityNewton, galaxy_parser
 from gbkfit.model.mass import MassContext, MassModel
@@ -21,15 +20,13 @@ G = 4.30091727e-6
 # The length of a kpc (m)
 KPC = 3.0856775814913673e19
 
-# A thick disk that rotates in the mass of its galaxy, held up by the
-# central equilibrium
+# A thick disk that rotates in the mass of its galaxy
 DISK = dict(
     type='thick_disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)), rstep=0.5,
     rptraits=dict(type='exponential'),
     rhtraits=dict(type='gauss', zmax=10),
     vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-    equilibrium=dict(type='central'),
     emission=dict(type='lines'))
 MASS = [dict(
     type='disk', name='stars', surface=dict(type='exponential'),
@@ -59,6 +56,16 @@ def with_kinematics(**kinematics):
     return DISK | dict(kinematics)
 
 
+def balanced_by(gravity, **options):
+    """
+    The disk in the vertical equilibrium of the given gravity, with the
+    given options of its kinematics.
+    """
+    return with_kinematics(dptraits=[
+        dict(type='uniform'), dict(type='equilibrium', gravity=gravity)],
+        **options)
+
+
 def test_newtonian_gravity_by_default():
     assert isinstance(galaxy(mass=MASS, distance=DISTANCE).gravity(),
                       GravityNewton)
@@ -81,8 +88,7 @@ def test_gravity_without_mass_refused():
 def test_mond_circular_velocity(interpolation, form, rtol):
     # Of a point mass, v^2 = nu(y) G M / R, y = G M / (R^2 a0), in either
     # form (QUMOND to the precision of its grid): in the functions of the
-    # galaxy (vnewton: Newtonian), the rotation it gives its disk, and the
-    # central equilibrium, h v / R
+    # galaxy (vnewton: Newtonian) and the rotation it gives its disk
     mond = galaxy(
         mass=POINT, distance=DISTANCE,
         gravity=dict(type='mond', interpolation=interpolation, form=form))
@@ -101,14 +107,8 @@ def test_mond_circular_velocity(interpolation, form, rtol):
     np.testing.assert_allclose(
         table['vcirc'].value, bound['vcirc'](table['radius_kpc'].value),
         rtol=1e-12)
-    np.testing.assert_allclose(states[0].rotation['vpt_vt'], table['vcirc'].value)
-    equilibrium = extra.get('equilibrium', component='gas')
-    kpc_per_arcsec = mond.distance().kpc_per_arcsec(
-        PARAMS, 0, gbkfit.cosmology.DEFAULT)
     np.testing.assert_allclose(
-        equilibrium['vcirc'].value[1:],
-        bound['vcirc'](equilibrium['radius'].value[1:] * kpc_per_arcsec),
-        rtol=1e-12)
+        states[0].rotation['vpt_vt'], table['vcirc'].value)
     assert galaxy_parser.dump(mond)['gravity'] == dict(
         type='mond', interpolation=interpolation, form=form)
 
@@ -226,11 +226,9 @@ def test_mond_without_a0_is_newtonian_gravity(form):
 
 
 @pytest.mark.parametrize('disk, mass, message', [
-    (with_kinematics(
-        equilibrium=dict(type='self_gravitating', mass='stars')), MASS,
-     "self_gravitating equilibrium of the component 'gas'"),
-    (with_kinematics(
-        vptraits=dict(type='mass', pressure_support=dict(type='self_gravitating'))),
+    (balanced_by('sheet', fluid='stars'), MASS,
+     "the vertical equilibrium 'sheet' of the component 'gas'"),
+    (with_kinematics(pressure_support=dict(type='self_gravitating')),
      POINT, "self_gravitating pressure support of the component 'gas'"),
     (DISK, MASS + [dict(
         type='halo', name='halo', profile=dict(
@@ -252,15 +250,15 @@ def test_what_mond_does_not_give_refused(disk, mass, message):
 
 def test_algebraic_mond_gives_the_plane_only():
     # It takes tables of the circular velocity, but not the forces off the
-    # plane that the jeans equilibrium takes
+    # plane that the equilibrium 'galaxy' takes
     table = dict(type='table', name='gas',
                  radii=dict(value=[1, 2, 4], unit='kpc'),
                  velocities=[20, 30, 40])
     gravity = dict(type='mond', interpolation='simple', form='algebraic')
     galaxy(mass=MASS + [table], distance=DISTANCE, gravity=gravity)
     with pytest.raises(ValueError, match="in the plane only"):
-        galaxy(with_kinematics(equilibrium=dict(type='jeans')), mass=MASS,
-               distance=DISTANCE, gravity=gravity)
+        galaxy(balanced_by('galaxy'), mass=MASS, distance=DISTANCE,
+               gravity=gravity)
 
 
 def test_mond_needs_an_interpolation_function():
@@ -432,7 +430,7 @@ def test_palatini_corrections_of_the_density_gradient():
 # that follows the gas
 THIN_DISK = {
     key: value for key, value in DISK.items()
-    if key not in ('rhtraits', 'equilibrium')} \
+    if key != 'rhtraits'} \
     | dict(type='thin_disk', rptraits=dict(type='exponential'),
            vptraits=dict(type='mass'), dptraits=dict(type='uniform'))
 GAS_MASS = dict(type='traced_disk', name='gas', component='gas')

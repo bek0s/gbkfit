@@ -19,10 +19,7 @@ from ..base import ComponentState, FrameParams, NativeGrid
 from .._needs import Need, density_needs
 from ...gravity import Capability
 from ..geometries import GEOMETRY_PARAMS, geometry_pdesc
-from ..parts import (
-    CentralEquilibrium, Equilibrium, JeansEquilibrium,
-    SelfGravitatingEquilibrium)
-from ..traits import PressureSupport, Trait
+from ..traits import DPTraitEquilibrium, PressureSupport, Trait
 
 if TYPE_CHECKING:
     from ._stage import DiskState
@@ -54,7 +51,9 @@ class NodalDisk(abc.ABC):
             prefixes: dict[str, str | Sequence[str]],
             density_units: dict[str, astropy.units.UnitBase | None],
             opacity_lines: Sequence[int] = (),
-            equilibrium: Equilibrium | None = None
+            equilibrium: DPTraitEquilibrium | None = None,
+            pressure_support: PressureSupport | None = None,
+            fluid: tuple[str, ...] = ()
     ):
         """
         traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
@@ -64,8 +63,12 @@ class NodalDisk(abc.ABC):
         density_units has the unit of the density of the density polar
         traits of each kind, if known (see NodalTraits). opacity_lines has
         the line of each trait of line opacity ('opt'): its index among
-        the lines of the emission. equilibrium is its
-        vertical equilibrium, if any (see parts.Equilibrium).
+        the lines of the emission. equilibrium is its vertical
+        equilibrium, if any (see traits.DPTraitEquilibrium; not in
+        traits_, as the kernels do not evaluate it), pressure_support how
+        the rotation of its velocity trait 'mass' is corrected for its
+        pressure, if at all, and fluid the names of the mass disks whose
+        densities they take, if given (see Disk).
         """
 
         subrnodes = subring_radii(rnodes, rstep)
@@ -81,6 +84,8 @@ class NodalDisk(abc.ABC):
             subrnodes, interp)
         self._opacity_lines = tuple(opacity_lines)
         self._equilibrium = equilibrium
+        self._pressure_support = pressure_support
+        self._fluid = tuple(fluid)
 
         # Make descs for the geometric parameters. There is no systemic
         # velocity without velocity traits.
@@ -128,13 +133,25 @@ class NodalDisk(abc.ABC):
         """
         return self._opacity_lines
 
-    def equilibrium(self) -> Equilibrium | None:
+    def equilibrium(self) -> DPTraitEquilibrium | None:
         """
-        Return its vertical equilibrium, if any (see parts.Equilibrium): its
-        galaxy gives its plans the dispersion of the equilibrium at its
-        subnodes (see DiskState).
+        Return its vertical equilibrium, if any (see
+        traits.DPTraitEquilibrium): its galaxy gives its plans the
+        dispersion of the equilibrium at its subnodes (see DiskState).
         """
         return self._equilibrium
+
+    def pressure_support(self) -> PressureSupport | None:
+        """Return its pressure support, if any (see traits.VPTraitMass)."""
+        return self._pressure_support
+
+    def fluid(self) -> tuple[str, ...]:
+        """
+        Return the names of the mass disks of its fluid, if given (see
+        Disk): the densities that its pressure support takes, and the
+        surface density of its equilibrium 'sheet'.
+        """
+        return self._fluid
 
     def trait_owners(self) -> dict[str, tuple[str | int, ...]]:
         """
@@ -208,21 +225,24 @@ class NodalDisk(abc.ABC):
         """
         Check whether it takes anything from the mass of its galaxy, when
         there is one: it rotates in it (see circular_velocity_params), or
-        it is in a vertical equilibrium (see parts.Equilibrium).
+        its vertical equilibrium balances its gravity (all but 'rotation',
+        see traits.BalanceGravity).
         """
-        return bool(self.circular_velocity_params()) \
-            or self._equilibrium is not None
+        equilibrium = self._equilibrium
+        return bool(self.circular_velocity_params()) or (
+            equilibrium is not None and equilibrium.gravity() != 'rotation')
 
     def needs(self, name: str | None) -> tuple[Need, ...]:
         """
         Return what it needs from its galaxy (see Need), as the disk of the
         component of the given name: the mass, for its velocity traits
-        'mass' and a vertical equilibrium (but a central one with
-        tangential velocity traits, which takes their rotation without
-        mass); the forces of the mass, for a jeans equilibrium and for its
-        rotation at each height (see rotation_factor_params); and the
-        densities of mass components, for its pressure support and its
-        equilibrium.
+        'mass' and its vertical equilibrium (but 'rotation', which takes
+        the rotation of its traits); the forces of the mass, for its
+        rotation at each height (see rotation_factor_params) and the
+        equilibrium 'galaxy'; and the densities of its fluid, for its
+        pressure support, and their surface densities, for the
+        equilibrium 'sheet' (those of the mass disks that follow it, if it
+        has no fluid: see ComponentSet).
         """
         label = repr(name)
         needs: list[Need] = []
@@ -231,10 +251,9 @@ class NodalDisk(abc.ABC):
                 Capability.MASS,
                 f"the 'mass' velocity traits of the component {label} need "
                 f"the mass of their galaxy"))
-        for support in self.pressure_supported_params().values():
+        if (support := self._pressure_support) is not None:
             needs += density_needs(
-                support.mass() or (),
-                support.type() == 'self_gravitating',
+                self._fluid, support.type() == 'self_gravitating',
                 f"the {support.type()} pressure support of the component "
                 f"{label}")
         if self.rotation_factor_params():
@@ -244,41 +263,32 @@ class NodalDisk(abc.ABC):
                 f"takes the radial force of the gravity of its galaxy off "
                 f"its plane"))
         equilibrium = self._equilibrium
-        if equilibrium is None:
+        if equilibrium is None or equilibrium.gravity() == 'rotation':
             return tuple(needs)
-        if not isinstance(equilibrium, CentralEquilibrium):
-            needs.append(Need(
-                Capability.MASS,
-                f"the vertical equilibrium {equilibrium.type()!r} of the "
-                f"component {label} needs the mass of its galaxy"))
-        elif not any(
-                trait.direction() == 'tan' for trait in self.traits('vpt')):
-            needs.append(Need(
-                Capability.MASS,
-                f"the vertical equilibrium of the component {label} takes "
-                f"the circular velocity of the mass of its galaxy, or "
-                f"without mass, the rotation of its disk; it has neither: "
-                f"give it tangential velocity traits, or the galaxy mass"))
-        if isinstance(equilibrium, JeansEquilibrium):
+        what = (
+            f"the vertical equilibrium {equilibrium.gravity()!r} of the "
+            f"component {label}")
+        needs.append(Need(
+            Capability.MASS, f"{what} needs the mass of its galaxy"))
+        if equilibrium.gravity() == 'galaxy':
             needs.append(Need(
                 Capability.FORCES,
-                f"the jeans equilibrium of the component {label} takes the "
-                f"vertical force of the gravity of its galaxy"))
-        if isinstance(equilibrium, SelfGravitatingEquilibrium):
-            needs += density_needs(
-                (equilibrium.mass(),), True,
-                f"the self_gravitating equilibrium of the component "
-                f"{label}")
+                f"{what} takes the vertical force of the gravity of its "
+                f"galaxy"))
+        else:
+            needs += density_needs(self._fluid, True, what)
         return tuple(needs)
 
     def pressure_supported_params(self) -> dict[str, PressureSupport]:
         """
         Return how those of its circular velocity parameters (see
         circular_velocity_params) whose values are corrected for its
-        pressure are corrected, by their names (see
-        traits.VPTraitMass).
+        pressure are corrected, by their names: all of them, if it has a
+        pressure support (see traits.VPTraitMass).
         """
-        return self._traits.pressure_supported_params()
+        support = self._pressure_support
+        return {} if support is None else dict.fromkeys(
+            self.circular_velocity_params(), support)
 
     def rotation_factor_params(self) -> dict[str, float]:
         """

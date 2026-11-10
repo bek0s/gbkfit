@@ -102,8 +102,9 @@ def kinematics(**options):
      "no dispersion trait for the direction 'ver'; give one, or an 'iso'"),
     (dict(dptraits=dict(type='uniform', direction='out')),
      "'direction' must be one of"),
-    (dict(dptraits=dict(type='uniform'),
-          equilibrium=dict(type='central', direction='rad')),
+    (dict(dptraits=[
+        dict(type='uniform'),
+        dict(type='equilibrium', gravity='rotation', direction='rad')]),
      "'direction' must be one of 'iso', 'ver'"),
 ])
 def test_dispersion_directions_are_checked(options, message):
@@ -126,11 +127,11 @@ def test_a_cone_has_isotropic_dispersion_only():
 
 def test_dispersion_directions_are_dumped():
     # (but the isotropic ones, by default)
+    equilibrium = dict(type='equilibrium', gravity='rotation', direction='ver')
     info = kinematics(
-        dptraits=[dict(type='uniform')] + DIRECTIONS[:1],
-        equilibrium=dict(type='central', direction='ver'))
+        dptraits=[dict(type='uniform')] + DIRECTIONS[:1] + [equilibrium])
     dumped = galaxy_parser.dump(galaxy_parser.load(copy.deepcopy(info)))
     dumped = dumped['components'][0]
     assert dumped['dptraits'] == [
-        dict(type='uniform'), dict(type='uniform', direction='rad')]
-    assert dumped['equilibrium'] == dict(type='central', direction='ver')
+        dict(type='uniform'), dict(type='uniform', direction='rad'),
+        equilibrium]

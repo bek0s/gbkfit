@@ -6,7 +6,7 @@ the density polar traits), and what several kinds share.
 import abc
 import dataclasses
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import Any, TypeVar
 
 import numpy as np
 
@@ -16,9 +16,6 @@ from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .options import (
     Blobs, Direction, DispersionDirection, Nodewise, SAMPLING_DEFAULT, Sampling,
     TraitOption, VPT_DIRECTIONS, VPT_DIRECTION_PLANE, Zmax, splits_around)
-
-if TYPE_CHECKING:
-    from .velocity import PressureSupport
 
 
 __all__ = [
@@ -62,10 +59,9 @@ class GalaxyInput:
 class RotationInput(GalaxyInput):
     """
     The circular velocity of the mass of the galaxy at the radii where
-    the parameters are sampled, corrected for the pressure of their disk
-    as support says, if it says (see VPTraitMass).
+    the parameters are sampled, corrected for the pressure of their disk,
+    if it has a pressure support (see VPTraitMass).
     """
-    support: 'PressureSupport | None'
 
 
 @dataclasses.dataclass(frozen=True)
@@ -435,7 +431,7 @@ class VPTrait(PTrait, abc.ABC):
         Check whether its speed is the same at every azimuth (at each
         radius): then the azimuthal means of it that the vertical
         equilibrium of its disk takes are its value at one azimuth (see
-        parts.Equilibrium); here, a speed of the radius only.
+        DPTraitEquilibrium); here, a speed of the radius only.
         """
         return True
 

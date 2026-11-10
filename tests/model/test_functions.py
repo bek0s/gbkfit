@@ -19,16 +19,20 @@ G = 4.30091727e-6
 # The length of an arcsec (kpc) at 10 Mpc
 KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 
+# The vertical equilibrium of a disk in the gravity of its galaxy
+EQUILIBRIUM = dict(type='equilibrium', gravity='galaxy')
+
 # A thick gas disk in the mass of a black hole and a halo: its rotation
 # in that gravity, with jeans pressure support, and its dispersion with
-# that of its central equilibrium
+# that of its equilibrium in that gravity
 GAS = dict(
     type='thick_disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)), rstep=0.5,
     rptraits=dict(type='exponential'),
     rhtraits=dict(type='gauss', zmax=10),
-    vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
-    dptraits=dict(type='uniform'), equilibrium=dict(type='central'),
+    vptraits=dict(type='mass'),
+    dptraits=[dict(type='uniform'), EQUILIBRIUM],
+    pressure_support=dict(type='jeans'),
     emission=dict(type='lines'))
 MASS = [
     dict(type='point', name='bh'),
@@ -148,11 +152,11 @@ def test_rotation_and_dispersion_as_the_gravity_gives_them():
 def test_pressure_support_of_the_velocity_ellipsoid():
     # The radial Jeans equation of the velocity ellipsoid: the pressure of
     # sigma_R, and sigma_R^2 - sigma_phi^2 (each with the dispersion of the
-    # central equilibrium in quadrature), at the subnodes; the same
-    # dispersion along every direction is isotropic
+    # equilibrium in quadrature), at the subnodes; the same dispersion
+    # along every direction is isotropic
     def with_dispersion(dptraits):
         gas = copy.deepcopy(GAS)
-        gas['dptraits'] = dptraits
+        gas['dptraits'] = dptraits + [EQUILIBRIUM]
         return gas_galaxy(components=[gas], mass=[copy.deepcopy(MASS[1])])
 
     def rotation_table(galaxy, params):
@@ -165,7 +169,7 @@ def test_pressure_support_of_the_velocity_ellipsoid():
         for direction in ('rad', 'tan', 'ver')]
     params = PARAMS | dict(distance=100, gas_dpt_a=30)
     isotropic, extra = rotation_table(
-        with_dispersion(dict(type='uniform')), params)
+        with_dispersion([dict(type='uniform')]), params)
     expected = isotropic['pressure'].value
     same, _ = rotation_table(
         with_dispersion(directions),

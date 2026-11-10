@@ -31,8 +31,9 @@ def kernel_consts_cases():
     for kind, parser in parsers.items():
         for type_, cls in parser.registered_classes().items():
             # (an image is a file; its constants are those of the map, see
-            # test_image_light)
-            if cls is traits.RPTraitImage:
+            # test_image_light; the kernels do not evaluate the vertical
+            # equilibrium, whose dispersion its galaxy derives)
+            if cls in (traits.RPTraitImage, traits.DPTraitEquilibrium):
                 continue
             if kind == 'rht':
                 options, consts = dict(zmax=5.0, nodewise=True), (5.0, True)
@@ -78,10 +79,20 @@ SHARING = dict(rpt='Shape', vpt='Shape', dpt='Shape', zpt='Shape',
                vht='Factor', dht='Factor')
 
 
+def kernel_classes(kind):
+    """
+    The types of traits of a family that the kernels evaluate, by type:
+    all but the vertical equilibrium, whose dispersion its galaxy derives.
+    """
+    return {
+        type_: cls for type_, cls in PARSERS[kind].registered_classes().items()
+        if cls is not traits.DPTraitEquilibrium}
+
+
 @pytest.mark.parametrize('kind', PARSERS)
 def test_each_type_of_a_family_has_a_uid_of_its_own(kind):
     # (the kernels take an image as a map, of its uid)
-    uids = [cls.uid() for cls in PARSERS[kind].registered_classes().values()
+    uids = [cls.uid() for cls in kernel_classes(kind).values()
             if cls is not traits.RPTraitImage]
     assert len(set(uids)) == len(uids), sorted(uids)
 
@@ -92,7 +103,7 @@ def test_a_shape_has_one_uid_in_every_family(kind):
         cls.type(): cls.uid() for cls in (
             getattr(shapes, name) for name in shapes.__all__
             if name.endswith(SHARING[kind]))}
-    for type_, cls in PARSERS[kind].registered_classes().items():
+    for type_, cls in kernel_classes(kind).items():
         if type_ in shared:
             assert cls.uid() == shared[type_], type_
         else:

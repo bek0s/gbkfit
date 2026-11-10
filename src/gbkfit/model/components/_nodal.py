@@ -25,7 +25,7 @@ from .nodes import Nodes
 from ._native import ParamBuffer
 from .traits import (
     DPT_DIRECTION_DEFAULT, DPTrait, GalaxyInput, HTrait, ImageInput,
-    PressureSupport, RPTrait, RotationFactorsInput, RotationInput,
+    RPTrait, RotationFactorsInput, RotationInput,
     SAMPLING_TAIL, Trait, VPTrait, WaveInput, trait_desc)
 
 
@@ -115,8 +115,7 @@ class TraitParams:
     The others have those whose values the galaxy gives (see
     traits.Trait.from_galaxy): circular_velocity the names of those whose
     values are the circular velocity of the mass of the galaxy (see
-    traits.RotationInput), pressure_support those of them corrected for
-    the pressure of the disk, with how, rotation_factor those whose
+    traits.RotationInput), rotation_factor those whose
     values are the factors of the rotation in the gravity at a height,
     with their heights (see traits.RotationFactorsInput), wave those whose
     values are the tables of a density wave in the rotation of the disk
@@ -127,7 +126,6 @@ class TraitParams:
     sampling: dict[str, str | None]
     pnames: tuple[dict[str, str], ...]
     circular_velocity: tuple[str, ...]
-    pressure_support: dict[str, PressureSupport]
     rotation_factor: dict[str, float]
     wave: tuple[str, ...]
     image: tuple[str, ...]
@@ -196,9 +194,6 @@ def _trait_params(
     inputs = [
         (trait.from_galaxy(), mapping)
         for trait, mapping in zip(traits_, mappings)]
-    rotations = [
-        (given, mapping) for given, mapping in inputs
-        if isinstance(given, RotationInput)]
 
     def names(kind: type[GalaxyInput]) -> tuple[str, ...]:
         return tuple(
@@ -209,9 +204,6 @@ def _trait_params(
         sampling={name: tuple_[1] for name, tuple_ in params.items()},
         pnames=mappings,
         circular_velocity=names(RotationInput),
-        pressure_support={
-            mapping[name]: given.support for given, mapping in rotations
-            if given.support is not None for name in given.params},
         rotation_factor={
             mapping[name]: height for given, mapping in inputs
             if isinstance(given, RotationFactorsInput)
@@ -383,9 +375,6 @@ class NodalTraits:
             name: radii.get(params.sampling[name], tuple(rnodes))
             for params in self._params.values()
             for name in params.circular_velocity}
-        self._pressure_supported_params = {
-            name: mode for params in self._params.values()
-            for name, mode in params.pressure_support.items()}
         self._rotation_factor_params = {
             name: height for params in self._params.values()
             for name, height in params.rotation_factor.items()}
@@ -451,14 +440,6 @@ class NodalTraits:
         (arcsec), by name.
         """
         return self._circular_velocity_params
-
-    def pressure_supported_params(self) -> dict[str, PressureSupport]:
-        """
-        Return how those of its circular velocity parameters whose values
-        are corrected for the pressure of their component are corrected,
-        by their names (see traits.VPTraitMass).
-        """
-        return self._pressure_supported_params
 
     def rotation_factor_params(self) -> dict[str, float]:
         """

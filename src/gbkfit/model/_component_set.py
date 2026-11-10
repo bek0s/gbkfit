@@ -22,7 +22,7 @@ from .components._needs import Need, check_densities, check_needs
 from .components._stage import GalaxyStage
 from .components._units import DataUnit
 from .components.base import Component, ComponentState, DepthAxis, OpacityCubes
-from .components.disks.disk import ThickDisk
+from .components.disks.disk import Disk, ThickDisk
 from .components.lines import Band
 from .distance import Distance
 from .extras import Extras
@@ -92,6 +92,7 @@ def _with_mass_params(
     # see DiskDensity.thick)
     thick = [cmp.name() for cmp in components if isinstance(cmp, ThickDisk)]
     gravity.check_mass_model(mass_model, thick)
+    _check_fluids(components, mass_model, thick)
     check_densities(
         [need for cmp in components for need in cmp.needs()], mass_model,
         thick)
@@ -108,6 +109,51 @@ def _with_mass_params(
         for name, followed in mass_model.mass_ratios().items()})
     own = {} if distance is None else distance.pdescs()
     return _with_params(params, own | mass | gravity.pdescs())
+
+
+def _check_fluids(
+        components: Sequence[Component],
+        mass_model: MassModel,
+        thick: Sequence[str]
+) -> None:
+    """
+    Check the fluids of the disks of a galaxy of a mass model (see Disk):
+    the mass disks that they name, or the mass disks that follow each
+    disk, whose surface density its equilibrium 'sheet' takes; and that
+    no disk balances its rotation (the equilibrium 'rotation') next to a
+    mass model, where the vertical frequency of the disk is 2.5-3 times
+    its angular speed. The galaxy has thick components of the given
+    names.
+
+    Raises
+    ------
+    ValueError
+        If one of these does not hold.
+    """
+    for cmp in components:
+        if not isinstance(cmp, Disk):
+            continue
+        label = repr(cmp.name()) if cmp.name() is not None else ''
+        equilibrium = cmp.equilibrium()
+        gravity = equilibrium.gravity() if equilibrium is not None else None
+        if gravity == 'rotation':
+            raise ValueError(
+                f"the vertical equilibrium 'rotation' of the component "
+                f"{label} takes the pull of a spherical mass of its "
+                f"rotation, which is not that of a galaxy of mass (a disk "
+                f"pulls 2.5-3 times harder where it dominates): give it the "
+                f"equilibrium 'galaxy' or 'sheet'")
+        fluid = mass_model.fluid(cmp.name(), cmp.fluid())
+        if gravity != 'sheet' or cmp.fluid():
+            continue
+        what = f"the vertical equilibrium 'sheet' of the component {label}"
+        if not fluid:
+            raise ValueError(
+                f"{what} takes the surface density of its fluid: give it a "
+                f"fluid, or a mass disk that follows it")
+        check_densities(
+            [Need(Capability.MASS, f"{what} takes the surface density",
+                  fluid, True)], mass_model, thick)
 
 
 def _distance_needs(

@@ -3,7 +3,7 @@ The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
 (see mass.DiskDensity), for its pressure support (see
 traits.VPTraitMass), and its rms height, rotation and jeans dispersion,
-for its vertical equilibrium (see parts.Equilibrium); its rotation, for
+for its vertical equilibrium (see traits.DPTraitEquilibrium); its rotation, for
 its density waves (see traits.VPTraitSpiral); and its rotation and
 dispersion, for the functions of its galaxy (see GalaxyFunctions).
 """
@@ -17,7 +17,6 @@ import numpy as np
 from gbkfit.params import ParamValues
 from ...mass.units import G
 from .._nodal import subring_radii, tail_end, tail_radii
-from ..parts import EQUILIBRIUM_DIRECTION_DEFAULT
 from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
 from ._disk import NodalDisk, DiskPlan
 
@@ -205,14 +204,14 @@ def _isotropic(disk: NodalDisk) -> bool:
     Check whether the dispersion of a disk is the same along every
     direction: its dispersion polar traits and the dispersion of its
     vertical equilibrium, if any, isotropic (see traits and
-    parts.Equilibrium).
+    traits.DPTraitEquilibrium).
     """
     equilibrium = disk.equilibrium()
     return all(
         trait.direction() == DPT_DIRECTION_DEFAULT
         for trait in disk.traits('dpt')) and (
             equilibrium is None
-            or equilibrium.direction() == EQUILIBRIUM_DIRECTION_DEFAULT)
+            or equilibrium.direction() == DPT_DIRECTION_DEFAULT)
 
 
 def _dispersions(
@@ -459,12 +458,12 @@ def jeans_dispersions(
         vertical_force: Callable[[np.ndarray, np.ndarray], np.ndarray]
 ) -> np.ndarray:
     """
-    Return the dispersion (km/s) of the jeans equilibrium of a thick disk
-    (see parts.JeansEquilibrium) at radii (arcsec, on the disk): sigma^2 =
-    int_0^inf z rho(z) (-F_z(R, z)) dz / int_0^inf rho(z) dz, the
-    dispersion of the column weighted by its density, with its density of
-    rms_heights (on its heights) and the vertical force F_z of the mass
-    of its galaxy. 0 where it has no density.
+    Return the dispersion (km/s) of the equilibrium 'galaxy' of a thick
+    disk (see traits.DPTraitEquilibrium) at radii (arcsec, on the disk):
+    sigma^2 = int_0^inf z rho(z) (-F_z(R, z)) dz / int_0^inf rho(z) dz,
+    the dispersion of the column weighted by its density, with its
+    density of rms_heights (on its heights) and the vertical force F_z of
+    the mass of its galaxy. 0 where it has no density.
 
     Parameters
     ----------
@@ -640,7 +639,7 @@ def dispersion(
         The radii (arcsec).
     equilibrium : np.ndarray, optional
         The dispersion of the vertical equilibrium of the disk at its
-        subnodes (km/s, see parts.Equilibrium), interpolated linearly
+        subnodes (km/s, see traits.DPTraitEquilibrium), interpolated linearly
         between them, as the disk is evaluated.
     direction : str, optional
         The direction: 'rad', 'tan' or 'ver'.
@@ -735,7 +734,7 @@ def pressure_support(
         the radii (Msun/kpc^2 with heights; required with them).
     equilibrium : np.ndarray, optional
         The dispersion of the vertical equilibrium of the disk at its
-        subnodes (km/s, see parts.Equilibrium), interpolated linearly
+        subnodes (km/s, see traits.DPTraitEquilibrium), interpolated linearly
         between them, as the disk is evaluated.
     heights : np.ndarray, optional
         The heights (arcsec) above the midplane; by default, the midplane.

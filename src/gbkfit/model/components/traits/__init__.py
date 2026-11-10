@@ -131,6 +131,7 @@ from .images import *
 from .heights import *
 from .velocity import *
 from .dispersion import *
+from .equilibrium import *
 from .warps import *
 from .selections import *
 
@@ -211,7 +212,8 @@ dpt_parser = TypedParser(DPTrait, [
     DPTraitMixtureMoffat,
     DPTraitNWUniform,
     DPTraitNWHarmonic,
-    DPTraitNWDistortion], family='dpt')
+    DPTraitNWDistortion,
+    DPTraitEquilibrium], family='dpt')
 
 # Dispersion height traits parser
 dht_parser = TypedParser(DHTrait, [

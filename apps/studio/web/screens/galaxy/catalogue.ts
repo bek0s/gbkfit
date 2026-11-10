@@ -61,12 +61,19 @@ const THICK_OPTIONS: { path: Path; what: string }[] = [
   { path: ['zptraits'], what: 'its warps' },
   { path: ['opacity'], what: 'its opacity' },
   { path: ['clouds'], what: 'its clouds' },
-  { path: ['equilibrium'], what: 'its equilibrium' },
 ];
+
+// Whether a dispersion trait is the vertical equilibrium of a thick disk
+// (the last of its dispersion traits, which a thin disk does not take)
+function isEquilibrium(trait: unknown): boolean {
+  return (trait as Options | undefined)?.type === 'equilibrium';
+}
 
 // What a thick disk has that it would lose if made thin
 export function lostIfThin(disk: Options): string[] {
-  return THICK_OPTIONS.filter(({ path }) => getAt(disk, path) !== undefined).map(({ what }) => what);
+  const lost = THICK_OPTIONS.filter(({ path }) => getAt(disk, path) !== undefined).map(({ what }) => what);
+  if (asList(getAt(disk, ['dptraits'])).some(isEquilibrium)) lost.push('its vertical equilibrium');
+  return lost;
 }
 
 // A disk made thin (without what only a thick disk has) or thick (with a
@@ -79,6 +86,13 @@ export function withThickness(disk: Options, thick: boolean): Options {
   }
   // (those it has: setAt would make the options they are in)
   for (const { path } of THICK_OPTIONS) if (getAt(next, path) !== undefined) next = setAt(next, path, undefined);
+  const dptraits = asList(getAt(next, ['dptraits']));
+  if (dptraits.some(isEquilibrium)) {
+    const fitted = dptraits.filter((trait) => !isEquilibrium(trait));
+    // (a disk that moves has a dispersion: a uniform one, if it had its
+    // equilibrium alone)
+    next = setAt(next, ['dptraits'], fitted.length ? asOneOrList(fitted) : { type: 'uniform' });
+  }
   return next;
 }
 

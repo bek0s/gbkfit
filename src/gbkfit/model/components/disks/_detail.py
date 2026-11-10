@@ -31,7 +31,7 @@ from . import _disk
 from .clouds import CloudDisk, Clouds
 from .smooth import SmoothDisk
 from .opacity import LineOpacity
-from ..parts import Equilibrium, KinematicTraits, equilibrium_parser
+from ..parts import KinematicTraits
 
 
 __all__ = [
@@ -82,8 +82,7 @@ def dump_disk_component(
         component: Component,
         disk: _disk.NodalDisk,
         rnodes: Nodes,
-        kinematics: KinematicTraits | None,
-        equilibrium: Equilibrium | None
+        kinematics: KinematicTraits | None
 ) -> dict[str, Any]:
     """
     Return the configuration of a disk component made of the given disk,
@@ -102,8 +101,11 @@ def dump_disk_component(
             list(disk.traits('rht')[:count])))
     if kinematics is not None:
         info.update(kinematics.dump())
-    if equilibrium is not None:
-        info.update(equilibrium=equilibrium_parser.dump(equilibrium))
+    if (support := disk.pressure_support()) is not None:
+        info.update(
+            pressure_support=traits.pressure_support_parser.dump(support))
+    if fluid := disk.fluid():
+        info.update(fluid=fluid[0] if len(fluid) == 1 else list(fluid))
     if component.emission() is not None:
         info.update(emission=emission_parser.dump(component.emission()))
     if component.opacity() is not None:
@@ -120,7 +122,8 @@ def make_disk(
         rptraits: tuple[traits.RPTrait, ...],
         rhtraits: tuple[traits.RHTrait, ...],
         kinematics: KinematicTraits | None,
-        equilibrium: Equilibrium | None,
+        pressure_support: traits.PressureSupport | None,
+        fluid: tuple[str, ...],
         emission: Emission | None,
         opacity: Opacity | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
@@ -166,7 +169,9 @@ def make_disk(
             rpt=_units.density_unit(emission),
             opt=_units.line_opacity_unit(emission)),
         opacity_lines=opacity_lines,
-        equilibrium=equilibrium)
+        equilibrium=kinematics.equilibrium() if kinematics is not None
+        else None,
+        pressure_support=pressure_support, fluid=fluid)
     if clouds is None:
         return SmoothDisk(**options)
     return CloudDisk(clouds, **options)
@@ -287,7 +292,10 @@ def _disk_traits(
         rpt=rptraits, rht=rhtraits, zpt=zptraits, spt=sptraits)
     if kinematics is None:
         return result
-    result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
+    # (the kernels evaluate the fitted dispersion traits; its galaxy
+    # derives that of the equilibrium)
+    dptraits = kinematics.fitted_dptraits()
+    result.update(vpt=kinematics.vptraits(), dpt=dptraits)
     if not thick:
         return result
     vhtraits, dhtraits = kinematics.vhtraits(), kinematics.dhtraits()
@@ -304,7 +312,7 @@ def _disk_traits(
         vht=with_default_height_traits(
             vhtraits, traits.VHTraitOne),
         dht=with_default_height_traits(
-            dhtraits, traits.DHTraitOne))
+            dhtraits, traits.DHTraitOne) if dptraits else ())
     return result
 
 

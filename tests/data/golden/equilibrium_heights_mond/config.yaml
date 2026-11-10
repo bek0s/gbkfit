@@ -10,13 +10,13 @@ galaxies:
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     rptraits: {type: exponential}
-    vptraits:
-      type: mass
-      pressure_support: {type: jeans}
-    dptraits: {type: uniform}
+    vptraits: {type: mass}
+    dptraits:
+    - {type: uniform}
+    - {type: equilibrium, gravity: galaxy}
     emission: {type: lines}
+    pressure_support: {type: jeans}
     rhtraits: {type: sech2, zmax: 6}
-    equilibrium: {type: jeans}
     vhtraits: {type: mass, zmax: 6}
   mass:
   - type: spheroid

@@ -94,7 +94,7 @@ _GEOMETRY_TRIAL = dict(
 # --- C1: rotation from the mass, with pressure support -------------------
 
 _C1_GAS = _disk(
-    'gas', vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
+    'gas', vptraits=dict(type='mass'), pressure_support=dict(type='jeans'),
     dptraits=[
         dict(type='uniform', direction='rad'),
         dict(type='uniform', direction='tan'),
@@ -137,8 +137,13 @@ _MASS_ROTATION_PRESSURE = dict(
 # --- C2: vertical equilibrium and rotation at each height, in MOND -------
 
 _C2_GAS = _thick(
-    _disk('gas', vptraits=dict(type='mass', pressure_support=dict(type='jeans'))),
-    equilibrium=dict(type='jeans'), vhtraits=dict(type='mass', zmax=6))
+    _disk(
+        'gas', vptraits=dict(type='mass'),
+        dptraits=[
+            dict(type='uniform'),
+            dict(type='equilibrium', gravity='galaxy')],
+        pressure_support=dict(type='jeans')),
+    vhtraits=dict(type='mass', zmax=6))
 
 # (a Sersic bulge, not an exponential disk, whose forces off its plane
 # cost some 9 s of tables in each process)

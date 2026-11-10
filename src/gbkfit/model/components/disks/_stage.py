@@ -23,9 +23,7 @@ from .._images import ImageMaps
 from .._units import mass_per_unit
 from .._stage import GalaxyMass
 from ..base import ComponentStage, ComponentState
-from ..parts import CentralEquilibrium, JeansEquilibrium
 from ..roles import Emission
-from ..traits import PressureSupport
 from ._disk import NodalDisk, DiskPlan
 from ._profiles import (
     NodalDiskDensity, density_waves, jeans_dispersions, pressure_support,
@@ -92,21 +90,23 @@ def plan_disk_stage(
         driver: Driver,
         sky_origin: tuple[float, float] | None,
         followed: bool,
-        label: str
+        label: str,
+        name: str | None
 ) -> 'DiskStage | None':
     """
     Plan the part of a disk of the given emission in the stage of its
     galaxy (see Component.plan_stage), if it takes anything from the
     galaxy (the circular velocity of the mass, an equilibrium, density
     waves, the light of image traits) or the mass follows it; None
-    otherwise.
+    otherwise. name is that of its component (None if unnamed), whose
+    fluid it takes (see MassModel.fluid).
     """
     takes = disk.circular_velocity_params() or disk.equilibrium() is not None \
         or disk.wave_params() or disk.image_params()
     if not (takes or followed):
         return None
     return DiskStage(
-        disk, label, driver, sky_origin, followed,
+        disk, label, name, driver, sky_origin, followed,
         mass_per_unit(emission) if followed else None)
 
 
@@ -117,14 +117,14 @@ class DiskStage(ComponentStage):
     the mass of the galaxy can follow (see NodalDiskDensity), and what the
     galaxy gives it (see state): the circular velocity of the mass at the
     radii of the parameters of its velocity trait 'mass' (see
-    NodalDisk.circular_velocity_params), with its pressure support where its
-    traits ask for it (see NodalDisk.pressure_supported_params), and at each
-    height, where they ask for it (the velocity height trait 'mass', see
+    NodalDisk.circular_velocity_params), with its pressure support, if it
+    has one (see NodalDisk.pressure_supported_params), and at each height,
+    where its traits ask for it (the velocity height trait 'mass', see
     NodalDisk.rotation_factor_params); the dispersion of its vertical
-    equilibrium at its subnodes, if it has one (see parts.Equilibrium): in the
-    circular velocity of the mass ('central'; without mass, that of its
-    rotation), in the vertical force of the mass ('jeans'), or in the
-    surface density of a mass component ('self_gravitating'); and the
+    equilibrium at its subnodes, if it has one (see
+    traits.DPTraitEquilibrium): in the rotation of its traits
+    ('rotation'), in the vertical force of the mass ('galaxy'), or in the
+    surface density of its fluid ('sheet'); and the
     tables of its density waves (the traits 'spiral', see
     NodalDisk.wave_params), in its rotation, at its subnodes: its state
     (see DiskState).
@@ -142,6 +142,9 @@ class DiskStage(ComponentStage):
     label : str
         The name of its component, or its position (e.g. 'component0'),
         for the messages.
+    name : str, optional
+        The name of its component, whose fluid it takes (see
+        MassModel.fluid).
     driver : Driver
         The driver where it samples its profiles.
     sky_origin : tuple of float, optional
@@ -164,6 +167,7 @@ class DiskStage(ComponentStage):
             self,
             disk: NodalDisk,
             label: str,
+            name: str | None,
             driver: Driver,
             sky_origin: tuple[float, float] | None,
             followed: bool,
@@ -171,6 +175,7 @@ class DiskStage(ComponentStage):
     ):
         self._disk = disk
         self._label = label
+        self._name = name
         self._followed = followed
         self._mass_per_unit = mass_per_unit
         self._images = None if not disk.image_params() \
@@ -230,9 +235,9 @@ class DiskStage(ComponentStage):
         ('vrot', km/s); with an equilibrium, 'equilibrium', a table of its
         subnodes ('radius', arcsec), its rms height there ('height',
         arcsec), what its equilibrium takes there: the circular velocity
-        ('vcirc', km/s; 'central') or the surface density
-        ('surface_density', Msun/kpc^2; 'self_gravitating'; none for
-        'jeans'), and the dispersion of its equilibrium ('sigma', km/s);
+        ('vcirc', km/s; 'rotation') or the surface density
+        ('surface_density', Msun/kpc^2; 'sheet'; none for 'galaxy'), and
+        the dispersion of its equilibrium ('sigma', km/s);
         and a warning if it has image traits and is near edge-on (see
         ImageMaps.warn_inclination).
         """
@@ -301,9 +306,9 @@ class DiskStage(ComponentStage):
         v2 = vcirc2
         pressure = None
         if support := disk.pressure_supported_params().get(name):
-            density = None if support.mass() is None \
-                else _pressure_density(
-                    mass.model, support, R, mass.params, mass.context)
+            density = None if not disk.fluid() else _pressure_density(
+                mass.model, disk.fluid(), support.type(), R, mass.params,
+                mass.context)
             pressure = pressure_support(
                 disk, self._plan, values, radii, support.type(), density,
                 equilibrium)
@@ -344,10 +349,9 @@ class DiskStage(ComponentStage):
         v2 = -R[:, None] * force_R
         support = next(iter(disk.pressure_supported_params().values()), None)
         if support is not None:
-            density = None if support.mass() is None \
-                else _pressure_density(
-                    mass.model, support, R, mass.params, mass.context,
-                    z * kpc_per_arcsec)
+            density = None if not disk.fluid() else _pressure_density(
+                mass.model, disk.fluid(), support.type(), R, mass.params,
+                mass.context, z * kpc_per_arcsec)
             v2 = v2 + pressure_support(
                 disk, self._plan, values, r, support.type(), density,
                 equilibrium, z, kpc_per_arcsec)
@@ -381,32 +385,34 @@ class DiskStage(ComponentStage):
     ) -> np.ndarray:
         """
         Return the dispersion of the vertical equilibrium (km/s) of its
-        disk at its subnodes (see parts.Equilibrium), from the values of
-        its parameters and the mass of the galaxy (None without mass); for
-        a central equilibrium, from the squared circular velocity of the
-        mass at the subnodes, and without mass, from that of its rotation.
-        With extra outputs, its table (see state).
+        disk at its subnodes (see traits.DPTraitEquilibrium), from the
+        values of its parameters and the mass of the galaxy (None without
+        mass), by its gravity: 'rotation', the squared rotation of its
+        tangential traits at the subnodes; 'galaxy', the vertical force
+        of the mass; 'sheet', the surface density of its fluid (see
+        MassModel.fluid). With extra outputs, its table (see state).
         """
         disk = self._disk
-        equilibrium = disk.equilibrium()
+        gravity = disk.equilibrium().gravity()
         plan = self._plan
         radii = np.asarray(disk.subrnodes())
         heights = rms_heights(disk, plan, values, radii)
         lit = self._lit(values, radii)
-        if isinstance(equilibrium, CentralEquilibrium):
-            vcirc2 = rotation(disk, plan, values, radii) ** 2 if mass is None \
-                else mass.field.vcirc2(radii * mass.kpc_per_arcsec)
-            sigma = _central_dispersion(radii, lit, heights, vcirc2)
+        if gravity == 'rotation':
+            vcirc2 = rotation(disk, plan, values, radii) ** 2
+            sigma = _rotation_dispersion(radii, lit, heights, vcirc2)
             taken = dict(vcirc=_signed_sqrt(vcirc2) * u.km / u.s)
-        elif isinstance(equilibrium, JeansEquilibrium):
-            sigma = _jeans_dispersion(disk, plan, values, radii, mass)
+        elif gravity == 'galaxy':
+            sigma = _galaxy_dispersion(disk, plan, values, radii, mass)
             taken = {}
         else:
-            name = equilibrium.mass()
-            surface = mass.model.component(name).surface_density(
-                radii * mass.kpc_per_arcsec,
-                mass.model.component_params(name, mass.params), mass.context)
-            sigma = _self_gravitating_dispersion(
+            R = radii * mass.kpc_per_arcsec
+            surface = sum(
+                mass.model.component(name).surface_density(
+                    R, mass.model.component_params(name, mass.params),
+                    mass.context)
+                for name in mass.model.fluid(self._name, disk.fluid()))
+            sigma = _sheet_dispersion(
                 radii, lit, heights * mass.kpc_per_arcsec, surface)
             taken = dict(surface_density=surface * u.solMass / u.kpc ** 2)
         if out_extra is not None:
@@ -419,38 +425,40 @@ class DiskStage(ComponentStage):
 
 def _pressure_density(
         mass_model: MassModel,
-        support: PressureSupport,
+        fluid: tuple[str, ...],
+        mode: str,
         R: np.ndarray,
         params: ParamValues,
         context: MassContext,
         z: np.ndarray | None = None
 ) -> np.ndarray:
     """
-    Return the density of the mass components of a pressure support (see
-    traits.VPTraitMass), their sum, at the radii R (kpc): for 'jeans', at
-    their midplane, or at the heights z (kpc; an array of shape (len(R),
-    len(z))); for 'self_gravitating', their surface density.
+    Return the density of the fluid of a pressure support (the mass disks
+    of the given names; see traits.PressureSupport), their sum, at the
+    radii R (kpc), by its mode: for 'jeans', at their midplane, or at the
+    heights z (kpc; an array of shape (len(R), len(z))); for
+    'self_gravitating', their surface density.
     """
     def density(name: str) -> np.ndarray:
         component = mass_model.component(name)
         own = mass_model.component_params(name, params)
-        if support.type() == 'self_gravitating':
+        if mode == 'self_gravitating':
             return component.surface_density(R, own, context)
         if z is None:
             return component.density(R, np.zeros_like(R), own, context)
         return component.density(R[:, None], z, own, context)
-    return sum(density(name) for name in support.mass())
+    return sum(density(name) for name in fluid)
 
 
-def _central_dispersion(
+def _rotation_dispersion(
         radii: np.ndarray,
         lit: Callable[[], np.ndarray],
         heights: np.ndarray,
         vcirc2: np.ndarray
 ) -> np.ndarray:
     """
-    Return the dispersion (km/s) of the central equilibrium (see
-    parts.CentralEquilibrium) at the radii (arcsec), where the disk has
+    Return the dispersion (km/s) of the equilibrium 'rotation' (see
+    traits.DPTraitEquilibrium) at the radii (arcsec), where the disk has
     light or not (see _check_solved), of the given rms heights (arcsec)
     and squared circular velocities ((km/s)^2): h Omega, Omega^2 = vcirc2
     / R^2; at the centre, where it is 0 / 0, Omega at the next radius; 0
@@ -467,13 +475,12 @@ def _central_dispersion(
         omega2[0] = omega2[1]
     solved = np.isfinite(omega2) & (omega2 >= 0)
     _check_solved(
-        solved, lit, radii, "the central equilibrium",
-        "the squared circular velocity of the mass is negative or not "
-        "finite")
+        solved, lit, radii, "the equilibrium 'rotation'",
+        "the squared rotation is negative or not finite")
     return heights * np.sqrt(np.where(solved, omega2, 0))
 
 
-def _jeans_dispersion(
+def _galaxy_dispersion(
         disk: NodalDisk,
         plan: DiskPlan,
         params: ParamValues,
@@ -481,8 +488,8 @@ def _jeans_dispersion(
         mass: GalaxyMass
 ) -> np.ndarray:
     """
-    Return the dispersion (km/s) of the jeans equilibrium (see
-    parts.JeansEquilibrium) of a disk at its subnodes (radii, arcsec), in
+    Return the dispersion (km/s) of the equilibrium 'galaxy' (see
+    traits.DPTraitEquilibrium) of a disk at its subnodes (radii, arcsec), in
     the vertical force of the mass of its galaxy (see jeans_dispersions);
     at the centre, the value at the next subnode.
     """
@@ -499,15 +506,15 @@ def _jeans_dispersion(
     return sigma
 
 
-def _self_gravitating_dispersion(
+def _sheet_dispersion(
         radii: np.ndarray,
         lit: Callable[[], np.ndarray],
         heights: np.ndarray,
         surface: np.ndarray
 ) -> np.ndarray:
     """
-    Return the dispersion (km/s) of the self-gravitating equilibrium (see
-    parts.SelfGravitatingEquilibrium) at the radii (arcsec), where the
+    Return the dispersion (km/s) of the equilibrium 'sheet' (see
+    traits.DPTraitEquilibrium) at the radii (arcsec), where the
     disk has light or not (see _check_solved), of the given rms heights
     (kpc) and surface densities (Msun/kpc^2): sqrt(2 sqrt(3) G Sigma h);
     0 where it has no solution and no light.
@@ -520,7 +527,7 @@ def _self_gravitating_dispersion(
     sigma2 = 2 * np.sqrt(3) * G * surface * heights
     solved = sigma2 >= 0
     _check_solved(
-        solved, lit, radii, "the self-gravitating equilibrium",
+        solved, lit, radii, "the equilibrium 'sheet'",
         "the surface density of the mass is negative")
     return np.sqrt(np.where(solved, sigma2, 0))
 

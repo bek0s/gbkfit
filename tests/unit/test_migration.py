@@ -784,8 +784,12 @@ def test_components_are_flat():
     # (in the order of the options they replace)
     assert list(thick) == [
         'type', 'name', 'rptraits', 'rhtraits', 'vptraits', 'dptraits',
-        'equilibrium', 'emission']
+        'emission']
     assert thick['rhtraits'] == dict(type='sech2', zmax=8)
+    # (and its equilibrium its last dispersion trait: see
+    # test_the_vertical_balance_is_stated_once)
+    assert thick['dptraits'] == [
+        dict(type='uniform'), dict(type='equilibrium', gravity='galaxy')]
     assert spheroids == [
         dict(type='jeans_spheroid', name='a'),
         dict(type='orbit_spheroid', name='b', norbits=200),
@@ -795,6 +799,73 @@ def test_components_are_flat():
         dict(type='spheroid', name='d'),
         dict(type='spheroid', name='e')]
     assert not any(c.message.startswith('by hand') for c in changes)
+
+
+def test_the_vertical_balance_is_stated_once():
+    # Version 8: the equilibrium of a thick disk is its last dispersion
+    # trait, its mass the fluid of the disk; the pressure support of its
+    # velocity trait 'mass' is an option of the disk
+    def thick(equilibrium, **options):
+        return dict(
+            type='thick_disk', rptraits=dict(type='exponential'),
+            rhtraits=dict(type='gauss', zmax=4),
+            vptraits=dict(type='arctan', direction='tan'),
+            dptraits=dict(type='uniform'), equilibrium=equilibrium) | options
+    disks = [
+        thick(dict(type='jeans', direction='ver')),
+        thick(dict(type='self_gravitating', mass='hi'),
+              vptraits=[dict(type='mass', pressure_support=dict(
+                  type='jeans', mass='hi'))]),
+        thick(dict(type='self_gravitating', mass=['hi', 'h2']),
+              dptraits=[dict(type='uniform', name='floor')]),
+        dict(type='thin_disk', rptraits=dict(type='exponential'),
+             vptraits=dict(type='mass', pressure_support=dict(
+                 type='self_gravitating', mass=['hi', 'h2'])),
+             dptraits=dict(type='uniform'))]
+    massive = dict(components=disks, mass=[dict(type='point', name='bh')])
+    central = dict(components=[thick(dict(type='central'))])
+    changes = migration.migrate(dict(galaxies=[massive, central]), 7)
+    fitted = dict(type='uniform')
+    assert [disk['dptraits'] for disk in disks[:3]] == [
+        [fitted, dict(type='equilibrium', gravity='galaxy', direction='ver')],
+        [fitted, dict(type='equilibrium', gravity='sheet')],
+        # (the traits of a list are named all or none)
+        [dict(type='uniform', name='floor'),
+         dict(type='equilibrium', gravity='sheet', name='equilibrium')]]
+    assert [disk.get('fluid') for disk in disks] == [
+        None, 'hi', ['hi', 'h2'], ['hi', 'h2']]
+    assert [disk.get('pressure_support') for disk in disks] == [
+        None, dict(type='jeans'), None, dict(type='self_gravitating')]
+    assert disks[1]['vptraits'] == [dict(type='mass')]
+    assert not any('equilibrium' in disk for disk in disks)
+    # (without mass, the central equilibrium is that of its rotation)
+    assert central['components'][0]['dptraits'][-1] == dict(
+        type='equilibrium', gravity='rotation')
+    assert not any(c.message.startswith('by hand') for c in changes)
+    from gbkfit.model import galaxy_parser
+    for disk in disks[:1]:
+        galaxy_parser.load(dict(
+            components=[disk | dict(
+                rnodes=[0, 1, 2], emission=dict(type='lines'))],
+            mass=[dict(type='point', name='bh')],
+            distance=dict(type='parameter')))
+
+
+@pytest.mark.parametrize('disk, mass, message', [
+    (dict(equilibrium=dict(type='central')), True,
+     "central equilibrium of a galaxy with mass"),
+    (dict(equilibrium=dict(type='self_gravitating', mass='hi'),
+          vptraits=dict(type='mass', pressure_support=dict(
+              type='jeans', mass='h2'))), False,
+     "take different masses")])
+def test_a_vertical_balance_that_is_not_expressible_is_refused(
+        disk, mass, message):
+    disk = dict(type='thick_disk', dptraits=dict(type='uniform')) | disk
+    galaxy = dict(components=[disk])
+    if mass:
+        galaxy['mass'] = [dict(type='point', name='bh')]
+    with pytest.raises(ConfigError, match=message):
+        migration.migrate(dict(galaxies=[galaxy]), 7)
 
 
 def test_flat_components_keep_their_comments(tmp_path):

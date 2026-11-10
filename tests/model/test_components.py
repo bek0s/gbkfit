@@ -57,8 +57,7 @@ THICK_OPTIONS = [
     ('zptraits', dict(type='nw_uniform', zmax=1)),
     ('rhtraits', SECH2),
     ('vhtraits', dict(type='one')),
-    ('dhtraits', dict(type='one')),
-    ('equilibrium', dict(type='central'))]
+    ('dhtraits', dict(type='one'))]
 
 # Each kind of component with its required trait option
 REQUIRED_TRAITS = [(name, 'rptraits') for name in COMPONENTS]
@@ -220,14 +219,14 @@ def test_a_thin_disk_takes_no_options_of_a_thick_disk(option, value):
 
 def test_a_lenient_thin_disk_leaves_out_the_options_of_a_thick_disk(caplog):
     component = component_info(
-        'lines_smdisk_thin', equilibrium=dict(type='central'),
+        'lines_smdisk_thin', dhtraits=dict(type='one'),
         zptraits=dict(type='nw_uniform', zmax=1))
     with strict_mode(False):
         galaxy = galaxy_parser.load(dict(components=[component]))
     dumped = galaxy.components()[0].dump()
     assert 'zptraits' not in dumped
-    assert 'equilibrium' not in dumped
-    assert "a thin disk does not take: 'equilibrium', 'zptraits'" \
+    assert 'dhtraits' not in dumped
+    assert "a thin disk does not take: 'dhtraits', 'zptraits'" \
         in caplog.text
 
 

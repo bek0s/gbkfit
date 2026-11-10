@@ -157,6 +157,34 @@ class MassModel(Serializable):
         """
         return self._components[self._index(name)]
 
+    def fluid(
+            self, component: str | None, given: Sequence[str] = ()
+    ) -> tuple[str, ...]:
+        """
+        Return the names of the mass disks of the fluid of a component of
+        its galaxy (of the given name, None if unnamed): those given (the
+        option fluid of a disk), or else those that follow the component.
+
+        Raises
+        ------
+        ValueError
+            If a given name is not that of one of its mass disks.
+        """
+        names = {mass.name(): mass for mass in self._components}
+        for name in given:
+            if not isinstance(names.get(name), MassDisk):
+                what = 'no mass component' if name not in names \
+                    else f'a {names[name].type()}'
+                raise ValueError(
+                    f"the fluid of the component {component!r} names mass "
+                    f"disks; {name!r} is {what}")
+        if given or component is None:
+            return tuple(given)
+        return tuple(
+            mass.name() for mass in self._components
+            if isinstance(mass, MassDisk)
+            and component in mass.followed_components())
+
     def mappings(self) -> tuple[dict[str, str], ...]:
         """
         Return the names of the parameters of each of its components among

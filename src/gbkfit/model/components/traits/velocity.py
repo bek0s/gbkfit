@@ -11,8 +11,7 @@ from typing import Annotated, Any
 import numpy as np
 from annotated_types import Ge
 
-from gbkfit.config import (
-    TypedParser, TypedSerializable, check_name, check_options)
+from gbkfit.config import TypedParser, TypedSerializable, check_options
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .base import RotationInput, VPTrait, VPTraitPlanar, WaveInput
 from .options import (
@@ -88,57 +87,34 @@ def _splits_bar(r: np.ndarray, params: dict[str, np.ndarray]) -> np.ndarray:
 class PressureSupport(TypedSerializable, abc.ABC):
     """
     How the rotation of a disk in the gravity of its galaxy is corrected
-    for its pressure (see VPTraitMass): with the density of the disk, or
-    the sum of the densities of mass components of its galaxy (mass).
-
-    Parameters
-    ----------
-    mass : str or Sequence of str, optional
-        The name of the mass component whose density the pressure takes,
-        or the names of several, whose densities add up; by default, that
-        of its disk.
-
-    Raises
-    ------
-    ValueError
-        If the names repeat, or there are none.
+    for its pressure (the option pressure_support of a disk; see
+    VPTraitMass): with the density of the disk, or that of its fluid, the
+    mass disks of its option fluid, whose densities add up (e.g. its
+    atomic and its molecular gas), with the dispersion of the disk. A
+    disk whose dispersion is not isotropic (see the package docstring)
+    takes the Jeans equation of its velocity ellipsoid: v^2 = v_c^2 + (R /
+    rho) d(rho sigma_R^2)/dR + sigma_R^2 - sigma_phi^2. The dispersion is
+    that of its dispersion traits, with that of its vertical equilibrium
+    in quadrature, if any (see DPTraitEquilibrium); the azimuthal means
+    are those of mass.SurfaceComponent, and the derivative is by the
+    second-order three-point formula on the rings; NaN without density
+    (see _profiles.pressure_support).
     """
 
     def dump(self) -> dict[str, Any]:
-        info: dict[str, Any] = dict(type=self.type())
-        if (names := self._mass) is not None:
-            info['mass'] = names[0] if len(names) == 1 else list(names)
-        return info
-
-    def __init__(self, mass: str | Sequence[str] | None = None):
-        check_options(PressureSupport.__init__, locals())
-        if mass is not None:
-            mass = (mass,) if isinstance(mass, str) else tuple(mass)
-            if not mass or len(set(mass)) != len(mass):
-                raise ValueError(
-                    f"the mass of a pressure support names mass components, "
-                    f"at least one and each once; it is {list(mass)}")
-            for name in mass:
-                check_name(name)
-        self._mass = mass
-
-    def mass(self) -> tuple[str, ...] | None:
-        """
-        Return the names of the mass components whose densities the
-        pressure takes, or None for that of the disk.
-        """
-        return self._mass
+        return dict(type=self.type())
 
 
 class PressureSupportJeans(PressureSupport):
     """
-    The pressure support of an isotropic gas at the midplane of its disk:
-    the radial Jeans equation. See VPTraitMass.
-
-    Parameters
-    ----------
-    mass : str or Sequence of str, optional
-        See PressureSupport: the densities at their midplane.
+    The pressure support of an isotropic gas at the midplane of its disk,
+    the radial Jeans equation: v^2 = v_c^2 + (R / rho) d(rho sigma^2)/dR,
+    with the azimuthal means of the density rho at the midplane (of the
+    disk: its density traits times its density height traits at z = 0,
+    or its density traits if thin, the equation of a thin disk; or of its
+    fluid, at their midplane, as DysmalPy's pressure support of type 3)
+    and of rho sigma^2, sigma its velocity dispersion at the midplane.
+    See PressureSupport.
     """
 
     @staticmethod
@@ -152,13 +128,14 @@ class PressureSupportJeans(PressureSupport):
 
 class PressureSupportSelfGravitating(PressureSupport):
     """
-    The pressure support of a disk whose thickness its own gravity sets.
-    See VPTraitMass.
-
-    Parameters
-    ----------
-    mass : str or Sequence of str, optional
-        See PressureSupport: their surface densities.
+    The pressure support of a disk whose thickness its own gravity sets,
+    h ~ sigma^2 / S, of its surface density S (its density traits, or the
+    surface density of its fluid): rho ~ S^2 / sigma^2 and rho sigma^2 ~
+    S^2, so that v^2 = v_c^2 + 2 sigma^2 dln S / dln R for an
+    axisymmetric disk (Burkert et al. 2010), whatever its density height
+    traits (DysmalPy's pressure support of types 1 and 2, for an
+    exponential and a Sersic S). A disk whose dispersion is not isotropic
+    takes sigma_z in rho. See PressureSupport.
     """
 
     @staticmethod
@@ -1230,46 +1207,15 @@ class VPTraitMass(VPTrait):
     rotation, as DysmalPy takes it), NaN where it is infinite (there is
     no circular orbit, e.g. at a jump of the surface density of a thin
     disk). A tangential speed (it has no option direction). It has no
-    parameters of its own, and its galaxy must have mass.
-
-    With the pressure support 'jeans', the rotation of an isotropic gas at the
-    midplane of its disk (the radial Jeans equation): v^2 = v_c^2 + (R /
-    rho) d(rho sigma^2)/dR, with the azimuthal means of the density rho of
-    the disk at its midplane (its density traits times its density
-    height traits at z = 0, or its density traits if thin: the equation
-    of a thin disk) and of rho sigma^2, sigma its velocity dispersion at
-    the midplane (with the dispersion of the vertical equilibrium of its
-    disk in quadrature, if any, see parts.Equilibrium; azimuthal means as
-    those of mass.SurfaceComponent); the derivative by the second-order
-    three-point formula on the rings; NaN without density. With
-    'self_gravitating', the same for a disk whose thickness its own
-    gravity sets, h ~ sigma^2 / S (S its surface density, its density
-    traits): rho ~ S^2 / sigma^2 and rho sigma^2 ~ S^2, so that v^2 =
-    v_c^2 + 2 sigma^2 dln S / dln R for an axisymmetric disk (Burkert et
-    al. 2010), whatever its density height traits (DysmalPy's pressure
-    support of types 1 and 2, for an exponential and a Sersic S). A disk
-    whose dispersion is not isotropic (see the package docstring) takes
-    the Jeans equation of its velocity ellipsoid: v^2 = v_c^2 + (R / rho)
-    d(rho sigma_R^2)/dR + sigma_R^2 - sigma_phi^2, with sigma_z in rho of
-    'self_gravitating' (see _profiles.pressure_support).
-
-    With the mass of the pressure support, the names of mass components
-    of its galaxy (one, or several: e.g. its atomic and its molecular
-    gas), the pressure takes the sum of their densities instead of that
-    of its disk: at their midplane ('jeans'; e.g. the gas of thick mass disks,
-    as DysmalPy's pressure support of type 3, which adds its gas
-    components), or their surface densities ('self_gravitating'; e.g.
-    that of the mass disk, as DysmalPy's types 1 and 2 take its
-    effective radius), with the dispersion of its disk.
+    parameters of its own, and its galaxy must have mass. With the
+    pressure support of its disk (see PressureSupport), the rotation of
+    the gas of the disk in that gravity.
 
     The rotation is the same at every height, or with the velocity height
     trait 'mass', that of the gravity at each height (see VHTraitMass).
 
     Parameters
     ----------
-    pressure_support : PressureSupport, optional
-        The pressure support: none (the default), 'jeans' or
-        'self_gravitating', with the density it takes.
     name : str, optional
         Its name, which prefixes its parameters (see Trait).
     """
@@ -1286,20 +1232,9 @@ class VPTraitMass(VPTrait):
     def uid() -> int:
         return VPT_UID_TABLE
 
-    def dump(self) -> dict[str, Any]:
-        info = {}
-        if (support := self._pressure_support) is not None:
-            info['pressure_support'] = pressure_support_parser.dump(support)
-        return super().dump() | info
-
-    def __init__(
-            self,
-            pressure_support: PressureSupport | None = None,
-            name: str | None = None
-    ):
+    def __init__(self, name: str | None = None):
         check_options(VPTraitMass.__init__, locals())
         super().__init__(name=name)
-        self._pressure_support = pressure_support
 
     def direction(self) -> str:
         return 'tan'
@@ -1314,4 +1249,4 @@ class VPTraitMass(VPTrait):
             default=200))
 
     def from_galaxy(self) -> RotationInput:
-        return RotationInput(('vt',), self._pressure_support)
+        return RotationInput(('vt',))

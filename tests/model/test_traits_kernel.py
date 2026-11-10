@@ -61,12 +61,14 @@ def trait_configs(parser):
     for type_, cls in parser.registered_classes().items():
         # (the traits mass have no parameters: their values come from the
         # mass of their galaxy, see test_mass; the spiral waves take the
-        # rotation of other traits, see test_flows; and the images are
-        # files, whose light their galaxy makes, see test_image_light)
+        # rotation of other traits, see test_flows; the images are files,
+        # whose light their galaxy makes, see test_image_light; and the
+        # kernels do not evaluate the vertical equilibrium, whose
+        # dispersion its galaxy derives, see test_equilibrium)
         if cls in (
                 traits.VPTraitMass, traits.VHTraitMass,
                 traits.VPTraitSpiral, traits.RPTraitSpiral,
-                traits.RPTraitImage):
+                traits.RPTraitImage, traits.DPTraitEquilibrium):
             continue
         options = inspect.signature(cls.__init__).parameters
         config = dict(type=type_)

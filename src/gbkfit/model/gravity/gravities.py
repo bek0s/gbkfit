@@ -157,14 +157,14 @@ class Gravity(TypedSerializable, abc.ABC):
     made (see Component.needs):
 
     - the forces anywhere (off the plane too; Capability.FORCES), which
-      the jeans equilibrium and the rotation at each height take (see
-      parts.JeansEquilibrium and traits.VHTraitMass)
+      the vertical equilibrium 'galaxy' and the rotation at each height
+      take (see traits.DPTraitEquilibrium and traits.VHTraitMass)
     - forces that are the gradient of a potential (POTENTIAL), in which
       orbits keep their energy, as the orbits of Schwarzschild models take
     - the vertical structure of self-gravitating isothermal sheets
-      (SHEETS), which the self_gravitating equilibrium and pressure
-      support take (see parts.SelfGravitatingEquilibrium and
-      traits.VPTraitMass)
+      (SHEETS), which the vertical equilibrium 'sheet' and the
+      self_gravitating pressure support take (see
+      traits.DPTraitEquilibrium and traits.PressureSupport)
     - the shares of the components in the squared circular velocity
       (SHARES), which the dark fraction of a halo takes (see
       mass.Halo)

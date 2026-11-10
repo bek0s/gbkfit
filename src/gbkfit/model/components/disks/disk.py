@@ -9,10 +9,11 @@ from typing import Any, Self
 
 import numpy as np
 
-from gbkfit.config import check_options, report_unknown
+from gbkfit.config import check_name, check_options, report_unknown
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
+from gbkfit.utils import iterutils
 from ...mass import DiskDensity
 from .. import traits
 from .._needs import Need
@@ -25,8 +26,7 @@ from ..nodes import Nodes, as_nodes
 from ..roles import STARS, Emission, Opacity
 from . import _detail, _disk, _stage
 from .clouds import Clouds
-from ..parts import (
-    Equilibrium, KinematicTraits, density_traits, kinematic_traits)
+from ..parts import KinematicTraits, density_traits, kinematic_traits
 
 
 __all__ = [
@@ -38,8 +38,77 @@ __all__ = [
 
 # The options of a thick disk that a thin one does not take
 _THICK_OPTIONS = (
-    'rhtraits', 'vhtraits', 'dhtraits', 'equilibrium', 'opacity',
-    'zptraits', 'clouds')
+    'rhtraits', 'vhtraits', 'dhtraits', 'opacity', 'zptraits', 'clouds')
+
+
+def _fluid(value: str | Sequence[str] | None) -> tuple[str, ...]:
+    """
+    Return the names of the mass disks of the fluid of a disk as a tuple
+    (none if not given). Raise ValueError if a name is not valid or
+    repeats.
+    """
+    names = iterutils.tuplify(value) if value is not None else ()
+    if value is not None and not names or len(set(names)) != len(names):
+        raise ValueError(
+            f"the fluid of a disk names mass disks, at least one and each "
+            f"once; it is {list(names)}")
+    for name in names:
+        check_name(name)
+    return names
+
+
+def _check_balance(
+        kinematics: KinematicTraits | None,
+        support: traits.PressureSupport | None,
+        fluid: tuple[str, ...],
+        thick: bool
+) -> None:
+    """
+    Check the vertical balance and the pressure of a disk of the given
+    kinematics, pressure support and fluid, thick or not: a vertical
+    equilibrium holds up the thickness of a thick disk; the pressure
+    corrects the rotation of its velocity trait 'mass', and at each
+    height (with the velocity height trait 'mass'), that of
+    'self_gravitating' in the sheet of the surface density of its fluid;
+    a fluid is what the pressure or the equilibrium 'sheet' takes.
+
+    Raises
+    ------
+    ValueError
+        If one of these does not hold.
+    """
+    equilibrium = kinematics.equilibrium() if kinematics is not None \
+        else None
+    if equilibrium is not None and not thick:
+        raise ValueError(
+            "the vertical equilibrium holds up the thickness of a thick "
+            "disk: a thin disk has none")
+    vptraits = kinematics.vptraits() if kinematics is not None else ()
+    if equilibrium is not None and equilibrium.gravity() == 'rotation' \
+            and not any(trait.direction() == 'tan' for trait in vptraits):
+        raise ValueError(
+            "the vertical equilibrium 'rotation' takes the rotation of the "
+            "tangential velocity traits of the disk: it has none")
+    if support is not None and not any(
+            isinstance(trait, traits.VPTraitMass) for trait in vptraits):
+        raise ValueError(
+            "the pressure support corrects the rotation of the disk in the "
+            "gravity of its galaxy: give it the velocity trait 'mass'")
+    vhtraits = (kinematics.vhtraits() or ()) if kinematics is not None \
+        else ()
+    if support is not None and support.type() == 'self_gravitating' \
+            and not fluid and any(
+                isinstance(trait, traits.VHTraitMass) for trait in vhtraits):
+        raise ValueError(
+            "the velocity height trait 'mass' takes the self_gravitating "
+            "pressure support at each height in the sheet of the surface "
+            "density of its fluid, of the scale height sigma^2 / (pi G "
+            "Sigma): give the disk its fluid")
+    sheet = equilibrium is not None and equilibrium.gravity() == 'sheet'
+    if fluid and support is None and not sheet:
+        raise ValueError(
+            "the fluid of a disk is the gas whose density its pressure "
+            "support and its equilibrium 'sheet' take: it has neither")
 
 
 class Disk(Component, abc.ABC):
@@ -56,8 +125,7 @@ class Disk(Component, abc.ABC):
 
     def dump(self) -> dict[str, Any]:
         info = _detail.dump_disk_component(
-            self, self._disk, self._rnodes, self._kinematics,
-            self._equilibrium)
+            self, self._disk, self._rnodes, self._kinematics)
         if self._clouds is not None:
             info['clouds'] = self._clouds.dump()
         return info
@@ -72,7 +140,8 @@ class Disk(Component, abc.ABC):
             traits.VHTrait | Sequence[traits.VHTrait | None] | None,
             dhtraits:
             traits.DHTrait | Sequence[traits.DHTrait | None] | None,
-            equilibrium: Equilibrium | None,
+            pressure_support: traits.PressureSupport | None,
+            fluid: str | Sequence[str] | None,
             emission: Emission | None,
             opacity: Opacity | None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
@@ -91,17 +160,15 @@ class Disk(Component, abc.ABC):
         rptraits, rhtraits = density_traits(rptraits, rhtraits, thick)
         self._kinematics = kinematics = kinematic_traits(
             vptraits, dptraits, vhtraits, dhtraits)
-        if equilibrium is not None and kinematics is None:
-            raise ValueError(
-                "the vertical equilibrium of a disk is that of its "
-                "kinematics: give it vptraits and dptraits")
-        self._equilibrium = equilibrium
+        fluid = _fluid(fluid)
+        _check_balance(kinematics, pressure_support, fluid, thick)
         self._clouds = clouds
         # In the form it was given in, for its configuration (see dump)
         self._rnodes = rnodes = as_nodes(rnodes)
         self._disk = _detail.make_disk(
-            rptraits, rhtraits, kinematics, equilibrium, emission, opacity,
-            zptraits, sptraits, thick=thick, loose=loose, tilted=tilted,
+            rptraits, rhtraits, kinematics, pressure_support, fluid,
+            emission, opacity, zptraits, sptraits, thick=thick, loose=loose,
+            tilted=tilted,
             rnodes=rnodes, rstep=rstep, interp=interp, clouds=clouds)
         self._lines = make_lines(self._disk.pdescs(), emission)
         self._bands = make_bands(self._disk.pdescs(), emission)
@@ -116,9 +183,23 @@ class Disk(Component, abc.ABC):
         """Return its kinematic traits, if it moves."""
         return self._kinematics
 
-    def equilibrium(self) -> Equilibrium | None:
-        """Return its vertical equilibrium, if any (a thick disk's)."""
-        return self._equilibrium
+    def equilibrium(self) -> traits.DPTraitEquilibrium | None:
+        """
+        Return its vertical equilibrium, if any (a thick disk's: the last
+        of its dispersion traits, see traits.DPTraitEquilibrium).
+        """
+        return self._disk.equilibrium()
+
+    def pressure_support(self) -> traits.PressureSupport | None:
+        """Return its pressure support, if any (see traits.VPTraitMass)."""
+        return self._disk.pressure_support()
+
+    def fluid(self) -> tuple[str, ...]:
+        """
+        Return the names of the mass disks of its fluid, if given (see
+        traits.PressureSupport and traits.BalanceGravity).
+        """
+        return self._disk.fluid()
 
     def clouds(self) -> Clouds | None:
         """Return its clouds, if it is made of clouds."""
@@ -168,7 +249,8 @@ class Disk(Component, abc.ABC):
             label: str
     ) -> _stage.DiskStage | None:
         return _stage.plan_disk_stage(
-            self._disk, self.emission(), driver, sky_origin, followed, label)
+            self._disk, self.emission(), driver, sky_origin, followed, label,
+            self.name())
 
     def plan(
             self,
@@ -213,6 +295,16 @@ class ThinDisk(Disk):
         Its velocity dispersion polar traits (parameters 'dpt_*'),
         isotropic or each along a direction: once one is along a
         direction, every direction needs its own or an isotropic one.
+    pressure_support : PressureSupport, optional
+        How the rotation of its velocity trait 'mass' is corrected for
+        its pressure: none (the default), 'jeans' or 'self_gravitating'
+        (see traits.PressureSupport).
+    fluid : str or Sequence of str, optional
+        The names of the mass disks of its galaxy whose densities its
+        pressure support takes instead of its own (e.g. its atomic and
+        molecular gas), and whose surface density holds a thick disk up
+        in the equilibrium 'sheet' (by default, the mass disks that follow
+        the disk).
     emission : Emission, optional
         The light it emits.
     sptraits : SPTrait or Sequence of SPTrait, optional
@@ -271,6 +363,8 @@ class ThinDisk(Disk):
             rptraits: traits.RPTrait | Sequence[traits.RPTrait],
             vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None = None,
             dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None = None,
+            pressure_support: traits.PressureSupport | None = None,
+            fluid: str | Sequence[str] | None = None,
             emission: Emission | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             loose: bool = False,
@@ -282,9 +376,9 @@ class ThinDisk(Disk):
     ):
         check_options(ThinDisk.__init__, locals())
         super().__init__(
-            rptraits, None, vptraits, dptraits, None, None, None, emission,
-            None, None, sptraits, loose, tilted, rnodes, rstep, interp, None,
-            name)
+            rptraits, None, vptraits, dptraits, None, None, pressure_support,
+            fluid, emission, None, None, sptraits, loose, tilted, rnodes,
+            rstep, interp, None, name)
 
     def thick(self, seen_by: 'type[Emission]') -> bool:
         return False
@@ -318,10 +412,12 @@ class ThickDisk(Disk):
         polar trait (as rhtraits; None items or none at all: the velocity
         does not change with the height).
     dhtraits : DHTrait or Sequence of DHTrait, optional
-        Its dispersion height traits, one shared or one for each
-        dispersion polar trait (as vhtraits).
-    equilibrium : Equilibrium, optional
-        Its vertical equilibrium, if it moves; none by default.
+        Its dispersion height traits, one shared or one for each fitted
+        dispersion polar trait (as vhtraits; its vertical equilibrium, the
+        last of its dispersion traits if any, takes none: see
+        traits.DPTraitEquilibrium).
+    pressure_support, fluid : optional
+        As those of ThinDisk.
     emission : Emission, optional
         The light it emits.
     opacity : Opacity, optional
@@ -381,7 +477,8 @@ class ThickDisk(Disk):
             traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
             dhtraits:
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
-            equilibrium: Equilibrium | None = None,
+            pressure_support: traits.PressureSupport | None = None,
+            fluid: str | Sequence[str] | None = None,
             emission: Emission | None = None,
             opacity: Opacity | None = None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
@@ -397,8 +494,8 @@ class ThickDisk(Disk):
         check_options(ThickDisk.__init__, locals())
         super().__init__(
             rptraits, rhtraits, vptraits, dptraits, vhtraits, dhtraits,
-            equilibrium, emission, opacity, zptraits, sptraits, loose, tilted,
-            rnodes, rstep, interp, clouds, name)
+            pressure_support, fluid, emission, opacity, zptraits, sptraits,
+            loose, tilted, rnodes, rstep, interp, clouds, name)
 
     def thick(self, seen_by: 'type[Emission]') -> bool:
         return True

@@ -22,7 +22,8 @@ __all__ = [
     'FlatComponents',
     'Halos',
     'TracedMass',
-    'TraitParameterNames'
+    'TraitParameterNames',
+    'VerticalBalance'
 ]
 
 
@@ -749,6 +750,112 @@ def _assumed(
 
 # The rules, in the order of the changes: TraitParameterNames reads the
 # trait options that FlatComponents takes up
+class VerticalBalance(Rule):
+    """
+    The vertical balance of a disk is stated once (2026-11-11). The
+    dispersion of the vertical equilibrium of a thick disk (equilibrium:
+    {type, direction, mass}; a thin disk took none, and keeps it to be
+    changed by hand, see v4) is its last dispersion trait, {type: equilibrium, gravity,
+    direction}: jeans balances the gravity galaxy; self_gravitating the
+    sheet of the surface density of its fluid (fluid: its mass); central
+    its rotation, in a galaxy without mass (next to a mass, the pull of a
+    spherical mass of its rotation is not expressible). The pressure
+    support of its velocity trait 'mass' is an option of the disk, and
+    the mass of the support the fluid of the disk.
+    """
+
+    _GRAVITIES = dict(
+        jeans='galaxy', self_gravitating='sheet', central='rotation')
+
+    @staticmethod
+    def version() -> int:
+        return 8
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for galaxy_path, galaxy in items(config, 'galaxies'):
+            massive = bool(galaxy.get('mass'))
+            for path, component in components(galaxy):
+                if component.get('type') in ('thin_disk', 'thick_disk'):
+                    changes += self._disk(
+                        component, galaxy_path + path, massive)
+        return changes
+
+    def _disk(
+            self,
+            disk: MutableMapping[str, Any],
+            path: list[str | int],
+            massive: bool
+    ) -> list[Change]:
+        """
+        Rewrite the balance of a disk of a galaxy with mass or not, in
+        place.
+
+        Raises
+        ------
+        ConfigError
+            If it is in the central equilibrium next to a mass, or its
+            pressure support and its equilibrium take different masses.
+        """
+        changes = []
+        fluids = []
+        vptraits = disk.get('vptraits')
+        for trait in vptraits if isinstance(vptraits, list) else [vptraits]:
+            if not isinstance(trait, MutableMapping) \
+                    or 'pressure_support' not in trait:
+                continue
+            support = dict(trait.pop('pressure_support'))
+            if (mass := support.pop('mass', None)) is not None:
+                fluids.append(mass)
+            disk['pressure_support'] = support
+            changes.append(Change(path, (
+                "the pressure support of the velocity trait mass -> "
+                "pressure_support of the disk")))
+        equilibrium = disk.get('equilibrium')
+        if disk.get('type') == 'thick_disk' \
+                and isinstance(equilibrium, Mapping):
+            kind = equilibrium.get('type')
+            if kind == 'central' and massive:
+                raise ConfigError(
+                    f"the disk at {path} is in the central equilibrium of "
+                    f"a galaxy with mass, which is no longer expressible: "
+                    f"the pull of a spherical mass of its rotation is not "
+                    f"that of the galaxy. Give it the equilibrium jeans "
+                    f"(the vertical force of the mass), or remove the "
+                    f"mass, then migrate it")
+            if (mass := equilibrium.get('mass')) is not None:
+                fluids.append(mass)
+            trait = dict(
+                type='equilibrium', gravity=self._GRAVITIES.get(kind, kind))
+            if 'direction' in equilibrium:
+                trait['direction'] = equilibrium['direction']
+            dptraits = disk.get('dptraits')
+            dptraits = list(dptraits) if isinstance(dptraits, list) \
+                else [dptraits]
+            # (the traits of a list are named all or none)
+            if any(isinstance(item, Mapping) and 'name' in item
+                   for item in dptraits):
+                trait['name'] = 'equilibrium'
+            disk['dptraits'] = dptraits + [trait]
+            del disk['equilibrium']
+            changes.append(Change(path, (
+                f"equilibrium {kind} -> the last dispersion trait, "
+                f"equilibrium of the gravity {trait['gravity']}")))
+        names = [
+            tuple(value) if isinstance(value, list) else (value,)
+            for value in fluids]
+        if len(set(names)) > 1:
+            raise ConfigError(
+                f"the pressure support and the equilibrium of the disk at "
+                f"{path} take different masses ({fluids}); a disk now has "
+                f"one fluid: give them one, then migrate it")
+        if fluids:
+            disk['fluid'] = fluids[0]
+            changes.append(Change(path, (
+                "the mass of its pressure support or equilibrium -> fluid")))
+        return changes
+
+
 RULES: tuple[Rule, ...] = (
     FlatComponents(),
     TraitParameterNames(),
@@ -756,4 +863,5 @@ RULES: tuple[Rule, ...] = (
     Halos(),
     Cosmologies(),
     AssumedDistances(),
+    VerticalBalance(),
 )
