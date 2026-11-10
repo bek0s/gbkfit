@@ -87,31 +87,39 @@ def _critical_density(cosmology: str, redshift: float) -> float:
 
 @functools.lru_cache(maxsize=256)
 def _omega_m(cosmology: str, redshift: float) -> float:
-    """Return the matter density parameter at a redshift."""
-    return float(_cosmology(cosmology).Om(redshift))
+    """
+    Return the matter density parameter at a redshift, with the massive
+    neutrinos (which astropy keeps apart from the matter), as Planck's
+    Omega_m has them.
+    """
+    cosmo = _cosmology(cosmology)
+    return float(cosmo.Om(redshift) + cosmo.Onu(redshift))
 
 
 @functools.lru_cache(maxsize=256)
 def _ricci_scalar(cosmology: str, redshift: float) -> float:
     """
     Return the Ricci scalar of the background universe (kpc^-2) at a
-    redshift: 8 pi G (rho_m + (1 - 3 w) rho_de) / c^2, of its matter and
-    its dark energy (radiation is traceless; the massive neutrinos, which
-    astropy keeps apart from the matter, add some 0.05%: left out).
+    redshift: 8 pi G (rho_m + (1 - 3 w) rho_de) / c^2, of its matter (with
+    the massive neutrinos, see _omega_m) and its dark energy (radiation is
+    traceless).
     """
     cosmo = _cosmology(cosmology)
     density = cosmo.critical_density(redshift).to_value('solMass / kpc3') * (
-        cosmo.Om(redshift) + (1 - 3 * cosmo.w(redshift)) * cosmo.Ode(redshift))
+        _omega_m(cosmology, redshift)
+        + (1 - 3 * cosmo.w(redshift)) * cosmo.Ode(redshift))
     return float(8 * np.pi * G * density / _C ** 2)
 
 
 def _baryon_fraction(cosmology: str) -> float | None:
     """
     Return the cosmic baryon fraction, Omega_b / Omega_m (None if the
-    cosmology has no Omega_b).
+    cosmology has no Omega_b), of Omega_m with the massive neutrinos (see
+    _omega_m).
     """
     cosmo = _cosmology(cosmology)
-    return None if cosmo.Ob0 is None else float(cosmo.Ob0 / cosmo.Om0)
+    return None if cosmo.Ob0 is None \
+        else float(cosmo.Ob0 / _omega_m(cosmology, 0.0))
 
 
 class Distance(TypedSerializable, abc.ABC):

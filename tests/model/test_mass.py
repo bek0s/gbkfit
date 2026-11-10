@@ -1465,9 +1465,15 @@ def test_the_mass_of_a_galaxy_at_a_direct_distance_is_of_its_epoch():
         mass=copy.deepcopy(MASS), distance=copy.deepcopy(DISTANCE),
         redshift=1.5))
     mass = galaxy.plan_stage().mass(DISK_PROPERTIES | MASS_PROPERTIES)
+    planck = astropy.cosmology.Planck18
     assert mass.context.critical_density == pytest.approx(
-        astropy.cosmology.Planck18.critical_density(1.5).to_value(
-            'solMass / kpc3'))
+        planck.critical_density(1.5).to_value('solMass / kpc3'))
+    # (Omega_m with the massive neutrinos, as Planck's: 0.3111 today)
+    assert mass.context.omega_m == pytest.approx(
+        planck.Om(1.5) + planck.Onu(1.5))
+    assert planck.Om0 + planck.Onu0 == pytest.approx(0.3111, abs=1e-4)
+    assert mass.context.baryon_fraction == pytest.approx(
+        planck.Ob0 / (planck.Om0 + planck.Onu0))
 
 
 def with_traits(component, **traits):
