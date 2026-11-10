@@ -37,14 +37,14 @@ def test_eval_writes_a_run(tmp_path):
         driver=dict(type='host'),
         galaxies=[dict(components=[dict(
             type='thin_disk', loose=False, tilted=False, rnodes=list(range(8)),
-            density=dict(ptraits=dict(type='exponential')),
+            rptraits=dict(type='exponential'),
             emission=dict(type='band'))])],
         observations=[dict(
             type='sky',
             observable=dict(type='pixel_brightness', size=[16, 12]),
             line_of_sight=dict(type='flat'))],
         params=dict(properties=dict(
-            xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=3)))
+            xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=3)))
     (tmp_path / 'config.json').write_text(json.dumps(config))
     result = run_cli(tmp_path, 'eval', 'model', 'config.json')
     assert result.returncode == 0, result.stderr
