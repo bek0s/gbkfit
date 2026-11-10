@@ -27,8 +27,9 @@ __all__ = [
 ]
 
 
-# Their uid in the native kernels
-RPT_UID_MAP = 151
+# Their uid in the native kernels (of densities alone, from 201: see
+# shapes for those of the shared shapes)
+RPT_UID_MAP = 202
 
 
 def _check_map_grid(

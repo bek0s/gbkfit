@@ -14,6 +14,7 @@ from gbkfit.params.pdescs import ParamDesc
 from .base import ZPTrait
 from .options import (
     SAMPLING_DEFAULT, Harmonic, Sampling, SamplingChoice, Zmax)
+from .shapes import PT_UID_NW_HARMONIC, PT_UID_NW_UNIFORM
 
 
 __all__ = [
@@ -21,10 +22,6 @@ __all__ = [
     'ZPTraitNWUniform'
 ]
 
-
-# Their uids in the native kernels
-ZPT_UID_NW_UNIFORM = 101
-ZPT_UID_NW_HARMONIC = 102
 
 
 class ZPTraitNWUniform(ZPTrait):
@@ -59,7 +56,7 @@ class ZPTraitNWUniform(ZPTrait):
 
     @staticmethod
     def uid() -> int:
-        return ZPT_UID_NW_UNIFORM
+        return PT_UID_NW_UNIFORM
 
     def __init__(
             self,
@@ -114,7 +111,7 @@ class ZPTraitNWHarmonic(ZPTrait):
 
     @staticmethod
     def uid() -> int:
-        return ZPT_UID_NW_HARMONIC
+        return PT_UID_NW_HARMONIC
 
     def __init__(
             self,

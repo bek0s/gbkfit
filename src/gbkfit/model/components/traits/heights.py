@@ -52,9 +52,10 @@ RHT_UID_LORENTZ = 5
 RHT_UID_MOFFAT = 6
 RHT_UID_SECH2 = 7
 
-# The uid of the velocity height trait 'mass' (of the velocity alone; the
-# factors that the velocity and the dispersion share are in shapes)
-VHT_UID_MASS = 5
+# The uid of the velocity height trait 'mass' (of the velocity alone,
+# from 201; the factors that the velocity and the dispersion share are in
+# shapes)
+VHT_UID_MASS = 201
 
 
 # The heights of the table of the velocity height trait 'mass' (see

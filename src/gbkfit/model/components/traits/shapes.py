@@ -62,8 +62,9 @@ __all__ = [
 
 
 # The uids of the shapes in the native kernels (traits.hpp PT_UID_*): the
-# same in every family; the uids of the traits of one family alone are in
-# blocks of their own (see each family)
+# same in every family; the traits of one family alone have uids from 201
+# (see each family), so that the kernels take the shapes in the default
+# case of the switch of each family
 PT_UID_UNIFORM = 1
 PT_UID_EXP = 2
 PT_UID_GAUSS = 3

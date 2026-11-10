@@ -9,6 +9,7 @@ import pytest
 import scipy.integrate
 
 from gbkfit.model.components import traits
+from gbkfit.model.components.traits import shapes
 
 
 def kernel_consts_cases():
@@ -62,6 +63,40 @@ def kernel_consts_cases():
 @pytest.mark.parametrize('cls, options, consts', list(kernel_consts_cases()))
 def test_traits_give_the_constants_the_kernels_read(cls, options, consts):
     assert cls(**options).consts() == consts
+
+
+PARSERS = dict(
+    rpt=traits.rpt_parser, rht=traits.rht_parser,
+    vpt=traits.vpt_parser, vht=traits.vht_parser,
+    dpt=traits.dpt_parser, dht=traits.dht_parser,
+    zpt=traits.zpt_parser, spt=traits.spt_parser)
+
+# The families whose kernels take the shapes (polar) or the factors
+# (height) that they share in the default case of their switch (see
+# traits.hpp), by the suffix of the classes of those in shapes
+SHARING = dict(rpt='Shape', vpt='Shape', dpt='Shape', zpt='Shape',
+               vht='Factor', dht='Factor')
+
+
+@pytest.mark.parametrize('kind', PARSERS)
+def test_each_type_of_a_family_has_a_uid_of_its_own(kind):
+    # (the kernels take an image as a map, of its uid)
+    uids = [cls.uid() for cls in PARSERS[kind].registered_classes().values()
+            if cls is not traits.RPTraitImage]
+    assert len(set(uids)) == len(uids), sorted(uids)
+
+
+@pytest.mark.parametrize('kind', SHARING)
+def test_a_shape_has_one_uid_in_every_family(kind):
+    shared = {
+        cls.type(): cls.uid() for cls in (
+            getattr(shapes, name) for name in shapes.__all__
+            if name.endswith(SHARING[kind]))}
+    for type_, cls in PARSERS[kind].registered_classes().items():
+        if type_ in shared:
+            assert cls.uid() == shared[type_], type_
+        else:
+            assert cls.uid() not in shared.values(), type_
 
 
 def test_velocity_traits_name_their_speed_after_their_direction():

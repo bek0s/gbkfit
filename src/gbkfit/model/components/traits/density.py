@@ -44,9 +44,9 @@ __all__ = [
 ]
 
 
-# The uid of the spiral wave in the native kernels (of densities alone:
-# see shapes for those of the shared shapes)
-RPT_UID_SPIRAL = 104
+# The uid of the spiral wave in the native kernels (of densities alone,
+# from 201: see shapes for those of the shared shapes)
+RPT_UID_SPIRAL = 201
 
 
 def _rings(subrnodes: np.ndarray) -> tuple[np.ndarray, ...]:

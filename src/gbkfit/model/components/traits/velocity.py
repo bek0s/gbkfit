@@ -19,6 +19,7 @@ from .options import (
     SAMPLING_DEFAULT, SAMPLING_TAIL, Direction,
     Harmonic, Sampling, SamplingChoice, Spiral, SpiralWavenumber,
     SpiralWinding, VPTDirectionChoice)
+from .shapes import PT_UID_NW_HARMONIC, PT_UID_NW_UNIFORM, PT_UID_UNIFORM
 
 
 __all__ = [
@@ -48,26 +49,24 @@ __all__ = [
 ]
 
 
-# Their uids in the native kernels
-VPT_UID_UNIFORM = 1
-VPT_UID_ARCTAN = 2
-VPT_UID_BOISSIER = 3
-VPT_UID_EPINAT = 4
-VPT_UID_LRAMP = 5
-VPT_UID_TANH = 6
-VPT_UID_POLYEX = 7
-VPT_UID_RIX = 8
-VPT_UID_COURTEAU = 9
-VPT_UID_BRANDT = 10
-VPT_UID_ISO = 11
-VPT_UID_NFW = 12
-VPT_UID_WEDGE = 13
-VPT_UID_BAR = 14
-VPT_UID_NW_UNIFORM = 101
-VPT_UID_NW_HARMONIC = 102
-VPT_UID_NW_BAR = 103
-VPT_UID_SPIRAL = 104
-VPT_UID_TABLE = 105
+# The uids of the velocity polar traits of their own in the native
+# kernels (from 201: see shapes for those of the shapes it shares)
+VPT_UID_ARCTAN = 201
+VPT_UID_BOISSIER = 202
+VPT_UID_EPINAT = 203
+VPT_UID_LRAMP = 204
+VPT_UID_TANH = 205
+VPT_UID_POLYEX = 206
+VPT_UID_RIX = 207
+VPT_UID_COURTEAU = 208
+VPT_UID_BRANDT = 209
+VPT_UID_ISO = 210
+VPT_UID_NFW = 211
+VPT_UID_WEDGE = 212
+VPT_UID_BAR = 213
+VPT_UID_NW_BAR = 214
+VPT_UID_SPIRAL = 215
+VPT_UID_TABLE = 216
 
 
 def _splits_bar(r: np.ndarray, params: dict[str, np.ndarray]) -> np.ndarray:
@@ -205,7 +204,7 @@ class VPTraitUniform(VPTrait):
 
     @staticmethod
     def uid() -> int:
-        return VPT_UID_UNIFORM
+        return PT_UID_UNIFORM
 
     def __init__(
             self,
@@ -836,7 +835,7 @@ class VPTraitNWUniform(VPTrait):
 
     @staticmethod
     def uid() -> int:
-        return VPT_UID_NW_UNIFORM
+        return PT_UID_NW_UNIFORM
 
     def __init__(
             self,
@@ -890,7 +889,7 @@ class VPTraitNWHarmonic(VPTrait):
 
     @staticmethod
     def uid() -> int:
-        return VPT_UID_NW_HARMONIC
+        return PT_UID_NW_HARMONIC
 
     def __init__(
             self,
