@@ -894,6 +894,9 @@ def test_mass_that_traces_a_component_has_its_own_types():
         dict(type='disk', name='dust',
              surface=dict(type='component', component='dust'),
              vertical=dict(type='sech2')),
+        dict(type='disk', name='hi',
+             surface=dict(type='component', component='hi', rstep=0.5),
+             vertical=dict(type='component', component='hi')),
         dict(type='light_spheroid', name='lum', component='bulge'),
         dict(type='disk', name='stars',
              surface=dict(type='exponential'), vertical=dict(type='thin'))]
@@ -904,6 +907,7 @@ def test_mass_that_traces_a_component_has_its_own_types():
              vertical=dict(type='component', component='hi')),
         dict(type='traced_disk', name='dust', component='dust',
              vertical=dict(type='sech2')),
+        dict(type='traced_disk', name='hi', component='hi', rstep=0.5),
         dict(type='traced_spheroid', name='lum', component='bulge'),
         dict(type='disk', name='stars',
              surface=dict(type='exponential'), vertical=dict(type='thin'))]
@@ -922,7 +926,9 @@ def test_halos_are_renamed():
              baryons=['a'], dark_fraction=dict(solve='log_m',
                                                bounds=[9, 15])),
         dict(type='spheroid', name='c', profile=dict(type='nfw'),
-             baryons=['a'], response=dict(type='sidm'))]
+             baryons=['a'], response=dict(type='sidm')),
+        dict(type='spheroid', name='d', profile=dict(type='nfw'),
+             baryons=['a'])]
     params = dict(
         properties=dict(
             mass_b_a=1.0, mass_b_r_fdm=5, mass_c_t_age=10,
@@ -931,8 +937,42 @@ def test_halos_are_renamed():
     config = dict(galaxies=[dict(mass=mass)], params=params)
     migration.migrate(config, 7)
     assert mass[0]['profile'] == dict(type='truncated_nfw')
+    # (baryons that nothing used)
+    assert 'baryons' not in mass[3] and mass[2]['baryons'] == ['a']
     assert params == dict(
         properties=dict(
             mass_b_gamma=1.0, mass_b_rfdm=5, mass_c_age=10,
             mass_b_alpha=2.0),
         derived=dict(x='mass_b_gamma * 2 + mass_c_age'))
+
+
+def test_the_setups_of_a_project_rename_the_parameters_of_its_pieces(
+        tmp_path):
+    # A setup that names a galaxy piece, with params of its own; and one
+    # with a galaxy of its own, whose params are a piece: both renamed
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(dict(format=project.FORMAT, version=7),
+              tmp_path / 'study' / project.MARKER)
+    disk = dict(type='thin_disk', name='gas', density=dict(ptraits=[
+        dict(type='exponential'), dict(type='uniform')]))
+    yaml.dump(dict(components=[disk]),
+              tmp_path / 'study' / 'galaxies' / 'gas.yaml')
+    yaml.dump(dict(properties=dict(ion_pt_a=1, ion_pt1_a=2)),
+              tmp_path / 'study' / 'params' / 'ion.yaml')
+    yaml.dump(dict(galaxies='gas', params=dict(properties=dict(
+        gas_pt_a=1, gas_pt1_a=2))),
+              tmp_path / 'study' / 'setups' / 'named.yaml')
+    yaml.dump(dict(galaxies=[dict(components=[disk | dict(name='ion')])],
+                   params='ion'),
+              tmp_path / 'study' / 'setups' / 'inline.yaml')
+    migration.migrate_project(study.path)
+    named = yaml.load(tmp_path / 'study' / 'setups' / 'named.yaml')
+    assert named == dict(galaxies='gas', params=dict(properties=dict(
+        gas_rpt_a=1, gas_rpt2_a=2)))
+    assert study.piece('params', 'ion') == dict(
+        properties=dict(ion_rpt_a=1, ion_rpt2_a=2))
+    inline = yaml.load(tmp_path / 'study' / 'setups' / 'inline.yaml')
+    assert inline['galaxies'][0]['components'][0]['rptraits'] == [
+        dict(type='exponential'), dict(type='uniform')]
+    assert study.piece('galaxies', 'gas')['components'][0]['rptraits'] \
+        == [dict(type='exponential'), dict(type='uniform')]

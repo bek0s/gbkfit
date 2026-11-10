@@ -345,10 +345,12 @@ class TracedMass(Rule):
         component = surface.get('component')
         rstep = surface.get('rstep')
         vertical = mass.get('vertical')
+        # (the layer of the same component, at the subnodes of the surface
+        # density: those of the vertical structure, if others, differed
+        # by little)
         own = isinstance(vertical, Mapping) \
             and vertical.get('type') == 'component' \
-            and vertical.get('component') == component \
-            and vertical.get('rstep') == rstep
+            and vertical.get('component') == component
         pairs = [('type', 'traced_disk')] + [
             (key, value) for key, value in mass.items()
             if key not in ('type', 'surface', 'vertical')]
@@ -368,7 +370,8 @@ class TracedMass(Rule):
 class HaloNames(Rule):
     """
     The names of halos (2026-11-11): the profile nfw_truncated is
-    truncated_nfw; and parameters are renamed in the params sections, as
+    truncated_nfw; baryons that neither a response nor a dark fraction
+    used are removed (they are an error); and parameters are renamed in the params sections, as
     TraitParameterNames renames those of traits: the inner slope of a
     dekel_zhao profile is gamma (was a), the radius of a dark fraction
     rfdm (was r_fdm), and the age of an SIDM halo age (was t_age).
@@ -397,6 +400,13 @@ class HaloNames(Rule):
                         "type nfw_truncated -> truncated_nfw"))
                 if kind == 'dekel_zhao':
                     renames[f'{prefix}a'] = f'{prefix}gamma'
+                # (baryons that nothing used, which are an error now)
+                if mass.get('baryons') and mass.get('response') is None \
+                        and mass.get('dark_fraction') is None:
+                    del mass['baryons']
+                    changes.append(Change(galaxy_path + path, (
+                        "baryons removed: neither a response nor a dark "
+                        "fraction used them")))
                 if mass.get('dark_fraction') is not None:
                     renames[f'{prefix}r_fdm'] = f'{prefix}rfdm'
                 response = mass.get('response')

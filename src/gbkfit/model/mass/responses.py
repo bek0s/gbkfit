@@ -16,7 +16,7 @@ import scipy.interpolate
 
 from gbkfit.config import (
     TypedParser, TypedSerializable, check_options)
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext
 from .halo_params import Overdensity
@@ -608,9 +608,9 @@ def _virial_radius(halo_vcirc2: _VCirc2, context: MassContext) -> float:
 
     Raises
     ------
-    ValueError
+    ModelEvaluationError
         If the halo is not that dense anywhere in _VIRIAL_RANGE, or
-        denser everywhere.
+        denser everywhere (at the values of its parameters).
     """
     target = _VIRIAL.density(context)
 
@@ -621,7 +621,7 @@ def _virial_radius(halo_vcirc2: _VCirc2, context: MassContext) -> float:
         return mean - target
     lo, hi = _VIRIAL_RANGE
     if not excess(lo) > 0 > excess(hi):
-        raise ValueError(
+        raise ModelEvaluationError(
             f"the halo has no virial radius (of the overdensity {_VIRIAL}) "
             f"between {np.exp(lo):g} and {np.exp(hi):g} kpc, which its "
             f"contraction takes")

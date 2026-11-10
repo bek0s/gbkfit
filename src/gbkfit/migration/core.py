@@ -5,11 +5,12 @@ files and of projects.
 """
 
 import contextlib
+import copy
 import json
 import os
 import shutil
 import tempfile
-from collections.abc import Generator, MutableMapping
+from collections.abc import Generator, Mapping, MutableMapping
 from typing import Any, TextIO
 
 import ruamel.yaml
@@ -186,26 +187,105 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
     pieces = {
         section: [_read(file) for file in section_files]
         for section, section_files in files.items()}
+    setup_files = [
+        os.path.join(project.path, 'setups', f'{name}.yaml')
+        for name in project.names('setups')]
+    setups = [_read(file) for file in setup_files]
+    # The galaxy pieces as they were, by name, for the setups that name
+    # them; and the galaxies inline in the setups, whose parameters the
+    # params pieces can have (rules that rename parameters take the
+    # galaxies they are with: see _galaxy_view)
+    originals = dict(zip(
+        project.names(gbkfit.project.piece_folder('galaxies')),
+        copy.deepcopy(pieces['galaxies'])))
+    inline = [
+        copy.deepcopy(galaxy) for setup in setups
+        for galaxy in _listed(setup, 'galaxies')
+        if isinstance(galaxy, Mapping)]
     by_piece: dict[tuple[str, int], list[Change]] = {}
-    for change in _rewrite(pieces, version):
+    view = dict(pieces, galaxies=pieces['galaxies'] + inline)
+    for change in _rewrite(view, version):
         section, index, *rest = change.path
-        by_piece.setdefault((section, index), []).append(
-            Change(rest, change.message))
+        # (not the copies of the galaxies of the setups)
+        if index < len(files[section]):
+            by_piece.setdefault((section, index), []).append(
+                Change(rest, change.message))
     changes = {}
     for (section, index), piece_changes in by_piece.items():
         _write(files[section][index], pieces[section][index])
         changes[files[section][index]] = piece_changes
-    for name in project.names('setups'):
-        file = os.path.join(project.path, 'setups', f'{name}.yaml')
-        setup = _read(file)
-        if isinstance(setup, MutableMapping) \
-                and (setup_changes := _rewrite(setup, version)):
+    for file, setup in zip(setup_files, setups):
+        if not isinstance(setup, MutableMapping):
+            continue
+        view, named = _galaxy_view(setup, originals)
+        setup_changes = [
+            change for change in _rewrite(view, version)
+            if not (len(change.path) > 1 and change.path[0] == 'galaxies'
+                    and change.path[1] in named)]
+        if view is not setup:
+            _write_back(setup, view, named)
+        if setup_changes:
             _write(file, setup)
             changes[file] = setup_changes
     _mark_current(project.path)
     return {
         os.path.relpath(file, project.path): file_changes
         for file, file_changes in changes.items()}
+
+
+def _listed(config: Any, section: str) -> list[Any]:
+    """Return the items of a section of a configuration, as a list."""
+    if not isinstance(config, Mapping):
+        return []
+    value = config.get(section)
+    return value if isinstance(value, list) else [] if value is None \
+        else [value]
+
+
+def _galaxy_view(
+        setup: MutableMapping[str, Any], originals: Mapping[str, Any]
+) -> tuple[dict[str, Any], set[int]]:
+    """
+    Return a view of a setup with its galaxies that name pieces replaced by
+    copies of the pieces as they were, so that the rules that rename
+    parameters know them (the rest is the setup itself, rewritten in
+    place), and the positions of those galaxies (whose changes are those
+    of the pieces, not of the setup).
+    """
+    galaxies = _listed(setup, 'galaxies')
+    named = {
+        i for i, galaxy in enumerate(galaxies)
+        if isinstance(galaxy, str) and galaxy in originals}
+    if not named:
+        return setup, set()
+    view = dict(setup)
+    view['galaxies'] = [
+        copy.deepcopy(originals[galaxy]) if i in named else galaxy
+        for i, galaxy in enumerate(galaxies)]
+    return view, named
+
+
+def _write_back(
+        setup: MutableMapping[str, Any],
+        view: Mapping[str, Any],
+        named: set[int]
+) -> None:
+    """
+    Take into a setup, in place, what the rules rewrote in its view (see
+    _galaxy_view): its options, and its galaxies but those that name
+    pieces.
+    """
+    for key in [k for k in setup if k not in view]:
+        del setup[key]
+    for key, value in view.items():
+        if key != 'galaxies':
+            setup[key] = value
+    galaxies = setup['galaxies']
+    rewritten = view['galaxies']
+    if isinstance(galaxies, list):
+        for i, galaxy in enumerate(rewritten):
+            if i not in named:
+                galaxies[i] = galaxy
 
 
 def _version(version: Any, from_version: int | None) -> int:
