@@ -29,7 +29,7 @@ __all__ = [
     'ProfileEinasto',
     'ProfileHalo',
     'ProfileNFW',
-    'ProfileNFWTruncated',
+    'ProfileTruncatedNFW',
     'ProfilePseudoIsothermal',
     'ProfileZhao'
 ]
@@ -209,7 +209,7 @@ class ProfileNFW(ProfileHalo):
 
     @staticmethod
     def type_title() -> str:
-        return 'NFW halo'
+        return 'NFW'
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -247,7 +247,7 @@ class ProfileBurkert(ProfileHalo):
 
     @staticmethod
     def type_title() -> str:
-        return 'Burkert halo'
+        return 'Burkert'
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -283,7 +283,7 @@ class ProfilePseudoIsothermal(ProfileHalo):
 
     @staticmethod
     def type_title() -> str:
-        return 'Pseudo-isothermal halo'
+        return 'Pseudo-isothermal'
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -330,7 +330,7 @@ class ProfileEinasto(ProfileHalo):
 
     @staticmethod
     def type_title() -> str:
-        return 'Einasto halo'
+        return 'Einasto'
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(alpha=ParamScalarDesc(
@@ -385,7 +385,7 @@ class ProfileZhao(ProfileHalo):
 
     @staticmethod
     def type_title() -> str:
-        return 'Zhao halo'
+        return 'Zhao'
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
@@ -417,14 +417,15 @@ class ProfileDekelZhao(ProfileHalo):
     """
     The halo of Dekel et al. 2017 and Freundlich et al. 2020: a cusp or a
     core of a free inner slope, falling as r^-3.5 outside. Its mean
-    density within r is rho_s / (x^a (1 + x^(1/2))^(2 (3 - a))): f(x) = (1
-    - a / 3) / (x^a (1 + x^(1/2))^(7 - 2 a)), of the inner slope a (its
-    shape parameter, below 3) and the outer slope -3.5, and m(x) = chi^(2
-    (3 - a)) / 3, with chi = x^(1/2) / (1 + x^(1/2)). Its scale radius r_s
-    is r_c of the papers (its slope is -2 at ((2 - a) / 1.5)^2 r_s), and
-    its concentration r_D / r_s. Its potential has a closed form for a <
-    2: -(2 / 3) ((1 - chi^(4 - 2 a)) / (4 - 2 a) - (1 - chi^(5 - 2 a)) /
-    (5 - 2 a)) in units of 4 pi G rho_s r_s^2.
+    density within r is rho_s / (x^g (1 + x^(1/2))^(2 (3 - g))): f(x) = (1
+    - g / 3) / (x^g (1 + x^(1/2))^(7 - 2 g)), of the inner slope g (its
+    shape parameter gamma, below 3; a of the papers) and the outer slope
+    -3.5, and m(x) = chi^(2 (3 - g)) / 3, with chi = x^(1/2) / (1 +
+    x^(1/2)). Its scale radius r_s is r_c of the papers (its slope is -2
+    at ((2 - g) / 1.5)^2 r_s), and its concentration r_D / r_s. Its
+    potential has a closed form for g < 2: -(2 / 3) ((1 - chi^(4 - 2 g)) /
+    (4 - 2 g) - (1 - chi^(5 - 2 g)) / (5 - 2 g)) in units of 4 pi G rho_s
+    r_s^2.
 
     Parameters
     ----------
@@ -438,27 +439,27 @@ class ProfileDekelZhao(ProfileHalo):
 
     @staticmethod
     def type_title() -> str:
-        return 'Dekel-Zhao halo'
+        return 'Dekel-Zhao'
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
-        return dict(a=ParamScalarDesc(
+        return dict(gamma=ParamScalarDesc(
             title='Inner slope', desc="the inner slope", max=3, unit='',
             default=1))
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
-        a = shape['a']
+        a = shape['gamma']
         return (1 - a / 3) / (x ** a * (1 + np.sqrt(x)) ** (7 - 2 * a))
 
     def _mass_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
         chi = np.sqrt(x) / (1 + np.sqrt(x))
-        return chi ** (2 * (3 - shape['a'])) / 3
+        return chi ** (2 * (3 - shape['gamma'])) / 3
 
     def _potential_shape(
             self, x: np.ndarray, shape: dict[str, float]
     ) -> np.ndarray | None:
-        a = shape['a']
+        a = shape['gamma']
         if not a < 2:
             return None
         chi = np.sqrt(x) / (1 + np.sqrt(x))
@@ -489,7 +490,7 @@ class ProfileCoreNFW(ProfileHalo):
 
     @staticmethod
     def type_title() -> str:
-        return 'Cored NFW halo'
+        return 'Cored NFW'
 
     def scales(
             self, params: ParamValues, context: MassContext
@@ -533,7 +534,7 @@ class ProfileCoreNFW(ProfileHalo):
         return _nfw_mass_shape(x) * np.tanh(x / shape['xc']) ** shape['n']
 
 
-class ProfileNFWTruncated(ProfileHalo):
+class ProfileTruncatedNFW(ProfileHalo):
     """
     An NFW halo cut off exponentially beyond a truncation radius, so that
     its mass is finite. It is the NFW halo of its parameters truncated as
@@ -553,11 +554,11 @@ class ProfileNFWTruncated(ProfileHalo):
 
     @staticmethod
     def type() -> str:
-        return 'nfw_truncated'
+        return 'truncated_nfw'
 
     @staticmethod
     def type_title() -> str:
-        return 'Truncated NFW halo'
+        return 'Truncated NFW'
 
     def scales(
             self, params: ParamValues, context: MassContext

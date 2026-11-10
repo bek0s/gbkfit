@@ -15,6 +15,7 @@ from .rules import Change, Rule, components, items, rename
 __all__ = [
     'RULES',
     'FlatComponents',
+    'HaloNames',
     'TracedMass',
     'TraitParameterNames'
 ]
@@ -100,6 +101,9 @@ class FlatComponents(Rule):
         and give a spheroid the type of its kinematics.
         """
         kinematics = component.get('kinematics')
+        if 'kinematics' in component and kinematics is None:
+            del component['kinematics']
+            return [Change(path, "kinematics: null removed")]
         if not isinstance(kinematics, Mapping):
             return []
         kind = kinematics.get('type')
@@ -361,10 +365,92 @@ class TracedMass(Rule):
             f"traced_disk, {what}"))]
 
 
+class HaloNames(Rule):
+    """
+    The names of halos (2026-11-11): the profile nfw_truncated is
+    truncated_nfw; and parameters are renamed in the params sections, as
+    TraitParameterNames renames those of traits: the inner slope of a
+    dekel_zhao profile is gamma (was a), the radius of a dark fraction
+    rfdm (was r_fdm), and the age of an SIDM halo age (was t_age).
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 8
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        renames: dict[str, str] = {}
+        for galaxy_path, galaxy in items(config, 'galaxies'):
+            galaxy_prefix = f"{galaxy['name']}_" if 'name' in galaxy else ''
+            for path, mass in items(galaxy, 'mass'):
+                if mass.get('type') != 'spheroid':
+                    continue
+                prefix = f"{galaxy_prefix}mass_{mass.get('name')}_"
+                profile = mass.get('profile')
+                kind = profile.get('type') \
+                    if isinstance(profile, MutableMapping) else None
+                if kind == 'nfw_truncated':
+                    profile['type'] = 'truncated_nfw'
+                    changes.append(Change(
+                        galaxy_path + path + ['profile'],
+                        "type nfw_truncated -> truncated_nfw"))
+                if kind == 'dekel_zhao':
+                    renames[f'{prefix}a'] = f'{prefix}gamma'
+                if mass.get('dark_fraction') is not None:
+                    renames[f'{prefix}r_fdm'] = f'{prefix}rfdm'
+                response = mass.get('response')
+                if isinstance(response, Mapping) \
+                        and response.get('type') == 'sidm':
+                    renames[f'{prefix}t_age'] = f'{prefix}age'
+        if renames:
+            for params_path, params in items(config, 'params'):
+                if isinstance(params.get('properties'), MutableMapping):
+                    changes += _renamed_names(params, params_path, renames)
+        return changes
+
+
+def _renamed_names(
+        params: MutableMapping[str, Any],
+        path: list[str | int],
+        renames: dict[str, str]
+) -> list[Change]:
+    """
+    Rename parameters of a params section by their names, in place, at
+    once: the keys of its properties and modes (e.g. a, a[1:]), and the
+    names in its expressions (see _renamed_prefixes).
+    """
+    changes = []
+    for option in ('properties', 'modes'):
+        mapping = params.get(option)
+        if not isinstance(mapping, MutableMapping):
+            continue
+        for key in list(mapping):
+            name = key.split('[')[0]
+            if name in renames:
+                new = renames[name] + key[len(name):]
+                rename(mapping, key, new)
+                changes.append(Change(path + [option], f"{key} -> {new}"))
+    if 'transforms' in params:
+        changes.append(Change(path + ['transforms'], (
+            f"by hand: rename {', '.join(renames)} in the transforms "
+            f"function")))
+    pattern = re.compile(
+        rf'(?<![\w.])({"|".join(re.escape(o) for o in renames)})(?!\w)')
+    for key in [k for k in _EXPRESSIONS if k in params]:
+        params[key], replaced = _replaced(
+            params[key], pattern, lambda m: renames[m.group(1)])
+        if replaced:
+            changes.append(Change(path + [key], (
+                "the parameters of halos renamed in its expressions")))
+    return changes
+
+
 # The rules, in the order of the changes: TraitParameterNames reads the
 # trait options that FlatComponents takes up
 RULES: tuple[Rule, ...] = (
     FlatComponents(),
     TraitParameterNames(),
     TracedMass(),
+    HaloNames(),
 )

@@ -24,7 +24,7 @@ from gbkfit.model.distance import (
 from gbkfit.model.mass import (
     DarkFraction, MassContext, MassDisk, MassModel, MassPoint, MassSpheroid,
     MassUser, ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao,
-    ProfileEinasto, ProfileNFW, ProfileNFWTruncated, ProfileNodewise,
+    ProfileEinasto, ProfileNFW, ProfileTruncatedNFW, ProfileNodewise,
     ProfilePseudoIsothermal, ProfileSersic, ProfileZhao,
     ResponseBlumenthal86, ResponseGnedin04, ResponseSIDM, ShapeFlattened,
     SurfaceComponent, SurfaceExponential, SurfaceGaussianRing, TracedDisk,
@@ -588,12 +588,12 @@ SPHERES = [
     (ProfileEinasto('density_radius'), dict(log_rho=6.5, rs=15, alpha=0.17)),
     (ProfileZhao('density_radius'),
      dict(log_rho=6.5, rs=8, alpha=2, beta=4, gamma=0.5)),
-    (ProfileDekelZhao('density_radius'), dict(log_rho=7, rs=5, a=0.5)),
-    (ProfileDekelZhao('density_radius'), dict(log_rho=7, rs=5, a=1.5)),
+    (ProfileDekelZhao('density_radius'), dict(log_rho=7, rs=5, gamma=0.5)),
+    (ProfileDekelZhao('density_radius'), dict(log_rho=7, rs=5, gamma=1.5)),
     (ProfileSersic(), dict(log_m=10, re=1.5, n=0.6)),
     (ProfileSersic(), dict(log_m=10, re=1.5, n=4)),
     (ProfileCoreNFW('density_radius'), dict(log_rho=7, rs=10, rc=1.5, n=0.8)),
-    (ProfileNFWTruncated('density_radius'), dict(log_rho=7, rs=10, rt=30))]
+    (ProfileTruncatedNFW('density_radius'), dict(log_rho=7, rs=10, rt=30))]
 
 
 def test_cored_and_truncated_nfw_halos_change_the_nfw_halo():
@@ -611,7 +611,7 @@ def test_cored_and_truncated_nfw_halos_change_the_nfw_halo():
             core.enclosed_mass(radius, cored, CONTEXT),
             nfw.enclosed_mass(radius, params, CONTEXT)
             * np.tanh(radius / 2) ** n, rtol=1e-12)
-    truncated = ProfileNFWTruncated()
+    truncated = ProfileTruncatedNFW()
     np.testing.assert_allclose(
         truncated.enclosed_mass(radius, params | dict(rt=1e7), CONTEXT),
         nfw.enclosed_mass(radius, params, CONTEXT), rtol=1e-5)
@@ -991,7 +991,7 @@ def test_dark_fractions_set_a_parameter_of_the_halo(
         profile=dict(type=profile),
         dark_fraction=dict(solve=solve, bounds=bounds)) | response])
     assert f'mass_halo_{solve}' not in model.pdescs()
-    params = BARYON_VALUES | given | dict(mass_halo_fdm=0.3, mass_halo_r_fdm=5)
+    params = BARYON_VALUES | given | dict(mass_halo_fdm=0.3, mass_halo_rfdm=5)
     parts = model.vcirc2_components(np.array([5.0]), params, CONTEXT)
     v2, baryon_v2 = parts['halo'][0], parts['stars'][0] + parts['bulge'][0]
     assert v2 / (v2 + baryon_v2) == pytest.approx(0.3, rel=1e-10)
@@ -1068,8 +1068,8 @@ def test_sidm_cores(with_baryons):
     model = mass_model(baryons + [halo])
     params = BARYON_VALUES | dict(
         mass_halo_log_m=11, mass_halo_c=15, mass_halo_sigma_m=1,
-        mass_halo_t_age=10)
-    own = dict(log_m=11, c=15, sigma_m=1, t_age=10)
+        mass_halo_age=10)
+    own = dict(log_m=11, c=15, sigma_m=1, age=10)
     before = MassSpheroid('h', ProfileNFW())
 
     def halo_v2(r):
@@ -1146,7 +1146,7 @@ HALOS = [
     ProfileZhao, ProfileDekelZhao]
 SHAPES = dict(
     einasto=dict(alpha=0.17), zhao=dict(alpha=1, beta=3, gamma=1.3),
-    dekel_zhao=dict(a=1))
+    dekel_zhao=dict(gamma=1))
 
 
 @pytest.mark.parametrize('halo_class', HALOS)
@@ -1186,7 +1186,7 @@ def test_dekel_zhao_has_the_slopes_of_its_shape():
     # Its logarithmic slope is (a + 3.5 x^(1/2)) / (1 + x^(1/2)): a at the
     # centre, -3.5 far out, and -2 at ((2 - a) / 1.5)^2 r_s
     profile = ProfileDekelZhao('density_radius')
-    params = dict(log_rho=7, rs=5, a=0.7)
+    params = dict(log_rho=7, rs=5, gamma=0.7)
     x = np.array([1e-6, 0.3, ((2 - 0.7) / 1.5) ** 2, 4, 1e6])
     step = 1e-5
 

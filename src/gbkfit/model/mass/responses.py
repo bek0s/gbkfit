@@ -268,7 +268,7 @@ class ResponseSIDM(HaloResponse):
     et al. 2014, 2016; Jiang et al. 2023). Within the radius r1 where a
     particle of the halo has scattered once in the age of the halo,
 
-        (4 / sqrt(pi)) rho(r1) v(r1) sigma_m t_age = 1
+        (4 / sqrt(pi)) rho(r1) v(r1) sigma_m age = 1
 
     (Jiang et al. 2023, Eq. 1; rho and v the density and the 1D velocity
     dispersion of the halo before, isotropic, of the Jeans equation in the
@@ -285,7 +285,7 @@ class ResponseSIDM(HaloResponse):
     alone, for speed.)
 
     Its parameters: 'sigma_m', the cross-section per unit mass (cm^2/g),
-    and 't_age', the age of the halo (Gyr). The core is integrated by
+    and 'age', the age of the halo (Gyr). The core is integrated by
     Runge-Kutta in ln r (steps of 0.05, from 1e-4 r1, to some 1e-6) and
     matched by Newton iterations (to 1e-10, from a grid search of the
     lowest density that matches); some 0.1 s.
@@ -337,7 +337,7 @@ class ResponseSIDM(HaloResponse):
                 title='Cross-section per unit mass',
                 desc="the cross-section of SIDM per unit mass",
                 min=0, unit='cm2 / g', default=1),
-            t_age=ParamScalarDesc(
+            age=ParamScalarDesc(
                 title='Halo age', desc="the age of the halo", min=0,
                 unit='Gyr', default=10))
 
@@ -388,7 +388,7 @@ class ResponseSIDM(HaloResponse):
             matches it at r1.
         """
         rate = (4 / np.sqrt(np.pi) * params['sigma_m'] * _SIGMA_UNIT
-                * params['t_age'] * _TIME_UNIT)
+                * params['age'] * _TIME_UNIT)
         return _sidm_core(
             self._before(halo_vcirc2, baryons_mass, profile, params,
                          context),
@@ -425,7 +425,7 @@ def _sidm_core(
     """
     Return the isothermal core of SIDM of a halo (see ResponseSIDM), of
     the squared circular velocity of the halo before, the mass of the
-    baryons within spheres and rate = (4 / sqrt(pi)) sigma_m t_age
+    baryons within spheres and rate = (4 / sqrt(pi)) sigma_m age
     (kpc^3/Msun / (km/s)); None
     without scatterings within the age.
 

@@ -777,7 +777,8 @@ def test_components_are_flat():
         dict(type='spheroid', name='c', kinematics=dict(
             type='traits', vptraits=dict(type='uniform', direction='tan'),
             dptraits=dict(type='uniform'), rnodes=[0, 10])),
-        dict(type='spheroid', name='d')]
+        dict(type='spheroid', name='d'),
+        dict(type='spheroid', name='e', kinematics=None)]
     config = dict(galaxies=[dict(components=[thick, *spheroids])])
     changes = migration.migrate(config, 7)
     # (in the order of the options they replace)
@@ -791,7 +792,8 @@ def test_components_are_flat():
         dict(type='spheroid', name='c',
              vptraits=dict(type='uniform', direction='tan'),
              dptraits=dict(type='uniform'), rnodes=[0, 10]),
-        dict(type='spheroid', name='d')]
+        dict(type='spheroid', name='d'),
+        dict(type='spheroid', name='e')]
     assert not any(c.message.startswith('by hand') for c in changes)
 
 
@@ -908,3 +910,29 @@ def test_mass_that_traces_a_component_has_its_own_types():
     assert not any(c.message.startswith('by hand') for c in changes)
     from gbkfit.model import mass_component_parser
     mass_component_parser.load(mass)
+
+
+def test_halos_are_renamed():
+    # Version 8: nfw_truncated is truncated_nfw; the inner slope of
+    # dekel_zhao is gamma, the radius of a dark fraction rfdm, and the age
+    # of an SIDM halo age, in the params sections too
+    mass = [
+        dict(type='spheroid', name='a', profile=dict(type='nfw_truncated')),
+        dict(type='spheroid', name='b', profile=dict(type='dekel_zhao'),
+             baryons=['a'], dark_fraction=dict(solve='log_m',
+                                               bounds=[9, 15])),
+        dict(type='spheroid', name='c', profile=dict(type='nfw'),
+             baryons=['a'], response=dict(type='sidm'))]
+    params = dict(
+        properties=dict(
+            mass_b_a=1.0, mass_b_r_fdm=5, mass_c_t_age=10,
+            mass_b_alpha=2.0),
+        derived=dict(x='mass_b_a * 2 + mass_c_t_age'))
+    config = dict(galaxies=[dict(mass=mass)], params=params)
+    migration.migrate(config, 7)
+    assert mass[0]['profile'] == dict(type='truncated_nfw')
+    assert params == dict(
+        properties=dict(
+            mass_b_gamma=1.0, mass_b_rfdm=5, mass_c_age=10,
+            mass_b_alpha=2.0),
+        derived=dict(x='mass_b_gamma * 2 + mass_c_age'))

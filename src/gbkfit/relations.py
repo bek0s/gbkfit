@@ -41,8 +41,8 @@ _BISECTIONS = 64
 
 def dz_a(s1: npt.ArrayLike, c2: npt.ArrayLike) -> np.ndarray:
     """
-    Return the inner slope a of the Dekel-Zhao halo (see
-    mass.ProfileDekelZhao) of the logarithmic slope s1 of its density at
+    Return the inner slope a of the Dekel-Zhao halo (its parameter gamma,
+    see mass.ProfileDekelZhao) of the logarithmic slope s1 of its density at
     0.01 R_vir and of the concentration c2 = R_vir / r_-2 (r_-2 where its
     slope is -2; Freundlich et al. 2020, Eq. 14): (1.5 s1 - 2 k) / (1.5 -
     k), with k = 0.1 (3.5 - s1) c2^(1/2).

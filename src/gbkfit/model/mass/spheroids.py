@@ -23,7 +23,7 @@ from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassComponent, MassContext, SpheroidDensity
 from .halos import (
     ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao, ProfileEinasto,
-    ProfileNFW, ProfileNFWTruncated, ProfilePseudoIsothermal, ProfileZhao)
+    ProfileNFW, ProfileTruncatedNFW, ProfilePseudoIsothermal, ProfileZhao)
 from .profiles import ProfileNodewise, ProfileSersic, SpheroidProfile
 from .responses import HaloResponse, halo_response_parser
 from .shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
@@ -49,13 +49,13 @@ spheroid_profile_parser = TypedParser(SpheroidProfile, [
     ProfileZhao,
     ProfileDekelZhao,
     ProfileCoreNFW,
-    ProfileNFWTruncated], family='spheroid_profile')
+    ProfileTruncatedNFW], family='spheroid_profile')
 
 class DarkFraction(Serializable):
     """
     A spheroid given by its dark matter fraction (see MassSpheroid): the
     fraction fdm = v^2 / (v^2 + v_b^2) of its squared circular velocity v^2
-    in that with its baryons (v_b^2) at the radius r_fdm (kpc), two
+    in that with its baryons (v_b^2) at the radius rfdm (kpc), two
     parameters, sets one of its parameters (solve), to the value within
     the bounds that gives it.
 
@@ -119,7 +119,7 @@ class MassSpheroid(MassComponent):
       MassComponent.cell_masses); its density and potential are not
       given.
     - given by its dark matter fraction (see DarkFraction): fdm = v^2 /
-      (v^2 + v_b^2) at r_fdm (two parameters, instead of the parameter it
+      (v^2 + v_b^2) at rfdm (two parameters, instead of the parameter it
       sets), of its circular velocity, after its response if it has one,
       and that of the baryons.
 
@@ -259,9 +259,9 @@ class MassSpheroid(MassComponent):
             pdescs |= dict(
                 fdm=ParamScalarDesc(
                     title='Dark matter fraction',
-                    desc="the dark matter fraction (of v^2) at r_fdm",
+                    desc="the dark matter fraction (of v^2) at rfdm",
                     min=0, max=1, unit='', default=0.5),
-                r_fdm=ParamScalarDesc(
+                rfdm=ParamScalarDesc(
                     title='Dark matter fraction radius',
                     desc="the radius of the dark matter fraction",
                     min=0, unit='kpc', default=10))
@@ -417,7 +417,7 @@ class MassSpheroid(MassComponent):
         if self._dark_fraction is None:
             return params
         name = self._dark_fraction.solve()
-        radius = np.array([float(params['r_fdm'])])
+        radius = np.array([float(params['rfdm'])])
         fdm = float(params['fdm'])
         if not fdm < 1:
             raise ModelEvaluationError(
