@@ -9,14 +9,14 @@ galaxies:
     file: rotmod.dat
     format: ascii.no_header
     radius: {column: col1, unit: kpc}
-    distance: 10
+    assumed_distance: 10
     velocity: {column: col4}
   - type: table
     name: disk
     file: rotmod.dat
     format: ascii.no_header
     radius: {column: col1, unit: kpc}
-    distance: 10
+    assumed_distance: 10
     velocity: {column: col5}
   - type: halo
     name: halo
@@ -29,7 +29,7 @@ observations:
   data:
     file: rc_profile.ecsv
     radius: {column: radius}
-    distance: 10.0
+    assumed_distance: 10.0
     vcirc: {column: vcirc, mask: vcirc_mask, error: vcirc_error}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
 params:

@@ -85,7 +85,7 @@ class ObservationProfile(Observation):
         the data.
     radii : Quantity, optional
         The radii; with data, those of the data.
-    distance : Quantity, optional
+    assumed_distance : Quantity, optional
         The distance of radii in lengths that were measured at one; with
         data, that of the data.
     inclination : float, optional
@@ -155,15 +155,17 @@ class ObservationProfile(Observation):
             radii=dict(
                 value=self._radii.value.tolist(),
                 unit=gbkfit.units.format_unit(self._radii.unit)))
-        if self._distance is not None:
-            info['distance'] = float(self._distance.to_value(u.Mpc))
+        if self._assumed_distance is not None:
+            info['assumed_distance'] = float(
+                self._assumed_distance.to_value(u.Mpc))
         return info
 
     def __init__(
             self,
             functions: Sequence[str] | None = None,
             radii: u.Quantity | None = None,
-            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None,
+            assumed_distance:
+            Annotated[float, Gt(0), Unit('Mpc')] | None = None,
             inclination:
             Annotated[float, Gt(0), Le(90), Unit('deg')] | None = None,
             galaxies: Sequence[str] | None = None,
@@ -174,18 +176,18 @@ class ObservationProfile(Observation):
         check_options(ObservationProfile.__init__, locals())
         if data is not None:
             if functions is not None or radii is not None \
-                    or distance is not None:
+                    or assumed_distance is not None:
                 raise ValueError(
                     "the data of a profile give its functions, its radii "
-                    "and their distance")
+                    "and their assumed distance")
             if not isinstance(data, DatasetProfile):
                 raise ValueError(
                     f"the data of a profile are a table of it "
                     f"(DatasetProfile); they are {type(data).__name__}")
-            functions, radii, distance = \
-                tuple(data.keys()), data.radii(), data.distance()
-        elif distance is not None:
-            distance = distance * u.Mpc
+            functions, radii, assumed_distance = \
+                tuple(data.keys()), data.radii(), data.assumed_distance()
+        elif assumed_distance is not None:
+            assumed_distance = assumed_distance * u.Mpc
         elif functions is None or radii is None:
             raise ValueError(
                 "a profile without data needs its functions and its radii")
@@ -196,7 +198,8 @@ class ObservationProfile(Observation):
                     f"{key!r} is not a function of radii of galaxies (e.g. "
                     f"vcirc, vcirc_halo, mass, slope, rotation_gas, "
                     f"dispersion_gas; see GalaxyFunctions)")
-        radii, distance = check_profile_radii(radii, distance)
+        radii, assumed_distance = check_profile_radii(
+            radii, assumed_distance)
         if any(radii == 0) and any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys):
             raise ValueError("slopes need radii above 0")
@@ -215,9 +218,9 @@ class ObservationProfile(Observation):
                     "an inclination scales rotation velocities (e.g. vcirc, "
                     "rotation_gas); the profile has none")
         if data is not None:
-            data = _checked_data(data, keys, radii, distance)
+            data = _checked_data(data, keys, radii, assumed_distance)
         self._radii = radii
-        self._distance = distance
+        self._assumed_distance = assumed_distance
         self._inclination = None if inclination is None \
             else float(inclination)
         # (slopes have no values where the galaxy has no density)
@@ -230,12 +233,12 @@ class ObservationProfile(Observation):
         """Return the radii."""
         return self._radii
 
-    def distance(self) -> u.Quantity | None:
+    def assumed_distance(self) -> u.Quantity | None:
         """
         Return the distance of radii in lengths that were measured at one,
         if given.
         """
-        return self._distance
+        return self._assumed_distance
 
     def inclination(self) -> float | None:
         """
@@ -273,7 +276,8 @@ class ObservationProfile(Observation):
         """
         return DatasetProfile(
             items, self._radii,
-            None if self._distance is None else self._distance.to_value(u.Mpc))
+            None if self._assumed_distance is None
+            else self._assumed_distance.to_value(u.Mpc))
 
     def data_unit(self) -> DataUnit | None:
         """Return None: its data are not of light."""
@@ -357,8 +361,8 @@ class ObservationProfile(Observation):
         """
         if self._radii.unit.is_equivalent(u.arcsec):
             return self._radii.to_value(u.arcsec), None
-        if self._distance is not None:
-            return (self._radii / self._distance).to_value(
+        if self._assumed_distance is not None:
+            return (self._radii / self._assumed_distance).to_value(
                 u.arcsec, u.dimensionless_angles()), None
         return None, self._radii.to_value(u.kpc)
 
@@ -423,9 +427,9 @@ def _checked_data(
         raise ValueError(
             f"the profile has the functions {sorted(keys)}, but the data "
             f"have {sorted(dataset.keys())}")
-    same_distance = dataset.distance() is None if distance is None \
-        else dataset.distance() is not None \
-        and u.isclose(dataset.distance(), distance)
+    same_distance = dataset.assumed_distance() is None if distance is None \
+        else dataset.assumed_distance() is not None \
+        and u.isclose(dataset.assumed_distance(), distance)
     if dataset.radii().unit != radii.unit \
             or not np.array_equal(dataset.radii(), radii) \
             or not same_distance:

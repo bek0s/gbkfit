@@ -105,13 +105,13 @@ def test_profile_of_a_table_file(tmp_path):
         type='profile', name='rc',
         data=dict(
             file=str(file), format='ascii.no_header',
-            radius=dict(column='col1', unit='kpc'), distance=20,
+            radius=dict(column='col1', unit='kpc'), assumed_distance=20,
             vcirc=dict(column='col2', error='col3')))
     observation = observation_parser.load(copy.deepcopy(info))
     data = observation.data()
     assert observation.keys() == ('vcirc',)
     np.testing.assert_array_equal(observation.radii(), [1, 2, 4] * u.kpc)
-    assert observation.distance() == 20 * u.Mpc
+    assert observation.assumed_distance() == 20 * u.Mpc
     # (a value without an error is left out)
     np.testing.assert_array_equal(data['vcirc'].mask(), [1, 1, 0])
     dumped = observation_parser.dump(
@@ -120,7 +120,7 @@ def test_profile_of_a_table_file(tmp_path):
     np.testing.assert_array_equal(again.radii(), observation.radii())
     np.testing.assert_array_equal(
         again.data()['vcirc'].data(), data['vcirc'].data())
-    assert again.distance() == observation.distance()
+    assert again.assumed_distance() == observation.assumed_distance()
     # (one error for all the values must be positive, not a bool)
     for error, message in ((0, "must be positive"), (True, "is True")):
         info['data']['vcirc']['error'] = error
@@ -260,7 +260,7 @@ def rotmod_info(file, column):
     """The configuration of a curve of a rotmod file of SPARC."""
     return dict(
         file=str(file), format='ascii.no_header',
-        radius=dict(column='col1', unit='kpc'), distance=10,
+        radius=dict(column='col1', unit='kpc'), assumed_distance=10,
         velocity=dict(column=column))
 
 
@@ -301,7 +301,7 @@ def test_rotation_curve_of_sparc(tmp_path):
         type='profile', name='rc', inclination=60,
         data=dict(
             file=str(file), format='ascii.no_header',
-            radius=dict(column='col1', unit='kpc'), distance=10,
+            radius=dict(column='col1', unit='kpc'), assumed_distance=10,
             vcirc=dict(column='col2', error='col3'))))
     params = dict(
         distance=10, mass_gas_upsilon=1, mass_disk_upsilon=0.5,

@@ -4,6 +4,8 @@ use: the radial nodes and subnodes of each disk.
 """
 
 import numpy as np
+import pytest
+from gbkfit.observation import ObservationGroup
 from modelutils import observation_group
 
 
@@ -72,10 +74,42 @@ def test_names_of_constants():
         | dict(name='g1')
     constants = observation_group([galaxy0, galaxy1]).constants()
     assert list(constants) == [
-        'g0_gas_rnodes', 'g0_gas_subrnodes', 'g0_ring_rnodes',
-        'g0_ring_subrnodes', 'g0_dust_rnodes', 'g0_dust_subrnodes',
-        'g1_rnodes', 'g1_subrnodes']
+        'g0_redshift', 'g0_gas_rnodes', 'g0_gas_subrnodes',
+        'g0_ring_rnodes', 'g0_ring_subrnodes', 'g0_dust_rnodes',
+        'g0_dust_subrnodes', 'g1_redshift', 'g1_rnodes', 'g1_subrnodes',
+        'cosmology_h']
     assert constants['g0_gas_rnodes'] == tuple(RNODES)
     assert constants['g0_ring_rnodes'] == (0, 5, 10)
     assert constants['g0_dust_rnodes'] == (0, 1)
     assert constants['g1_rnodes'] == (0, 3, 6)
+
+
+def test_the_redshift_and_the_cosmology_are_constants():
+    # The redshift of each galaxy, prefixed as its parameters, and the h
+    # of the cosmology of the group (e.g. for c200_dutton14 of the epoch
+    # of the galaxy); redshift_at, a function of the derived values
+    import gbkfit.cosmology
+    vptraits = dict(type='arctan', direction='tan')
+    far = spectral_cube([disk(vptraits)], dict(type='flat'))
+    far['galaxy']['redshift'] = 0.5
+    galaxies = [
+        spectral_cube([disk(vptraits)], dict(type='flat'))
+        | dict(name='near'), far | dict(name='far')]
+    constants = observation_group(galaxies).constants()
+    assert constants['near_redshift'] == 0
+    assert constants['far_redshift'] == 0.5
+    assert constants['cosmology_h'] == pytest.approx(0.6766)
+    flat = gbkfit.cosmology.CosmologyFlatLambdaCDM(70, 0.3)
+    group = observation_group(galaxies)
+    group = ObservationGroup(
+        group.galaxies(), group.observations(), cosmology=flat)
+    assert group.constants()['cosmology_h'] == pytest.approx(0.7)
+    galaxy = group.galaxies()[1]
+    redshift_at = galaxy.plan_functions().bind({
+        name: desc.default() for name, desc in galaxy.pdescs().items()
+    })['redshift_at']
+    # (1 + z) sqrt((1 + b) / (1 - b)) - 1
+    beta = 3000 / 299792.458
+    assert redshift_at(3000) == pytest.approx(
+        1.5 * np.sqrt((1 + beta) / (1 - beta)) - 1, rel=1e-12)
+    assert redshift_at(0) == pytest.approx(0.5)

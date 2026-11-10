@@ -1115,3 +1115,27 @@ def test_the_setups_of_a_project_take_the_cosmology_of_their_galaxies(
     assert one['cosmology'] == dict(type='published', name='WMAP9')
     assert project.open(study.path).piece('galaxies', 'far')['distance'] \
         == dict(type='parameter')
+
+
+def test_the_distances_of_tables_and_profiles_are_assumed_distances():
+    # Version 8: the distance D0 that their radii were measured at is
+    # their assumed_distance: of mass tables, profile observations and
+    # their data, and data pieces of profiles
+    table = dict(type='table', name='disk', file='rotmod.dat',
+                 radius=dict(column='col1', unit='kpc'), distance=10,
+                 velocity=dict(column='col5'))
+    profile = dict(type='profile', name='rc', distance=10, data=dict(
+        file='rc.ecsv', radius=dict(column='radius'), distance=10,
+        vcirc=dict(column='vcirc')))
+    config = dict(galaxies=[dict(mass=[table])], observations=[profile])
+    migration.migrate(config, 7)
+    assert 'distance' not in table and table['assumed_distance'] == 10
+    assert profile['assumed_distance'] == 10
+    assert profile['data']['assumed_distance'] == 10
+    pieces = migration.rules.PiecesView(data=[
+        dict(type='profile', file='rc.ecsv', distance=10),
+        dict(type='pixel_spectra', data='cube.fits')])
+    migration.v8.AssumedDistances().rewrite(pieces)
+    assert pieces['data'] == [
+        dict(type='profile', file='rc.ecsv', assumed_distance=10),
+        dict(type='pixel_spectra', data='cube.fits')]

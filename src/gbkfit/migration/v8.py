@@ -17,6 +17,7 @@ from .rules import (
 
 __all__ = [
     'RULES',
+    'AssumedDistances',
     'Cosmologies',
     'FlatComponents',
     'Halos',
@@ -702,6 +703,50 @@ def _setup_cosmology(
         f"the cosmology of the distances of its galaxies ({name})"))]
 
 
+class AssumedDistances(Rule):
+    """
+    The distance that the radii of a table or a profile were measured at
+    (2026-11-11), D0, is their assumed_distance (was distance): of the
+    mass tables of the galaxies, of the profile observations, and of the
+    data of profiles (inline, or pieces).
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 8
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for galaxy_path, galaxy in items(config, 'galaxies'):
+            for path, mass in items(galaxy, 'mass'):
+                if mass.get('type') == 'table':
+                    changes += _assumed(mass, galaxy_path + path)
+        for path, observation in items(config, 'observations'):
+            if observation.get('type') != 'profile':
+                continue
+            changes += _assumed(observation, path)
+            data = observation.get('data')
+            if isinstance(data, MutableMapping):
+                changes += _assumed(data, path + ['data'])
+        # (the data pieces of a project, of their type)
+        for path, data in items(config, 'data'):
+            if data.get('type') == 'profile':
+                changes += _assumed(data, path)
+        return changes
+
+
+def _assumed(
+        options: MutableMapping[str, Any], path: list[str | int]
+) -> list[Change]:
+    """
+    Rename the option distance of a table or a profile assumed_distance,
+    in place, and return the change.
+    """
+    if 'distance' not in options:
+        return []
+    rename(options, 'distance', 'assumed_distance')
+    return [Change(path, "distance -> assumed_distance")]
+
 # The rules, in the order of the changes: TraitParameterNames reads the
 # trait options that FlatComponents takes up
 RULES: tuple[Rule, ...] = (
@@ -710,4 +755,5 @@ RULES: tuple[Rule, ...] = (
     TracedMass(),
     Halos(),
     Cosmologies(),
+    AssumedDistances(),
 )

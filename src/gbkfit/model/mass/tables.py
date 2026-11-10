@@ -72,7 +72,7 @@ class MassTable(MassComponent):
         increasing.
     velocities : Sequence of float
         The circular velocity at each radius (km/s).
-    distance : float, optional
+    assumed_distance : float, optional
         The distance the table was made at, D0 (Mpc).
 
     Raises
@@ -100,7 +100,8 @@ class MassTable(MassComponent):
             radius: Column,
             velocity: Column,
             format: str | None = None,
-            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None
+            assumed_distance:
+            Annotated[float, Gt(0), Unit('Mpc')] | None = None
     ) -> Self:
         """
         Read a mass table from a table file (see read_table).
@@ -117,7 +118,7 @@ class MassTable(MassComponent):
         format : str, optional
             The format of the file (see astropy's Table.read); by
             default, the one astropy tells.
-        distance : float, optional
+        assumed_distance : float, optional
             The distance the table was made at, D0 (Mpc).
 
         Returns
@@ -131,7 +132,8 @@ class MassTable(MassComponent):
         velocities = read_column(
             table, velocity.column, velocity.unit or 'km/s')
         return cls(
-            name, radii, velocities.to_value(u.km / u.s).tolist(), distance)
+            name, radii, velocities.to_value(u.km / u.s).tolist(),
+            assumed_distance)
 
     def dump(self) -> dict[str, Any]:
         info = super().dump() | dict(
@@ -139,8 +141,8 @@ class MassTable(MassComponent):
                 value=self._radii.value.tolist(),
                 unit=gbkfit.units.format_unit(self._radii.unit)),
             velocities=self._velocities.to_value(u.km / u.s).tolist())
-        if self._distance is not None:
-            info['distance'] = self._distance
+        if self._assumed_distance is not None:
+            info['assumed_distance'] = self._assumed_distance
         return info
 
     def __init__(
@@ -148,7 +150,8 @@ class MassTable(MassComponent):
             name: str,
             radii: u.Quantity,
             velocities: Annotated[Sequence[float] | np.ndarray, Unit('km/s')],
-            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None
+            assumed_distance:
+            Annotated[float, Gt(0), Unit('Mpc')] | None = None
     ):
         check_options(MassTable.__init__, locals())
         super().__init__(name)
@@ -171,7 +174,8 @@ class MassTable(MassComponent):
                 f"{velocities}")
         self._radii = radii.astype(float)
         self._velocities = velocities * (u.km / u.s)
-        self._distance = None if distance is None else float(distance)
+        self._assumed_distance = None if assumed_distance is None \
+            else float(assumed_distance)
         # The spline of V |V| ((km/s)^2) in the radii of the table, from 0
         x = self._radii.value
         v = self._velocities.to_value(u.km / u.s)
@@ -187,9 +191,9 @@ class MassTable(MassComponent):
         """Return the circular velocities of the table."""
         return self._velocities
 
-    def distance(self) -> float | None:
+    def assumed_distance(self) -> float | None:
         """Return the distance the table was made at (Mpc), if given."""
-        return self._distance
+        return self._assumed_distance
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(upsilon=ParamScalarDesc(
@@ -200,7 +204,7 @@ class MassTable(MassComponent):
     def needs_distance(self) -> str | None:
         if self._radii.unit.is_equivalent(u.arcsec):
             return "is a table of radii in angles"
-        if self._distance is not None:
+        if self._assumed_distance is not None:
             return "is a table measured at a distance (D0)"
         return None
 
@@ -250,19 +254,19 @@ class MassTable(MassComponent):
         see needs_distance.)
         """
         angles = self._radii.unit.is_equivalent(u.arcsec)
-        if not angles and self._distance is None:
+        if not angles and self._assumed_distance is None:
             return R / self._radii.unit.to(u.kpc), 1.0
         kpc_per_arcsec = context.kpc_per_arcsec
         arcsec = R / kpc_per_arcsec
         scale = 1.0
-        if self._distance is not None:
+        if self._assumed_distance is not None:
             # (D/D0, of the lengths of an arcsec at D and D0)
             scale = kpc_per_arcsec / (
-                self._distance * u.Mpc * u.arcsec).to_value(
+                self._assumed_distance * u.Mpc * u.arcsec).to_value(
                     u.kpc, u.dimensionless_angles())
         if angles:
             return arcsec / self._radii.unit.to(u.arcsec), scale
         # (the lengths of the table, at D0, of those angles)
-        lengths = (arcsec * u.arcsec * self._distance * u.Mpc).to(
+        lengths = (arcsec * u.arcsec * self._assumed_distance * u.Mpc).to(
             self._radii.unit, u.dimensionless_angles())
         return lengths.value, scale

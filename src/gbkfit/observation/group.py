@@ -469,8 +469,14 @@ class ObservationGroup:
         return self._pdescs
 
     def constants(self) -> dict[str, Any]:
-        """Return the constants of the galaxies, prefixed."""
-        return self._constants
+        """
+        Return the values that parameter expressions can use: those of
+        the galaxies (see Galaxy.constants), prefixed as their parameters,
+        and the Hubble constant of their cosmology in units of 100 km/s/Mpc
+        ('cosmology_h'; e.g. for the relations of the concentrations of
+        halos, see gbkfit.relations).
+        """
+        return self._constants | dict(cosmology_h=self._cosmology.h())
 
     def function_names(self) -> tuple[str, ...]:
         """

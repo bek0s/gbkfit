@@ -17,6 +17,7 @@ import numpy.typing as npt
 
 from gbkfit.cosmology import Cosmology
 from gbkfit.driver import Driver
+from gbkfit.grid import doppler
 from gbkfit.params import ParamValues
 from .components._stage import GalaxyMass, GalaxyStage, GalaxyState
 from .components.base import ComponentState
@@ -82,6 +83,9 @@ class GalaxyFunctions:
       gives its enclosed mass
     - kpc_per_arcsec: the length of an arcsec in it (kpc), if it has a
       distance (with or without mass)
+    - redshift_at(v): its redshift at the systemic velocities v (km/s;
+      e.g. that of a component, vsys), (1 + z) D(v) - 1, of its redshift
+      z and the relativistic Doppler factor D (see LinePlacement)
 
     For each of its disks with velocity or dispersion traits, named
     after its component ('rotation_gas'; 'rotation' for one without a
@@ -132,6 +136,7 @@ class GalaxyFunctions:
     ):
         components = component_set.components()
         self._component_set = component_set
+        self._redshift = redshift
         self._stage = GalaxyStage(
             component_set, driver, redshift, sky_origin, cosmology)
         self._suffixes = _disk_suffixes(component_set)
@@ -167,6 +172,7 @@ class GalaxyFunctions:
                 if cmp.gives_enclosed_mass()]
         if component_set.distance() is not None:
             names += ['kpc_per_arcsec']
+        names += ['redshift_at']
         for suffix in _disk_suffixes(component_set).values():
             names += [f'rotation{suffix}', f'dispersion{suffix}']
         return tuple(names)
@@ -288,6 +294,8 @@ class GalaxyFunctions:
                     _density_slope, f'slope{suffix}', enclosed)
         if (kpc_per_arcsec := self._stage.kpc_per_arcsec(params)) is not None:
             functions['kpc_per_arcsec'] = kpc_per_arcsec
+        functions['redshift_at'] = functools.partial(
+            _redshift_at, self._redshift)
         for i, suffix in self._suffixes.items():
             functions[f'rotation{suffix}'] = functools.partial(
                 self._rotation, i, params, state_of)
@@ -362,6 +370,14 @@ class GalaxyFunctions:
             raise ValueError(
                 f"{name}: the radii must not be negative; they are {radii}")
         return radii
+
+
+def _redshift_at(redshift: float, v: npt.ArrayLike) -> np.ndarray:
+    """
+    Return the redshift of a galaxy of the given redshift at the systemic
+    velocities v (km/s; see GalaxyFunctions).
+    """
+    return (1 + redshift) * doppler(np.asarray(v, dtype=float)) - 1
 
 
 def _vcirc(

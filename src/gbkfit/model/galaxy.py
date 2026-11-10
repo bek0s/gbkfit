@@ -270,10 +270,12 @@ class Galaxy(Serializable):
 
     def constants(self) -> dict[str, Any]:
         """
-        Return the values that parameter expressions can use (e.g. the
+        Return the values that parameter expressions can use: its
+        redshift ('redshift'), and those of its components (e.g. the
         radial nodes of its disks, prefixed as their parameters).
         """
-        return self._component_set.constants()
+        return dict(redshift=self.redshift()) \
+            | self._component_set.constants()
 
     def plan_stage(
             self,

@@ -52,8 +52,8 @@ def check_profile_radii(
     if distance is not None:
         if radii.unit.is_equivalent(u.arcsec):
             raise ValueError(
-                "a distance is that of radii in lengths, measured at it; "
-                "the radii are angles")
+                "an assumed distance is that of radii in lengths, measured "
+                "at it; the radii are angles")
         if not isinstance(distance, u.Quantity) or distance.size != 1 \
                 or not distance.unit.is_equivalent(u.Mpc) \
                 or not distance > 0:
@@ -83,7 +83,7 @@ class DatasetProfile(Dataset):
         least one.
     radii : Quantity
         The radii.
-    distance : float, optional
+    assumed_distance : float, optional
         The distance of radii in lengths that were measured at one (Mpc).
 
     Raises
@@ -111,7 +111,8 @@ class DatasetProfile(Dataset):
             file: FilePath,
             radius: Column,
             format: str | None = None,
-            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None,
+            assumed_distance:
+            Annotated[float, Gt(0), Unit('Mpc')] | None = None,
             **items: DataColumns
     ) -> 'DatasetProfile':
         """
@@ -128,7 +129,7 @@ class DatasetProfile(Dataset):
             column, which must have one).
         format : str, optional
             The format of the file, if astropy cannot tell it.
-        distance : float, optional
+        assumed_distance : float, optional
             The distance of radii in lengths that were measured at one
             (Mpc).
         **items : DataColumns
@@ -151,7 +152,7 @@ class DatasetProfile(Dataset):
         for key, item in items.items():
             with config_path(key):
                 data[key] = _detail.table_item(table, item)
-        return cls(data, radii, distance)
+        return cls(data, radii, assumed_distance)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -169,8 +170,9 @@ class DatasetProfile(Dataset):
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),
             radius=dict(column='radius'))
-        if self._distance is not None:
-            info['distance'] = float(self._distance.to_value(u.Mpc))
+        if self._assumed_distance is not None:
+            info['assumed_distance'] = float(
+                self._assumed_distance.to_value(u.Mpc))
         for key, item in self.items():
             unit = item.unit() or u.dimensionless_unscaled
             table[key] = item.data() * unit
@@ -186,29 +188,31 @@ class DatasetProfile(Dataset):
             self,
             items: Mapping[str, Data],
             radii: u.Quantity,
-            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None
+            assumed_distance:
+            Annotated[float, Gt(0), Unit('Mpc')] | None = None
     ):
         check_options(DatasetProfile.__init__, locals())
         super().__init__(items)
-        radii, distance = check_profile_radii(
-            radii, None if distance is None else distance * u.Mpc)
+        radii, assumed_distance = check_profile_radii(
+            radii, None if assumed_distance is None
+            else assumed_distance * u.Mpc)
         if self.shape() != radii.shape:
             raise ValueError(
                 f"the data items have {self.shape()[0]} values, but there "
                 f"are {radii.size} radii")
         self._radii = radii
-        self._distance = distance
+        self._assumed_distance = assumed_distance
 
     def radii(self) -> u.Quantity:
         """Return the radii."""
         return self._radii
 
-    def distance(self) -> u.Quantity | None:
+    def assumed_distance(self) -> u.Quantity | None:
         """
         Return the distance of radii in lengths that were measured at one,
         if given.
         """
-        return self._distance
+        return self._assumed_distance
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """

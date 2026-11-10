@@ -34,7 +34,7 @@ def load_galaxy(components):
 def test_one_component_needs_no_name():
     galaxy = load_galaxy([disk()])
     assert {'xpos', 'rpt_a', 'rht_s'} <= set(galaxy.pdescs())
-    assert set(galaxy.constants()) == {'rnodes', 'subrnodes'}
+    assert set(galaxy.constants()) == {'redshift', 'rnodes', 'subrnodes'}
 
 
 def test_names_prefix_the_parameters_and_constants():
@@ -48,8 +48,8 @@ def test_names_prefix_the_parameters_and_constants():
     galaxy = load_galaxy(
         [disk(name='disk'), disk(name='bulge'), dust(name='dust')])
     assert set(galaxy.constants()) == {
-        'disk_rnodes', 'disk_subrnodes', 'bulge_rnodes', 'bulge_subrnodes',
-        'dust_rnodes', 'dust_subrnodes'}
+        'redshift', 'disk_rnodes', 'disk_subrnodes', 'bulge_rnodes',
+        'bulge_subrnodes', 'dust_rnodes', 'dust_subrnodes'}
 
 
 def test_names_do_not_depend_on_the_order():
@@ -110,7 +110,8 @@ def test_galaxy_names_prefix_the_parameters():
         [observation(['hi']), observation(['halpha'])])
     assert {'hi_xpos', 'halpha_xpos'} <= set(group_.pdescs())
     assert set(group_.constants()) == {
-        'hi_rnodes', 'hi_subrnodes', 'halpha_rnodes', 'halpha_subrnodes'}
+        'hi_redshift', 'hi_rnodes', 'hi_subrnodes', 'halpha_redshift',
+        'halpha_rnodes', 'halpha_subrnodes', 'cosmology_h'}
     assert galaxy_parser.dump(group_.galaxies()[0])['name'] == 'hi'
 
 

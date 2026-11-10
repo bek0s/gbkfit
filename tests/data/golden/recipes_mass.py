@@ -260,7 +260,7 @@ def _rotmod(**columns: Any) -> dict[str, Any]:
     """The options of columns of the rotmod file, at its distance."""
     return dict(
         file='rotmod.dat', format='ascii.no_header',
-        radius=dict(column='col1', unit='kpc'), distance=10) | columns
+        radius=dict(column='col1', unit='kpc'), assumed_distance=10) | columns
 
 
 _PROFILE_TABLE_MASS = dict(

@@ -63,7 +63,7 @@ def test_circular_velocity_of_the_mass():
     assert functions.names() == (
         'vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo', 'mass', 'mass_bh',
         'mass_halo', 'slope', 'slope_bh', 'slope_halo', 'kpc_per_arcsec',
-        'rotation_gas', 'dispersion_gas')
+        'redshift_at', 'rotation_gas', 'dispersion_gas')
     bound = functions.bind(PARAMS)
     R = np.array([0.5, 2.0, 8.0])
     np.testing.assert_allclose(
@@ -194,7 +194,7 @@ def test_functions_of_a_disk_without_mass():
     # its traits at any radius
     galaxy = galaxy_parser.load(dict(components=[copy.deepcopy(DISK)]))
     functions = galaxy.plan_functions()
-    assert functions.names() == ('rotation', 'dispersion')
+    assert functions.names() == ('redshift_at', 'rotation', 'dispersion')
     bound = functions.bind(DISK_PARAMS)
     R = np.array([[0.0, 1.3], [7.1, 20.0]])
     np.testing.assert_allclose(
@@ -282,3 +282,18 @@ def test_derived_values_of_a_group():
     assert derived['v_sigma'] == pytest.approx(
         float(bound['rotation_gas'](10) / bound['dispersion_gas'](10)),
         rel=1e-12)
+    # (the constants of the epoch: a concentration of the relation of
+    # Dutton & Maccio at the redshift of the galaxy, in its cosmology; its
+    # redshift at the systemic velocity of its disk)
+    from gbkfit import relations
+    params = param_space_parser.load(
+        dict(properties=PARAMS, derived=dict(
+            c200='relations.c200_dutton14(12, redshift, cosmology_h)',
+            z_sys='redshift_at(gas_vsys)')),
+        pdescs=group.pdescs(), constants=group.constants(),
+        function_names=group.function_names())
+    derived = params.derived_values(params.evaluate(), group.plan().functions())
+    assert derived['c200'] == pytest.approx(
+        float(relations.c200_dutton14(12, 0, 0.6766)), rel=1e-12)
+    assert derived['z_sys'] == pytest.approx(
+        float(bound['redshift_at'](PARAMS['gas_vsys'])), rel=1e-12)

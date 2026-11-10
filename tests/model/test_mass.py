@@ -1767,7 +1767,7 @@ def test_a_distance_is_needed_where_arcsec_meet_kpc():
         table = dict(type='table', name='t', radii=radii,
                      velocities=[10, 20])
         if distance is not None:
-            table['distance'] = distance
+            table['assumed_distance'] = distance
         with pytest.raises(ValueError, match=message):
             galaxy_parser.load(dict(mass=[table]))
     alone = galaxy_parser.load(dict(mass=copy.deepcopy(MASS)))
