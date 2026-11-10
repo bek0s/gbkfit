@@ -162,8 +162,8 @@ class Gravity(TypedSerializable, abc.ABC):
       support take (see parts.SelfGravitatingEquilibrium and
       traits.VPTraitMass)
     - the shares of the components in the squared circular velocity
-      (SHARES), which the dark fraction of a spheroid takes (see
-      mass.DarkFraction)
+      (SHARES), which the dark fraction of a halo takes (see
+      mass.Halo)
     """
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:

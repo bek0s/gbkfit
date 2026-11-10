@@ -188,7 +188,7 @@ def test_each_parameter_has_the_option_that_makes_it():
         profile=dict(type='sersic'), shape=dict(type='flattened'))
     galaxy = galaxy_parser.load(dict(
         components=[gas, bulge], distance=dict(type='direct'),
-        mass=[dict(type='spheroid', name='halo', profile=dict(type='nfw'))]))
+        mass=[dict(type='halo', name='halo', profile=dict(type='nfw'))]))
     owners = galaxy.param_owners()
     assert set(owners) == set(galaxy.pdescs())
     assert owners['gas_xpos'] == ('components', 0)

@@ -12,7 +12,7 @@ galaxies:
     shape: {type: flattened}
   mass:
   - {type: traced_spheroid, name: lum, component: stars}
-  - type: spheroid
+  - type: halo
     name: halo
     profile: {type: nfw}
   distance: {type: direct, cosmology: Planck18}

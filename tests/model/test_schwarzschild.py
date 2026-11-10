@@ -38,8 +38,8 @@ SPHEROID = dict(
     norbits=200, turns=20)
 GALAXY = dict(
     components=[SPHEROID],
-    mass=[dict(type='spheroid', name='light',
-               profile=dict(type='zhao', parameters='density_radius')),
+    mass=[dict(type='halo', name='light',
+               profile=dict(type='zhao', parameterisation='density_radius')),
           dict(type='point', name='bh')],
     distance=dict(type='direct', cosmology='Planck18'))
 PROPERTIES = dict(

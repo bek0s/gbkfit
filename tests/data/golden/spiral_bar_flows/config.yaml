@@ -22,7 +22,7 @@ galaxies:
     name: stars
     surface: {type: exponential}
     vertical: {type: thin}
-  - type: spheroid
+  - type: halo
     name: halo
     profile: {type: nfw}
   distance: {type: direct, cosmology: Planck18}

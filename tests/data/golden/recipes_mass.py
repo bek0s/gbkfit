@@ -17,7 +17,7 @@ _STARS = dict(
     type='disk', name='stars', surface=dict(type='exponential'),
     vertical=dict(type='thin'))
 
-_NFW = dict(type='spheroid', name='halo', profile=dict(type='nfw'))
+_NFW = dict(type='halo', name='halo', profile=dict(type='nfw'))
 
 # The rings of a disk
 _RINGS = dict(loose=False, tilted=False, rnodes=list(range(0, 13)))
@@ -212,7 +212,7 @@ _FR_GRAVITY_RESPONSE = dict(
     galaxies=[dict(
         components=[_disk('gas', vptraits=dict(type='mass'))],
         mass=[_STARS, _NFW | dict(
-            baryons=['stars'], response=dict(type='gnedin04'))],
+            baryons=['stars'], contraction=dict(type='gnedin04'))],
         distance=_DISTANCE,
         gravity=dict(type='hu_sawicki', screened=['halo']))],
     observations=[
@@ -222,11 +222,13 @@ _FR_GRAVITY_RESPONSE = dict(
         _moments(size=16, name='maps')],
     truth=_prefixed('gas', _GEOMETRY_TRUTH | dict(dpt_a=20)) | dict(
         distance=80, mass_stars_log_m=10.3, mass_stars_rd=1.2,
-        mass_halo_log_m=11.5, mass_halo_c=10, gravity_log_fr0=-6.0),
+        mass_halo_log_m=11.5, mass_halo_c=10, mass_halo_a0=0.85,
+        mass_halo_w=0.8, gravity_log_fr0=-6.0),
     trial=_prefixed('gas', _GEOMETRY_TRIAL | dict(dpt_a=20)) | dict(
         distance=80, mass_stars_log_m=dict(value=10.4, min=9, max=12),
         mass_stars_rd=1.2, mass_halo_log_m=dict(value=11.7, min=10, max=13),
-        mass_halo_c=10, gravity_log_fr0=dict(value=-6.5, min=-8, max=-4)),
+        mass_halo_c=10, mass_halo_a0=0.85, mass_halo_w=0.8,
+        gravity_log_fr0=dict(value=-6.5, min=-8, max=-4)),
     noises=[dict(type='gauss', rms=3), dict(type='gauss', rms=0.002)],
     likelihoods=[None, _MOMENTS_LIKELIHOOD])
 

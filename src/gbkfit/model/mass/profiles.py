@@ -1,12 +1,12 @@
 """
 The profiles of spheroids (see spheroids.MassSpheroid): spherical
 densities, given as functions of the spherical radius r with their
-enclosed masses; the halos are in halos.
+enclosed masses; the profiles of halos are in halos.
 """
 
 import abc
 from collections.abc import Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -23,8 +23,35 @@ from .units import G
 __all__ = [
     'ProfileNodewise',
     'ProfileSersic',
+    'SphericalProfile',
     'SpheroidProfile'
 ]
+
+
+class SphericalProfile(Protocol):
+    """
+    A spherical density, which a shape lays out (see shapes): its density
+    (Msun/kpc^3), its mass within spheres (Msun) and its potential
+    ((km/s)^2) at the spherical radii r (kpc), of the values of the
+    parameters of its spheroid and of its context. The profile of a
+    spheroid (SpheroidProfile), or a halo at the values of its parameters
+    (halos.SphericalHalo).
+    """
+
+    def density(
+            self, r: np.ndarray, params: ParamValues, context: MassContext
+    ) -> np.ndarray:
+        ...
+
+    def enclosed_mass(
+            self, r: npt.ArrayLike, params: ParamValues, context: MassContext
+    ) -> np.ndarray:
+        ...
+
+    def potential(
+            self, r: np.ndarray, params: ParamValues, context: MassContext
+    ) -> np.ndarray:
+        ...
 
 
 class SpheroidProfile(TypedSerializable, abc.ABC):

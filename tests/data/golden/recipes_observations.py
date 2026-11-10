@@ -443,7 +443,7 @@ CASES: list[dict[str, Any]] = [
         galaxies=[dict(
             components=[_STARS],
             mass=[dict(type='traced_spheroid', name='lum', component='stars'),
-                  dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
+                  dict(type='halo', name='halo', profile=dict(type='nfw'))],
             distance=dict(type='direct', cosmology='Planck18'))],
         observations=[_sky(
             dict(

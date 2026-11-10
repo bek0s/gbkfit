@@ -32,7 +32,7 @@ GAS = dict(
     emission=dict(type='lines'))
 MASS = [
     dict(type='point', name='bh'),
-    dict(type='spheroid', name='halo', profile=dict(type='nfw'))]
+    dict(type='halo', name='halo', profile=dict(type='nfw'))]
 PARAMS = dict(
     gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60, gas_vsys=0,
     gas_rpt_a=1, gas_rpt_s=4, gas_rht_s=0.5, gas_dpt_a=10, distance=10,
@@ -95,8 +95,8 @@ def test_density_slopes_of_the_mass():
     # halo (x = r / r_s); of a point mass, none (no density away from it);
     # of both, that of the halo (the point mass adds mass, not density)
     mass = [MASS[0], dict(
-        type='spheroid', name='halo',
-        profile=dict(type='nfw', parameters='density_radius'))]
+        type='halo', name='halo',
+        profile=dict(type='nfw', parameterisation='density_radius'))]
     params = {k: v for k, v in PARAMS.items()
               if not k.startswith('mass_halo')}
     params |= dict(mass_halo_log_rho=7, mass_halo_rs=12)

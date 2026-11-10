@@ -203,8 +203,8 @@ MASSIVE = dict(
         rptraits=dict(type='exponential'),
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
         emission=dict(type='lines'))],
-    mass=[dict(type='spheroid', name='halo', profile=dict(
-        type='pseudo_isothermal', parameters='density_radius'))],
+    mass=[dict(type='halo', name='halo', profile=dict(
+        type='pseudo_isothermal', parameterisation='density_radius'))],
     distance=dict(type='direct'))
 
 CUBE = dict(

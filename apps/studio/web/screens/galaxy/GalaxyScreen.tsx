@@ -99,7 +99,7 @@ export function GalaxyScreen({ name }: { name: string }) {
       // (mass comes with a distance, which it needs)
       if (p.key === 'mass' && next.distance === undefined) next = setAt(next, ['distance'], { type: 'direct' });
       if (p.key === 'mass') {
-        next = setAt(next, ['mass'], [startOf(draft.defs, 'mass_component', 'spheroid', [], { name: 'halo' })]);
+        next = setAt(next, ['mass'], [startOf(draft.defs, 'mass_component', 'halo', [], { name: 'halo' })]);
       } else next = setAt(next, [...base, ...p.option], p.start ?? {});
       return { ...s, options: next };
     });

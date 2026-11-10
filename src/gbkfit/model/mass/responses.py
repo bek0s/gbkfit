@@ -1,12 +1,13 @@
 """
 The responses of spherical halos to the gravity of their baryons (see
-MassSpheroid): the adiabatic contractions of Blumenthal et al. (1986) and
-Gnedin et al. (2004), that of Cautun et al. (2020), and the isothermal
-core of self-interacting dark matter.
+spheroids.Halo): the adiabatic contractions of Blumenthal et al. (1986)
+and Gnedin et al. (2004) and that of Cautun et al. (2020) (see
+Contraction), and the isothermal core of self-interacting dark matter
+(see sidm_vcirc2).
 """
 
 import abc
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import Any, NamedTuple
 
 import astropy.units
@@ -14,33 +15,30 @@ import numpy as np
 import scipy.integrate
 import scipy.interpolate
 
-from gbkfit.config import (
-    TypedParser, TypedSerializable, check_options)
+from gbkfit.config import TypedParser, TypedSerializable
 from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext
 from .halo_params import Overdensity
-from .profiles import SpheroidProfile
 from .units import G
 
 
 __all__ = [
-    'HaloResponse',
-    'ResponseBlumenthal86',
-    'ResponseCautun20',
-    'ResponseGnedin04',
-    'ResponseSIDM',
+    'SIDM_PDESCS',
+    'Contraction',
+    'ContractionBlumenthal86',
+    'ContractionCautun20',
+    'ContractionGnedin04',
     'SIDMCore',
-    'halo_response_parser'
+    'contraction_parser',
+    'sidm_core',
+    'sidm_vcirc2'
 ]
 
 
-# The orbit-averaged radii of the contraction of Gnedin et al. (2004):
-# r_bar = A0 r_vir (r / r_vir)^w, of the virial radius r_vir of their
-# calibration, within which the mean density is 180 times the mean
-# matter density (_VIRIAL)
-_GNEDIN04_A0 = 0.85
-_GNEDIN04_W = 0.8
+# The virial radius of the contractions, within which the mean density
+# of the halo is 180 times the mean matter density: that of the
+# calibration of the orbit-averaged radii of Gnedin et al. (2004)
 _VIRIAL = Overdensity('180m')
 
 # The bisections of the virial radius of a halo, in ln r (kpc)
@@ -80,13 +78,23 @@ _SIDM_DISPERSIONS = (0.5, 2.0, 24)
 _SIDM_ITERATIONS = 50
 _SIDM_TOLERANCE = 1e-10
 
+# The parameters of SIDM (see sidm_vcirc2)
+SIDM_PDESCS = dict(
+    sigma_m=ParamScalarDesc(
+        title='Cross-section per unit mass',
+        desc="the cross-section of SIDM per unit mass",
+        min=0, unit='cm2 / g', default=1),
+    age=ParamScalarDesc(
+        title='Halo age', desc="the age of the halo", min=0, unit='Gyr',
+        default=10))
 
-class HaloResponse(TypedSerializable, abc.ABC):
+
+class Contraction(TypedSerializable, abc.ABC):
     """
-    How a spherical halo responds to the gravity of its baryons: its
-    squared circular velocity after, of those of the halo before and of
-    the baryons, and its parameters (of the spheroid of the halo, with
-    those of its profile and shape).
+    The contraction of a spherical halo by the gravity of its baryons:
+    its squared circular velocity after, of those of the halo before and
+    of the baryons, and its parameters (of the halo, with those of its
+    profile and shape).
     """
 
     def dump(self) -> dict[str, Any]:
@@ -96,42 +104,30 @@ class HaloResponse(TypedSerializable, abc.ABC):
         """Return its parameters, by name; none here."""
         return {}
 
-    def check_profile(self, profile: SpheroidProfile) -> None:
-        """
-        Raise ValueError, saying why, unless it takes the profile of its
-        halo; here, it does.
-        """
-
-    def check_baryons(self, baryons: Sequence[str]) -> None:
-        """
-        Raise ValueError, saying why, unless it takes the baryons its
-        halo responds to (by their names); here, it needs some.
-        """
-        if not baryons:
-            raise ValueError(
-                f"the response '{self.type()}' needs the baryons that the "
-                f"spheroid responds to (baryons)")
-
     @abc.abstractmethod
     def vcirc2(
             self,
             R: np.ndarray,
             halo_vcirc2: _VCirc2,
             baryons_mass: _Mass,
-            profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         """
         Return the squared circular velocity ((km/s)^2) of the halo after
-        its response at the radii R (kpc; 1-D), of that of the halo before
-        and the mass of the baryons within spheres (functions of the
-        radius), the profile of the halo, the values of the parameters of
-        its spheroid and its context (see MassComponent.vcirc2).
+        its contraction at the radii R (kpc; 1-D), of that of the halo
+        before and the mass of the baryons within spheres (functions of
+        the radius), the values of the parameters of its halo and its
+        context (see MassComponent.vcirc2).
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the halo before has no virial radius (see _virial_radius).
         """
 
 
-class ResponseBlumenthal86(HaloResponse):
+class ContractionBlumenthal86(Contraction):
     """
     The adiabatic contraction of Blumenthal et al. 1986: the halo
     contracts in the pull of its baryons, each shell keeping r M(<r). It
@@ -162,7 +158,6 @@ class ResponseBlumenthal86(HaloResponse):
             R: np.ndarray,
             halo_vcirc2: _VCirc2,
             baryons_mass: _Mass,
-            profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -171,15 +166,16 @@ class ResponseBlumenthal86(HaloResponse):
             _virial_radius(halo_vcirc2, context))
 
 
-class ResponseGnedin04(HaloResponse):
+class ContractionGnedin04(Contraction):
     """
     The adiabatic contraction of Gnedin et al. 2004: that of Blumenthal et
     al. 1986 on orbit-averaged radii, which contracts the halo less. It is
-    that of Blumenthal et al. (see ResponseBlumenthal86) with the
-    orbit-averaged radii r_bar = 0.85 r_vir (r / r_vir)^0.8 in the masses,
-    of the virial radius r_vir of their calibration (within which the
-    mean density of the halo is 180 times the mean matter density), for
-    halos of any parameterisation.
+    that of Blumenthal et al. (see ContractionBlumenthal86) with the
+    orbit-averaged radii r_bar = a0 r_vir (r / r_vir)^w in the masses, of
+    the virial radius r_vir of their calibration (within which the mean
+    density of the halo is 180 times the mean matter density). Its
+    parameters: a0 and w, 0.85 and 0.8 by default (Gnedin et al. 2004;
+    a0 = 1.6 is the calibration of Gnedin et al. 2011).
     """
 
     @staticmethod
@@ -190,21 +186,33 @@ class ResponseGnedin04(HaloResponse):
     def type_title() -> str:
         return 'Adiabatic contraction (Gnedin 2004)'
 
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return dict(
+            a0=ParamScalarDesc(
+                title='Orbit-average scale',
+                desc="the scale a0 of the orbit-averaged radii, r_bar = a0 "
+                     "r_vir (r / r_vir)^w",
+                min=0, unit='', default=0.85),
+            w=ParamScalarDesc(
+                title='Orbit-average exponent',
+                desc="the exponent w of the orbit-averaged radii, r_bar = "
+                     "a0 r_vir (r / r_vir)^w",
+                min=0, unit='', default=0.8))
+
     def vcirc2(
             self,
             R: np.ndarray,
             halo_vcirc2: _VCirc2,
             baryons_mass: _Mass,
-            profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         return _contracted(
             R, halo_vcirc2, baryons_mass,
-            _virial_radius(halo_vcirc2, context), _GNEDIN04_A0, _GNEDIN04_W)
+            _virial_radius(halo_vcirc2, context), params['a0'], params['w'])
 
 
-class ResponseCautun20(HaloResponse):
+class ContractionCautun20(Contraction):
     """
     The contraction of Cautun et al. 2020, fitted to simulations: the
     mass of the halo within each radius grows with that of the baryons.
@@ -229,7 +237,6 @@ class ResponseCautun20(HaloResponse):
             R: np.ndarray,
             halo_vcirc2: _VCirc2,
             baryons_mass: _Mass,
-            profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -249,9 +256,15 @@ class ResponseCautun20(HaloResponse):
         return out
 
 
+contraction_parser = TypedParser(Contraction, [
+    ContractionBlumenthal86,
+    ContractionGnedin04,
+    ContractionCautun20], family='halo_contraction')
+
+
 class SIDMCore(NamedTuple):
     """
-    The isothermal core of a halo of SIDM (see ResponseSIDM): its radius
+    The isothermal core of a halo of SIDM (see sidm_vcirc2): its radius
     r1 (kpc), its central density rho0 (Msun/kpc^3) and velocity
     dispersion v0 (km/s), and its mass (Msun) within radii below r1 (a
     function of the radii).
@@ -262,11 +275,21 @@ class SIDMCore(NamedTuple):
     mass: Callable[[np.ndarray], np.ndarray]
 
 
-class ResponseSIDM(HaloResponse):
+def sidm_vcirc2(
+        R: np.ndarray,
+        halo_vcirc2: _VCirc2,
+        baryons_mass: _Mass,
+        params: ParamValues
+) -> np.ndarray:
     """
-    The isothermal core of self-interacting dark matter (SIDM; Kaplinghat
-    et al. 2014, 2016; Jiang et al. 2023). Within the radius r1 where a
-    particle of the halo has scattered once in the age of the halo,
+    Return the squared circular velocity ((km/s)^2) at the radii R (kpc;
+    1-D) of a halo of self-interacting dark matter (SIDM; Kaplinghat et
+    al. 2014, 2016; Jiang et al. 2023), of that of the halo before (after
+    its contraction if it has one; Jiang et al. 2023 contract it as
+    Gnedin et al. 2004), the mass of its baryons within spheres
+    (functions of the radius) and the values of its parameters. Within
+    the radius r1 where a particle of the halo has scattered once in the
+    age of the halo,
 
         (4 / sqrt(pi)) rho(r1) v(r1) sigma_m age = 1
 
@@ -284,137 +307,44 @@ class ResponseSIDM(HaloResponse):
     from a Dekel-Zhao profile fitted to the halo before, of dark matter
     alone, for speed.)
 
-    Its parameters: 'sigma_m', the cross-section per unit mass (cm^2/g),
-    and 'age', the age of the halo (Gyr). The core is integrated by
-    Runge-Kutta in ln r (steps of 0.05, from 1e-4 r1, to some 1e-6) and
-    matched by Newton iterations (to 1e-10, from a grid search of the
-    lowest density that matches); some 0.1 s.
-
-    Parameters
-    ----------
-    contraction : HaloResponse, optional
-        The contraction of the halo before by the baryons (Jiang et al.
-        2023: 'gnedin04'); none by default (Kaplinghat et al. 2016).
+    Its parameters (SIDM_PDESCS): 'sigma_m', the cross-section per unit
+    mass (cm^2/g), and 'age', the age of the halo (Gyr). The core is
+    integrated by Runge-Kutta in ln r (steps of 0.05, from 1e-4 r1, to
+    some 1e-6) and matched by Newton iterations (to 1e-10, from a grid
+    search of the lowest density that matches); some 0.1 s.
 
     Raises
     ------
     ValueError
-        If the contraction is that of SIDM.
+        If the halo scatters at every radius (to 1e4 kpc), or no core
+        matches it at r1.
     """
+    out = halo_vcirc2(R)
+    core = sidm_core(halo_vcirc2, baryons_mass, params)
+    if core is not None:
+        inside = (R > 0) & (R < core.r1)
+        out[inside] = G * core.mass(R[inside]) / R[inside]
+    return out
 
-    @staticmethod
-    def type() -> str:
-        return 'sidm'
 
-    @staticmethod
-    def type_title() -> str:
-        return 'Self-interacting dark matter core'
+def sidm_core(
+        halo_vcirc2: _VCirc2,
+        baryons_mass: _Mass,
+        params: ParamValues
+) -> SIDMCore | None:
+    """
+    Return the isothermal core of a halo of SIDM (see sidm_vcirc2 for the
+    arguments); None without scatterings within the age of the halo.
 
-    def dump(self) -> dict[str, Any]:
-        info = super().dump()
-        if self._contraction is not None:
-            info['contraction'] = halo_response_parser.dump(
-                self._contraction)
-        return info
-
-    def __init__(self, contraction: HaloResponse | None = None):
-        check_options(ResponseSIDM.__init__, locals())
-        if isinstance(contraction, ResponseSIDM):
-            raise ValueError(
-                "the contraction of the halo before its SIDM core is not "
-                "SIDM")
-        self._contraction = contraction
-
-    def contraction(self) -> HaloResponse | None:
-        """Return the contraction of the halo before, if any."""
-        return self._contraction
-
-    def pdescs(self) -> dict[str, ParamDesc]:
-        pdescs = {} if self._contraction is None \
-            else self._contraction.pdescs()
-        return pdescs | dict(
-            sigma_m=ParamScalarDesc(
-                title='Cross-section per unit mass',
-                desc="the cross-section of SIDM per unit mass",
-                min=0, unit='cm2 / g', default=1),
-            age=ParamScalarDesc(
-                title='Halo age', desc="the age of the halo", min=0,
-                unit='Gyr', default=10))
-
-    def check_profile(self, profile: SpheroidProfile) -> None:
-        if self._contraction is not None:
-            self._contraction.check_profile(profile)
-
-    def check_baryons(self, baryons: Sequence[str]) -> None:
-        # (of dark matter alone without baryons)
-        if self._contraction is not None:
-            self._contraction.check_baryons(baryons)
-
-    def vcirc2(
-            self,
-            R: np.ndarray,
-            halo_vcirc2: _VCirc2,
-            baryons_mass: _Mass,
-            profile: SpheroidProfile,
-            params: ParamValues,
-            context: MassContext
-    ) -> np.ndarray:
-        before = self._before(
-            halo_vcirc2, baryons_mass, profile, params, context)
-        core = self.core(
-            halo_vcirc2, baryons_mass, profile, params, context)
-        out = before(R)
-        if core is not None:
-            inside = (R > 0) & (R < core.r1)
-            out[inside] = G * core.mass(R[inside]) / R[inside]
-        return out
-
-    def core(
-            self,
-            halo_vcirc2: _VCirc2,
-            baryons_mass: _Mass,
-            profile: SpheroidProfile,
-            params: ParamValues,
-            context: MassContext
-    ) -> SIDMCore | None:
-        """
-        Return the isothermal core of the halo (see vcirc2 for the
-        arguments); None without scatterings within the age of the halo.
-
-        Raises
-        ------
-        ValueError
-            If the halo scatters at every radius (to 1e4 kpc), or no core
-            matches it at r1.
-        """
-        rate = (4 / np.sqrt(np.pi) * params['sigma_m'] * _SIGMA_UNIT
-                * params['age'] * _TIME_UNIT)
-        return _sidm_core(
-            self._before(halo_vcirc2, baryons_mass, profile, params,
-                         context),
-            baryons_mass, rate)
-
-    def _before(
-            self,
-            halo_vcirc2: _VCirc2,
-            baryons_mass: _Mass,
-            profile: SpheroidProfile,
-            params: ParamValues,
-            context: MassContext
-    ) -> _VCirc2:
-        """
-        Return the squared circular velocity of the halo before its core:
-        contracted by the baryons if it is.
-        """
-        if self._contraction is None:
-            return halo_vcirc2
-        contraction = self._contraction
-
-        def before(radii: np.ndarray) -> np.ndarray:
-            return contraction.vcirc2(
-                radii, halo_vcirc2, baryons_mass, profile, params, context)
-
-        return before
+    Raises
+    ------
+    ValueError
+        If the halo scatters at every radius (to 1e4 kpc), or no core
+        matches it at r1.
+    """
+    rate = (4 / np.sqrt(np.pi) * params['sigma_m'] * _SIGMA_UNIT
+            * params['age'] * _TIME_UNIT)
+    return _sidm_core(halo_vcirc2, baryons_mass, rate)
 
 
 def _sidm_core(
@@ -423,7 +353,7 @@ def _sidm_core(
         rate: float
 ) -> SIDMCore | None:
     """
-    Return the isothermal core of SIDM of a halo (see ResponseSIDM), of
+    Return the isothermal core of SIDM of a halo (see sidm_vcirc2), of
     the squared circular velocity of the halo before, the mass of the
     baryons within spheres and rate = (4 / sqrt(pi)) sigma_m age
     (kpc^3/Msun / (km/s)); None
@@ -676,9 +606,3 @@ def _contracted(
     out[valid] = halo_vcirc2(x_averaged) * x_averaged / averaged
     return out
 
-
-halo_response_parser = TypedParser(HaloResponse, [
-    ResponseBlumenthal86,
-    ResponseGnedin04,
-    ResponseCautun20,
-    ResponseSIDM], family='halo_response')

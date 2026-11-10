@@ -251,12 +251,14 @@ export const COMPONENT_STARTS: Record<string, Options> = {
 export const NUMBER_STARTS: Record<string, number> = { zmax: 6, order: 2, nblobs: 1, ngauss: 3 };
 
 // What some new items start with, by family and type, before the options
-// they require: a halo of an NFW profile, a mass disk of an exponential
-// surface, thin; self-absorption the same everywhere
+// they require: a halo of an NFW profile, a spheroid of a Sersic one, a
+// mass disk of an exponential surface, thin; self-absorption the same
+// everywhere
 export const ITEM_STARTS: Record<string, Record<string, Options>> = {
   opacity: { line: { coefficients: { type: 'uniform' } } },
   mass_component: {
-    spheroid: { profile: { type: 'nfw' } },
+    halo: { profile: { type: 'nfw' } },
+    spheroid: { profile: { type: 'sersic' } },
     disk: { surface: { type: 'exponential' }, vertical: { type: 'thin' } },
   },
 };

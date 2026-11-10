@@ -13,7 +13,7 @@ from gbkfit.model.components.spheroids._orbits import (
     OrbitIntegrator, PotentialTable, SkyGrid, potential_at, potential_table)
 from gbkfit.model.gravity import GravityNewton
 from gbkfit.model.mass import (
-    G, MassContext, MassModel, MassPoint, MassSpheroid, ProfileZhao,
+    G, Halo, MassContext, MassModel, MassPoint, ProfileZhao,
     ShapeFlattened)
 
 
@@ -33,9 +33,9 @@ GEOMETRY = dict(xpos=1.5, ypos=-1, posa=30, incl=60)
 def gravity(q=None):
     """The gravity of the spheroid (flattened to q, if given)."""
     model = MassModel([
-        MassSpheroid(
-            'stars', ProfileZhao(parameters='density_radius'),
-            None if q is None else ShapeFlattened()),
+        Halo(
+            'stars', ProfileZhao(parameterisation='density_radius'),
+            shape=None if q is None else ShapeFlattened()),
         MassPoint('bh')])
     params = dict(
         mass_stars_log_rho=np.log10(M / (2 * np.pi * A ** 3)),

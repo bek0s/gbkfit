@@ -469,9 +469,9 @@ class MassComponent(TypedSerializable, abc.ABC):
     def takes_shares(self) -> bool:
         """
         Check whether it takes the shares of the components in the squared
-        circular velocity of the mass (e.g. a spheroid given by its dark
-        fraction, see DarkFraction), which the gravity of its galaxy must
-        give (see Gravity.gives); here, it does not.
+        circular velocity of the mass (e.g. a halo given by its dark
+        fraction, see Halo), which the gravity of its galaxy must give
+        (see Gravity.gives); here, it does not.
         """
         return False
 

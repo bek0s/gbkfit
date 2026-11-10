@@ -106,7 +106,7 @@ def test_the_mass_takes_the_light_of_the_image(tmp_path):
     # (which lowers its rotation by 3 to 5 km/s, at 100 Mpc)
     write_truth(tmp_path / 'truth.fits')
     mass = dict(
-        mass=[dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
+        mass=[dict(type='halo', name='halo', profile=dict(type='nfw'))],
         distance=dict(type='direct'))
     kinematics = dict(
         vptraits=dict(type='mass', pressure_support=dict(type='jeans')),

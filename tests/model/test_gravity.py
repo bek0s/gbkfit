@@ -231,9 +231,9 @@ def test_mond_without_a0_is_newtonian_gravity(form):
         vptraits=dict(type='mass', pressure_support=dict(type='self_gravitating'))),
      POINT, "self_gravitating pressure support of the component 'gas'"),
     (DISK, MASS + [dict(
-        type='spheroid', name='halo', profile=dict(type='nfw'),
-        baryons=['stars'],
-        dark_fraction=dict(solve='log_m', bounds=[9.0, 15.0]))],
+        type='halo', name='halo', profile=dict(
+            type='nfw', parameterisation='dark_fraction_concentration'),
+        baryons=['stars'])],
      "the mass component 'halo' takes the shares"),
     (DISK, MASS + [dict(
         type='table', name='gas', radii=dict(value=[1, 2, 4], unit='kpc'),
@@ -274,8 +274,8 @@ def test_mond_needs_an_interpolation_function():
 
 # A halo and a thick disk of stars, for f(R) gravity
 HALO = dict(
-    type='spheroid', name='halo',
-    profile=dict(type='nfw', parameters='density_radius'))
+    type='halo', name='halo',
+    profile=dict(type='nfw', parameterisation='density_radius'))
 THICK = [dict(
     type='disk', name='stars', surface=dict(type='exponential'),
     vertical=dict(type='exponential')), HALO]
@@ -341,7 +341,7 @@ def test_hu_sawicki_sourced_by_a_contracted_halo():
     # its spherical shells: unscreened, the forces are 4/3 of the
     # Newtonian ones, as of a halo that does not
     contracted = HALO | dict(
-        baryons=['stars'], response=dict(type='blumenthal86'))
+        baryons=['stars'], contraction=dict(type='blumenthal86'))
     galaxy_ = galaxy(mass=[THICK[0], contracted], distance=DISTANCE,
                      gravity=dict(type='hu_sawicki'))
     R, z = np.array([1.0, 5, 20]), np.array([0.5, 0, 5])
@@ -439,15 +439,12 @@ GAS_MASS = dict(type='traced_disk', name='gas', component='gas')
 @pytest.mark.parametrize('disk, mass, message', [
     (DISK, MASS, r"\['stars'\] do not give it"),
     (DISK, 'user', r"\['mine'\] do not give it"),
-    (DISK, [THICK[0], HALO | dict(
-        baryons=['stars'], response=dict(type='blumenthal86'))],
-     r"\['halo'\] do not give it"),
     (THIN_DISK, [GAS_MASS], r"\['gas'\] do not give it")])
 def test_palatini_needs_the_density(tmp_path, disk, mass, message):
     # Of every mass component, when the galaxy is made: thin disks have
     # none in their plane (a disk that follows a thin component is thin);
-    # user components and halos that respond to their baryons do not
-    # give it; and a disk that follows a thick component does
+    # user components do not give it; and a disk that follows a thick
+    # component does, as do halos that respond to their baryons
     (tmp_path / 'curve.py').write_text(
         "def vcirc2(R, params):\n    return 100 * R\n")
     if mass == 'user':
@@ -457,13 +454,16 @@ def test_palatini_needs_the_density(tmp_path, disk, mass, message):
         galaxy(disk, mass=mass, distance=DISTANCE,
                gravity=dict(type='palatini'))
     galaxy(mass=[GAS_MASS], distance=DISTANCE, gravity=dict(type='palatini'))
+    galaxy(mass=[THICK[0], HALO | dict(
+        baryons=['stars'], contraction=dict(type='blumenthal86'))],
+        distance=DISTANCE, gravity=dict(type='palatini'))
 
 
 def test_palatini_takes_newtonian_shares():
     # (those of the dark fraction)
     with pytest.raises(ValueError, match="dark fraction"):
         galaxy(mass=[THICK[0], dict(
-            type='spheroid', name='halo', profile=dict(type='nfw'),
-            baryons=['stars'],
-            dark_fraction=dict(solve='log_m', bounds=[9.0, 15.0]))],
+            type='halo', name='halo', profile=dict(
+                type='nfw', parameterisation='dark_fraction_concentration'),
+            baryons=['stars'])],
             distance=DISTANCE, gravity=dict(type='palatini'))

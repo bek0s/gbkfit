@@ -34,7 +34,6 @@ CLASSES = [
     gbkfit.model.Galaxy,
     gbkfit.model.components.disks.Clouds,
     gbkfit.model.Line,
-    gbkfit.model.mass.DarkFraction,
     gbkfit.model.mass.MassModel,
     gbkfit.observation.Depth,
     gbkfit.observation.Exposure,

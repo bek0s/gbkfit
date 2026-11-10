@@ -1,37 +1,45 @@
 """
-The profiles of spherical dark matter halos (see spheroids.MassSpheroid,
-and halo_params for their parameters): a density rho_s f(r / r_s) of a
-given shape f, and its mass shape m(x) = int_0^x f(t) t^2 dt.
+The profiles of dark matter halos (see spheroids.Halo, and halo_params
+for their parameters): spherical densities of the values of their
+parameters and of the overdensity of their halo (see HaloProfile.at).
+Most are a density rho_s f(r / r_s) of a given shape f, with its mass
+shape m(x) = int_0^x f(t) t^2 dt (see ScaledHaloProfile); the nodewise
+halo is a density given at radial nodes (ProfileNodewiseHalo).
 """
 
 import abc
-from typing import Any
+from collections.abc import Sequence
+from typing import Annotated, Any
 
 import numpy as np
 import numpy.typing as npt
 import scipy.special
 
-from gbkfit.config import check_options
-from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.params.pdescs import ParamScalarDesc
+from gbkfit.config import TypedParser, TypedSerializable, Unit, check_options
+from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
+from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
+from . import _numerics
 from .base import MassContext
 from .halo_params import (
-    Overdensity, ParameterisationChoice, halo_scale_radius, halo_scales,
+    DARK_FRACTIONS, ParameterisationChoice, halo_scale_radius, halo_scales,
     parameterisation_pdescs)
-from .profiles import SpheroidProfile
 from .units import G
 
 
 __all__ = [
+    'HaloProfile',
     'ProfileBurkert',
     'ProfileCoreNFW',
     'ProfileDekelZhao',
     'ProfileEinasto',
-    'ProfileHalo',
     'ProfileNFW',
-    'ProfileTruncatedNFW',
+    'ProfileNodewiseHalo',
     'ProfilePseudoIsothermal',
-    'ProfileZhao'
+    'ProfileTruncatedNFW',
+    'ProfileZhao',
+    'ScaledHaloProfile',
+    'SphericalHalo',
+    'halo_profile_parser'
 ]
 
 
@@ -39,121 +47,193 @@ __all__ = [
 # their precision by cancellation)
 _X_SERIES = 1e-3
 
+# Below this |y|, expm1(y) / y is taken as its series (see _power_integral)
+_Y_SERIES = 1e-8
 
-class ProfileHalo(SpheroidProfile, abc.ABC):
+
+class SphericalHalo(abc.ABC):
     """
-    A spherical halo of density rho_s f(r / r_s): its parameters are those
-    of its parameterisation, and those of the shape of its profile.
+    A spherical halo at the values of its parameters (see HaloProfile.at):
+    its density, its mass within spheres and its potential at the
+    spherical radii r (kpc). It is the profile of its spheroid (see
+    shapes): it takes the values of the parameters of the spheroid and
+    its context, as profiles do (see profiles.SpheroidProfile), and uses
+    neither, since it has no parameters left.
+    """
+
+    @abc.abstractmethod
+    def density(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues | None = None,
+            context: MassContext | None = None
+    ) -> np.ndarray:
+        """Return its density (Msun/kpc^3) at the spherical radii r."""
+        pass
+
+    @abc.abstractmethod
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues | None = None,
+            context: MassContext | None = None
+    ) -> np.ndarray:
+        """Return its mass (Msun) within the spherical radii r."""
+        pass
+
+    def potential(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues | None = None,
+            context: MassContext | None = None
+    ) -> np.ndarray:
+        """
+        Return its potential ((km/s)^2) at the spherical radii r: 0 at
+        infinity, or at the centre if it is infinite at infinity (see
+        zero_at_infinity); here by quadrature.
+        """
+        return _numerics.spherical_potential(
+            self.density, self.enclosed_mass, np.asarray(r, dtype=float))
+
+    def zero_at_infinity(self) -> bool:
+        """
+        Check whether its potential is 0 at infinity (here), or at the
+        centre (of a mass that grows so fast that its potential at
+        infinity is infinite: the pseudo-isothermal halo).
+        """
+        return True
+
+
+class HaloProfile(TypedSerializable, abc.ABC):
+    """
+    The profile of a dark matter halo (see spheroids.Halo): a spherical
+    density of the values of its parameters and of the overdensity of
+    its halo (see at).
+    """
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type())
+
+    @abc.abstractmethod
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """Return its parameters, by name."""
+        pass
+
+    def parameterisation(self) -> str | None:
+        """
+        Return its parameterisation (see halo_params), if it has one;
+        here, it has none.
+        """
+        return None
+
+    @abc.abstractmethod
+    def at(
+            self, params: ParamValues, overdensity_density: float
+    ) -> SphericalHalo:
+        """
+        Return the halo of the values of its parameters and of D rho_ref
+        (Msun/kpc^3), the density of the overdensity of its halo at the
+        epoch of its galaxy (see halo_params.Overdensity).
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the values give no halo.
+        """
+        pass
+
+
+class ScaledHaloProfile(HaloProfile, abc.ABC):
+    """
+    A halo of density rho_s f(r / r_s): its parameters are those of its
+    parameterisation, and those of the shape of its profile.
 
     Parameters
     ----------
-    parameters : str, optional
+    parameterisation : str, optional
         Its parameterisation: 'mass_concentration' (the default),
-        'velocity_concentration' or 'density_radius' (see halo_params).
-    overdensity : str, optional
-        The overdensity of its mass and radius, for the parameterisations
-        of a mass or a velocity: e.g. '200c' (the default), '200m' or
-        'vir' (see halo_params.Overdensity).
+        'velocity_concentration', 'density_radius',
+        'dark_fraction_concentration' or 'dark_fraction_radius' (see
+        halo_params; its halo solves those of a dark fraction, see
+        spheroids.Halo).
 
     Raises
     ------
     ValueError
-        If the parameterisation or the overdensity is not valid, or an
-        overdensity is given for 'density_radius'.
+        If the parameterisation is not valid.
     """
 
     def dump(self) -> dict[str, Any]:
-        info = super().dump() | dict(parameters=self._parameters)
-        if self._overdensity is not None:
-            info.update(overdensity=str(self._overdensity))
-        return info
+        return super().dump() | dict(parameterisation=self._parameterisation)
 
     def __init__(
             self,
-            parameters: ParameterisationChoice = 'mass_concentration',
-            overdensity: str | None = None
+            parameterisation: ParameterisationChoice = 'mass_concentration'
     ):
-        check_options(ProfileHalo.__init__, locals())
-        if parameters == 'density_radius':
-            if overdensity is not None:
-                raise ValueError(
-                    "the parameters 'density_radius' take no overdensity")
-            self._overdensity = None
-        else:
-            self._overdensity = Overdensity(
-                '200c' if overdensity is None else overdensity)
-        self._parameters = parameters
+        check_options(ScaledHaloProfile.__init__, locals())
+        self._parameterisation = parameterisation
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        return parameterisation_pdescs(self._parameters) | self._shape_pdescs()
+        return parameterisation_pdescs(self._parameterisation) \
+            | self._shape_pdescs()
 
     def parameterisation(self) -> str:
-        """Return its parameterisation (see halo_params)."""
-        return self._parameters
+        return self._parameterisation
 
-    def halo_radius(self, params: ParamValues, context: MassContext) -> float:
+    def scales(
+            self,
+            params: ParamValues,
+            overdensity_density: float,
+            parameterisation: str | None = None
+    ) -> tuple[float, float]:
         """
-        Return its radius r_D (kpc), c r_s, of a parameterisation of a
-        mass or a velocity.
+        Return its scale density (Msun/kpc^3) and radius (kpc), of the
+        values of the parameters of its parameterisation, or of another
+        one (not of a dark fraction), and D rho_ref (see at).
+        """
+        parameterisation = parameterisation or self._parameterisation
+        r_s = halo_scale_radius(parameterisation, params, overdensity_density)
+        return halo_scales(
+            parameterisation, params, overdensity_density,
+            lambda c: self._scaling_mass(c, params, r_s))
+
+    def at(
+            self, params: ParamValues, overdensity_density: float
+    ) -> SphericalHalo:
+        """
+        See HaloProfile.at; not of a dark fraction, which its halo solves
+        (see at_scales).
 
         Raises
         ------
         ValueError
-            If its parameterisation is 'density_radius', of no r_D.
+            If its parameterisation is that of a dark fraction.
         """
-        if self._parameters == 'density_radius':
+        if self._parameterisation in DARK_FRACTIONS:
             raise ValueError(
-                "a halo of the parameters 'density_radius' has no radius r_D")
-        _, r_s = self.scales(params, context)
-        return params['c'] * r_s
+                f"the halo of the parameterisation "
+                f"{self._parameterisation!r} is solved for by its halo")
+        return self.at_scales(
+            *self.scales(params, overdensity_density), params)
 
-    def scales(
-            self, params: ParamValues, context: MassContext
-    ) -> tuple[float, float]:
-        """Return its scale density (Msun/kpc^3) and radius (kpc)."""
-        overdensity = self._overdensity_density(context)
-        shape = self._shape_values(params, halo_scale_radius(
-            self._parameters, params, overdensity))
-        return halo_scales(
-            self._parameters, params, overdensity,
-            lambda c: float(self._mass_shape(np.array(c, dtype=float), shape)))
+    def at_scales(
+            self, rho_s: float, r_s: float, params: ParamValues
+    ) -> SphericalHalo:
+        """
+        Return the halo of the scale density rho_s (Msun/kpc^3) and
+        radius r_s (kpc), and of the values of the parameters of the shape
+        of its profile.
+        """
+        return _ScaledHalo(self, rho_s, r_s, self._shape_values(params, r_s))
 
-    def density(
-            self,
-            r: np.ndarray,
-            params: ParamValues,
-            context: MassContext
-    ) -> np.ndarray:
-        rho_s, r_s = self.scales(params, context)
-        return rho_s * self._density_shape(
-            np.asarray(r, dtype=float) / r_s, self._shape_values(params, r_s))
-
-    def enclosed_mass(
-            self,
-            r: npt.ArrayLike,
-            params: ParamValues,
-            context: MassContext
-    ) -> np.ndarray:
-        rho_s, r_s = self.scales(params, context)
-        return 4 * np.pi * rho_s * r_s ** 3 * self._mass_shape(
-            np.asarray(r, dtype=float) / r_s, self._shape_values(params, r_s))
-
-    def potential(
-            self,
-            r: np.ndarray,
-            params: ParamValues,
-            context: MassContext
-    ) -> np.ndarray:
-        rho_s, r_s = self.scales(params, context)
-        phi = self._potential_shape(r / r_s, self._shape_values(params, r_s))
-        if phi is None:
-            return super().potential(r, params, context)
-        return 4 * np.pi * G * rho_s * r_s ** 2 * phi
-
-    def _overdensity_density(self, context: MassContext) -> float | None:
-        """Return D rho_ref (Msun/kpc^3) of its overdensity, if any."""
-        return None if self._overdensity is None \
-            else self._overdensity.density(context)
+    def _scaling_mass(
+            self, c: float, params: ParamValues, r_s: float) -> float:
+        """
+        Return m(c), the mass shape at the concentration c of the halo of
+        the scale radius r_s (see halo_params): that of its profile.
+        """
+        return float(self._mass_shape(
+            np.array(c, dtype=float), self._shape_values(params, r_s)))
 
     def _shape_values(
             self, params: ParamValues, r_s: float) -> dict[str, float]:
@@ -189,8 +269,68 @@ class ProfileHalo(SpheroidProfile, abc.ABC):
         """
         return None
 
+    def _zero_at_infinity(self) -> bool:
+        """
+        Check whether its potential is 0 at infinity (here), or at the
+        centre (see SphericalHalo.zero_at_infinity).
+        """
+        return True
 
-class ProfileNFW(ProfileHalo):
+
+class _ScaledHalo(SphericalHalo):
+    """
+    A halo of density rho_s f(r / r_s) at the values of its parameters
+    (see ScaledHaloProfile.at_scales).
+    """
+
+    def __init__(
+            self,
+            profile: ScaledHaloProfile,
+            rho_s: float,
+            r_s: float,
+            shape: dict[str, float]
+    ):
+        self._profile = profile
+        self._rho_s = rho_s
+        self._r_s = r_s
+        self._shape = shape
+
+    def density(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues | None = None,
+            context: MassContext | None = None
+    ) -> np.ndarray:
+        return self._rho_s * self._profile._density_shape(
+            np.asarray(r, dtype=float) / self._r_s, self._shape)
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues | None = None,
+            context: MassContext | None = None
+    ) -> np.ndarray:
+        return 4 * np.pi * self._rho_s * self._r_s ** 3 \
+            * self._profile._mass_shape(
+                np.asarray(r, dtype=float) / self._r_s, self._shape)
+
+    def potential(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues | None = None,
+            context: MassContext | None = None
+    ) -> np.ndarray:
+        r = np.asarray(r, dtype=float)
+        phi = self._profile._potential_shape(r / self._r_s, self._shape)
+        if phi is None:
+            return super().potential(r)
+        return 4 * np.pi * G * self._rho_s * self._r_s ** 2 * phi
+
+    def zero_at_infinity(self) -> bool:
+        return self._profile._zero_at_infinity()
+
+
+class ProfileNFW(ScaledHaloProfile):
     """
     The halo of Navarro, Frenk & White (1997): a density that falls as
     r^-1 inside its scale radius and as r^-3 outside. Its shape is f(x) =
@@ -199,8 +339,8 @@ class ProfileNFW(ProfileHalo):
 
     Parameters
     ----------
-    parameters, overdensity : optional
-        See ProfileHalo.
+    parameterisation : optional
+        See ScaledHaloProfile.
     """
 
     @staticmethod
@@ -227,7 +367,7 @@ class ProfileNFW(ProfileHalo):
             np.log1p(x_safe) / x_safe)
 
 
-class ProfileBurkert(ProfileHalo):
+class ProfileBurkert(ScaledHaloProfile):
     """
     The cored halo of Burkert (1995): a density that is flat inside its
     core radius and falls as r^-3 outside. Its shape is f(x) = 1 / ((1 +
@@ -237,8 +377,8 @@ class ProfileBurkert(ProfileHalo):
 
     Parameters
     ----------
-    parameters, overdensity : optional
-        See ProfileHalo.
+    parameterisation : optional
+        See ScaledHaloProfile.
     """
 
     @staticmethod
@@ -263,18 +403,20 @@ class ProfileBurkert(ProfileHalo):
              - 2 * np.arctan(x_safe)) / 4)
 
 
-class ProfilePseudoIsothermal(ProfileHalo):
+class ProfilePseudoIsothermal(ScaledHaloProfile):
     """
     The pseudo-isothermal sphere: a density that is flat inside its core
     radius and falls as r^-2 outside (of a flat rotation curve). Its shape
     is f(x) = 1 / (1 + x^2), m(x) = x - arctan(x). Its scale radius r_s is
     the core radius r_c, and its concentration r_D / r_c. Its mass grows
-    without bound, so its potential is infinite.
+    without bound, so its potential at infinity is infinite: it is given
+    relative to the centre, 4 pi G rho_s r_s^2 (ln(1 + x^2) / 2 +
+    arctan(x) / x - 1).
 
     Parameters
     ----------
-    parameters, overdensity : optional
-        See ProfileHalo.
+    parameterisation : optional
+        See ScaledHaloProfile.
     """
 
     @staticmethod
@@ -297,18 +439,18 @@ class ProfilePseudoIsothermal(ProfileHalo):
             x ** 3 / 3 - x ** 5 / 5 + x ** 7 / 7,
             x_safe - np.arctan(x_safe))
 
-    def potential(
-            self,
-            r: np.ndarray,
-            params: ParamValues,
-            context: MassContext
-    ) -> np.ndarray:
-        raise ValueError(
-            "the potential of a pseudo-isothermal sphere is infinite: its "
-            "mass grows without bound")
+    def _potential_shape(
+            self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
+        x_safe = np.maximum(x, _X_SERIES)
+        return np.where(
+            x < _X_SERIES, x ** 2 / 6 - x ** 4 / 20,
+            np.log1p(x_safe ** 2) / 2 + np.arctan(x_safe) / x_safe - 1)
+
+    def _zero_at_infinity(self) -> bool:
+        return False
 
 
-class ProfileEinasto(ProfileHalo):
+class ProfileEinasto(ScaledHaloProfile):
     """
     The halo of Einasto (1965): a density whose logarithmic slope steepens
     with radius, as r^alpha. Its shape is f(x) = exp(-(2 / a) (x^a - 1)),
@@ -320,8 +462,8 @@ class ProfileEinasto(ProfileHalo):
 
     Parameters
     ----------
-    parameters, overdensity : optional
-        See ProfileHalo.
+    parameterisation : optional
+        See ScaledHaloProfile.
     """
 
     @staticmethod
@@ -361,7 +503,7 @@ class ProfileEinasto(ProfileHalo):
         return -(mass_term + outer)
 
 
-class ProfileZhao(ProfileHalo):
+class ProfileZhao(ScaledHaloProfile):
     """
     The halo of Zhao (1996): a density of a free inner slope, outer slope
     and sharpness of the transition between them. Its shape is f(x) =
@@ -375,8 +517,8 @@ class ProfileZhao(ProfileHalo):
 
     Parameters
     ----------
-    parameters, overdensity : optional
-        See ProfileHalo.
+    parameterisation : optional
+        See ScaledHaloProfile.
     """
 
     @staticmethod
@@ -413,7 +555,7 @@ class ProfileZhao(ProfileHalo):
             p, (b - g) / a, p + 1, -x ** a)
 
 
-class ProfileDekelZhao(ProfileHalo):
+class ProfileDekelZhao(ScaledHaloProfile):
     """
     The halo of Dekel et al. 2017 and Freundlich et al. 2020: a cusp or a
     core of a free inner slope, falling as r^-3.5 outside. Its mean
@@ -429,8 +571,8 @@ class ProfileDekelZhao(ProfileHalo):
 
     Parameters
     ----------
-    parameters, overdensity : optional
-        See ProfileHalo.
+    parameterisation : optional
+        See ScaledHaloProfile.
     """
 
     @staticmethod
@@ -467,7 +609,7 @@ class ProfileDekelZhao(ProfileHalo):
                          - (1 - chi ** (5 - 2 * a)) / (5 - 2 * a))
 
 
-class ProfileCoreNFW(ProfileHalo):
+class ProfileCoreNFW(ScaledHaloProfile):
     """
     The cored NFW halo of Read, Agertz & Collins (2016, coreNFW): an NFW
     halo whose central cusp is flattened into a core. Its mass is that of
@@ -480,8 +622,8 @@ class ProfileCoreNFW(ProfileHalo):
 
     Parameters
     ----------
-    parameters, overdensity : optional
-        See ProfileHalo.
+    parameterisation : optional
+        See ScaledHaloProfile.
     """
 
     @staticmethod
@@ -492,13 +634,10 @@ class ProfileCoreNFW(ProfileHalo):
     def type_title() -> str:
         return 'Cored NFW'
 
-    def scales(
-            self, params: ParamValues, context: MassContext
-    ) -> tuple[float, float]:
-        # (those of the NFW halo it cores)
-        return halo_scales(
-            self._parameters, params, self._overdensity_density(context),
-            lambda c: float(_nfw_mass_shape(np.array(c, dtype=float))))
+    def _scaling_mass(
+            self, c: float, params: ParamValues, r_s: float) -> float:
+        # (that of the NFW halo it cores)
+        return float(_nfw_mass_shape(np.array(c, dtype=float)))
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
@@ -534,7 +673,7 @@ class ProfileCoreNFW(ProfileHalo):
         return _nfw_mass_shape(x) * np.tanh(x / shape['xc']) ** shape['n']
 
 
-class ProfileTruncatedNFW(ProfileHalo):
+class ProfileTruncatedNFW(ScaledHaloProfile):
     """
     An NFW halo cut off exponentially beyond a truncation radius, so that
     its mass is finite. It is the NFW halo of its parameters truncated as
@@ -548,8 +687,8 @@ class ProfileTruncatedNFW(ProfileHalo):
 
     Parameters
     ----------
-    parameters, overdensity : optional
-        See ProfileHalo.
+    parameterisation : optional
+        See ScaledHaloProfile.
     """
 
     @staticmethod
@@ -560,13 +699,10 @@ class ProfileTruncatedNFW(ProfileHalo):
     def type_title() -> str:
         return 'Truncated NFW'
 
-    def scales(
-            self, params: ParamValues, context: MassContext
-    ) -> tuple[float, float]:
-        # (those of the NFW halo it truncates)
-        return halo_scales(
-            self._parameters, params, self._overdensity_density(context),
-            lambda c: float(_nfw_mass_shape(np.array(c, dtype=float))))
+    def _scaling_mass(
+            self, c: float, params: ParamValues, r_s: float) -> float:
+        # (that of the NFW halo it truncates)
+        return float(_nfw_mass_shape(np.array(c, dtype=float)))
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(rt=ParamScalarDesc(
@@ -606,3 +742,185 @@ def _nfw_mass_shape(x: np.ndarray) -> np.ndarray:
         x < _X_SERIES,
         x ** 2 / 2 - 2 * x ** 3 / 3 + 3 * x ** 4 / 4 - 4 * x ** 5 / 5,
         np.log1p(x_safe) - x_safe / (1 + x_safe))
+
+
+class ProfileNodewiseHalo(HaloProfile):
+    """
+    A halo of a density given at radial nodes: 10^log_rho (Msun/kpc^3) at
+    each node (kpc), a power law between them (linear in log r and log
+    rho), continued within the first node and beyond the last; positive
+    by construction. Its mass and its potential are in closed form. Its
+    mass at the centre must be finite: its density there must fall less
+    steeply than r^-3 (or an error, ModelEvaluationError). Its potential
+    is 0 at infinity if its density beyond the last node falls more
+    steeply than r^-2, and from the centre otherwise (see
+    SphericalHalo.zero_at_infinity).
+
+    Parameters
+    ----------
+    nodes : Sequence of float
+        The radii (kpc) of its nodes: at least two, positive, increasing.
+
+    Raises
+    ------
+    ValueError
+        If the nodes are not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'nodewise'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Nodewise'
+
+    def dump(self) -> dict[str, Any]:
+        return super().dump() | dict(nodes=self._nodes.tolist())
+
+    def __init__(self, nodes: Annotated[Sequence[float], Unit('kpc')]):
+        check_options(ProfileNodewiseHalo.__init__, locals())
+        nodes = np.asarray(nodes, dtype=float)
+        if (nodes.ndim != 1 or len(nodes) < 2 or not np.all(np.isfinite(nodes))
+                or nodes[0] <= 0 or np.any(np.diff(nodes) <= 0)):
+            raise ValueError(
+                f"the nodes of a nodewise halo must be at least two radii, "
+                f"positive, increasing; they are {nodes.tolist()}")
+        self._nodes = nodes
+
+    def nodes(self) -> np.ndarray:
+        """Return the radii (kpc) of its nodes."""
+        return self._nodes
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return dict(log_rho=ParamVectorDesc(
+            len(self._nodes), title='Log density',
+            desc="log10 of the density at each node",
+            unit='dex(solMass / kpc3)', default=7))
+
+    def at(
+            self, params: ParamValues, overdensity_density: float
+    ) -> SphericalHalo:
+        log_rho = np.asarray(params['log_rho'], dtype=float)
+        slope = (log_rho[1] - log_rho[0]) \
+            / np.log10(self._nodes[1] / self._nodes[0])
+        if not slope > -3:
+            raise ModelEvaluationError(
+                f"the nodewise halo has an infinite mass at its centre: its "
+                f"density within its first node falls as r^{slope:.3g}, "
+                f"r^-3 or steeper")
+        return _NodewiseHalo(self._nodes, 10 ** log_rho)
+
+
+class _NodewiseHalo(SphericalHalo):
+    """
+    A halo of a density given at radial nodes, at the values of its
+    parameters (see ProfileNodewiseHalo): on each segment [a, b], the
+    density rho_ref (r / r_ref)^k, of the density rho_ref at the node
+    r_ref; the first segment is [0, nodes[0]] and the last [nodes[-1],
+    inf], of the power laws next to them.
+    """
+
+    def __init__(self, nodes: np.ndarray, rho: np.ndarray):
+        slopes = np.diff(np.log(rho)) / np.diff(np.log(nodes))
+        self._a = np.concatenate(([0.0], nodes))
+        self._b = np.concatenate((nodes, [np.inf]))
+        self._ref = np.concatenate((nodes[:1], nodes))
+        self._rho = np.concatenate((rho[:1], rho))
+        self._k = np.concatenate((slopes[:1], slopes, slopes[-1:]))
+
+    def density(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues | None = None,
+            context: MassContext | None = None
+    ) -> np.ndarray:
+        rr = np.asarray(r, dtype=float)[..., None]
+        on = (rr >= self._a) & (rr < self._b)
+        with np.errstate(divide='ignore'):
+            values = self._rho * (rr / self._ref) ** self._k
+        return np.sum(np.where(on, values, 0), axis=-1)
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues | None = None,
+            context: MassContext | None = None
+    ) -> np.ndarray:
+        # 4 pi rho_ref r_ref^3 int t^(k + 2) dt over each segment, from
+        # a / r_ref to x / r_ref, x = r within it (a before, b beyond)
+        x = np.clip(np.asarray(r, dtype=float)[..., None], self._a, self._b)
+        return 4 * np.pi * np.sum(
+            self._rho * self._ref ** 3 * self._spans(self._a, x, 3), axis=-1)
+
+    def potential(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues | None = None,
+            context: MassContext | None = None
+    ) -> np.ndarray:
+        # -G (M(<r) / r + 4 pi int_r^inf rho s ds) from infinity, and G (4
+        # pi int_0^r rho s ds - M(<r) / r) from the centre (of the same
+        # gradient G M(<r) / r^2, and 0 at the centre), each integral 4 pi
+        # rho_ref r_ref^2 int t^(k + 1) dt over the segments
+        r = np.asarray(r, dtype=float)
+        x = np.clip(r[..., None], self._a, self._b)
+        if self.zero_at_infinity():
+            spans = self._spans(x, self._b, 2)
+        else:
+            spans = self._spans(self._a, x, 2)
+        outer = 4 * np.pi * np.sum(
+            self._rho * self._ref ** 2 * spans, axis=-1)
+        mass = self.enclosed_mass(r)
+        inner = np.divide(mass, r, out=np.zeros_like(r), where=r > 0)
+        if self.zero_at_infinity():
+            return -G * (inner + outer)
+        return G * (outer - inner)
+
+    def zero_at_infinity(self) -> bool:
+        # (of a finite potential at infinity: beyond its last node, a
+        # density that falls more steeply than r^-2)
+        return self._k[-1] < -2
+
+    def _spans(
+            self, lower: np.ndarray, upper: np.ndarray, power: int
+    ) -> np.ndarray:
+        """
+        Return int t^(k + power - 1) dt from lower / r_ref to upper / r_ref
+        on each segment (0 where they meet).
+        """
+        p = self._k + power
+        with np.errstate(divide='ignore', invalid='ignore'):
+            span = _power_integral(np.log(upper / self._ref), p) \
+                - _power_integral(np.log(lower / self._ref), p)
+        return np.where(np.broadcast_to(lower == upper, span.shape), 0, span)
+
+
+def _power_integral(L: np.ndarray, p: np.ndarray) -> np.ndarray:
+    """
+    Return int_1^(e^L) t^(p - 1) dt = (e^(p L) - 1) / p, of L, the log
+    of the upper limit, and p (broadcast together): L (e^y - 1) / y, y =
+    p L, which tends to L as p goes to 0; at L = -inf (an upper limit of
+    0), -1 / p for p > 0 (and -inf otherwise), and at L = inf, -1 / p for
+    p < 0 (and inf otherwise).
+    """
+    y = p * L
+    with np.errstate(invalid='ignore', divide='ignore', over='ignore'):
+        ratio = np.where(
+            np.abs(y) < _Y_SERIES, 1 + y / 2, np.expm1(y) / y)
+        return np.select(
+            [np.isneginf(L), np.isposinf(L)],
+            [np.where(p > 0, -1 / p, -np.inf),
+             np.where(p < 0, -1 / p, np.inf)], L * ratio)
+
+
+halo_profile_parser = TypedParser(HaloProfile, [
+    ProfileNFW,
+    ProfileBurkert,
+    ProfilePseudoIsothermal,
+    ProfileEinasto,
+    ProfileZhao,
+    ProfileDekelZhao,
+    ProfileCoreNFW,
+    ProfileTruncatedNFW,
+    ProfileNodewiseHalo], family='halo_profile')

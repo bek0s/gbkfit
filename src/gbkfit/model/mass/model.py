@@ -17,7 +17,7 @@ from gbkfit.utils import iterutils
 from .base import MassComponent, MassContext
 from .disks import MassDisk, TracedDisk
 from .points import MassPoint
-from .spheroids import MassSpheroid, TracedSpheroid
+from .spheroids import Halo, MassSpheroid, TracedSpheroid
 from .tables import MassTable
 from .user import MassUser
 
@@ -33,6 +33,7 @@ mass_component_parser = TypedParser(MassComponent, [
     MassPoint,
     MassDisk,
     TracedDisk,
+    Halo,
     MassSpheroid,
     TracedSpheroid,
     MassTable,

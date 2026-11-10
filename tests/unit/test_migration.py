@@ -936,7 +936,8 @@ def test_halos_are_renamed():
         derived=dict(x='mass_b_a * 2 + mass_c_t_age'))
     config = dict(galaxies=[dict(mass=mass)], params=params)
     migration.migrate(config, 7)
-    assert mass[0]['profile'] == dict(type='truncated_nfw')
+    assert mass[0] == dict(
+        type='halo', name='a', profile=dict(type='truncated_nfw'))
     # (baryons that nothing used)
     assert 'baryons' not in mass[3] and mass[2]['baryons'] == ['a']
     assert params == dict(
@@ -944,6 +945,71 @@ def test_halos_are_renamed():
             mass_b_gamma=1.0, mass_b_rfdm=5, mass_c_age=10,
             mass_b_alpha=2.0),
         derived=dict(x='mass_b_gamma * 2 + mass_c_age'))
+
+
+def test_spheroids_of_dark_matter_are_halos():
+    # Version 8: a mass spheroid of the profile of a halo, or that
+    # responds to baryons or is given by a dark fraction, is a halo, of the
+    # parameterisation and the overdensity of its profile; its response
+    # is its contraction, or sidm; a dark fraction of its mass or its
+    # scale density is its parameterisation; gnedin04 has the parameters
+    # a0 and w, at its values before
+    mass = [
+        dict(type='disk', name='stars', surface=dict(type='exponential'),
+             vertical=dict(type='thin')),
+        dict(type='spheroid', name='bulge', profile=dict(type='sersic')),
+        dict(type='spheroid', name='a',
+             profile=dict(type='nfw', parameters='velocity_concentration',
+                          overdensity='200m'),
+             baryons=['stars'], response=dict(type='gnedin04')),
+        dict(type='spheroid', name='b', profile=dict(type='burkert'),
+             baryons=['stars'], response=dict(
+                 type='sidm', contraction=dict(type='blumenthal86')),
+             dark_fraction=dict(solve='v', bounds=[10, 300])),
+        dict(type='spheroid', name='c',
+             profile=dict(type='einasto', parameters='density_radius'),
+             baryons=['stars'],
+             dark_fraction=dict(solve='log_rho', bounds=[5, 9]))]
+    params = dict(properties=dict(
+        mass_a_v=150, mass_a_c=10, mass_b_c=8, mass_b_fdm=0.5,
+        mass_b_r_fdm=5, mass_b_sigma_m=1, mass_b_t_age=10))
+    config = dict(galaxies=[dict(mass=mass)], params=params)
+    changes = migration.migrate(config, 7)
+    assert mass[1] == dict(
+        type='spheroid', name='bulge', profile=dict(type='sersic'))
+    assert mass[2] == dict(
+        type='halo', name='a',
+        profile=dict(type='nfw', parameterisation='velocity_concentration'),
+        overdensity='200m', baryons=['stars'],
+        contraction=dict(type='gnedin04'))
+    assert mass[3] == dict(
+        type='halo', name='b',
+        profile=dict(type='burkert',
+                     parameterisation='dark_fraction_concentration'),
+        baryons=['stars'], contraction=dict(type='blumenthal86'), sidm=True)
+    assert mass[4] == dict(
+        type='halo', name='c',
+        profile=dict(type='einasto', parameterisation='dark_fraction_radius'),
+        baryons=['stars'])
+    assert list(params['properties']) == [
+        'mass_a_v', 'mass_a_c', 'mass_a_a0', 'mass_a_w', 'mass_b_c',
+        'mass_b_fdm', 'mass_b_rfdm', 'mass_b_sigma_m', 'mass_b_age']
+    assert params['properties']['mass_a_a0'] == 0.85
+    assert params['properties']['mass_a_w'] == 0.8
+    assert not any(c.message.startswith('by hand') for c in changes)
+    from gbkfit.model import mass_component_parser
+    mass_component_parser.load(mass)
+    # (a dark fraction of another parameter, or a luminous spheroid that
+    # responds: by hand)
+    mass = [
+        dict(type='spheroid', name='a', profile=dict(type='einasto'),
+             baryons=['b'], dark_fraction=dict(solve='alpha', bounds=[0, 1])),
+        dict(type='spheroid', name='b', profile=dict(type='sersic'),
+             baryons=['a'], response=dict(type='blumenthal86'))]
+    changes = migration.migrate(dict(galaxies=[dict(mass=mass)]), 7)
+    assert [c.message.split(':')[0] for c in changes
+            if c.message.startswith('by hand')] == ['by hand', 'by hand']
+    assert mass[0]['type'] == 'halo' and mass[1]['type'] == 'spheroid'
 
 
 def test_the_setups_of_a_project_rename_the_parameters_of_its_pieces(

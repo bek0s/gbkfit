@@ -18,7 +18,7 @@ galaxies:
     radius: {column: col1, unit: kpc}
     distance: 10
     velocity: {column: col5}
-  - type: spheroid
+  - type: halo
     name: halo
     profile: {type: nfw}
   distance: {type: direct, cosmology: Planck18}

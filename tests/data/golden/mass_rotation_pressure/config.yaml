@@ -23,7 +23,7 @@ galaxies:
     name: gas
     component: gas
     vertical: {type: sech2}
-  - type: spheroid
+  - type: halo
     name: halo
     profile: {type: nfw}
   distance: {type: direct, cosmology: Planck18}

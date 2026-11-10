@@ -22,14 +22,15 @@ from gbkfit.model import Extras, galaxy_parser
 from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
 from gbkfit.model.mass import (
-    DarkFraction, MassContext, MassDisk, MassModel, MassPoint, MassSpheroid,
-    MassUser, ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao,
-    ProfileEinasto, ProfileNFW, ProfileTruncatedNFW, ProfileNodewise,
-    ProfilePseudoIsothermal, ProfileSersic, ProfileZhao,
-    ResponseBlumenthal86, ResponseGnedin04, ResponseSIDM, ShapeFlattened,
-    SurfaceComponent, SurfaceExponential, SurfaceGaussianRing, TracedDisk,
-    SurfaceNodewise, VerticalComponent, VerticalSech, VerticalExponential,
-    VerticalGauss, VerticalSech2, VerticalThin, mass_component_parser)
+    ContractionBlumenthal86, ContractionGnedin04, Halo, HaloProfile,
+    MassContext, MassDisk, MassModel, MassPoint, MassSpheroid, MassUser,
+    Overdensity, ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao,
+    ProfileEinasto, ProfileNFW, ProfileNodewise, ProfileNodewiseHalo,
+    ProfilePseudoIsothermal, ProfileSersic, ProfileTruncatedNFW, ProfileZhao,
+    ShapeFlattened, SurfaceExponential, SurfaceGaussianRing, SurfaceNodewise,
+    TracedDisk, VerticalComponent, VerticalExponential, VerticalGauss,
+    VerticalSech, VerticalSech2, VerticalThin, mass_component_parser,
+    sidm_core)
 from gbkfit.model.mass import _disk_gravity
 from gbkfit.params import ModelEvaluationError
 
@@ -581,6 +582,28 @@ def test_disks_as_thick_as_a_component(surface, flare):
     np.testing.assert_allclose(result, expected, rtol=1e-6)
 
 
+# The density of the overdensity 200c (that of halos by default) at the
+# epoch of CONTEXT
+DENSITY_200C = Overdensity('200c').density(CONTEXT)
+
+
+def at(profile, params):
+    """
+    The profile of a halo at the values of its parameters (see
+    HaloProfile.at), of the overdensity 200c; or a profile of a spheroid,
+    as it is. Both take the values of the parameters and the context.
+    """
+    if isinstance(profile, HaloProfile):
+        return profile.at(params, DENSITY_200C)
+    return profile
+
+
+def spheroid(profile, shape=None):
+    """The mass spheroid of a profile: a halo, or a MassSpheroid."""
+    kind = Halo if isinstance(profile, HaloProfile) else MassSpheroid
+    return kind('s', profile, shape=shape)
+
+
 SPHERES = [
     (ProfileNFW('density_radius'), dict(log_rho=7, rs=10)),
     (ProfileBurkert('density_radius'), dict(log_rho=7.5, rs=4)),
@@ -593,7 +616,8 @@ SPHERES = [
     (ProfileSersic(), dict(log_m=10, re=1.5, n=0.6)),
     (ProfileSersic(), dict(log_m=10, re=1.5, n=4)),
     (ProfileCoreNFW('density_radius'), dict(log_rho=7, rs=10, rc=1.5, n=0.8)),
-    (ProfileTruncatedNFW('density_radius'), dict(log_rho=7, rs=10, rt=30))]
+    (ProfileTruncatedNFW('density_radius'), dict(log_rho=7, rs=10, rt=30)),
+    (ProfileNodewiseHalo([0.5, 2, 8, 30]), dict(log_rho=[8.5, 7.6, 6.5, 5]))]
 
 
 def test_cored_and_truncated_nfw_halos_change_the_nfw_halo():
@@ -606,15 +630,15 @@ def test_cored_and_truncated_nfw_halos_change_the_nfw_halo():
     core = ProfileCoreNFW()
     for n in (0.0, 0.7):
         cored = params | dict(rc=2.0, n=n)
-        assert core.scales(cored, CONTEXT) == nfw.scales(params, CONTEXT)
+        assert core.scales(cored, DENSITY_200C) \
+            == nfw.scales(params, DENSITY_200C)
         np.testing.assert_allclose(
-            core.enclosed_mass(radius, cored, CONTEXT),
-            nfw.enclosed_mass(radius, params, CONTEXT)
-            * np.tanh(radius / 2) ** n, rtol=1e-12)
-    truncated = ProfileTruncatedNFW()
+            at(core, cored).enclosed_mass(radius),
+            at(nfw, params).enclosed_mass(radius) * np.tanh(radius / 2) ** n,
+            rtol=1e-12)
     np.testing.assert_allclose(
-        truncated.enclosed_mass(radius, params | dict(rt=1e7), CONTEXT),
-        nfw.enclosed_mass(radius, params, CONTEXT), rtol=1e-5)
+        at(ProfileTruncatedNFW(), params | dict(rt=1e7)).enclosed_mass(radius),
+        at(nfw, params).enclosed_mass(radius), rtol=1e-5)
 
 
 @pytest.mark.parametrize('profile, params', SPHERES)
@@ -622,16 +646,17 @@ def test_spheres_are_their_densities(profile, params):
     # Their enclosed mass is the integral of their density (including
     # radii where the halos use their series), and their circular
     # velocity G M(<r) / r
-    sphere = MassSpheroid('s', profile)
+    sphere = spheroid(profile)
+    density = at(profile, params)
     radius = np.array([1e-4, 5e-4, 2e-3, 0.5, 2, 10, 100])
     expected = [
         scipy.integrate.quad(
-            lambda r: 4 * np.pi * r ** 2 * float(profile.density(
+            lambda r: 4 * np.pi * r ** 2 * float(density.density(
                 np.array(r), params, CONTEXT)),
-            0, radius_, points=[1e-5, 1e-3, 0.1], limit=400)[0]
+            0, radius_, points=[1e-5, 1e-3, 0.1, 0.5, 2, 8, 30], limit=400)[0]
         for radius_ in radius]
     np.testing.assert_allclose(
-        profile.enclosed_mass(radius, params, CONTEXT), expected, rtol=1e-6)
+        density.enclosed_mass(radius, params, CONTEXT), expected, rtol=1e-6)
     np.testing.assert_allclose(
         sphere.vcirc2(radius, params, CONTEXT),
         G * np.array(expected) / radius, rtol=1e-6)
@@ -639,8 +664,7 @@ def test_spheres_are_their_densities(profile, params):
 
 @pytest.mark.parametrize('sphere, params', [
     (MassPoint('p'), dict(log_m=8))] + [
-        (MassSpheroid('s', profile), params) for profile, params in SPHERES
-        if profile.type() != 'pseudo_isothermal'])
+        (spheroid(profile), params) for profile, params in SPHERES])
 def test_spheres_are_their_potentials(sphere, params):
     # The forces are -grad(potential), off the plane too
     R, z, step = np.array([0.7, 3, 12]), np.array([0.4, 2, 5]), 1e-4
@@ -656,10 +680,59 @@ def test_spheres_are_their_potentials(sphere, params):
         / (2 * step), rtol=1e-5)
 
 
-def test_the_potential_of_a_pseudo_isothermal_sphere_is_infinite():
-    with pytest.raises(ValueError, match="infinite"):
-        MassSpheroid('h', ProfilePseudoIsothermal()).potential(
-            1, 0, dict(log_m=12, c=10), CONTEXT)
+@pytest.mark.parametrize('profile, params', [
+    SPHERES[-1], SPHERES[2],
+    (SPHERES[-1][0], dict(log_rho=[8.5, 7.6, 6.5, 6]))])
+def test_potentials_are_zero_at_infinity_or_at_the_centre(profile, params):
+    # 0 at infinity: -int_r^inf G M / s^2 ds; of a mass that grows so
+    # fast that this is infinite (the pseudo-isothermal halo, and a
+    # nodewise halo whose density falls less steeply than r^-2 beyond its
+    # last node), 0 at the centre: int_0^r G M / s^2 ds
+    halo = at(profile, params)
+    radius = np.array([0.1, 0.7, 3, 20, 60])
+
+    def pull(s):
+        return G * float(halo.enclosed_mass(np.array(s))) / s ** 2
+    if halo.zero_at_infinity():
+        expected = [-scipy.integrate.quad(
+            pull, r, np.inf, epsrel=1e-12, limit=400)[0] for r in radius]
+    else:
+        expected = [scipy.integrate.quad(
+            pull, 0, r, points=[0.5, 2, 8, 30], epsrel=1e-12, limit=400)[0]
+            for r in radius]
+        assert halo.potential(np.array([0.0]))[0] == 0
+    assert halo.zero_at_infinity() == (params is SPHERES[-1][1])
+    np.testing.assert_allclose(halo.potential(radius), expected, rtol=1e-9)
+
+
+def test_nodewise_halos_are_power_laws_between_their_nodes():
+    # Its density at its nodes, a power law between them, continued within
+    # the first node and beyond the last
+    profile, params = SPHERES[-1]
+    halo = at(profile, params)
+    nodes, log_rho = profile.nodes(), np.array(params['log_rho'], float)
+    np.testing.assert_allclose(
+        np.log10(halo.density(nodes)), log_rho, rtol=1e-12)
+    np.testing.assert_allclose(
+        np.log10(halo.density(np.sqrt(nodes[:-1] * nodes[1:]))),
+        (log_rho[:-1] + log_rho[1:]) / 2, rtol=1e-12)
+    slope = (log_rho[1] - log_rho[0]) / np.log10(nodes[1] / nodes[0])
+    assert halo.density(np.array([0.05]))[0] == pytest.approx(
+        10 ** log_rho[0] * 0.1 ** slope, rel=1e-12)
+    slope = (log_rho[-1] - log_rho[-2]) / np.log10(nodes[-1] / nodes[-2])
+    assert halo.density(np.array([300.0]))[0] == pytest.approx(
+        10 ** log_rho[-1] * 10 ** slope, rel=1e-12)
+    info = dict(type='halo', name='h',
+                profile=dict(type='nodewise', nodes=[0.5, 2, 8, 30]))
+    loaded = mass_component_parser.load(copy.deepcopy(info))
+    assert mass_component_parser.dump(loaded)['profile'] == info['profile']
+    assert loaded.pdescs()['log_rho'].size() == 4
+    for nodes in ([0, 1], [2, 1], [1]):
+        with pytest.raises(ValueError, match="the nodes of a nodewise halo"):
+            ProfileNodewiseHalo(nodes)
+    # (a density that falls as r^-3 or steeper has no finite mass)
+    with pytest.raises(ModelEvaluationError, match="infinite mass"):
+        profile.at(dict(log_rho=[9, 5, 4, 3]), DENSITY_200C)
 
 
 def test_sersic_of_index_1_is_the_deprojected_exponential():
@@ -751,14 +824,16 @@ def test_nodewise_spheroids_load_and_check_their_nodes():
 
 def test_flattened_spheroids_of_axis_ratio_1_are_spheres():
     # (to 1e-11 for the halos; the tables of the Sersic profile, of its
-    # density and of its mass, agree to about 2e-8)
+    # density and of its mass, agree to about 2e-8; the kinks of the
+    # nodewise halo at its nodes, to some 1e-3)
     radius = np.array([0.01, 0.3, 2, 15, 120])
     for profile, params in SPHERES:
-        sphere = MassSpheroid('s', profile)
-        flat = MassSpheroid('s', profile, ShapeFlattened())
+        sphere = spheroid(profile)
+        flat = spheroid(profile, ShapeFlattened())
         np.testing.assert_allclose(
             flat.vcirc2(radius, params | dict(q=1), CONTEXT),
-            sphere.vcirc2(radius, params, CONTEXT), rtol=1e-7)
+            sphere.vcirc2(radius, params, CONTEXT),
+            rtol=1e-3 if isinstance(profile, ProfileNodewiseHalo) else 1e-7)
 
 
 def test_flattened_spheroids_are_their_potential_integrals():
@@ -767,13 +842,14 @@ def test_flattened_spheroids_are_their_potential_integrals():
     # ((1 + u)^2 sqrt(q^2 + u)), against the integral over m, oblate and
     # prolate
     profile, params = SPHERES[1]
+    density = at(profile, params)
     radius = np.array([0.5, 4, 30])
     for q in (0.3, 2.0):
-        flat = MassSpheroid('s', profile, ShapeFlattened())
+        flat = spheroid(profile, ShapeFlattened())
 
         def vcirc2(R):
             return 2 * np.pi * G * R ** 2 * scipy.integrate.quad(
-                lambda u: float(profile.density(
+                lambda u: float(density.density(
                     np.array(R / np.sqrt(1 + u)), params, CONTEXT))
                 / ((1 + u) ** 2 * np.sqrt(q ** 2 + u)), 0, np.inf,
                 epsabs=0, epsrel=1e-10, limit=400)[0]
@@ -789,13 +865,14 @@ def test_flattened_spheroids_give_their_forces_anywhere(q):
     # u)^(1/2)) and F_z = -2 pi G z int rho du / ((1 + u) (q^2 +
     # u)^(3/2)), m^2 = R^2 / (1 + u) + z^2 / (q^2 + u); a sphere at q = 1
     profile, params = SPHERES[1]
-    flat = MassSpheroid('s', profile, ShapeFlattened())
+    density = at(profile, params)
+    flat = spheroid(profile, ShapeFlattened())
     R, z = np.array([0.5, 4, 30, 3]), np.array([0.2, 3, 10, 0])
 
     def force(R, z, power, axis):
         def integrand(u):
             m = np.sqrt(R ** 2 / (1 + u) + z ** 2 / (q ** 2 + u))
-            return float(profile.density(np.array(m), params, CONTEXT)) \
+            return float(density.density(np.array(m), params, CONTEXT)) \
                 / ((1 + u) ** (2.5 - power) * (q ** 2 + u) ** power)
         return -2 * np.pi * G * axis * scipy.integrate.quad(
             integrand, 0, np.inf, epsabs=0, epsrel=1e-10, limit=400)[0]
@@ -807,7 +884,7 @@ def test_flattened_spheroids_give_their_forces_anywhere(q):
         force_z, [force(*point, 1.5, point[1]) for point in zip(R, z)],
         rtol=1e-7, atol=1e-12)
     if q == 1:
-        sphere = MassSpheroid('s', profile).forces(R, z, params, CONTEXT)
+        sphere = spheroid(profile).forces(R, z, params, CONTEXT)
         np.testing.assert_allclose(force_R, sphere[0], rtol=1e-7)
         np.testing.assert_allclose(force_z, sphere[1], rtol=1e-7)
 
@@ -816,7 +893,7 @@ def test_contracted_halos_pull_toward_their_centre():
     # Spherical shells: -v^2(r) / r^2 toward the centre, of the contracted
     # circular velocity at the spherical radius r
     model = mass_model(
-        BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
+        BARYONS + [responding_halo(contraction=dict(type='blumenthal86'))])
     halo = model.component('halo')
     values = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
     params = model.component_params('halo', values)
@@ -827,6 +904,52 @@ def test_contracted_halos_pull_toward_their_centre():
     scale = -halo.vcirc2(r, params, context) / r ** 2
     np.testing.assert_allclose(force_R, scale * R, rtol=1e-12)
     np.testing.assert_allclose(force_z, scale * z, rtol=1e-12)
+
+
+@pytest.mark.parametrize('responses', [
+    dict(contraction=dict(type='blumenthal86')),
+    dict(contraction=dict(type='gnedin04'), sidm=True, baryons=['stars']),
+    dict(contraction=dict(type='blumenthal86'),
+         profile=dict(type='pseudo_isothermal'))])
+def test_responding_halos_have_their_density_and_potential(responses):
+    # Of their mass within spheres: their density, dM/dr / (4 pi r^2),
+    # whose integral is their mass (to the precision of the spline of the
+    # mass of an SIDM core, some 1e-5); their potential, whose gradient is
+    # v^2 / r (to some 3e-6 of SIDM, of the edge of its core on the grid
+    # of the integral), and that far out of the halo before (0 at
+    # infinity, or at the centre for the pseudo-isothermal halo)
+    model = mass_model(BARYONS + [responding_halo(**responses)])
+    halo = model.component('halo')
+    values = BARYON_VALUES | {
+        name: desc.default() for name, desc in model.pdescs().items()
+        if name.startswith('mass_halo_')} | dict(
+        mass_halo_log_m=12, mass_halo_c=5)
+    params = model.component_params('halo', values)
+    context = model._context(halo, values, CONTEXT)
+    radii = np.geomspace(1e-5, 200, 4000)
+    density = halo.density(radii, np.zeros_like(radii), params, context)
+    mass = scipy.integrate.cumulative_simpson(
+        4 * np.pi * radii ** 3 * density, x=np.log(radii), initial=0)
+    r = np.array([0.3, 2, 10, 50])
+    np.testing.assert_allclose(
+        np.interp(r, radii, mass), halo.enclosed_mass(r, params, context),
+        rtol=1e-4 if halo.sidm() else 1e-5)
+    step = 1e-5
+
+    def potential(radius):
+        return halo.potential(radius, np.zeros_like(radius), params, context)
+    pull = (potential(r * np.exp(step)) - potential(r * np.exp(-step))) \
+        / (2 * np.sinh(step) * r)
+    np.testing.assert_allclose(
+        pull, halo.vcirc2(r, params, context) / r,
+        rtol=1e-5 if halo.sidm() else 1e-6)
+    # (0 at infinity: far out, where the halo barely responds; from the
+    # centre, that far out differs by the integral of the difference)
+    if at(halo.profile(), params).zero_at_infinity():
+        far = np.array([1e4])
+        assert potential(far)[0] == pytest.approx(
+            spheroid(halo.profile()).potential(far, 0, params, context)[0],
+            rel=1e-3)
 
 
 def test_flat_sersic_spheroids_are_thin_disks():
@@ -860,7 +983,17 @@ def test_spheroid_shapes_load_and_dump():
     assert mass_component_parser.dump(bulge) == info
     assert list(bulge.pdescs()) == ['log_m', 're', 'n', 'q']
     assert not bulge.spherical()
-    assert MassSpheroid('halo', ProfileNFW()).spherical()
+    assert Halo('halo', ProfileNFW()).spherical()
+
+
+def test_halos_and_spheroids_take_their_own_profiles():
+    # (no NFW bulge, no Sersic halo)
+    with pytest.raises(ConfigError, match="unknown type 'nfw'"):
+        mass_component_parser.load(
+            dict(type='spheroid', name='b', profile=dict(type='nfw')))
+    with pytest.raises(ConfigError, match="unknown type 'sersic'"):
+        mass_component_parser.load(
+            dict(type='halo', name='h', profile=dict(type='sersic')))
 
 
 # Baryons that halos respond to: a thin exponential disk and a bulge
@@ -876,7 +1009,7 @@ BARYON_VALUES = dict(
 def responding_halo(**options):
     """The configuration of an NFW halo that responds to BARYONS."""
     return dict(
-        type='spheroid', name='halo', profile=dict(type='nfw'),
+        type='halo', name='halo', profile=dict(type='nfw'),
         baryons=['stars', 'bulge']) | options
 
 
@@ -899,11 +1032,11 @@ def test_contracted_halos_keep_the_dark_matter_of_their_shells():
     # of the baryons within the virial radius, of 180 times the mean
     # matter density), against r' found by root finding at each radius
     model = mass_model(
-        BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
+        BARYONS + [responding_halo(contraction=dict(type='blumenthal86'))])
     params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
     radius = np.array([0.5, 2, 5, 20, 100])
     parts = model.vcirc2_components(radius, params, CONTEXT)
-    halo = MassSpheroid('h', ProfileNFW())
+    halo = Halo('h', ProfileNFW())
 
     def halo_mass(r):
         return float(halo.vcirc2(
@@ -924,31 +1057,37 @@ def test_contracted_halos_keep_the_dark_matter_of_their_shells():
         assert v2 == pytest.approx(halo_mass(initial) / r, rel=1e-9)
 
 
-def test_gnedin_and_cautun_contractions():
+@pytest.mark.parametrize('a0, w', [(0.85, 0.8), (1.6, 0.7)])
+def test_gnedin_and_cautun_contractions(a0, w):
     # Gnedin et al. (2004): within R = r_bar, the dark matter the halo had
     # within r_bar' of the shell r', with r' M(r_bar') / (1 - f_b) = r
-    # (M(r_bar') + M_b(R)), r_bar = 0.85 r_vir (r / r_vir)^0.8, of the
-    # virial radius of their calibration (180 times the mean matter
-    # density), for any parameterisation, against r' found by root
-    # finding; it contracts the halo less than Blumenthal et al. Cautun et
-    # al. (2020): its formula, of the baryon fraction of the context
-    params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
+    # (M(r_bar') + M_b(R)), r_bar = a0 r_vir (r / r_vir)^w (by default 0.85
+    # and 0.8), of the virial radius of their calibration (180 times the
+    # mean matter density), for any parameterisation, against r' found by
+    # root finding; by default, it contracts the halo less than Blumenthal
+    # et al. Cautun et al. (2020): its formula, of the baryon fraction of
+    # the context
+    params = BARYON_VALUES | dict(
+        mass_halo_log_m=12, mass_halo_c=5, mass_halo_a0=a0, mass_halo_w=w)
     radius = np.array([0.5, 2, 5, 20])
     context = dataclasses.replace(CONTEXT, baryon_fraction=0.16)
     models = {
-        name: mass_model(BARYONS + [responding_halo(response=dict(type=name))])
+        name: mass_model(BARYONS + [
+            responding_halo(contraction=dict(type=name))])
         for name in ('blumenthal86', 'gnedin04', 'cautun20')}
     parts = {
-        name: model.vcirc2_components(radius, params, context)
+        name: model.vcirc2_components(
+            radius, {key: value for key, value in params.items()
+                     if key in model.pdescs()}, context)
         for name, model in models.items()}
-    halo, halo_params = MassSpheroid('h', ProfileNFW()), dict(log_m=12, c=5)
+    halo, halo_params = Halo('h', ProfileNFW()), dict(log_m=12, c=5)
 
     def halo_mass(r):
         return float(halo.vcirc2(np.array([r]), halo_params, context)[0]) * r
     r_vir = virial_radius(halo_mass, context)
 
     def averaged(r):
-        return 0.85 * r_vir * (r / r_vir) ** 0.8
+        return a0 * r_vir * (r / r_vir) ** w
 
     def mass(r):
         return halo_mass(averaged(r))
@@ -960,48 +1099,54 @@ def test_gnedin_and_cautun_contractions():
     keep = 1 - baryons_at(r_vir) / (baryons_at(r_vir) + halo_mass(r_vir))
     baryons = np.array([baryons_at(R) for R in radius])
     for R, baryon, v2 in zip(radius, baryons, parts['gnedin04']['halo']):
-        r = r_vir * (R / (0.85 * r_vir)) ** (1 / 0.8)
+        r = r_vir * (R / (a0 * r_vir)) ** (1 / w)
         initial = scipy.optimize.brentq(
             lambda x: x * mass(x) / keep - r * (mass(x) + baryon),
             r, 1e4 * r, xtol=1e-14, rtol=1e-15)
         assert v2 == pytest.approx(mass(initial) / R, rel=1e-9)
     before = halo.vcirc2(radius, halo_params, context)
-    assert np.all(before < parts['gnedin04']['halo'])
-    assert np.all(parts['gnedin04']['halo'] < parts['blumenthal86']['halo'])
+    if (a0, w) == (0.85, 0.8):
+        assert np.all(before < parts['gnedin04']['halo'])
+        assert np.all(
+            parts['gnedin04']['halo'] < parts['blumenthal86']['halo'])
     eta = baryons / radius * 0.84 / (0.16 * before)
     np.testing.assert_allclose(
         parts['cautun20']['halo'],
         before * (0.45 + 0.38 * (eta + 1.16) ** 0.53), rtol=1e-10)
     with pytest.raises(ValueError, match="cosmic baryon fraction"):
-        mass_model(BARYONS + [responding_halo(response=dict(type='cautun20'))]
-                   ).vcirc2(radius, params, CONTEXT)
+        mass_model(BARYONS + [
+            responding_halo(contraction=dict(type='cautun20'))]
+        ).vcirc2(radius, BARYON_VALUES | dict(
+            mass_halo_log_m=12, mass_halo_c=5), CONTEXT)
     # (any parameterisation: the virial radius is that of the profile)
-    MassSpheroid('h', ProfileNFW('density_radius'), baryons=['stars'],
-                 response=ResponseGnedin04())
+    Halo('h', ProfileNFW('density_radius'), baryons=['stars'],
+         contraction=ContractionGnedin04())
 
 
-@pytest.mark.parametrize('profile, solve, bounds, given', [
-    ('nfw', 'log_m', [9, 15], dict(mass_halo_c=8)),
-    ('burkert', 'c', [1, 100], dict(mass_halo_log_m=11.8))])
+@pytest.mark.parametrize('profile, parameterisation, given', [
+    ('nfw', 'dark_fraction_concentration', dict(mass_halo_c=8)),
+    ('burkert', 'dark_fraction_radius', dict(mass_halo_rs=6))])
 @pytest.mark.parametrize(
-    'response', [{}, dict(response=dict(type='blumenthal86'))])
-def test_dark_fractions_set_a_parameter_of_the_halo(
-        profile, solve, bounds, given, response):
-    model = mass_model(BARYONS + [responding_halo(
-        profile=dict(type=profile),
-        dark_fraction=dict(solve=solve, bounds=bounds)) | response])
-    assert f'mass_halo_{solve}' not in model.pdescs()
+    'responses', [{}, dict(contraction=dict(type='blumenthal86'))])
+def test_dark_fractions_set_the_scale_of_the_halo(
+        profile, parameterisation, given, responses):
+    # The scale that gives the fraction: the mass of the halo at its
+    # concentration, or its scale density at its scale radius, of the
+    # halo after its contraction if it has one
+    model = mass_model(BARYONS + [responding_halo(profile=dict(
+        type=profile, parameterisation=parameterisation)) | responses])
+    names = set(model.pdescs())
+    assert {'mass_halo_fdm', 'mass_halo_rfdm'} <= names
+    assert not {'mass_halo_log_m', 'mass_halo_log_rho'} & names
     params = BARYON_VALUES | given | dict(mass_halo_fdm=0.3, mass_halo_rfdm=5)
     parts = model.vcirc2_components(np.array([5.0]), params, CONTEXT)
     v2, baryon_v2 = parts['halo'][0], parts['stars'][0] + parts['bulge'][0]
     assert v2 / (v2 + baryon_v2) == pytest.approx(0.3, rel=1e-10)
     # (where no halo gives it, no model: a point fitters cannot evaluate)
-    with pytest.raises(ModelEvaluationError, match="no value of"):
-        model.vcirc2(
-            np.array([5.0]), params | dict(mass_halo_fdm=0.999), CONTEXT)
-    with pytest.raises(ModelEvaluationError, match="leaves its baryons"):
-        model.vcirc2(
-            np.array([5.0]), params | dict(mass_halo_fdm=1.0), CONTEXT)
+    for fdm in (0.0, 1.0):
+        with pytest.raises(ModelEvaluationError, match=r"within \(0, 1\)"):
+            model.vcirc2(
+                np.array([5.0]), params | dict(mass_halo_fdm=fdm), CONTEXT)
 
 
 def test_responding_halos_are_checked(tmp_path):
@@ -1014,35 +1159,42 @@ def test_responding_halos_are_checked(tmp_path):
             dict(type='user', name='mine', file=str(tmp_path / 'curve.py'),
                  func='vcirc2'),
             responding_halo(
-                baryons=['mine'], response=dict(type='blumenthal86'))])
-    with pytest.raises(ValueError, match="needs the baryons"):
-        MassSpheroid('h', ProfileNFW(), response=ResponseBlumenthal86())
-    with pytest.raises(ValueError, match="spherical shape"):
-        MassSpheroid(
-            'h', ProfileNFW(), ShapeFlattened(), baryons=['stars'],
-            response=ResponseBlumenthal86())
-    with pytest.raises(ValueError, match="not a parameter"):
-        MassSpheroid('h', ProfileNFW(), baryons=['stars'],
-                     dark_fraction=DarkFraction('q', [0.1, 1]))
+                baryons=['mine'], contraction=dict(type='blumenthal86'))])
+    with pytest.raises(ValueError, match="a contraction needs the baryons"):
+        Halo('h', ProfileNFW(), contraction=ContractionBlumenthal86())
+    with pytest.raises(ValueError, match="a dark fraction needs the baryons"):
+        Halo('h', ProfileNFW('dark_fraction_radius'))
+    for options in (dict(baryons=['stars'],
+                         contraction=ContractionBlumenthal86()),
+                    dict(sidm=True)):
+        with pytest.raises(ValueError, match="spherical shape"):
+            Halo('h', ProfileNFW(), shape=ShapeFlattened(), **options)
     with pytest.raises(ValueError, match="does not have"):
-        mass_model([responding_halo(response=dict(type='blumenthal86'))])
+        mass_model([responding_halo(contraction=dict(type='blumenthal86'))])
     with pytest.raises(ValueError, match="in a loop"):
         mass_model([
-            responding_halo(
-                name='a', baryons=['b'], response=dict(type='blumenthal86')),
-            responding_halo(
-                name='b', baryons=['a'], response=dict(type='blumenthal86'))])
+            responding_halo(name='a', baryons=['b'],
+                            contraction=dict(type='blumenthal86')),
+            responding_halo(name='b', baryons=['a'],
+                            contraction=dict(type='blumenthal86'))])
     # (baryons that nothing uses)
-    with pytest.raises(ValueError, match="it has neither: leave them out"):
-        MassSpheroid('h', ProfileNFW(), baryons=['stars'])
+    with pytest.raises(ValueError, match="it has none of these"):
+        Halo('h', ProfileNFW(), baryons=['stars'])
+
+    class Clash(ContractionBlumenthal86):
+        def pdescs(self):
+            return dict(c=ProfileNFW().pdescs()['c'])
+    with pytest.raises(ValueError, match=r"repeat: \['c'\]"):
+        Halo('h', ProfileNFW(), baryons=['stars'], contraction=Clash())
+    # (SIDM of dark matter alone)
+    assert 'sigma_m' in Halo('h', ProfileNFW(), sidm=True).pdescs()
     info = responding_halo(
-        response=dict(type='blumenthal86'),
-        dark_fraction=dict(solve='log_m', bounds=[9.0, 15.0]))
+        profile=dict(type='nfw',
+                     parameterisation='dark_fraction_concentration'),
+        overdensity='200m', contraction=dict(type='gnedin04'), sidm=True)
     dumped = mass_component_parser.dump(
         mass_component_parser.load(copy.deepcopy(info)))
-    assert {key: dumped[key] for key in (
-        'baryons', 'response', 'dark_fraction')} == {
-        key: info[key] for key in ('baryons', 'response', 'dark_fraction')}
+    assert dumped == info | dict(shape=dict(type='sphere'))
     assert mass_component_parser.dump(
         mass_component_parser.load(copy.deepcopy(dumped))) == dumped
 
@@ -1056,21 +1208,20 @@ TIME_UNIT = 1.0227121650456948
 @pytest.mark.parametrize('with_baryons', [False, True])
 def test_sidm_cores(with_baryons):
     # The isothermal core of SIDM (Jiang et al. 2023): at r1, one
-    # scattering in the age, (4 / sqrt(pi)) rho v sigma_m t_age = 1 (rho
+    # scattering in the age, (4 / sqrt(pi)) rho v sigma_m age = 1 (rho
     # and the Jeans velocity dispersion v of the halo before, in the
     # potential of the halo and of the baryons); within, the isothermal
     # Jeans-Poisson equation (solved here by solve_ivp), of the density and
     # the mass of the halo before at r1; outside, the halo before
     baryons = [BARYONS[0]] if with_baryons else []
-    halo = dict(type='spheroid', name='halo', profile=dict(type='nfw'),
-                baryons=['stars'] if with_baryons else [],
-                response=dict(type='sidm'))
+    halo = dict(type='halo', name='halo', profile=dict(type='nfw'),
+                baryons=['stars'] if with_baryons else [], sidm=True)
     model = mass_model(baryons + [halo])
     params = BARYON_VALUES | dict(
         mass_halo_log_m=11, mass_halo_c=15, mass_halo_sigma_m=1,
         mass_halo_age=10)
     own = dict(log_m=11, c=15, sigma_m=1, age=10)
-    before = MassSpheroid('h', ProfileNFW())
+    before = Halo('h', ProfileNFW())
 
     def halo_v2(r):
         return before.vcirc2(r, own, CONTEXT)
@@ -1085,16 +1236,16 @@ def test_sidm_cores(with_baryons):
     def baryon_mass(r):
         return float(baryons_mass(np.array([r]))[0])
 
-    core = model.component('halo').response().core(
-        halo_v2, baryons_mass, ProfileNFW(), own, CONTEXT)
+    core = sidm_core(halo_v2, baryons_mass, own)
     r1 = core.r1
 
     def mass(r, v2):
         return v2(np.array([r]))[0] * r / G
 
-    rho1 = ProfileNFW().density(np.array([r1]), own, CONTEXT)[0]
+    nfw = at(ProfileNFW(), own)
+    rho1 = nfw.density(np.array([r1]))[0]
     pressure = scipy.integrate.quad(
-        lambda r: ProfileNFW().density(np.array([r]), own, CONTEXT)[0] * G
+        lambda r: nfw.density(np.array([r]))[0] * G
         * (mass(r, halo_v2) + baryon_mass(r)) / r ** 2,
         r1, np.inf, epsrel=1e-10, limit=400)[0]
     scatterings = (4 / np.sqrt(np.pi) * rho1 * np.sqrt(pressure / rho1)
@@ -1125,22 +1276,6 @@ def test_sidm_cores(with_baryons):
     np.testing.assert_array_equal(without, halo_v2(R))
 
 
-def test_sidm_responses_are_checked():
-    # Of dark matter alone, or with a contraction of the halo before, which
-    # needs baryons and is not SIDM
-    info = responding_halo(response=dict(
-        type='sidm', contraction=dict(type='gnedin04')))
-    dumped = mass_component_parser.dump(
-        mass_component_parser.load(copy.deepcopy(info)))
-    assert dumped['response'] == info['response']
-    MassSpheroid('h', ProfileNFW(), response=ResponseSIDM())
-    with pytest.raises(ValueError, match="needs the baryons"):
-        MassSpheroid('h', ProfileNFW(), response=ResponseSIDM(
-            ResponseBlumenthal86()))
-    with pytest.raises(ValueError, match="is not SIDM"):
-        ResponseSIDM(ResponseSIDM())
-
-
 HALOS = [
     ProfileNFW, ProfileBurkert, ProfilePseudoIsothermal, ProfileEinasto,
     ProfileZhao, ProfileDekelZhao]
@@ -1155,11 +1290,12 @@ def test_halos_have_their_mass_and_concentration(halo_class, overdensity):
     # The mean density within r_D is D rho_ref, the mass within it M_D,
     # and its velocity V_D: given by (M_D, c) or (V_D, c), a halo is the
     # same
-    profile = halo_class('mass_concentration', overdensity)
-    halo = MassSpheroid('h', profile)
+    profile = halo_class('mass_concentration')
+    halo = Halo('h', profile, overdensity=overdensity)
     shape = SHAPES.get(profile.type(), {})
     params = dict(log_m=12, c=9) | shape
-    rho_s, r_s = profile.scales(params, CONTEXT)
+    rho_s, r_s = profile.scales(
+        params, Overdensity(overdensity).density(CONTEXT))
     r_d = 9 * r_s
     mass = 1e12
     reference = dict(
@@ -1172,26 +1308,29 @@ def test_halos_have_their_mass_and_concentration(halo_class, overdensity):
     else:
         density = float(overdensity[:-1]) * reference[overdensity[-1]]
     assert mass / (4 / 3 * np.pi * r_d ** 3) == pytest.approx(density)
-    assert profile.enclosed_mass(r_d, params, CONTEXT) == pytest.approx(mass)
-    by_velocity = MassSpheroid(
-        'h', halo_class('velocity_concentration', overdensity))
+    assert halo.enclosed_mass(r_d, params, CONTEXT) == pytest.approx(mass)
+    by_velocity = Halo(
+        'h', halo_class('velocity_concentration'), overdensity=overdensity)
     radius = np.array([0.5, 5, 50])
     np.testing.assert_allclose(
         by_velocity.vcirc2(
             radius, dict(v=np.sqrt(G * mass / r_d), c=9) | shape, CONTEXT),
         halo.vcirc2(radius, params, CONTEXT), rtol=1e-10)
+    # (an overdensity for every parameterisation)
+    assert Halo('h', halo_class('density_radius'), overdensity=overdensity
+                ).overdensity().density(CONTEXT) == pytest.approx(density)
 
 
 def test_dekel_zhao_has_the_slopes_of_its_shape():
     # Its logarithmic slope is (a + 3.5 x^(1/2)) / (1 + x^(1/2)): a at the
     # centre, -3.5 far out, and -2 at ((2 - a) / 1.5)^2 r_s
-    profile = ProfileDekelZhao('density_radius')
     params = dict(log_rho=7, rs=5, gamma=0.7)
+    halo = at(ProfileDekelZhao('density_radius'), params)
     x = np.array([1e-6, 0.3, ((2 - 0.7) / 1.5) ** 2, 4, 1e6])
     step = 1e-5
 
     def log_density(r):
-        return np.log(profile.density(r, params, CONTEXT))
+        return np.log(halo.density(r))
     slope = (log_density(5 * x * (1 + step))
              - log_density(5 * x * (1 - step))) \
         / (np.log1p(step) - np.log1p(-step))
@@ -1202,21 +1341,22 @@ def test_dekel_zhao_has_the_slopes_of_its_shape():
 def test_zhao_is_nfw_for_its_shape():
     radius = np.array([1e-3, 0.5, 5, 50, 500])
     np.testing.assert_allclose(
-        MassSpheroid('h', ProfileZhao()).vcirc2(
+        Halo('h', ProfileZhao()).vcirc2(
             radius, dict(log_m=12, c=9, alpha=1, beta=3, gamma=1), CONTEXT),
-        MassSpheroid('h', ProfileNFW()).vcirc2(
+        Halo('h', ProfileNFW()).vcirc2(
             radius, dict(log_m=12, c=9), CONTEXT),
         rtol=1e-10)
 
 
-@pytest.mark.parametrize('options, error, message', [
-    (dict(parameters='mass'), ValueError, "'parameters' must be one of"),
-    (dict(overdensity='200x'), ValueError, "overdensity must be"),
-    (dict(parameters='density_radius', overdensity='200c'), ValueError,
-     "take no overdensity")])
-def test_halo_options_are_checked(options, error, message):
-    with pytest.raises(error, match=message):
-        ProfileNFW(**options)
+def test_halo_options_are_checked():
+    with pytest.raises(ValueError, match="'parameterisation' must be one of"):
+        ProfileNFW(parameterisation='mass')
+    with pytest.raises(ValueError, match="overdensity must be"):
+        Halo('h', ProfileNFW(), overdensity='200x')
+    # (a dark fraction is the halo's to solve)
+    with pytest.raises(ValueError, match="solved for by its halo"):
+        ProfileNFW('dark_fraction_radius').at(
+            dict(fdm=0.5, rfdm=5, rs=10), DENSITY_200C)
 
 
 def sphere_integral(density, radius, epsrel=1e-10):
@@ -1304,7 +1444,7 @@ def test_flattened_spheroids_enclose_the_mass_of_their_density(q):
     # Oblate, a sphere and prolate: the integral of the density over the
     # sphere; at q = 1, the mass of the profile
     profile, params = SPHERES[1]
-    flat = MassSpheroid('s', profile, ShapeFlattened())
+    flat = spheroid(profile, ShapeFlattened())
     params = params | dict(q=q)
     radius = np.array([0.5, 4, 30])
     expected = [sphere_integral(
@@ -1314,7 +1454,8 @@ def test_flattened_spheroids_enclose_the_mass_of_their_density(q):
     if q == 1:
         np.testing.assert_allclose(
             flat.enclosed_mass(radius, params, CONTEXT),
-            profile.enclosed_mass(radius, params, CONTEXT), rtol=1e-12)
+            at(profile, params).enclosed_mass(radius, params, CONTEXT),
+            rtol=1e-12)
 
 
 def test_user_component_gives_its_enclosed_mass_by_a_function(tmp_path):
@@ -1377,7 +1518,7 @@ def test_user_component_gives_its_forces_by_a_function(tmp_path):
 def test_mass_model_adds_its_components():
     model = MassModel([
         MassDisk('stars', SurfaceExponential(), VerticalThin()),
-        MassSpheroid('halo', ProfileNFW())])
+        Halo('halo', ProfileNFW())])
     assert list(model.pdescs()) == [
         'mass_stars_log_m', 'mass_stars_rd', 'mass_halo_log_m', 'mass_halo_c']
     params = dict(
@@ -1386,7 +1527,7 @@ def test_mass_model_adds_its_components():
     radius = np.array([0, 1, 5, 20])
     expected = (
         exponential_disk().vcirc2(radius, dict(log_m=10.5, rd=3), CONTEXT)
-        + MassSpheroid('h', ProfileNFW()).vcirc2(
+        + Halo('h', ProfileNFW()).vcirc2(
             radius, dict(log_m=12, c=8), CONTEXT))
     np.testing.assert_allclose(
         model.vcirc2(radius, params, CONTEXT), expected, rtol=1e-12)
@@ -1435,9 +1576,9 @@ MASS = [
     dict(type='disk', name='gas',
          surface=dict(type='nodewise', nodes=[0.0, 0.3, 0.6, 1.2]),
          vertical=dict(type='thin')),
-    dict(type='spheroid', name='halo', profile=dict(
-        type='pseudo_isothermal', parameters='density_radius'),
-        shape=dict(type='sphere'))]
+    dict(type='halo', name='halo', profile=dict(
+        type='pseudo_isothermal', parameterisation='density_radius'),
+        overdensity='200c', shape=dict(type='sphere'))]
 
 DISTANCE = dict(type='direct', cosmology='Planck18')
 
@@ -1767,8 +1908,8 @@ def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
     if thick:
         disk = with_traits(disk, rhtraits=dict(type='sech2', zmax=8))
         properties |= dict(hi_rht_s=1)
-    halo = dict(type='spheroid', name='halo', profile=dict(
-        type='pseudo_isothermal', parameters='density_radius'))
+    halo = dict(type='halo', name='halo', profile=dict(
+        type='pseudo_isothermal', parameterisation='density_radius'))
     halo_properties = dict(distance=10, mass_halo_log_rho=8, mass_halo_rs=1)
 
     def galaxy(gas):
@@ -1806,8 +1947,9 @@ def test_a_disk_rotates_in_its_own_thin_mass_disk():
         components=[disk],
         mass=[dict(type='traced_disk', name='hi', component='gas',
                    vertical=dict(type='thin')),
-              dict(type='spheroid', name='halo', profile=dict(
-                  type='pseudo_isothermal', parameters='density_radius'))],
+              dict(type='halo', name='halo', profile=dict(
+                  type='pseudo_isothermal',
+                  parameterisation='density_radius'))],
         distance=copy.deepcopy(DISTANCE)))
     params = {f'gas_{key}': value
               for key, value in DISK_PROPERTIES.items()} | dict(
@@ -2017,8 +2159,8 @@ def test_pressure_support_takes_the_density_of_a_mass_component(mode):
              vertical=dict(type='sech2')),
         dict(type='spheroid', name='stars', profile=dict(type='sersic'),
              shape=dict(type='flattened')),
-        dict(type='spheroid', name='halo', profile=dict(
-            type='pseudo_isothermal', parameters='density_radius'))]
+        dict(type='halo', name='halo', profile=dict(
+            type='pseudo_isothermal', parameterisation='density_radius'))]
     density = dict(jeans='gas', self_gravitating='stars')[mode]
     galaxy = disk_galaxy('smooth', dict(
         type='mass', pressure_support=dict(type=mode, mass=density)),
@@ -2047,8 +2189,8 @@ def test_pressure_support_adds_the_densities_of_mass_components():
     mass = [
         dict(type='disk', name=name, surface=dict(type='exponential'),
              vertical=dict(type='sech2')) for name in ('hi', 'h2')] + [
-        dict(type='spheroid', name='halo', profile=dict(
-            type='pseudo_isothermal', parameters='density_radius'))]
+        dict(type='halo', name='halo', profile=dict(
+            type='pseudo_isothermal', parameterisation='density_radius'))]
     galaxy = disk_galaxy('smooth', dict(
         type='mass', pressure_support=dict(type='jeans',
         mass=['hi', 'h2'])), mass, DISTANCE)
@@ -2077,8 +2219,8 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
         | dict(name='gas')
     mass = [
         dict(type='traced_disk', name='hi', component='gas'),
-        dict(type='spheroid', name='halo', profile=dict(
-            type='pseudo_isothermal', parameters='density_radius'))]
+        dict(type='halo', name='halo', profile=dict(
+            type='pseudo_isothermal', parameterisation='density_radius'))]
 
     def rotation(density):
         support = disk | dict(dict(
@@ -2139,7 +2281,7 @@ def test_a_self_gravitating_density_needs_a_projection():
     with pytest.raises(ValueError, match="does not give its surface"):
         galaxy_parser.load(dict(
             components=[disk], mass=[dict(
-                type='spheroid', name='halo', profile=dict(type='nfw'))],
+                type='halo', name='halo', profile=dict(type='nfw'))],
             distance=copy.deepcopy(DISTANCE)))
 
 def test_the_table_of_rotation_at_heights_stays_within_the_density():
@@ -2383,8 +2525,8 @@ def test_cell_masses_add_up(vertical):
     # enclosed mass), and of a thin disk (in the cells next to its plane)
     # or a thick one (of its density)
     if vertical is None:
-        component = dict(type='spheroid', name='c', profile=dict(
-            type='nfw', parameters='density_radius'))
+        component = dict(type='halo', name='c', profile=dict(
+            type='nfw', parameterisation='density_radius'))
         params = dict(mass_c_log_rho=7, mass_c_rs=10)
     else:
         component = dict(type='disk', name='c', surface=dict(

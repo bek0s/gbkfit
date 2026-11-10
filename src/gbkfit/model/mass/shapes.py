@@ -1,7 +1,7 @@
 """
-The shapes of spheroids (see spheroids.MassSpheroid): how the density
-rho_sph(r) of their profile (see profiles and halos) is laid out in
-space, on spheres or on flattened spheroids.
+The shapes of spheroids (see spheroids.MassSpheroid and spheroids.Halo):
+how the density rho_sph(r) of their profile (see profiles and halos) is
+laid out in space, on spheres or on flattened spheroids.
 """
 
 import abc
@@ -15,7 +15,7 @@ from gbkfit.config import TypedParser, TypedSerializable
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext, forces_in_plane
-from .profiles import SpheroidProfile
+from .profiles import SphericalProfile
 from .units import G
 
 
@@ -47,7 +47,7 @@ _FLATTENED_PHI, _FLATTENED_WEIGHTS = _flattened_nodes()
 
 def _flattened_enclosed_mass(
         r: float,
-        profile: SpheroidProfile,
+        profile: SphericalProfile,
         params: ParamValues,
         context: MassContext
 ) -> float:
@@ -109,7 +109,7 @@ class SpheroidShape(TypedSerializable, abc.ABC):
     def vcirc2(
             self,
             R: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -125,7 +125,7 @@ class SpheroidShape(TypedSerializable, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -139,7 +139,7 @@ class SpheroidShape(TypedSerializable, abc.ABC):
     def enclosed_mass(
             self,
             r: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -153,7 +153,7 @@ class SpheroidShape(TypedSerializable, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -169,7 +169,7 @@ class SpheroidShape(TypedSerializable, abc.ABC):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -208,7 +208,7 @@ class ShapeSphere(SpheroidShape):
     def vcirc2(
             self,
             R: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -222,7 +222,7 @@ class ShapeSphere(SpheroidShape):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -231,7 +231,7 @@ class ShapeSphere(SpheroidShape):
     def enclosed_mass(
             self,
             r: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -241,7 +241,7 @@ class ShapeSphere(SpheroidShape):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -258,7 +258,7 @@ class ShapeSphere(SpheroidShape):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -278,7 +278,8 @@ class ShapeFlattened(SpheroidShape):
     velocity in its plane (Binney & Tremaine 2008, 2.132) is v^2(R) = 4
     pi G int_0^R rho_sph(m) m^2 dm / sqrt(R^2 - e^2 m^2), e^2 = 1 - q^2,
     computed by quadrature (160 nodes: to about 1e-8 for Sersic and halo
-    profiles, cusps too, and 1e-6 for Gaussians, down to q = 0.05). Its
+    profiles, cusps too, and 1e-6 for Gaussians, down to q = 0.05; to
+    some 1e-3 for the kinks of nodewise profiles at their nodes). Its
     forces anywhere (Binney & Tremaine 2008, 2.140, with x =
     (1 + u)^-1/2): F_R = -4 pi G R int_0^1 rho_sph(m) x^2 dx / (1 - e^2
     x^2)^(1/2) and F_z = -4 pi G z int_0^1 rho_sph(m) x^2 dx / (1 - e^2
@@ -306,7 +307,7 @@ class ShapeFlattened(SpheroidShape):
     def vcirc2(
             self,
             R: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -330,7 +331,7 @@ class ShapeFlattened(SpheroidShape):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -341,7 +342,7 @@ class ShapeFlattened(SpheroidShape):
     def enclosed_mass(
             self,
             r: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
@@ -355,7 +356,7 @@ class ShapeFlattened(SpheroidShape):
             self,
             R: npt.ArrayLike,
             z: npt.ArrayLike,
-            profile: SpheroidProfile,
+            profile: SphericalProfile,
             params: ParamValues,
             context: MassContext
     ) -> tuple[np.ndarray, np.ndarray]:

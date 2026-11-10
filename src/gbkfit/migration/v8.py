@@ -15,7 +15,7 @@ from .rules import Change, Rule, components, items, rename
 __all__ = [
     'RULES',
     'FlatComponents',
-    'HaloNames',
+    'Halos',
     'TracedMass',
     'TraitParameterNames'
 ]
@@ -367,14 +367,43 @@ class TracedMass(Rule):
             f"traced_disk, {what}"))]
 
 
-class HaloNames(Rule):
+# The profiles of halos (of v7 and v8: nfw_truncated is truncated_nfw)
+_HALO_PROFILES = frozenset({
+    'nfw', 'burkert', 'pseudo_isothermal', 'einasto', 'zhao', 'dekel_zhao',
+    'core_nfw', 'nfw_truncated', 'truncated_nfw'})
+
+# The parameterisations of the dark fractions of v7, by the parameter
+# that they solve for (the mass, or its velocity; the scale density)
+_DARK_FRACTIONS = dict(
+    log_m='dark_fraction_concentration',
+    v='dark_fraction_concentration',
+    log_rho='dark_fraction_radius')
+
+
+class Halos(Rule):
     """
-    The names of halos (2026-11-11): the profile nfw_truncated is
-    truncated_nfw; baryons that neither a response nor a dark fraction
-    used are removed (they are an error); and parameters are renamed in the params sections, as
-    TraitParameterNames renames those of traits: the inner slope of a
-    dekel_zhao profile is gamma (was a), the radius of a dark fraction
-    rfdm (was r_fdm), and the age of an SIDM halo age (was t_age).
+    Halos (2026-11-11): a mass spheroid of the profile of a halo, or
+    that responds to baryons or is given by a dark fraction, is a halo
+    (type halo).
+    - The parameters of its profile are its parameterisation, and the
+      overdensity of its profile is that of the halo.
+    - A response is a contraction; the response sidm is sidm: true, with
+      the contraction that it nested.
+    - A dark fraction that solved for the mass (log_m, or v) is the
+      parameterisation dark_fraction_concentration, and one that solved
+      for the scale density (log_rho) dark_fraction_radius; its bounds
+      go. Others (that solved for c or a shape parameter) are changed by
+      hand, as is a spheroid of a luminous profile with a response or a
+      dark fraction.
+    - The profile nfw_truncated is truncated_nfw, and baryons that
+      nothing used are removed (they are an error).
+    - Parameters are renamed in the params sections, as
+      TraitParameterNames renames those of traits: the inner slope of a
+      dekel_zhao profile is gamma (was a), the radius of a dark fraction
+      rfdm (was r_fdm), and the age of an SIDM halo age (was t_age).
+    - The contraction gnedin04 has the parameters a0 and w, added at the
+      values it had (0.85 and 0.8) to the params sections that give the
+      other parameters of its halo.
     """
 
     @staticmethod
@@ -384,40 +413,158 @@ class HaloNames(Rule):
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
         changes = []
         renames: dict[str, str] = {}
+        additions: dict[str, dict[str, float]] = {}
         for galaxy_path, galaxy in items(config, 'galaxies'):
             galaxy_prefix = f"{galaxy['name']}_" if 'name' in galaxy else ''
             for path, mass in items(galaxy, 'mass'):
                 if mass.get('type') != 'spheroid':
                     continue
+                path = galaxy_path + path
                 prefix = f"{galaxy_prefix}mass_{mass.get('name')}_"
-                profile = mass.get('profile')
-                kind = profile.get('type') \
-                    if isinstance(profile, MutableMapping) else None
-                if kind == 'nfw_truncated':
-                    profile['type'] = 'truncated_nfw'
-                    changes.append(Change(
-                        galaxy_path + path + ['profile'],
-                        "type nfw_truncated -> truncated_nfw"))
-                if kind == 'dekel_zhao':
-                    renames[f'{prefix}a'] = f'{prefix}gamma'
-                # (baryons that nothing used, which are an error now)
-                if mass.get('baryons') and mass.get('response') is None \
-                        and mass.get('dark_fraction') is None:
-                    del mass['baryons']
-                    changes.append(Change(galaxy_path + path, (
-                        "baryons removed: neither a response nor a dark "
-                        "fraction used them")))
-                if mass.get('dark_fraction') is not None:
-                    renames[f'{prefix}r_fdm'] = f'{prefix}rfdm'
-                response = mass.get('response')
-                if isinstance(response, Mapping) \
-                        and response.get('type') == 'sidm':
-                    renames[f'{prefix}t_age'] = f'{prefix}age'
-        if renames:
-            for params_path, params in items(config, 'params'):
-                if isinstance(params.get('properties'), MutableMapping):
+                renames |= _halo_renames(mass, prefix)
+                if _gnedin04(mass):
+                    additions[prefix] = _GNEDIN04
+                changes += _halo(mass, path)
+        for params_path, params in items(config, 'params'):
+            if isinstance(params.get('properties'), MutableMapping):
+                if renames:
                     changes += _renamed_names(params, params_path, renames)
+                changes += _added_names(params, params_path, additions)
         return changes
+
+
+# The parameters of the contraction gnedin04, at the values of v7
+_GNEDIN04 = dict(a0=0.85, w=0.8)
+
+
+def _gnedin04(mass: Mapping[str, Any]) -> bool:
+    """
+    Check whether a mass spheroid of v7 contracts as gnedin04 (by its
+    response, or the contraction of its response sidm).
+    """
+    response = mass.get('response')
+    if isinstance(response, Mapping) and response.get('type') == 'sidm':
+        response = response.get('contraction')
+    return isinstance(response, Mapping) and response.get('type') == 'gnedin04'
+
+
+def _added_names(
+        params: MutableMapping[str, Any],
+        path: list[str | int],
+        additions: dict[str, dict[str, Any]]
+) -> list[Change]:
+    """
+    Add parameters to the properties of a params section, in place: of
+    each prefix (of a halo) whose parameters it gives, the parameters of
+    the given names and values, after its last one, unless it gives them.
+    """
+    changes = []
+    properties = params['properties']
+    for prefix, values in additions.items():
+        keys = [key for key in properties if key.startswith(prefix)]
+        missing = [(prefix + name, value) for name, value in values.items()
+                   if prefix + name not in properties]
+        if keys and missing:
+            _splice(properties, keys[-1],
+                    [(keys[-1], properties[keys[-1]])] + missing)
+            changes.append(Change(path + ['properties'], (
+                f"{', '.join(name for name, _ in missing)} added, the "
+                f"parameters of the contraction gnedin04, at its values "
+                f"before")))
+    return changes
+
+
+def _halo_renames(
+        mass: Mapping[str, Any], prefix: str) -> dict[str, str]:
+    """
+    Return the renames of the parameters of a mass spheroid of v7 (see
+    Halos), of the prefix of its parameters.
+    """
+    renames = {}
+    profile = mass.get('profile')
+    if isinstance(profile, Mapping) and profile.get('type') == 'dekel_zhao':
+        renames[f'{prefix}a'] = f'{prefix}gamma'
+    if mass.get('dark_fraction') is not None:
+        renames[f'{prefix}r_fdm'] = f'{prefix}rfdm'
+    response = mass.get('response')
+    if isinstance(response, Mapping) and response.get('type') == 'sidm':
+        renames[f'{prefix}t_age'] = f'{prefix}age'
+    return renames
+
+
+def _halo(mass: MutableMapping[str, Any], path: list) -> list[Change]:
+    """
+    Rewrite a mass spheroid of v7 in place, as a halo if it is one (see
+    Halos), and return the changes.
+    """
+    changes = []
+    profile = mass.get('profile')
+    if not isinstance(profile, MutableMapping):
+        profile = {}
+    kind = profile.get('type')
+    if kind == 'nfw_truncated':
+        profile['type'] = 'truncated_nfw'
+        changes.append(Change(
+            path + ['profile'], "type nfw_truncated -> truncated_nfw"))
+    response = mass.get('response')
+    dark_fraction = mass.get('dark_fraction')
+    # (baryons that nothing used, which are an error now)
+    if mass.get('baryons') and response is None and dark_fraction is None:
+        del mass['baryons']
+        changes.append(Change(path, (
+            "baryons removed: neither a response nor a dark fraction used "
+            "them")))
+    if kind not in _HALO_PROFILES:
+        if response is not None or dark_fraction is not None:
+            changes.append(Change(path, (
+                f"by hand: a spheroid of the profile {kind} has a response "
+                f"or a dark fraction, which only halos have: make it a halo "
+                f"of the profile of a halo, or leave them out")))
+        return changes
+    mass['type'] = 'halo'
+    changes.append(Change(path, "type spheroid -> halo"))
+    if 'parameters' in profile:
+        rename(profile, 'parameters', 'parameterisation')
+        changes.append(Change(
+            path + ['profile'], "parameters -> parameterisation"))
+    if 'overdensity' in profile:
+        _splice(mass, 'profile', [
+            ('profile', profile), ('overdensity', profile.pop('overdensity'))])
+        changes.append(Change(
+            path, "the overdensity of the profile is that of the halo"))
+    if isinstance(response, MutableMapping):
+        if response.get('type') == 'sidm':
+            contraction = response.get('contraction')
+            _splice(mass, 'response', (
+                [] if contraction is None else [('contraction', contraction)])
+                + [('sidm', True)])
+            changes.append(Change(
+                path, "response sidm -> sidm: true (and its contraction)"))
+        else:
+            rename(mass, 'response', 'contraction')
+            changes.append(Change(path, "response -> contraction"))
+    if isinstance(dark_fraction, Mapping):
+        solve = dark_fraction.get('solve')
+        parameterisation = _DARK_FRACTIONS.get(solve)
+        if parameterisation is None:
+            changes.append(Change(path + ['dark_fraction'], (
+                f"by hand: a dark fraction sets the mass or the scale "
+                f"density of a halo now (see the parameterisations "
+                f"dark_fraction_concentration and dark_fraction_radius); "
+                f"this one solved for {solve}")))
+        else:
+            del mass['dark_fraction']
+            if 'parameterisation' in profile:
+                profile['parameterisation'] = parameterisation
+            else:
+                _splice(profile, 'type', [
+                    ('type', profile['type']),
+                    ('parameterisation', parameterisation)])
+            changes.append(Change(path, (
+                f"dark_fraction (solve {solve}) -> the parameterisation "
+                f"{parameterisation} of the profile; its bounds are "
+                f"dropped")))
+    return changes
 
 
 def _renamed_names(
@@ -462,5 +609,5 @@ RULES: tuple[Rule, ...] = (
     FlatComponents(),
     TraitParameterNames(),
     TracedMass(),
-    HaloNames(),
+    Halos(),
 )

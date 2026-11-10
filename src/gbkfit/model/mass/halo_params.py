@@ -12,7 +12,11 @@ the scale radius of its profile (each profile states which).
 A halo is computed from (rho_s, r_s). It is given by those (log10
 rho_s, r_s: 'density_radius'), by (log10 M_D, c: 'mass_concentration')
 or by (V_D, c: 'velocity_concentration'), which convert to them
-exactly.
+exactly; or by its dark matter fraction fdm = v^2 / (v^2 + v_b^2) at
+the radius rfdm (of its squared circular velocity v^2 and that of its
+baryons v_b^2), with c ('dark_fraction_concentration') or r_s
+('dark_fraction_radius'), which its halo solves for the scale it sets
+(see spheroids.Halo).
 """
 
 import re
@@ -29,6 +33,7 @@ from .units import G
 
 
 __all__ = [
+    'DARK_FRACTIONS',
     'PARAMETERISATIONS',
     'Overdensity',
     'ParameterisationChoice',
@@ -39,14 +44,24 @@ __all__ = [
 
 
 PARAMETERISATIONS = (
-    'mass_concentration', 'velocity_concentration', 'density_radius')
+    'mass_concentration', 'velocity_concentration', 'density_radius',
+    'dark_fraction_concentration', 'dark_fraction_radius')
+
+# The parameterisations of a dark matter fraction, by the
+# parameterisation whose scale each sets (its mass, at the concentration;
+# its scale density, at the scale radius)
+DARK_FRACTIONS = dict(
+    dark_fraction_concentration='mass_concentration',
+    dark_fraction_radius='density_radius')
 
 # The option of the parameterisation of a halo
 ParameterisationChoice: TypeAlias = Annotated[
     Literal[PARAMETERISATIONS], Choices(
         mass_concentration='Mass and concentration',
         velocity_concentration='Velocity and concentration',
-        density_radius='Scale density and radius')]
+        density_radius='Scale density and radius',
+        dark_fraction_concentration='Dark fraction and concentration',
+        dark_fraction_radius='Dark fraction and scale radius')]
 
 
 class Overdensity:
@@ -99,6 +114,18 @@ def parameterisation_pdescs(
     c = ParamScalarDesc(
         title='Concentration', desc="the concentration, r_D / r_s", min=0,
         unit='', default=10)
+    rs = ParamScalarDesc(
+        title='Scale radius', desc="the scale radius r_s", min=0,
+        unit='kpc', default=20)
+    dark_fraction = dict(
+        fdm=ParamScalarDesc(
+            title='Dark matter fraction',
+            desc="the dark matter fraction (of v^2) at rfdm",
+            min=0, max=1, unit='', default=0.5),
+        rfdm=ParamScalarDesc(
+            title='Dark matter fraction radius',
+            desc="the radius of the dark matter fraction",
+            min=0, unit='kpc', default=10))
     return dict(
         mass_concentration=dict(
             log_m=ParamScalarDesc(
@@ -116,9 +143,9 @@ def parameterisation_pdescs(
                 title='Log scale density',
                 desc="log10 of the scale density rho_s",
                 unit='dex(solMass / kpc3)', default=7),
-            rs=ParamScalarDesc(
-                title='Scale radius', desc="the scale radius r_s", min=0,
-                unit='kpc', default=20)),
+            rs=rs),
+        dark_fraction_concentration=dark_fraction | dict(c=c),
+        dark_fraction_radius=dark_fraction | dict(rs=rs),
     )[parameterisation]
 
 
@@ -130,9 +157,9 @@ def halo_scales(
 ) -> tuple[float, float]:
     """
     Return (rho_s, r_s) of a halo from the values of the parameters of
-    its parameterisation, D rho_ref (Msun/kpc^3; None for
-    'density_radius', which needs none), and m(x), its mass shape (see
-    the module docstring).
+    its parameterisation (not of a dark fraction, see DARK_FRACTIONS), D
+    rho_ref (Msun/kpc^3; None for 'density_radius', which needs none),
+    and m(x), its mass shape (see the module docstring).
     """
     if parameterisation == 'density_radius':
         return 10 ** params['log_rho'], params['rs']

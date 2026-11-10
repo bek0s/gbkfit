@@ -22,7 +22,7 @@ from gbkfit.observation import (
 # A galaxy of mass alone: a black hole and a halo, at 10 Mpc
 MASS = [
     dict(type='point', name='bh'),
-    dict(type='spheroid', name='halo', profile=dict(type='nfw'))]
+    dict(type='halo', name='halo', profile=dict(type='nfw'))]
 PARAMS = dict(
     distance=10, mass_bh_log_m=10, mass_halo_log_m=12, mass_halo_c=8)
 
@@ -283,7 +283,7 @@ def test_rotation_curve_of_sparc(tmp_path):
     galaxy = galaxy_parser.load(dict(
         mass=[dict(type='table', name='gas') | rotmod_info(file, 'col4'),
               dict(type='table', name='disk') | rotmod_info(file, 'col5'),
-              dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
+              dict(type='halo', name='halo', profile=dict(type='nfw'))],
         distance=dict(type='direct')))
     observation = observation_parser.load(dict(
         type='profile', name='rc', inclination=60,

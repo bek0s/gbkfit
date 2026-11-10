@@ -929,8 +929,8 @@ def hernquist_galaxy():
         emission=STARS_EMISSION, profile=dict(type='mge', ngauss=len(i0)))
     galaxy = dict(
         components=[spheroid],
-        mass=[dict(type='spheroid', name='light',
-                   profile=dict(type='zhao', parameters='density_radius')),
+        mass=[dict(type='halo', name='light', profile=dict(
+                   type='zhao', parameterisation='density_radius')),
               dict(type='point', name='bh')],
         distance=DISTANCE)
     properties = dict(
