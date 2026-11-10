@@ -161,9 +161,9 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
         rptraits=dict(type='exponential'),
         emission=dict(type='band'))
     galaxy = galaxy_parser.load(dict(
-        components=[light], distance=dict(type='direct'), mass=[dict(
-            type='disk', name='stellar', vertical=dict(type='thin'),
-            surface=dict(type='component', component='stars'))]))
+        components=[light], distance=dict(type='direct'),
+        mass=[dict(type='traced_disk', name='stellar', component='stars',
+                   vertical=dict(type='thin'))]))
     image = ObservationSky(
         PixelBrightness(size=(8, 8), step=(1, 1)), LineOfSightFlat())
     profile = ObservationProfile(['vcirc'], np.array([2.0, 6.0]) * u.arcsec)

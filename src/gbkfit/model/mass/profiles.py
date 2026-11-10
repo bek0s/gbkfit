@@ -207,7 +207,7 @@ class ProfileGaussian(SpheroidProfile):
     sigma^2)), its enclosed mass M (erf(x / sqrt(2)) - sqrt(2 / pi) x
     exp(-x^2 / 2)) and its potential -G M erf(x / sqrt(2)) / r (x = r /
     sigma), exactly: a Gaussian of a multi-Gaussian expansion that a
-    mass follows (see spheroids.MassLightSpheroid). Not a profile of
+    mass follows (see spheroids.TracedSpheroid). Not a profile of
     configurations, nor public.
     """
 

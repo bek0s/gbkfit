@@ -178,10 +178,7 @@ def test_self_gravitating_equilibrium_in_its_own_mass_disk():
         DISK, equilibrium=SELF_GRAVITATING) \
         | dict(name='gas')
     balanced = galaxy(
-        disk, mass=[dict(
-            type='disk', name='gas', surface=dict(type='component',
-                                                  component='gas'),
-            vertical=dict(type='component', component='gas'))],
+        disk, mass=[dict(type='traced_disk', name='gas', component='gas')],
         distance=dict(type='direct', cosmology='Planck18'))
     params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
         | dict(distance=10, mass_gas_upsilon=1e9)
@@ -256,10 +253,7 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
         name='gas', rptraits=dict(type='exponential'),
                     rhtraits=dict(type='sech2', zmax=2))
     balanced = galaxy(
-        disk, mass=[dict(
-            type='disk', name='gas', surface=dict(type='component',
-                                                  component='gas'),
-            vertical=dict(type='component', component='gas'))],
+        disk, mass=[dict(type='traced_disk', name='gas', component='gas')],
         distance=dict(type='direct', cosmology='Planck18'))
     params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
         | dict(gas_rht_s=0.05, distance=10, mass_gas_upsilon=1e9)

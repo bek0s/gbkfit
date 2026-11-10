@@ -102,8 +102,7 @@ _C1_GAS = _disk(
 
 # (thick: a thin disk pulls infinitely at the edge of the gas)
 _C1_MASS = [
-    dict(type='disk', name='gas',
-         surface=dict(type='component', component='gas'),
+    dict(type='traced_disk', name='gas', component='gas',
          vertical=dict(type='sech2')),
     _NFW]
 
@@ -153,10 +152,7 @@ _EQUILIBRIUM_HEIGHTS_MOND = dict(
         "small cube.",
     galaxies=[dict(
         components=[_C2_GAS],
-        mass=[_BULGE, dict(
-            type='disk', name='gas',
-            surface=dict(type='component', component='gas'),
-            vertical=dict(type='component', component='gas'))],
+        mass=[_BULGE, dict(type='traced_disk', name='gas', component='gas')],
         distance=_DISTANCE,
         gravity=dict(type='mond', interpolation='simple'))],
     observations=[_cube([20, 20, 30])],

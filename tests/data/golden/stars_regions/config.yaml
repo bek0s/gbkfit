@@ -11,7 +11,7 @@ galaxies:
     profile: {type: sersic}
     shape: {type: flattened}
   mass:
-  - {type: light_spheroid, name: lum, component: stars}
+  - {type: traced_spheroid, name: lum, component: stars}
   - type: spheroid
     name: halo
     profile: {type: nfw}

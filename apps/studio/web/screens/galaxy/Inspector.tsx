@@ -268,6 +268,13 @@ function ListPart({
   const spheroids = asList(options.components)
     .filter((c) => isSpheroid(c.type))
     .map((c) => String(c.name ?? ''));
+  const disks = asList(options.components)
+    .filter((c) => isDisk(c.type))
+    .map((c) => String(c.name ?? ''));
+  // (the mass that traces a component starts with the first one of its
+  // kind, if any)
+  const traced = (type: string): string[] | null =>
+    family !== 'mass_component' ? null : type === 'traced_spheroid' ? spheroids : type === 'traced_disk' ? disks : null;
   const names = items.map((item) => String(item.name ?? ''));
   const end = useRef<HTMLSpanElement>(null);
   const [added, setAdded] = useState(0);
@@ -288,8 +295,8 @@ function ListPart({
     });
   const add = (type: string) => {
     setAdded((n) => n + 1);
-    const follows = family === 'mass_component' && type === 'light_spheroid';
-    const start = startOf(defs, family, type, names, follows ? { component: spheroids[0] } : {});
+    const of = traced(type);
+    const start = startOf(defs, family, type, names, of ? { component: of[0] } : {});
     draft.edit((s) => {
       let next = setAt(s.options, listPath, asOneOrList([...asList(getAt(s.options, listPath)), start]) ?? []);
       // (a density trait of a thick disk or a cone comes with its height,
@@ -332,7 +339,7 @@ function ListPart({
           count={items.length}
           allowed={allowed}
           directions={family === 'vpt' ? (traits?.[kind]?.directions ?? null) : family === 'dpt' ? (traits?.[kind]?.dispersion_directions ?? null) : null}
-          spheroids={spheroids}
+          traceable={traced(String(item.type)) ?? []}
           heights={heights && !shared ? { ...heights, path: [...base, ...heights.option, i], count: items.length, allowed: traits?.[kind]?.traits[heights.family] ?? null } : undefined}
           rings={rings}
           onRemove={removable ? () => remove(i) : undefined}
@@ -359,11 +366,11 @@ function ListPart({
             width={MENU_WIDTH}
             at="end"
             entries={typesOf(defs, family, allowed).map((t) => {
-              const follows = family === 'mass_component' && t.value === 'light_spheroid';
-              const blocked = follows && spheroids.length === 0;
+              const of = traced(t.value);
+              const blocked = of !== null && of.length === 0;
               return {
                 label: t.label,
-                description: blocked ? 'Add a spheroid component first: this mass follows its light.' : t.description,
+                description: blocked ? `Add a ${t.value === 'traced_disk' ? 'disk' : 'spheroid'} component first: this mass traces it.` : t.description,
                 disabled: blocked,
                 onClick: () => add(t.value),
               };
@@ -397,7 +404,7 @@ function ItemCard({
   count,
   allowed,
   directions,
-  spheroids,
+  traceable,
   heights,
   rings,
   onRemove,
@@ -411,7 +418,8 @@ function ItemCard({
   count: number;
   allowed: string[] | null;
   directions: string[] | null;
-  spheroids: string[];
+  // (of a mass that traces a component: the components it can trace)
+  traceable: string[];
   heights?: { path: Path; family: string; title: string; nullable: boolean; count: number; allowed: string[] | null };
   rings: number[] | null;
   onRemove?: () => void;
@@ -451,7 +459,7 @@ function ItemCard({
         <div className="gx-card-sub">
           {named && <NameField value={typeof item.name === 'string' ? item.name : ''} required={family === 'mass_component'} onCommit={(name) => set(name ? { ...item, name } : omitKey(item, 'name'), { moved: inPlace })} />}
           {'component' in properties && (
-            <Choice items={spheroids.map((s) => ({ value: s, label: `follows ${s}` }))} value={String(item.component ?? '')} onChange={(component) => set({ ...item, component })} label="The spheroid whose light it follows" />
+            <Choice items={traceable.map((s) => ({ value: s, label: `traces ${s}` }))} value={String(item.component ?? '')} onChange={(component) => set({ ...item, component })} label="The component it traces" />
           )}
         </div>
       )}

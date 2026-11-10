@@ -104,7 +104,7 @@ def _mge_stars(kind: str, **options: Any) -> list[dict[str, Any]]:
             type=kind, name='stars', rmax=20,
             emission=dict(type='stars'), profile=dict(type='mge', ngauss=2),
             **options)],
-        mass=[dict(type='light_spheroid', name='lum', component='stars'),
+        mass=[dict(type='traced_spheroid', name='lum', component='stars'),
               dict(type='point', name='bh')],
         distance=dict(type='direct', cosmology='Planck18'))]
 
@@ -442,7 +442,7 @@ CASES: list[dict[str, Any]] = [
             "Jeans kinematics in the gravity of its light and an NFW halo.",
         galaxies=[dict(
             components=[_STARS],
-            mass=[dict(type='light_spheroid', name='lum', component='stars'),
+            mass=[dict(type='traced_spheroid', name='lum', component='stars'),
                   dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
             distance=dict(type='direct', cosmology='Planck18'))],
         observations=[_sky(

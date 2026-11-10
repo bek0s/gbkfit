@@ -433,9 +433,7 @@ THIN_DISK = {
     if key not in ('rhtraits', 'equilibrium')} \
     | dict(type='thin_disk', rptraits=dict(type='exponential'),
            vptraits=dict(type='mass'), dptraits=dict(type='uniform'))
-GAS_MASS = dict(
-    type='disk', name='gas', surface=dict(type='component', component='gas'),
-    vertical=dict(type='component', component='gas'))
+GAS_MASS = dict(type='traced_disk', name='gas', component='gas')
 
 
 @pytest.mark.parametrize('disk, mass, message', [

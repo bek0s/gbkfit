@@ -15,9 +15,9 @@ from gbkfit.config import (
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
 from .base import MassComponent, MassContext
-from .disks import MassDisk
+from .disks import MassDisk, TracedDisk
 from .points import MassPoint
-from .spheroids import MassLightSpheroid, MassSpheroid
+from .spheroids import MassSpheroid, TracedSpheroid
 from .tables import MassTable
 from .user import MassUser
 
@@ -32,8 +32,9 @@ __all__ = [
 mass_component_parser = TypedParser(MassComponent, [
     MassPoint,
     MassDisk,
+    TracedDisk,
     MassSpheroid,
-    MassLightSpheroid,
+    TracedSpheroid,
     MassTable,
     MassUser], family='mass_component')
 

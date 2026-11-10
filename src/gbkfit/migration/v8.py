@@ -15,6 +15,7 @@ from .rules import Change, Rule, components, items, rename
 __all__ = [
     'RULES',
     'FlatComponents',
+    'TracedMass',
     'TraitParameterNames'
 ]
 
@@ -299,9 +300,71 @@ def _replaced(value: Any, pattern: re.Pattern, new) -> tuple[Any, bool]:
     return value, replaced
 
 
+class TracedMass(Rule):
+    """
+    The mass that traces a component has types of its own (2026-11-11):
+    a mass disk whose surface density was that of a component (surface:
+    {type: component, component: C, rstep}) is a traced_disk of the
+    component C (with its rstep), in the layer of C unless its vertical
+    structure is another (a law, or the layer of another component, which
+    it keeps); and light_spheroid is traced_spheroid. A disk mass takes
+    surface laws only.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 8
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for galaxy_path, galaxy in items(config, 'galaxies'):
+            for path, mass in items(galaxy, 'mass'):
+                path = galaxy_path + path
+                kind = mass.get('type')
+                if kind == 'light_spheroid':
+                    mass['type'] = 'traced_spheroid'
+                    changes.append(Change(
+                        path, "type light_spheroid -> traced_spheroid"))
+                elif kind == 'disk':
+                    changes += self._disk(mass, path)
+        return changes
+
+    @staticmethod
+    def _disk(
+            mass: MutableMapping[str, Any], path: list[str | int]
+    ) -> list[Change]:
+        """Rewrite a mass disk that follows a component, in place."""
+        surface = mass.get('surface')
+        if not isinstance(surface, Mapping) \
+                or surface.get('type') != 'component':
+            return []
+        component = surface.get('component')
+        rstep = surface.get('rstep')
+        vertical = mass.get('vertical')
+        own = isinstance(vertical, Mapping) \
+            and vertical.get('type') == 'component' \
+            and vertical.get('component') == component \
+            and vertical.get('rstep') == rstep
+        pairs = [('type', 'traced_disk')] + [
+            (key, value) for key, value in mass.items()
+            if key not in ('type', 'surface', 'vertical')]
+        pairs.append(('component', component))
+        if rstep is not None:
+            pairs.append(('rstep', rstep))
+        if vertical is not None and not own:
+            pairs.append(('vertical', vertical))
+        mass.clear()
+        mass.update(pairs)
+        what = 'in its layer' if own else 'with its vertical structure'
+        return [Change(path, (
+            f"type disk of the surface of the component {component!r} -> "
+            f"traced_disk, {what}"))]
+
+
 # The rules, in the order of the changes: TraitParameterNames reads the
 # trait options that FlatComponents takes up
 RULES: tuple[Rule, ...] = (
     FlatComponents(),
     TraitParameterNames(),
+    TracedMass(),
 )

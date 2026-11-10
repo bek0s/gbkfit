@@ -19,9 +19,9 @@ galaxies:
     - {type: uniform, direction: ver}
     emission: {type: lines}
   mass:
-  - type: disk
+  - type: traced_disk
     name: gas
-    surface: {type: component, component: gas}
+    component: gas
     vertical: {type: sech2}
   - type: spheroid
     name: halo

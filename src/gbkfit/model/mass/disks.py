@@ -1,23 +1,27 @@
 """
 Axisymmetric mass disks: a surface density (see surfaces) and a
-vertical structure (see vertical), each chosen on its own.
+vertical structure (see vertical), each chosen on its own (MassDisk), or
+the density that a disk component traces (TracedDisk).
 """
 
 from collections.abc import Collection
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 import numpy.typing as npt
+import scipy.integrate
+from annotated_types import Gt
 
-from gbkfit.config import check_options
+from gbkfit.config import check_name, check_options
 from gbkfit.params import ParamDesc, ParamValues
 from .base import DiskDensity, MassComponent, MassContext, forces_in_plane
-from .surfaces import DiskSurface, disk_surface_parser
-from .vertical import DiskVertical, disk_vertical_parser
+from .surfaces import DiskSurface, SurfaceComponent, disk_surface_parser
+from .vertical import DiskVertical, VerticalComponent, disk_vertical_parser
 
 
 __all__ = [
-    'MassDisk'
+    'MassDisk',
+    'TracedDisk'
 ]
 
 
@@ -60,13 +64,11 @@ def _panel_nodes(edges: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 class MassDisk(MassComponent):
     """
     An axisymmetric disk of a surface density and a vertical structure,
-    each chosen on its own. Its surface density is e.g. an exponential, or
-    that of a component of the galaxy (see surfaces), and its vertical
-    structure a law, e.g. sech2, or that of a component (see vertical).
-    A disk follows at most one component (by its surface density, its
-    vertical structure, or both); following it by both, it is the density
-    of the component itself (each of its terms of the pdf of its height).
-    Its forces are given anywhere: in its plane, the radial force of its
+    each chosen on its own. Its surface density is a law, e.g. an
+    exponential (see surfaces), and its vertical structure a law, e.g.
+    sech2, or the layer of a disk component of the galaxy (see vertical).
+    A disk that traces the density of a component is a TracedDisk. Its
+    forces are given anywhere: in its plane, the radial force of its
     circular velocity; off it, the pull of its rings (see
     DiskSurface.force).
 
@@ -82,8 +84,7 @@ class MassDisk(MassComponent):
     Raises
     ------
     ValueError
-        If the name is not valid, or the surface density and the vertical
-        structure follow different components.
+        If the name is not valid.
     """
 
     @staticmethod
@@ -102,18 +103,20 @@ class MassDisk(MassComponent):
     def __init__(
             self, name: str, surface: DiskSurface, vertical: DiskVertical):
         check_options(MassDisk.__init__, locals())
+        self._init(name, surface, vertical)
+
+    def _init(
+            self, name: str, surface: DiskSurface, vertical: DiskVertical
+    ) -> None:
+        """Make the disk (for the constructors, which check the options)."""
         super().__init__(name)
-        followed = {
-            surface.followed_component(), vertical.followed_component()}
-        followed.discard(None)
-        if len(followed) > 1:
-            raise ValueError(
-                f"a mass disk follows at most one component; its surface "
-                f"density follows {surface.followed_component()!r} and its "
-                f"vertical structure {vertical.followed_component()!r}")
         self._surface = surface
         self._vertical = vertical
-        self._followed = tuple(followed)
+        # (the components it follows, by its surface density and by its
+        # vertical structure: one, two, or none)
+        self._followed = tuple(dict.fromkeys(
+            c for c in (surface.followed_component(),
+                        vertical.followed_component()) if c is not None))
 
     def surface(self) -> DiskSurface:
         """Return its surface density."""
@@ -239,10 +242,24 @@ class MassDisk(MassComponent):
         theta, weights = _panel_nodes(edges)
         R, h = radius * np.sin(theta), radius * np.cos(theta)
         out[inside] = 2 * np.pi * np.sum(
-            weights * self._surface.surface_density(R, params, context)
-            * self._vertical.share_within(R, h, params, context) * R * h,
+            weights * self._column_within(R, h, params, context) * R * h,
             axis=1)
         return out.reshape(r.shape)
+
+    def _column_within(
+            self,
+            R: np.ndarray,
+            h: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return its mass per unit area (Msun/kpc^2) within the heights h
+        (kpc) of its plane, at the radii R (kpc): its surface density
+        times the share of its vertical structure there.
+        """
+        return self._surface.surface_density(R, params, context) \
+            * self._vertical.share_within(R, h, params, context)
 
     def forces(
             self,
@@ -277,3 +294,169 @@ class MassDisk(MassComponent):
             context: MassContext
     ) -> np.ndarray:
         return self._surface.force('z', R, z, self._vertical, params, context)
+
+
+class TracedDisk(MassDisk):
+    """
+    A disk whose mass traces a disk component of the galaxy: the density
+    of the component (e.g. of its light, or the optical depth of its
+    dust) times a mass per unit of it, upsilon (see
+    surfaces.SurfaceComponent). Its vertical structure is the layer of the
+    component (each term of the pdf of its height; razor-thin for a thin
+    disk), unless another is given: a law (e.g. sech2, of the scale height
+    hz) or the layer of another disk component (e.g. molecular gas from a
+    CO surface density, in the layer of the HI). In its own layer, its
+    density is the sum over the terms of the component of their surface
+    density times the pdf of their height, at the subnodes, and linear in
+    R between them, as its gravity takes it (so that its density, its
+    mass and its forces are those of one disk).
+
+    Parameters
+    ----------
+    name : str
+        Its name (see MassComponent).
+    component : str
+        The name of the disk component whose density it traces.
+    rstep : float, optional
+        The width (in the units of the rings of the component, e.g.
+        arcsec) of the rings at whose subnodes it takes the density; by
+        default, the subnodes of the component.
+    vertical : DiskVertical, optional
+        Its vertical structure; by default, the layer of the component.
+
+    Raises
+    ------
+    ValueError
+        If the name, the component or rstep is not valid, or vertical is
+        the layer of the component itself (the default: leave it out).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'traced_disk'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Traced disk'
+
+    def dump(self) -> dict[str, Any]:
+        info = MassComponent.dump(self) | dict(component=self._component)
+        if self._rstep is not None:
+            info.update(rstep=self._rstep)
+        if not self._own_layer:
+            info.update(vertical=disk_vertical_parser.dump(self.vertical()))
+        return info
+
+    def __init__(
+            self,
+            name: str,
+            component: str,
+            rstep: Annotated[float, Gt(0)] | None = None,
+            vertical: DiskVertical | None = None
+    ):
+        check_options(TracedDisk.__init__, locals())
+        check_name(component)
+        if isinstance(vertical, VerticalComponent) \
+                and vertical.component() == component:
+            raise ValueError(
+                f"a traced disk is in the layer of its component "
+                f"{component!r} unless another vertical structure is "
+                f"given: leave vertical out")
+        self._component = component
+        self._rstep = rstep
+        self._own_layer = vertical is None
+        surface = SurfaceComponent(component, rstep)
+        self._init(
+            name, surface,
+            VerticalComponent(component, rstep) if vertical is None
+            else vertical)
+
+    def component(self) -> str:
+        """Return the name of the component whose density it traces."""
+        return self._component
+
+    def density(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        if not self._own_layer:
+            return super().density(R, z, params, context)
+        # (each term of the component, its surface density times the pdf
+        # of its height, summed at the subnodes)
+        density, knots, sigmas, upsilon = self._knots(params, context)
+
+        def at(k: int, heights: np.ndarray) -> np.ndarray:
+            pdfs = density.height_pdfs(knots[k:k + 1], heights)
+            return sigmas[:, k] @ pdfs[:, 0]
+        R, z = np.broadcast_arrays(
+            np.asarray(R, dtype=float), np.asarray(z, dtype=float))
+        return upsilon * _linear_between(R, z, knots, at)
+
+    def _column_within(
+            self,
+            R: np.ndarray,
+            h: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        if not self._own_layer:
+            return super()._column_within(R, h, params, context)
+        # (that of its density: of each subnode by adaptive quadrature, to
+        # 1e-10, and linear between them; the pdfs are even in z)
+        density, knots, sigmas, upsilon = self._knots(params, context)
+
+        def at(k: int, heights: np.ndarray) -> np.ndarray:
+            if not np.any(sigmas[:, k]):
+                return np.zeros(heights.shape)
+
+            def column(z: float) -> float:
+                pdfs = density.height_pdfs(knots[k:k + 1], np.array([z]))
+                return float(sigmas[:, k] @ pdfs[:, 0, 0])
+            return np.array([
+                2 * scipy.integrate.quad(
+                    column, 0, height, epsabs=0, epsrel=1e-10,
+                    limit=200)[0]
+                for height in heights])
+        R, h = np.broadcast_arrays(
+            np.asarray(R, dtype=float), np.asarray(h, dtype=float))
+        return upsilon * _linear_between(R, h, knots, at)
+
+    def _knots(
+            self, params: ParamValues, context: MassContext
+    ) -> tuple[DiskDensity, np.ndarray, np.ndarray, float]:
+        """
+        Return the density of its component, the subnodes where it takes
+        it, the surface density of each term there (terms, subnodes) and
+        upsilon, its mass per unit of it (with that of a unit of the
+        density).
+        """
+        density = context.density(self._component)
+        knots = density.knots(self._rstep)
+        return (density, knots, density.surface_densities(knots),
+                self.surface().upsilon(params, context))
+
+
+def _linear_between(
+        R: np.ndarray,
+        points: np.ndarray,
+        knots: np.ndarray,
+        at
+) -> np.ndarray:
+    """
+    Return a quantity at the radii R, linear in R between the knots and 0
+    beyond the first and the last: at(k, points) gives it at the knot k
+    for the given points (e.g. heights) of the radii near it.
+    """
+    out = np.zeros(R.shape)
+    inside = (R >= knots[0]) & (R <= knots[-1])
+    left = np.clip(np.searchsorted(knots, R, side='right') - 1,
+                   0, len(knots) - 2)
+    t = (R - knots[left]) / (knots[left + 1] - knots[left])
+    for k in np.unique(left[inside]):
+        near = inside & (left == k)
+        out[near] = (1 - t[near]) * at(k, points[near]) \
+            + t[near] * at(k + 1, points[near])
+    return out

@@ -23,7 +23,7 @@ class SpheroidStage(ComponentStage):
     """
     The part of a spheroid in the stage of its galaxy (see GalaxyStage):
     its density, which the mass of the galaxy follows (see
-    mass.MassLightSpheroid), of the given mass surface density of one unit
+    mass.TracedSpheroid), of the given mass surface density of one unit
     of its light (Msun/kpc^2; see _units.mass_per_unit), if its emission
     has a unit; and its state, that of the motion of its kinematics, if
     any (see SpheroidMotion.state; e.g. the tables of its Jeans

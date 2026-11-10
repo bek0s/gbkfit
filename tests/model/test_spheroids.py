@@ -2,7 +2,7 @@
 Tests for the spheroids (Spheroid): their light in images against the
 exact projections of their profiles, the mean density near the centre
 of a cusp, and their options; the mass that follows their light
-(mass.MassLightSpheroid); their Jeans kinematics (JeansKinematics),
+(mass.TracedSpheroid); their Jeans kinematics (JeansKinematics),
 against exact and independent solutions, and in spectral cubes of stars;
 and the kinematics of their traits (SpheroidTraitsKinematics).
 """
@@ -303,7 +303,7 @@ def test_invalid_spheroids_are_refused(options, message):
 BULGE = dict(
     type='spheroid', name='bulge', rmax=10, emission=BAND,
     profile=dict(type='sersic'), shape=dict(type='flattened'))
-STARS = dict(type='light_spheroid', name='stars', component='bulge')
+STARS = dict(type='traced_spheroid', name='stars', component='bulge')
 DISTANCE = dict(type='direct', cosmology='Planck18')
 BULGE_PROPERTIES = dict(
     bulge_xpos=0, bulge_ypos=0, bulge_posa=30, bulge_incl=60, bulge_ie=2,
@@ -428,13 +428,13 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
 
 
 @pytest.mark.parametrize('mass, message', [
-    (dict(type='light_spheroid', name='stars', component='gas'),
+    (dict(type='traced_spheroid', name='stars', component='gas'),
      "follows the density of a spheroid, but 'gas' is a disk: the mass "
-     "that follows it is of the type 'disk'"),
-    (dict(type='disk', name='stars', surface=dict(
-        type='component', component='bulge'), vertical=dict(type='sech2')),
+     "that follows it is of the type 'disk' or 'traced_disk'"),
+    (dict(type='traced_disk', name='stars', component='bulge',
+          vertical=dict(type='sech2')),
      "follows the density of a disk, but 'bulge' is a spheroid: the mass "
-     "that follows it is of the type 'light_spheroid'"),
+     "that follows it is of the type 'traced_spheroid'"),
 ])
 def test_a_mass_follows_components_of_its_kind(mass, message):
     disk = dict(

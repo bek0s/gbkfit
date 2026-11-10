@@ -636,7 +636,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
             if key not in ('norbits', 'turns')}
         return galaxy(
             components=[spheroid | dict(rmax=40) | changes],
-            mass=[dict(type='light_spheroid', name='stars',
+            mass=[dict(type='traced_spheroid', name='stars',
                        component='stars'),
                   dict(type='point', name='bh')])
     truth = dict(

@@ -116,7 +116,7 @@ class DiskDensity(ComponentDensity, Protocol):
 class SpheroidDensity:
     """
     The density of a spheroid of a galaxy, which mass spheroids follow
-    (see spheroids.MassLightSpheroid): a sum of terms, each a spherical
+    (see spheroids.TracedSpheroid): a sum of terms, each a spherical
     profile laid out in a shape, in kpc, of the total mass of its light
     (in the units of the component times kpc^2: its density times kpc^2
     gives the mass per unit of the light, see mass_per_unit).

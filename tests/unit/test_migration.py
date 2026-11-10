@@ -876,3 +876,35 @@ def test_trait_parameters_of_the_galaxies_of_a_project_are_renamed():
         c.message.startswith('by hand: the galaxies rename the parameters '
                              'disk_pt_*')
         for c in changes)
+
+
+def test_mass_that_traces_a_component_has_its_own_types():
+    # Version 8: a mass disk of the surface of a component is a
+    # traced_disk, in its layer unless another is given; light_spheroid
+    # is traced_spheroid; a disk of a surface law is left as it is
+    mass = [
+        dict(type='disk', name='gas',
+             surface=dict(type='component', component='hi'),
+             vertical=dict(type='component', component='hi')),
+        dict(type='disk', name='h2',
+             surface=dict(type='component', component='co', rstep=0.5),
+             vertical=dict(type='component', component='hi')),
+        dict(type='disk', name='dust',
+             surface=dict(type='component', component='dust'),
+             vertical=dict(type='sech2')),
+        dict(type='light_spheroid', name='lum', component='bulge'),
+        dict(type='disk', name='stars',
+             surface=dict(type='exponential'), vertical=dict(type='thin'))]
+    changes = migration.migrate(dict(galaxies=[dict(mass=mass)]), 7)
+    assert mass == [
+        dict(type='traced_disk', name='gas', component='hi'),
+        dict(type='traced_disk', name='h2', component='co', rstep=0.5,
+             vertical=dict(type='component', component='hi')),
+        dict(type='traced_disk', name='dust', component='dust',
+             vertical=dict(type='sech2')),
+        dict(type='traced_spheroid', name='lum', component='bulge'),
+        dict(type='disk', name='stars',
+             surface=dict(type='exponential'), vertical=dict(type='thin'))]
+    assert not any(c.message.startswith('by hand') for c in changes)
+    from gbkfit.model import mass_component_parser
+    mass_component_parser.load(mass)

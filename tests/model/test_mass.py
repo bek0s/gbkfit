@@ -27,7 +27,7 @@ from gbkfit.model.mass import (
     ProfileEinasto, ProfileNFW, ProfileNFWTruncated, ProfileNodewise,
     ProfilePseudoIsothermal, ProfileSersic, ProfileZhao,
     ResponseBlumenthal86, ResponseGnedin04, ResponseSIDM, ShapeFlattened,
-    SurfaceComponent, SurfaceExponential, SurfaceGaussianRing,
+    SurfaceComponent, SurfaceExponential, SurfaceGaussianRing, TracedDisk,
     SurfaceNodewise, VerticalComponent, VerticalSech, VerticalExponential,
     VerticalGauss, VerticalSech2, VerticalThin, mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
@@ -450,11 +450,77 @@ class Layers:
         return None
 
 
-def test_mass_disks_follow_one_component():
+def test_mass_disks_follow_one_component_or_two():
+    # (e.g. H2 of a CO surface density in the layer of the HI)
     disk = MassDisk('d', SurfaceExponential(), VerticalComponent('hi'))
     assert disk.followed_components() == ('hi',)
-    with pytest.raises(ValueError, match="follows at most one component"):
-        MassDisk('d', SurfaceComponent('hi'), VerticalComponent('co'))
+    assert TracedDisk('gas', 'hi').followed_components() == ('hi',)
+    h2 = TracedDisk('h2', 'co', vertical=VerticalComponent('hi'))
+    assert h2.followed_components() == ('co', 'hi')
+    with pytest.raises(ValueError, match="leave vertical out"):
+        TracedDisk('gas', 'hi', vertical=VerticalComponent('hi'))
+
+
+def test_a_traced_disk_in_its_layer_has_the_density_of_its_gravity():
+    # Between two subnodes, the sum over the terms of their surface
+    # density times the pdf of their height, linear in R, as its gravity
+    # takes it (was the product of the linear surface density and the
+    # linear shape, which differs for a flaring disk of two terms); its
+    # column is its surface density, and 0 beyond the subnodes
+    layers = Layers(flare=1)
+    context = MassContext(1, 1, dict(hi=layers))
+    disk = TracedDisk('gas', 'hi')
+    params = dict(upsilon=2.0)
+    knots = layers.knots(None)
+    z = np.array([0.0, 0.2, 0.7, 1.5])
+
+    def column(k):
+        pdfs = layers.height_pdfs(knots[k:k + 1], z)
+        return 2.0 * layers.surface_densities(knots[k:k + 1])[:, 0] \
+            @ pdfs[:, 0]
+    R = 0.25 * knots[3] + 0.75 * knots[4]
+    np.testing.assert_allclose(
+        disk.density(R, z, params, context),
+        0.25 * column(3) + 0.75 * column(4), rtol=1e-12)
+    old = disk.surface_density(R, params, context) \
+        * VerticalComponent('hi').height_pdf(R, z, params, context)
+    assert not np.allclose(disk.density(R, z, params, context), old,
+                           rtol=1e-6)
+    heights = np.linspace(-6, 6, 4001)
+    np.testing.assert_allclose(
+        np.trapezoid(disk.density(R, heights, params, context), heights),
+        disk.surface_density(R, params, context), rtol=1e-6)
+    assert np.all(disk.density(11.0, z, params, context) == 0)
+    # (its mass within a height: that of the same interpolant)
+    within = disk._column_within(np.array([R]), np.array([0.7]), params,
+                                 context)
+    inside = np.linspace(-0.7, 0.7, 2001)
+    np.testing.assert_allclose(
+        within, np.trapezoid(
+            disk.density(R, inside, params, context), inside), rtol=1e-6)
+
+
+def test_a_traced_disk_in_the_layer_of_another_component():
+    # Its surface density, in the shape of the other component's layer:
+    # as a disk of that surface density as a law in that layer
+    co, hi = Layers(flare=0), Layers(flare=1)
+    context = MassContext(1, 1, dict(co=co, hi=hi))
+    h2 = TracedDisk('h2', 'co', vertical=VerticalComponent('hi'))
+    params = dict(upsilon=1.0)
+    knots = co.knots(None)
+    # (a node-wise surface of the same values, 0 just beyond the last)
+    nodewise = MassDisk(
+        'n', SurfaceNodewise([*knots, knots[-1] + 1e-6]),
+        VerticalComponent('hi'))
+    log_sigma = np.log10(h2.surface_density(knots, params, context))
+    R = np.array([1.0, 3.0, 6.0])
+    np.testing.assert_allclose(
+        h2.vcirc2(R, params, context),
+        nodewise.vcirc2(R, dict(log_sigma=log_sigma), context), rtol=1e-4)
+    own = TracedDisk('h2', 'co')
+    assert not np.allclose(
+        h2.vcirc2(R, params, context), own.vcirc2(R, params, context),
+        rtol=1e-3)
 
 
 def test_vertical_structure_of_a_component():
@@ -1671,10 +1737,7 @@ def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
             components=[copy.deepcopy(disk)], mass=[gas, halo],
             distance=copy.deepcopy(DISTANCE)))
 
-    following = galaxy(dict(
-        type='disk', name='gas',
-        surface=dict(type='component', component='hi'),
-        vertical=dict(type='component', component='hi')))
+    following = galaxy(dict(type='traced_disk', name='gas', component='hi'))
     nodewise = galaxy(dict(
         type='disk', name='gas',
         surface=dict(
@@ -1702,8 +1765,7 @@ def test_a_disk_rotates_in_its_own_thin_mass_disk():
     disk = with_traits(DISK, vptraits=dict(type='mass')) | dict(name='gas')
     galaxy = galaxy_parser.load(dict(
         components=[disk],
-        mass=[dict(type='disk', name='hi',
-                   surface=dict(type='component', component='gas'),
+        mass=[dict(type='traced_disk', name='hi', component='gas',
                    vertical=dict(type='thin')),
               dict(type='spheroid', name='halo', profile=dict(
                   type='pseudo_isothermal', parameters='density_radius'))],
@@ -1718,9 +1780,7 @@ def test_a_disk_rotates_in_its_own_thin_mass_disk():
 
 def test_disks_follow_components_of_their_galaxy():
     mass = [
-        dict(type='disk', name='gas',
-             surface=dict(type='component', component='hi', rstep=1.0),
-             vertical=dict(type='component', component='hi', rstep=None))]
+        dict(type='traced_disk', name='gas', component='hi', rstep=1.0)]
     loaded = mass_component_parser.load(copy.deepcopy(mass))
     assert mass_component_parser.dump(loaded) == mass
     with pytest.raises(ValueError, match="has no component 'hi'"):
@@ -1747,10 +1807,8 @@ def test_disk_follows_a_component_without_light():
         opacity=dict(type='dust'))
     galaxy = galaxy_parser.load(dict(
         components=[stars, dust],
-        mass=[dict(
-            type='disk', name='gas',
-            surface=dict(type='component', component='dust'),
-            vertical=dict(type='thin'))],
+        mass=[dict(type='traced_disk', name='gas', component='dust',
+                   vertical=dict(type='thin'))],
         distance=copy.deepcopy(DISTANCE)))
     params = {
         f'{name}_{key}': value for name in ('stars', 'dust')
@@ -1979,9 +2037,7 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
         rhtraits=dict(type='sech2', zmax=8)) \
         | dict(name='gas')
     mass = [
-        dict(type='disk', name='hi', surface=dict(
-            type='component', component='gas'),
-            vertical=dict(type='component', component='gas')),
+        dict(type='traced_disk', name='hi', component='gas'),
         dict(type='spheroid', name='halo', profile=dict(
             type='pseudo_isothermal', parameters='density_radius'))]
 

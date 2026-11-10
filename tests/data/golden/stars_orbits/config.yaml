@@ -12,7 +12,7 @@ galaxies:
     norbits: 200
     turns: 20
   mass:
-  - {type: light_spheroid, name: lum, component: stars}
+  - {type: traced_spheroid, name: lum, component: stars}
   - {type: point, name: bh}
   distance: {type: direct, cosmology: Planck18}
 observations:

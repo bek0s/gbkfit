@@ -4,7 +4,7 @@ and halos) of a shape (see shapes), a sphere or a flattened spheroid; a
 halo can respond to the gravity of the baryons (see responses: e.g.
 contracted adiabatically), or be given by its dark matter fraction. And
 the mass that follows the light of a spheroid of the galaxy
-(MassLightSpheroid).
+(TracedSpheroid).
 """
 
 import math
@@ -32,7 +32,7 @@ from .units import G
 
 __all__ = [
     'DarkFraction',
-    'MassLightSpheroid',
+    'TracedSpheroid',
     'MassSpheroid',
     'dark_fraction_parser',
     'spheroid_profile_parser'
@@ -435,9 +435,9 @@ class MassSpheroid(MassComponent):
         return dict(params) | {name: value}
 
 
-class MassLightSpheroid(MassComponent):
+class TracedSpheroid(MassComponent):
     """
-    The mass that follows the light of a spheroid of the galaxy, times a
+    The mass that traces the light of a spheroid of the galaxy, times a
     mass-to-light ratio. It follows it to any radius (see
     components.Spheroid; rmax only bounds how far its light is drawn):
     upsilon times the light of each term of its profile, its density,
@@ -464,17 +464,17 @@ class MassLightSpheroid(MassComponent):
 
     @staticmethod
     def type() -> str:
-        return 'light_spheroid'
+        return 'traced_spheroid'
 
     @staticmethod
     def type_title() -> str:
-        return 'From a spheroid'
+        return 'Traced spheroid'
 
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(component=self._component)
 
     def __init__(self, name: str, component: str):
-        check_options(MassLightSpheroid.__init__, locals())
+        check_options(TracedSpheroid.__init__, locals())
         super().__init__(name)
         check_name(component)
         self._component = component
