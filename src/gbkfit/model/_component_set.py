@@ -28,8 +28,8 @@ from .distance import Distance
 from .extras import Extras
 from .gravity import Capability, Gravity, GravityNewton
 from .mass import (
-    ComponentDensity, DiskDensity, MassComponent, MassModel, SpheroidDensity,
-    mass_component_parser)
+    ComponentDensity, DiskDensity, MassComponent, MassDisk, MassModel,
+    SpheroidDensity, mass_component_parser)
 
 
 __all__ = [
@@ -117,24 +117,31 @@ def _check_fluids(
         thick: Sequence[str]
 ) -> None:
     """
-    Check the fluids of the disks of a galaxy of a mass model (see Disk):
-    the mass disks that they name, or the mass disks that follow each
-    disk, whose surface density its equilibrium 'sheet' takes; and that
-    no disk balances its rotation (the equilibrium 'rotation') next to a
-    mass model, where the vertical frequency of the disk is 2.5-3 times
-    its angular speed. The galaxy has thick components of the given
-    names.
+    Check the fluids and the vertical balance of the disks of a galaxy of
+    a mass model (see Disk): the mass disks that their fluids name, or the
+    mass disks that follow each disk, whose surface density its
+    equilibrium 'sheet' takes; that no disk balances its rotation (the
+    equilibrium 'rotation') next to a mass model, where the vertical
+    frequency of a disk is 2.5-3 times its angular speed; and that no
+    mass disk follows the layer of a thick disk that derives its
+    thickness (the mass would take the thickness that its gravity sets:
+    not yet). The galaxy has thick components of the given names.
 
     Raises
     ------
     ValueError
         If one of these does not hold.
     """
+    layers = {
+        mass.vertical().followed_component()
+        for mass in mass_model.components() if isinstance(mass, MassDisk)
+    } - {None}
     for cmp in components:
         if not isinstance(cmp, Disk):
             continue
         label = repr(cmp.name()) if cmp.name() is not None else ''
-        equilibrium = cmp.equilibrium()
+        equilibrium = cmp.equilibrium() if cmp.equilibrium() is not None \
+            else cmp.height_equilibrium()
         gravity = equilibrium.gravity() if equilibrium is not None else None
         if gravity == 'rotation':
             raise ValueError(
@@ -143,6 +150,14 @@ def _check_fluids(
                 f"rotation, which is not that of a galaxy of mass (a disk "
                 f"pulls 2.5-3 times harder where it dominates): give it the "
                 f"equilibrium 'galaxy' or 'sheet'")
+        if cmp.height_equilibrium() is not None and cmp.name() in layers \
+                and isinstance(cmp, ThickDisk):
+            raise ValueError(
+                f"a mass disk follows the layer of the component {label}, "
+                f"whose thickness its vertical equilibrium derives: a mass "
+                f"that takes the thickness that its gravity sets is not "
+                f"supported yet; give the mass disk a vertical structure of "
+                f"its own")
         fluid = mass_model.fluid(cmp.name(), cmp.fluid())
         if gravity != 'sheet' or cmp.fluid():
             continue

@@ -164,7 +164,8 @@ rht_parser = TypedParser(RHTrait, [
     RHTraitGGauss,
     RHTraitLorentz,
     RHTraitMoffat,
-    RHTraitSech2], family='rht')
+    RHTraitSech2,
+    RHTraitEquilibrium], family='rht')
 
 
 # Velocity polar traits parser

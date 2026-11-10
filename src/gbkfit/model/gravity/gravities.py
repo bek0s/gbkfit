@@ -162,9 +162,8 @@ class Gravity(TypedSerializable, abc.ABC):
     - forces that are the gradient of a potential (POTENTIAL), in which
       orbits keep their energy, as the orbits of Schwarzschild models take
     - the vertical structure of self-gravitating isothermal sheets
-      (SHEETS), which the vertical equilibrium 'sheet' and the
-      self_gravitating pressure support take (see
-      traits.DPTraitEquilibrium and traits.PressureSupport)
+      (SHEETS), which the vertical equilibrium 'sheet' takes (see
+      traits.DPTraitEquilibrium and traits.RHTraitEquilibrium)
     - the shares of the components in the squared circular velocity
       (SHARES), which the dark fraction of a halo takes (see
       mass.Halo)

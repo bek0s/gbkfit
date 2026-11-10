@@ -326,3 +326,152 @@ def test_galaxy_equilibrium_needs_vertical_forces(tmp_path):
 def test_equilibrium_is_checked(disk, message):
     with pytest.raises((ConfigError, ValueError), match=message):
         galaxy(disk)
+
+
+# A thin disk that rotates in its mass, of the jeans pressure in the sheet
+# of the mass disk that follows it (its thickness not drawn)
+THIN = dict(
+    type='thin_disk', name='gas', rnodes=list(range(0, 21, 2)), rstep=0.5,
+    rptraits=dict(type='exponential'),
+    rhtraits=dict(type='equilibrium', gravity='sheet'),
+    vptraits=dict(type='mass'), dptraits=dict(type='nw_uniform'),
+    pressure_support=dict(type='jeans'), emission=dict(type='lines'))
+THIN_MASS = [
+    dict(type='traced_disk', name='gas', component='gas',
+         vertical=dict(type='thin')),
+    dict(type='point', name='bh')]
+THIN_PROPERTIES = dict(
+    gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60, gas_vsys=0,
+    gas_rpt_a=1, gas_rpt_s=4, gas_dpt_a=list(np.linspace(40, 15, 11)),
+    distance=10, mass_bh_log_m=10.5, mass_gas_upsilon=1e9)
+
+
+@pytest.mark.parametrize('fluid', [None, 'gas'])
+def test_the_sheet_of_a_thin_disk_is_its_own_gravity(fluid):
+    # The density at its midplane, S / (2 z0), z0 = sigma^2 / (pi G
+    # Sigma), of Sigma = upsilon S, is ~ S^2 / sigma^2: the pressure is R
+    # sigma^2 d(S^2)/dR / S^2 (2 sigma^2 dln S / dln R for an axisymmetric
+    # disk: Burkert et al. 2010), whatever its dispersion, at every radius
+    # of the rotation (the tail too), of its own S or of the surface
+    # density of its fluid
+    disk = THIN | ({} if fluid is None else dict(fluid=fluid))
+    balanced = galaxy(disk, mass=THIN_MASS, distance=dict(type='parameter'))
+    extra = Extras()
+    balanced.plan_stage().evaluate(THIN_PROPERTIES, extra)
+    table = extra.get('vpt_vt_rotation', component='gas')
+    r = np.asarray(table['radius'])
+    surface = np.exp(-r / 4)
+    sigma = np.interp(r, THIN['rnodes'], THIN_PROPERTIES['gas_dpt_a'])
+    np.testing.assert_allclose(
+        table['pressure'],
+        r * np.gradient(surface ** 2, r, edge_order=2) * sigma ** 2
+        / surface ** 2, rtol=1e-8, atol=1e-8)
+    # (and its scale heights at the subnodes, z0 = sigma^2 / (pi G Sigma))
+    heights = extra.get('equilibrium', component='gas')
+    radii = np.asarray(heights['radius'])
+    sigma = np.interp(radii, THIN['rnodes'], THIN_PROPERTIES['gas_dpt_a'])
+    Sigma = 1e9 * np.exp(-radii / 4)
+    np.testing.assert_allclose(heights['sigma'], sigma, rtol=1e-12)
+    np.testing.assert_allclose(
+        heights['height'],
+        sigma ** 2 / (np.pi * G * Sigma) / KPC_PER_ARCSEC, rtol=1e-10)
+    dumped = galaxy_parser.dump(balanced)['components'][0]
+    assert dumped['rhtraits'] == dict(type='equilibrium', gravity='sheet')
+
+
+def test_a_thick_disk_draws_the_sheet_of_its_fluid(driver):
+    # The disk of the sheet of its fluid (an exponential mass disk) is that
+    # of node-wise sech^2 heights at its subnodes of its scale heights,
+    # sigma^2 / (pi G Sigma)
+    mass = [dict(
+        type='disk', name='gas', surface=dict(type='exponential'),
+        vertical=dict(type='thin'))]
+    info = dict(mass=mass, distance=dict(type='parameter'))
+    disk = unbalanced(DISK, dict(type='uniform'))
+    balanced = galaxy(disk | dict(
+        rhtraits=dict(type='equilibrium', gravity='sheet', zmax=10),
+        fluid='gas'), **info)
+    given = galaxy(disk | dict(rhtraits=dict(
+        type='sech2', zmax=10, nodewise=True, sampling='subrings')), **info)
+    properties = {key: value for key, value in PROPERTIES.items()
+                  if key != 'rht_s'} | dict(
+        dpt_a=20, distance=10, mass_gas_log_m=10, mass_gas_rd=2)
+    assert 'rht_s' not in balanced.pdescs()
+    extra = Extras()
+    balanced.plan_stage().evaluate(properties, extra)
+    table = extra.get('equilibrium', component='component0')
+    radii = np.asarray(table['radius'])
+    Sigma = 1e10 / (2 * np.pi * 2 ** 2) * np.exp(-radii * KPC_PER_ARCSEC / 2)
+    np.testing.assert_allclose(
+        table['height'],
+        20 ** 2 / (np.pi * G * Sigma) / KPC_PER_ARCSEC, rtol=1e-10)
+    np.testing.assert_allclose(
+        evaluate(driver, balanced, properties),
+        evaluate(driver, given, properties | dict(
+            rht_s=np.asarray(table['height']))),
+        rtol=1e-6, atol=1e-9)
+
+
+def test_a_thick_disk_draws_the_gaussian_of_its_rotation(driver):
+    # Without mass, the disk is that of node-wise Gaussian heights at its
+    # subnodes of h = sigma / Omega, Omega = V / R of its rotation V (of
+    # its traits); at the centre, Omega of the next subnode
+    disk = unbalanced(DISK, dict(type='uniform'))
+    balanced = galaxy(disk | dict(rhtraits=dict(
+        type='equilibrium', gravity='rotation', zmax=10)))
+    given = galaxy(disk | dict(rhtraits=dict(
+        type='gauss', zmax=10, nodewise=True, sampling='subrings')))
+    radii = np.array(given.constants()['subrnodes'])
+    omega = np.zeros_like(radii)
+    omega[1:] = 200 * 2 / np.pi * np.arctan(radii[1:] / 3) / radii[1:]
+    omega[0] = omega[1]
+    properties = {key: value for key, value in PROPERTIES.items()
+                  if key != 'rht_s'} | dict(dpt_a=20)
+    np.testing.assert_allclose(
+        evaluate(driver, balanced, properties),
+        evaluate(driver, given, properties | dict(rht_s=20 / omega)),
+        rtol=1e-6, atol=1e-9)
+
+
+FOLLOWED = dict(mass=[dict(type='traced_disk', name='gas', component='gas')],
+                distance=dict(type='parameter'))
+
+
+@pytest.mark.parametrize('disk, info, message', [
+    (DISK | dict(rhtraits=[
+        dict(type='equilibrium', gravity='rotation', zmax=10),
+        dict(type='gauss', zmax=10)], rptraits=[
+        dict(type='exponential'), dict(type='gauss')]), {}, "give it alone"),
+    (DISK | dict(rhtraits=dict(
+        type='equilibrium', gravity='rotation', zmax=10)), {}, "not both"),
+    (unbalanced(DISK, dict(type='uniform')) | dict(rhtraits=dict(
+        type='equilibrium', gravity='rotation')), {}, "give it zmax"),
+    (unbalanced(DISK, dict(type='uniform')) | dict(rhtraits=dict(
+        type='equilibrium', gravity='galaxy', zmax=10)), {}, "'galaxy'"),
+    (unbalanced(DISK, dict(type='uniform')) | dict(
+        rhtraits=dict(type='equilibrium', gravity='rotation', zmax=10),
+        dhtraits=dict(type='exponential')), {}, "must be 'one'"),
+    (THIN | dict(rhtraits=dict(type='equilibrium', gravity='sheet', zmax=2)),
+     FOLLOWED, "give it no zmax"),
+    ({key: value for key, value in THIN.items()
+      if key != 'pressure_support'} | dict(vptraits=dict(
+          type='arctan', direction='tan')), {}, "give it pressure_support"),
+    (THIN | dict(rhtraits=dict(type='gauss', zmax=2)), {},
+     "a thin disk takes one density height trait"),
+    (THIN, dict(mass=[dict(type='point', name='bh')],
+                distance=dict(type='parameter')),
+     "give it a fluid, or a mass disk that follows it"),
+    (unbalanced(DISK, dict(type='uniform')) | dict(name='gas', rhtraits=dict(
+        type='equilibrium', gravity='sheet', zmax=10)), FOLLOWED,
+     "not supported yet"),
+    (unbalanced(DISK, dict(type='uniform')) | dict(rhtraits=dict(
+        type='equilibrium', gravity='rotation', zmax=10)), POINT,
+     "equilibrium 'rotation' of the component"),
+    ({key: value for key, value in DISK.items()
+      if key not in ('loose', 'tilted', 'dptraits')}
+     | dict(type='cone', dptraits=dict(type='uniform'), rhtraits=dict(
+         type='equilibrium', gravity='rotation', zmax=10)), {},
+     "equilibrium")])
+def test_the_balance_of_the_thickness_is_checked(disk, info, message):
+    with pytest.raises((ConfigError, ValueError), match=message):
+        galaxy(disk, **info)

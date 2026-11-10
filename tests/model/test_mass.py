@@ -1618,6 +1618,16 @@ DISK = dict(
 DISK_PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, dpt_a=15)
 
+# The options of a thin disk whose thickness its own gravity sets: its
+# vertical equilibrium 'sheet', which it does not draw, gives its jeans
+# pressure support the density at its midplane, S / (2 z0), of its
+# surface density S (that of its fluid, if it has one) and z0 = sigma^2 /
+# (pi G Sigma), Sigma that of its fluid (or of the mass disks that follow
+# it): rho ~ S^2 / sigma^2, where Sigma ~ S
+SHEET = dict(
+    type='thin_disk', rhtraits=dict(type='equilibrium', gravity='sheet'),
+    pressure_support=dict(type='jeans'))
+
 
 def test_the_mass_of_a_galaxy_is_of_its_epoch():
     # The critical density that defines its halos is that of its redshift
@@ -1668,12 +1678,12 @@ def disk_galaxy(
     and options (e.g. its pressure support), thick (of sech2 height
     traits) if thick, with the given mass and distance.
     """
-    disk = with_traits(DISK, vptraits=vptraits) | options
+    disk = with_traits(DISK, vptraits=vptraits)
     if thick:
         disk = with_traits(disk, rhtraits=dict(type='sech2', zmax=8))
     if disk_type == 'clouds':
         disk |= dict(clouds=dict(cflux=1e-3))
-    info = dict(components=[disk])
+    info = dict(components=[disk | options])
     if mass is not None:
         info |= dict(mass=copy.deepcopy(mass))
     if distance is not None:
@@ -2101,7 +2111,7 @@ def test_pressure_support_is_the_jeans_equation(driver):
     disk = component.density_disk()
     radius = np.array(disk.subrnodes())
     np.testing.assert_allclose(
-        pressure_support(disk, plan.disk_plan(), params, radius, 'jeans'),
+        pressure_support(disk, plan.disk_plan(), params, radius),
         -(30 * np.exp(-radius / 10)) ** 2 * radius * (1 / 4 + 2 / 10),
         rtol=1e-2, atol=1e-3)
 
@@ -2110,23 +2120,25 @@ def test_pressure_support_is_the_jeans_equation(driver):
     (dict(type='exponential'), lambda r: np.exp(-r / 4)),
     (dict(type='ggauss'), lambda r: np.exp(-(r / 4) ** 1.5))])
 def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
-    # R d(S^2)/dR sigma^2 / S^2, whatever the thickness of the disk, with
-    # the three-point derivative on the subnodes, as the disk takes it: its
-    # limit 2 sigma^2 dln S / dln R is, of an exponential S (scale 4),
-    # -2 sigma^2 R / 4 (DysmalPy's type 1, -3.36 sigma^2 R / R_e with R_e =
-    # 1.678 x 4), and of a Sersic one (a ggauss of shape 1.5 = 1 / n),
-    # -2 sigma^2 1.5 (R / 4)^1.5 (type 2), here of a dispersion of scale 10
-    from gbkfit.model import ThickDisk
+    # Of a thin disk in the equilibrium 'sheet' of its own surface density
+    # S (Sigma = upsilon S, of a mass disk that follows it, of any
+    # upsilon), R d(S^2)/dR sigma^2 / S^2, with the three-point derivative
+    # on the subnodes, as the disk takes it: its limit 2 sigma^2 dln S /
+    # dln R is, of an exponential S (scale 4), -2 sigma^2 R / 4 (DysmalPy's
+    # type 1, -3.36 sigma^2 R / R_e with R_e = 1.678 x 4), and of a Sersic
+    # one (a ggauss of shape 1.5 = 1 / n), -2 sigma^2 1.5 (R / 4)^1.5 (type
+    # 2), here of a dispersion of scale 10
+    from gbkfit.model import ThinDisk
     from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
     from gbkfit.model.components.disks._profiles import pressure_support
-    component = ThickDisk.load(dict(
+    component = ThinDisk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
-        rptraits=ptrait, rhtraits=dict(type='sech2', zmax=8),
+        rptraits=ptrait, rhtraits=SHEET['rhtraits'],
         vptraits=dict(type='mass'), dptraits=dict(type='exponential'),
-        pressure_support=dict(type='self_gravitating'),
+        pressure_support=SHEET['pressure_support'],
         emission=dict(type='lines')))
     params = dict(
-        xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, rht_s=1,
+        xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
         dpt_a=30, dpt_s=10) | (dict(rpt_b=1.5) if 'rpt_b' in component.pdescs()
                                else {})
     plan = component.plan(
@@ -2134,15 +2146,18 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
         None, None, 0.0)
     disk = component.density_disk()
     (name, support), = disk.pressure_supported_params().items()
-    assert name == 'vpt_vt' and support.type() == 'self_gravitating' \
+    assert name == 'vpt_vt' and support.type() == 'jeans' \
         and disk.fluid() == ()
     radius = np.array(disk.subrnodes())
     squared = surface(radius) ** 2
+    sigma2 = (30 * np.exp(-radius / 10)) ** 2
+    z0 = sigma2 / (np.pi * G * 1e8 * surface(radius))
     np.testing.assert_allclose(
         pressure_support(
-            disk, plan.disk_plan(), params, radius, 'self_gravitating'),
-        radius * np.gradient(squared, radius, edge_order=2)
-        * (30 * np.exp(-radius / 10)) ** 2 / squared, rtol=1e-10)
+            disk, plan.disk_plan(), params, radius,
+            midplane=disk.height_equilibrium().midplane_density(z0)),
+        radius * np.gradient(squared, radius, edge_order=2) * sigma2
+        / squared, rtol=1e-10)
 
 
 @pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
@@ -2209,47 +2224,50 @@ def test_pressure_support_option():
         ThinDisk.load(disk | dict(
             pressure_support=dict(type='jeans', mass='gas')))
     for fluid in ('gas', ['hi', 'h2']):
-        given = disk | dict(
-            pressure_support=dict(type='self_gravitating'), fluid=fluid)
+        given = supported | dict(fluid=fluid)
         assert ThinDisk.load(given).dump()['fluid'] == fluid
     with pytest.raises(ValueError, match="each once"):
         ThinDisk.load(supported | dict(fluid=['hi', 'hi']))
 
 
-@pytest.mark.parametrize('mode', ['jeans', 'self_gravitating'])
-def test_pressure_support_takes_the_density_of_a_mass_component(mode):
-    # The density at its midplane of the fluid of the disk, a thick
-    # exponential gas disk of the scale length 1 kpc ('jeans', as
-    # DysmalPy's type 3), or its surface density ('self_gravitating', as
-    # its types 1 and 2 with the effective radius of the mass disk): (R /
-    # rho) d(rho sigma^2)/dR on the subnodes, with rho ~ exp(-R), or ~
-    # exp(-2 R) / sigma^2, for the dispersion of the disk
+@pytest.mark.parametrize('sheet', [False, True])
+def test_pressure_support_takes_the_density_of_a_mass_component(sheet):
+    # The density at its midplane of the fluid of a thick disk, a thick
+    # exponential gas disk of the scale length 1 kpc (as DysmalPy's type
+    # 3), or of a thin disk in the equilibrium 'sheet' of its fluid, its
+    # surface density / (2 z0) (as its types 1 and 2 with the effective
+    # radius of the mass disk): (R / rho) d(rho sigma^2)/dR on the
+    # subnodes, with rho ~ exp(-R), or ~ exp(-2 R) / sigma^2, for the
+    # dispersion of the disk
     mass = [
         dict(type='disk', name='gas', surface=dict(type='exponential'),
              vertical=dict(type='sech2')),
         dict(type='halo', name='halo', profile=dict(
             type='pseudo_isothermal', parameterisation='density_radius'))]
+    options = SHEET if sheet else dict(pressure_support=dict(type='jeans'))
     galaxy = disk_galaxy(
-        'smooth', dict(type='mass'), mass, DISTANCE,
-        pressure_support=dict(type=mode), fluid='gas')
+        'smooth', dict(type='mass'), mass, DISTANCE, thick=not sheet,
+        fluid='gas', **options)
     params = DISK_PROPERTIES | dict(
         distance=10, mass_gas_log_m=9, mass_gas_rd=1, mass_gas_hz=0.1,
-        mass_halo_log_rho=7, mass_halo_rs=3)
+        mass_halo_log_rho=7, mass_halo_rs=3) | (
+            {} if sheet else dict(rht_s=1))
     extra = Extras()
     galaxy.plan_stage().evaluate(params, extra)
     table = extra.get('vpt_vt_rotation', component='component0')
     r = np.asarray(table['radius'])
-    profile = np.exp(-np.asarray(table['radius_kpc'])) \
-        ** dict(jeans=1, self_gravitating=2)[mode]
+    profile = np.exp(-np.asarray(table['radius_kpc'])) ** (2 if sheet else 1)
     np.testing.assert_allclose(
         table['pressure'], DISK_PROPERTIES['dpt_a'] ** 2 * r
         * np.gradient(profile, r, edge_order=2) / profile, rtol=1e-5)
 
 
-def test_pressure_support_adds_the_densities_of_mass_components():
+@pytest.mark.parametrize('thick', [False, True])
+def test_pressure_support_adds_the_densities_of_mass_components(thick):
     # Two thick exponential gas disks of one thickness (e.g. the atomic
     # and the molecular gas), of the scale lengths 2 and 1 kpc: the
-    # 'jeans' pressure of the sum of their densities at their midplane,
+    # 'jeans' pressure of the sum of their densities at their midplane (of
+    # a thick disk), or of their surface densities (of a thin one), alike
     # ~ M_hi / rd_hi^2 exp(-R / rd_hi) + M_h2 / rd_h2^2 exp(-R / rd_h2)
     mass = [
         dict(type='disk', name=name, surface=dict(type='exponential'),
@@ -2257,12 +2275,12 @@ def test_pressure_support_adds_the_densities_of_mass_components():
         dict(type='halo', name='halo', profile=dict(
             type='pseudo_isothermal', parameterisation='density_radius'))]
     galaxy = disk_galaxy(
-        'smooth', dict(type='mass'), mass, DISTANCE,
+        'smooth', dict(type='mass'), mass, DISTANCE, thick=thick,
         pressure_support=dict(type='jeans'), fluid=['hi', 'h2'])
     params = DISK_PROPERTIES | dict(
         distance=10, mass_hi_log_m=9.5, mass_hi_rd=2, mass_hi_hz=0.1,
         mass_h2_log_m=9, mass_h2_rd=1, mass_h2_hz=0.1, mass_halo_log_rho=7,
-        mass_halo_rs=3)
+        mass_halo_rs=3) | (dict(rht_s=1) if thick else {})
     extra = Extras()
     galaxy.plan_stage().evaluate(params, extra)
     table = extra.get('vpt_vt_rotation', component='component0')
@@ -2273,15 +2291,17 @@ def test_pressure_support_adds_the_densities_of_mass_components():
         * np.gradient(profile, r, edge_order=2) / profile, rtol=1e-5)
 
 
-@pytest.mark.parametrize('mode', ['jeans', 'self_gravitating'])
-def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
+@pytest.mark.parametrize('sheet', [False, True])
+def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(
+        sheet):
     # A mass disk that follows the disk (its surface density and vertical
     # structure) has its density at its subnodes, upsilon times it, which
-    # the pressure does not see: the support of the density of the disk
-    disk = with_traits(
-        DISK, vptraits=dict(type='mass'), pressure_support=dict(type=mode),
-        rhtraits=dict(type='sech2', zmax=8)) \
-        | dict(name='gas')
+    # the pressure does not see: the support of the density of the disk,
+    # thick, or thin in the equilibrium 'sheet' (of the mass disk)
+    disk = with_traits(DISK, vptraits=dict(type='mass')) | (
+        SHEET if sheet else dict(
+            type='thick_disk', rhtraits=dict(type='sech2', zmax=8),
+            pressure_support=dict(type='jeans'))) | dict(name='gas')
     mass = [
         dict(type='traced_disk', name='hi', component='gas'),
         dict(type='halo', name='halo', profile=dict(
@@ -2293,8 +2313,8 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
             distance=copy.deepcopy(DISTANCE)))
         params = {f'gas_{key}': value
                   for key, value in DISK_PROPERTIES.items()} | dict(
-            gas_rht_s=0.5, distance=10, mass_hi_upsilon=1e8,
-            mass_halo_log_rho=7, mass_halo_rs=3)
+            distance=10, mass_hi_upsilon=1e8, mass_halo_log_rho=7,
+            mass_halo_rs=3) | ({} if sheet else dict(gas_rht_s=0.5))
         state = galaxy.plan_stage().evaluate(params).states[0]
         return state.rotation['vpt_vt']
     np.testing.assert_allclose(
@@ -2304,23 +2324,26 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
 def test_pressure_density_is_a_mass_component_that_gives_it():
     def galaxy(fluid):
         return disk_galaxy(
-            'smooth', dict(type='mass'), MASS, DISTANCE,
+            'smooth', dict(type='mass'), MASS, DISTANCE, thick=True,
             pressure_support=dict(type='jeans'), fluid=fluid)
     with pytest.raises(ValueError, match="which its galaxy does not have"):
         galaxy('dust')
-    # (a thin disk has no density at its midplane: refused at load, not at
-    # the first evaluation of a fit, audit 2026-10-31 #30a)
-    with pytest.raises(ValueError, match="does not give its density"):
+    # (a thin mass disk has no density at its midplane, which the pressure
+    # of a thick disk takes: refused at load, not at the first evaluation
+    # of a fit, audit 2026-10-31 #30a)
+    with pytest.raises(
+            ValueError, match="takes the density of the mass component "
+            "'stars', which does not give its density"):
         galaxy('stars')
 
 
 def rotation_at_heights(mass, params, **options):
     """
-    The galaxy of a thick disk (DISK, of sech2 height traits to zmax 8)
-    of the velocity polar and height traits 'mass' and the given options
-    (e.g. its pressure support), and of the given mass, and what its
-    gravity gives the disk (its state) at the values params of its
-    parameters.
+    The galaxy of a thick disk (DISK, of sech2 height traits to zmax 8,
+    unless the options give others) of the velocity polar and height
+    traits 'mass' and the given options (e.g. its pressure support), and
+    of the given mass, and what its gravity gives the disk (its state) at
+    the values params of its parameters.
     """
     disk = with_traits(
         DISK, vptraits=dict(type='mass'),
@@ -2341,8 +2364,7 @@ def test_the_fluid_is_of_mass_disks(fluid, message):
     # at load, not at the first evaluation of a fit: audit 2026-10-31 #30a)
     disk = with_traits(
         DISK, vptraits=dict(type='mass'),
-        pressure_support=dict(type='self_gravitating'), fluid=fluid) \
-        | dict(name='gas')
+        pressure_support=dict(type='jeans'), fluid=fluid) | dict(name='gas')
     with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(
             components=[disk], mass=[
@@ -2416,29 +2438,32 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
 
 
 def test_self_gravitating_rotation_at_each_height():
-    # In the isothermal sheet of the surface density S of an exponential
-    # mass disk (scale length 1 kpc) and a uniform dispersion sigma, rho
-    # sigma^2 ~ S^2 sech^2(z / z0), z0 = sigma^2 / (pi G S): R d(rho
-    # sigma^2)/dR / rho = sigma^2 R (-2 + 2 u tanh(u)), u = z / z0, R in
-    # kpc, to the precision of the three-point derivative on the subnodes
-    params = DISK_PROPERTIES | dict(
-        rht_s=1, distance=10, mass_gas_log_m=9.5, mass_gas_rd=1,
-        mass_bh_log_m=10.5)
+    # In the isothermal sheet that the disk draws (its equilibrium 'sheet')
+    # of its surface density S (an exponential of the scale length 1 kpc,
+    # that of a thin mass disk that follows it, upsilon S: of a vertical
+    # structure of its own, as no mass yet takes the thickness its gravity
+    # sets) and a uniform dispersion sigma, rho sigma^2 ~ S^2 sech^2(z /
+    # z0), z0 = sigma^2 / (pi G S): R d(rho sigma^2)/dR / rho = sigma^2 R
+    # (-2 + 2 u tanh(u)), u = z / z0, R in kpc, to the precision of the
+    # three-point derivative on the subnodes
+    params = {f'gas_{key}': value
+              for key, value in DISK_PROPERTIES.items()} | dict(
+        gas_rpt_s=1 / KPC_PER_ARCSEC, distance=10,
+        mass_gas_upsilon=10 ** 9.5 / (2 * np.pi), mass_bh_log_m=10.5)
     mass = [
-        dict(type='disk', name='gas', surface=dict(type='exponential'),
+        dict(type='traced_disk', name='gas', component='gas',
              vertical=dict(type='thin')),
         dict(type='point', name='bh')]
     galaxy, state = rotation_at_heights(
-        mass, params, pressure_support=dict(type='self_gravitating'),
-        fluid='gas')
+        mass, params, name='gas',
+        rhtraits=dict(type='equilibrium', gravity='sheet', zmax=8),
+        pressure_support=dict(type='jeans'))
     disk = galaxy.components()[0].density_disk()
     R = np.array(disk.subrnodes())[1:, None] * KPC_PER_ARCSEC
     z = np.linspace(0, 8, 33) * KPC_PER_ARCSEC
     surface = 10 ** 9.5 / (2 * np.pi) * np.exp(-R)
     u = np.pi * G * surface * z / 15 ** 2
-    model = mass_model(mass)
-    force_R = model.forces(R, z, dict(
-        mass_gas_log_m=9.5, mass_gas_rd=1, mass_bh_log_m=10.5), CONTEXT)[0]
+    force_R = galaxy.plan_stage().mass(params).field.forces(R, z)[0]
     v2 = -R * force_R + 15 ** 2 * R * (-2 + 2 * u * np.tanh(u))
     factors = np.array(
         [state.rotation_factors[f'vht_f{k}'] for k in range(33)]).T[1:]
@@ -2451,8 +2476,9 @@ def test_self_gravitating_rotation_at_each_height():
     (dict(vptraits=dict(type='arctan', direction='tan')), False,
      "pairs with the velocity trait 'mass' only, not 'arctan'"),
     (dict(vptraits=dict(type='mass'),
-          pressure_support=dict(type='self_gravitating')), False,
-     "give the disk its fluid"),
+          rhtraits=dict(type='equilibrium', gravity='sheet', zmax=8),
+          pressure_support=dict(type='jeans')), False,
+     "give it a fluid, or a mass disk that follows it"),
     (dict(vptraits=dict(type='mass')), True,
      r"\['mine'\] do not give their forces off their plane")])
 def test_rotation_at_each_height_is_checked(
@@ -2463,7 +2489,7 @@ def test_rotation_at_each_height_is_checked(
         type='user', name='mine', file=str(tmp_path / 'curve.py'),
         func='vcirc2')] if user else MASS
     disk = with_traits(
-        DISK, rhtraits=dict(type='sech2', zmax=8), **options)
+        DISK, **(dict(rhtraits=dict(type='sech2', zmax=8)) | options))
     disk |= dict(vhtraits=dict(type='mass', zmax=8))
     with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(

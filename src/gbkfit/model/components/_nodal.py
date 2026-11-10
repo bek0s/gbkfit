@@ -24,8 +24,8 @@ from gbkfit.utils import iterutils
 from .nodes import Nodes
 from ._native import ParamBuffer
 from .traits import (
-    DPT_DIRECTION_DEFAULT, DPTrait, GalaxyInput, HTrait, ImageInput,
-    RPTrait, RotationFactorsInput, RotationInput,
+    DPT_DIRECTION_DEFAULT, DPTrait, GalaxyInput, HTrait, HeightInput,
+    ImageInput, RPTrait, RotationFactorsInput, RotationInput,
     SAMPLING_TAIL, Trait, VPTrait, WaveInput, trait_desc)
 
 
@@ -117,7 +117,9 @@ class TraitParams:
     values are the circular velocity of the mass of the galaxy (see
     traits.RotationInput), rotation_factor those whose
     values are the factors of the rotation in the gravity at a height,
-    with their heights (see traits.RotationFactorsInput), wave those whose
+    with their heights (see traits.RotationFactorsInput), height those
+    whose values are the scale heights of a vertical equilibrium (see
+    traits.HeightInput), wave those whose
     values are the tables of a density wave in the rotation of the disk
     (see traits.WaveInput), and image those whose values are the face-on
     light of an image (see traits.ImageInput).
@@ -127,6 +129,7 @@ class TraitParams:
     pnames: tuple[dict[str, str], ...]
     circular_velocity: tuple[str, ...]
     rotation_factor: dict[str, float]
+    height: tuple[str, ...]
     wave: tuple[str, ...]
     image: tuple[str, ...]
 
@@ -208,6 +211,7 @@ def _trait_params(
             mapping[name]: height for given, mapping in inputs
             if isinstance(given, RotationFactorsInput)
             for name, height in zip(given.params, given.heights)},
+        height=names(HeightInput),
         wave=names(WaveInput),
         image=names(ImageInput))
 
@@ -378,6 +382,9 @@ class NodalTraits:
         self._rotation_factor_params = {
             name: height for params in self._params.values()
             for name, height in params.rotation_factor.items()}
+        self._height_params = tuple(dict.fromkeys(
+            name for params in self._params.values()
+            for name in params.height))
         self._wave_params = tuple(
             name for params in self._params.values() for name in params.wave)
         self._image_params = tuple(
@@ -428,8 +435,8 @@ class NodalTraits:
         for params in self._params.values():
             pdescs.update(params.pdescs)
         for name in [*self._circular_velocity_params,
-                     *self._rotation_factor_params, *self._wave_params,
-                     *self._image_params]:
+                     *self._rotation_factor_params, *self._height_params,
+                     *self._wave_params, *self._image_params]:
             del pdescs[name]
         return pdescs
 
@@ -449,6 +456,14 @@ class NodalTraits:
         traits.VHTraitMass).
         """
         return self._rotation_factor_params
+
+    def height_params(self) -> tuple[str, ...]:
+        """
+        Return the parameters whose values are not given, but are the
+        scale heights of a vertical equilibrium at the subnodes, which
+        its galaxy derives (see traits.RHTraitEquilibrium).
+        """
+        return self._height_params
 
     def wave_params(self) -> tuple[str, ...]:
         """

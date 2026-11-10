@@ -761,7 +761,11 @@ class VerticalBalance(Rule):
     its rotation, in a galaxy without mass (next to a mass, the pull of a
     spherical mass of its rotation is not expressible). The pressure
     support of its velocity trait 'mass' is an option of the disk, and
-    the mass of the support the fluid of the disk.
+    the mass of the support the fluid of the disk. The self_gravitating
+    support of a thin disk is the jeans support of the disk in the sheet
+    of its fluid (rhtraits: {type: equilibrium, gravity: sheet}), which
+    without a mass is that of the mass disks that follow it; on a thick
+    disk of fitted heights, it is not expressible.
     """
 
     _GRAVITIES = dict(
@@ -774,39 +778,55 @@ class VerticalBalance(Rule):
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
         changes = []
         for galaxy_path, galaxy in items(config, 'galaxies'):
-            massive = bool(galaxy.get('mass'))
+            mass = [item for _, item in items(galaxy, 'mass')]
             for path, component in components(galaxy):
                 if component.get('type') in ('thin_disk', 'thick_disk'):
                     changes += self._disk(
-                        component, galaxy_path + path, massive)
+                        component, galaxy_path + path, mass)
         return changes
 
     def _disk(
             self,
             disk: MutableMapping[str, Any],
             path: list[str | int],
-            massive: bool
+            mass: list[Any]
     ) -> list[Change]:
         """
-        Rewrite the balance of a disk of a galaxy with mass or not, in
-        place.
+        Rewrite the balance of a disk of a galaxy of the given mass
+        components (none without mass), in place.
 
         Raises
         ------
         ConfigError
-            If it is in the central equilibrium next to a mass, or its
-            pressure support and its equilibrium take different masses.
+            If it is in the central equilibrium next to a mass, its
+            pressure support and its equilibrium take different masses, or
+            it is a thick disk of the self_gravitating support, or a thin
+            one of it without a mass disk.
         """
+        massive = bool(mass)
         changes = []
         fluids = []
+        sheet = False
         vptraits = disk.get('vptraits')
         for trait in vptraits if isinstance(vptraits, list) else [vptraits]:
             if not isinstance(trait, MutableMapping) \
                     or 'pressure_support' not in trait:
                 continue
             support = dict(trait.pop('pressure_support'))
-            if (mass := support.pop('mass', None)) is not None:
-                fluids.append(mass)
+            if (names := support.pop('mass', None)) is not None:
+                fluids.append(names)
+            if support.get('type') == 'self_gravitating':
+                if disk.get('type') == 'thick_disk':
+                    raise ConfigError(
+                        f"the disk at {path} is thick, of the "
+                        f"self_gravitating pressure support, which is no "
+                        f"longer expressible with heights of its own: give "
+                        f"it the pressure jeans (in its heights), or the "
+                        f"heights of the equilibrium sheet (rhtraits: "
+                        f"{{type: equilibrium, gravity: sheet, zmax}}), "
+                        f"then migrate it")
+                support['type'] = 'jeans'
+                sheet = True
             disk['pressure_support'] = support
             changes.append(Change(path, (
                 "the pressure support of the velocity trait mass -> "
@@ -823,8 +843,8 @@ class VerticalBalance(Rule):
                     f"that of the galaxy. Give it the equilibrium jeans "
                     f"(the vertical force of the mass), or remove the "
                     f"mass, then migrate it")
-            if (mass := equilibrium.get('mass')) is not None:
-                fluids.append(mass)
+            if (names := equilibrium.get('mass')) is not None:
+                fluids.append(names)
             trait = dict(
                 type='equilibrium', gravity=self._GRAVITIES.get(kind, kind))
             if 'direction' in equilibrium:
@@ -853,6 +873,26 @@ class VerticalBalance(Rule):
             disk['fluid'] = fluids[0]
             changes.append(Change(path, (
                 "the mass of its pressure support or equilibrium -> fluid")))
+        if sheet:
+            name = disk.get('name')
+            followed = any(
+                isinstance(item, Mapping) and name is not None and (
+                    item.get('type') == 'traced_disk'
+                    and item.get('component') == name
+                    or isinstance(item.get('vertical'), Mapping)
+                    and item['vertical'].get('component') == name)
+                for item in mass)
+            if not fluids and not followed:
+                raise ConfigError(
+                    f"the thin disk at {path} is of the self_gravitating "
+                    f"pressure support, now the pressure jeans in the sheet "
+                    f"of the surface density of its fluid, a mass disk; it "
+                    f"has none: give it a mass disk that follows it, or its "
+                    f"fluid (fluid: <name>), then migrate it")
+            disk['rhtraits'] = dict(type='equilibrium', gravity='sheet')
+            changes.append(Change(path, (
+                "pressure support self_gravitating -> jeans, in the sheet "
+                "of its fluid (rhtraits: equilibrium sheet)")))
         return changes
 
 

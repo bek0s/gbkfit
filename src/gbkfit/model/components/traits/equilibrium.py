@@ -1,20 +1,29 @@
 """
-The trait of the vertical balance of a disk that its galaxy derives: the
-dispersion that holds up its thickness (DPTraitEquilibrium).
+The traits of the vertical balance of a disk that its galaxy derives: the
+dispersion that holds up its thickness (DPTraitEquilibrium), or the
+thickness that its dispersion holds up (RHTraitEquilibrium).
 """
 
 import dataclasses
 from typing import Annotated, Any, Literal, TypeAlias
 
-from gbkfit.config import Choices, check_options
-from .base import DPTrait
-from .options import DispersionDirection, TraitOption
+import numpy as np
+from annotated_types import Gt
+from pydantic import FiniteFloat
+
+from gbkfit.config import Choices, Unit, check_options
+from gbkfit.params.pdescs import ParamDesc, ParamVectorDesc
+from .base import DPTrait, HeightInput, RHTrait
+from .heights import RHTraitGauss, RHTraitSech2
+from .options import (
+    DispersionDirection, Nodewise, Sampling, TraitOption, Zmax)
 
 
 __all__ = [
     'BALANCE_GRAVITIES',
     'BalanceGravity',
-    'DPTraitEquilibrium'
+    'DPTraitEquilibrium',
+    'RHTraitEquilibrium'
 ]
 
 
@@ -25,6 +34,13 @@ BalanceGravityChoice: TypeAlias = Annotated[
     Choices(
         galaxy='The mass of the galaxy', sheet='Its own sheet',
         rotation='Its rotation')]
+
+# The gravities that closed forms of the thickness balance (see
+# RHTraitEquilibrium; that of the galaxy needs heights of no closed form)
+HEIGHT_GRAVITIES = ('sheet', 'rotation')
+HeightGravityChoice: TypeAlias = Annotated[
+    Literal[HEIGHT_GRAVITIES],
+    Choices(sheet='Its own sheet', rotation='Its rotation')]
 
 # The directions of the dispersion of a vertical equilibrium
 EQUILIBRIUM_DIRECTIONS = ('iso', 'ver')
@@ -133,3 +149,109 @@ class DPTraitEquilibrium(DPTrait):
 
     def axisymmetric(self) -> bool:
         return True
+
+
+class RHTraitEquilibrium(RHTrait):
+    """
+    The thickness that the dispersion of a disk holds up against a gravity
+    (its option gravity, see BalanceGravity), which its galaxy derives at
+    each evaluation: a height profile of the scale s(R) at the subnodes of
+    the disk, linear between them, from its vertical dispersion sigma_z at
+    the midplane (that of its dispersion traits, isothermal in z: its
+    dispersion height traits are 'one'). By gravity:
+    - 'sheet': the isothermal sheet of the surface density Sigma of its
+      fluid, sech^2(z / z0) / (2 z0), z0 = sigma_z^2 / (pi G Sigma)
+      (Burkert et al. 2010); in Newtonian gravity.
+    - 'rotation': in the pull of a spherical mass, a Gaussian of the
+      scale h = sigma_z / Omega, Omega = v / R of the rotation v of its
+      fitted tangential traits; in a galaxy without mass.
+    At the centre, where v / R is 0 / 0, Omega at the next subnode. It
+    has no parameters. It is the one density height trait of its disk,
+    which every density polar trait shares, and its disk derives no
+    dispersion besides (see DPTraitEquilibrium). A thick disk draws it,
+    within zmax of its midplane; a thin disk does not, and its pressure
+    support takes the density at its midplane, Sigma / (2 z0) or Sigma /
+    (sqrt(2 pi) h) (see traits.PressureSupport).
+
+    Parameters
+    ----------
+    gravity : str
+        The gravity: 'sheet' or 'rotation'.
+    zmax : float, optional
+        The height above the midplane (arcsec) within which the density
+        lies (see RHTrait): required on a thick disk, which draws it; none
+        on a thin one.
+    name : str, optional
+        Its name, which prefixes its parameter (see Trait).
+
+    Raises
+    ------
+    ValueError
+        If an option is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'equilibrium'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Vertical equilibrium'
+
+    def uid(self) -> int:
+        # (the kernels draw its profile, of the scale its galaxy gives)
+        return self._profile.uid()
+
+    def dump(self) -> dict[str, Any]:
+        info: dict[str, Any] = dict(type=self.type(), gravity=self.gravity())
+        if self._zmax is not None:
+            info['zmax'] = self._zmax
+        if self.name() is not None:
+            info['name'] = self.name()
+        return info
+
+    def __init__(
+            self,
+            gravity: HeightGravityChoice,
+            zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')] | None = None,
+            name: str | None = None
+    ):
+        check_options(RHTraitEquilibrium.__init__, locals())
+        # (node-wise, of a value at each subnode, which its galaxy gives;
+        # its zmax, if not drawn, any)
+        super().__init__(
+            BalanceGravity(gravity), Zmax(1.0 if zmax is None else zmax),
+            Nodewise(True), Sampling('subrings'), name=name)
+        self._zmax = zmax
+        profile = RHTraitSech2 if gravity == 'sheet' else RHTraitGauss
+        self._profile = profile(
+            1.0 if zmax is None else zmax, nodewise=True,
+            sampling='subrings')
+
+    def gravity(self) -> str:
+        """Return the gravity that it balances (see BalanceGravity)."""
+        return self._option(BalanceGravity).name
+
+    def drawn(self) -> bool:
+        """Check whether a thick disk can draw it: whether it has a zmax."""
+        return self._zmax is not None
+
+    def midplane_density(self, s: np.ndarray) -> np.ndarray:
+        """
+        Return its density at the midplane, of the scale s: 1 / (2 s) of
+        the sheet, 1 / (sqrt(2 pi) s) of the Gaussian.
+        """
+        factor = 2 if self.gravity() == 'sheet' else np.sqrt(2 * np.pi)
+        return 1 / (factor * s)
+
+    def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
+        return self._profile.cdf(z, *params)
+
+    def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        return dict(s=ParamVectorDesc(
+            nrnodes, title='Scale height',
+            desc="the scale height of the vertical equilibrium",
+            min=0, unit='arcsec', default=0.2))
+
+    def from_galaxy(self) -> HeightInput:
+        return HeightInput(('s',))

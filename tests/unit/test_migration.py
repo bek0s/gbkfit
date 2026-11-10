@@ -834,8 +834,11 @@ def test_the_vertical_balance_is_stated_once():
          dict(type='equilibrium', gravity='sheet', name='equilibrium')]]
     assert [disk.get('fluid') for disk in disks] == [
         None, 'hi', ['hi', 'h2'], ['hi', 'h2']]
+    # (the self-gravitating support of a thin disk is that of jeans in the
+    # sheet of its fluid)
     assert [disk.get('pressure_support') for disk in disks] == [
-        None, dict(type='jeans'), None, dict(type='self_gravitating')]
+        None, dict(type='jeans'), None, dict(type='jeans')]
+    assert disks[3]['rhtraits'] == dict(type='equilibrium', gravity='sheet')
     assert disks[1]['vptraits'] == [dict(type='mass')]
     assert not any('equilibrium' in disk for disk in disks)
     # (without mass, the central equilibrium is that of its rotation)
@@ -851,13 +854,35 @@ def test_the_vertical_balance_is_stated_once():
             distance=dict(type='parameter')))
 
 
+def test_the_self_gravitating_support_is_the_sheet_of_its_followers():
+    # Without a mass, the sheet of a thin disk is that of the mass disks
+    # that follow it
+    disk = dict(
+        type='thin_disk', name='gas', rptraits=dict(type='exponential'),
+        vptraits=dict(type='mass', pressure_support=dict(
+            type='self_gravitating')), dptraits=dict(type='uniform'))
+    mass = [dict(type='traced_disk', name='gas', component='gas')]
+    migration.migrate(dict(galaxies=[dict(components=[disk], mass=mass)]), 7)
+    assert disk == dict(
+        type='thin_disk', name='gas', rptraits=dict(type='exponential'),
+        vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
+        pressure_support=dict(type='jeans'),
+        rhtraits=dict(type='equilibrium', gravity='sheet'))
+
+
 @pytest.mark.parametrize('disk, mass, message', [
     (dict(equilibrium=dict(type='central')), True,
      "central equilibrium of a galaxy with mass"),
     (dict(equilibrium=dict(type='self_gravitating', mass='hi'),
           vptraits=dict(type='mass', pressure_support=dict(
               type='jeans', mass='h2'))), False,
-     "take different masses")])
+     "take different masses"),
+    (dict(vptraits=dict(type='mass', pressure_support=dict(
+        type='self_gravitating', mass='hi'))), True,
+     "is thick, of the self_gravitating pressure support"),
+    (dict(type='thin_disk', vptraits=dict(type='mass', pressure_support=dict(
+        type='self_gravitating'))), True,
+     "give it a mass disk that follows it, or its fluid")])
 def test_a_vertical_balance_that_is_not_expressible_is_refused(
         disk, mass, message):
     disk = dict(type='thick_disk', dptraits=dict(type='uniform')) | disk

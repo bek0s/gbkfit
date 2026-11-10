@@ -55,7 +55,6 @@ THICK_OPTIONS = [
     ('opacity', DUST),
     ('clouds', dict(cflux=1e-3)),
     ('zptraits', dict(type='nw_uniform', zmax=1)),
-    ('rhtraits', SECH2),
     ('vhtraits', dict(type='one')),
     ('dhtraits', dict(type='one'))]
 
@@ -215,6 +214,13 @@ def test_a_thin_disk_takes_no_options_of_a_thick_disk(option, value):
     assert (
         f"options of a thick disk (type: thick_disk), which a thin disk "
         f"does not take: '{option}'") in message
+
+
+def test_a_thin_disk_takes_no_heights_but_its_equilibrium():
+    # (a thin disk takes one density height trait: its vertical
+    # equilibrium, which it does not draw; see test_equilibrium)
+    message = component_error('lines_smdisk_thin', rhtraits=SECH2)
+    assert "a thin disk takes one density height trait" in message
 
 
 def test_a_lenient_thin_disk_leaves_out_the_options_of_a_thick_disk(caplog):

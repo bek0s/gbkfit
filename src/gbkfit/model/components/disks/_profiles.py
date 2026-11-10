@@ -2,10 +2,11 @@
 The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
 (see mass.DiskDensity), for its pressure support (see
-traits.VPTraitMass), and its rms height, rotation and jeans dispersion,
-for its vertical equilibrium (see traits.DPTraitEquilibrium); its rotation, for
-its density waves (see traits.VPTraitSpiral); and its rotation and
-dispersion, for the functions of its galaxy (see GalaxyFunctions).
+traits.VPTraitMass), and its rms height, rotation and dispersions, for
+its vertical equilibrium (see traits.DPTraitEquilibrium and
+traits.RHTraitEquilibrium); its rotation, for its density waves (see
+traits.VPTraitSpiral); and its rotation and dispersion, for the
+functions of its galaxy (see GalaxyFunctions).
 """
 
 import dataclasses
@@ -15,7 +16,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from gbkfit.params import ParamValues
-from ...mass.units import G
 from .._nodal import subring_radii, tail_end, tail_radii
 from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
 from ._disk import NodalDisk, DiskPlan
@@ -681,38 +681,33 @@ def pressure_support(
         plan: DiskPlan,
         params: ParamValues,
         radii: np.ndarray,
-        mode: str,
         density: np.ndarray | None = None,
         equilibrium: np.ndarray | None = None,
         heights: np.ndarray | None = None,
-        kpc_per_arcsec: float | None = None
+        midplane: np.ndarray | None = None
 ) -> np.ndarray:
     """
     Return the pressure support of a disk, (R / rho) d(rho sigma^2)/dR
     ((km/s)^2), at radii (arcsec, increasing, on the disk), at its
-    midplane or at given heights above it, with sigma its velocity
-    dispersion (its dispersion polar traits times its dispersion height
-    traits, and the dispersion of its vertical equilibrium in quadrature,
-    if any), by mode (see traits.VPTraitMass and traits.VHTraitMass):
-    'jeans', with the azimuthal means of its density rho at each height
-    (its density polar traits times its density height traits, or its
-    density polar traits if thin, where its selection traits keep it) and
-    of rho sigma^2, sigma at each height; 'self_gravitating', with those
-    of S^2 / sigma^2 and of S^2, which rho and rho sigma^2 are
-    proportional to at the midplane (S its density polar traits, where
-    its selection traits keep it, or instead the given density), times
-    sech^2(z / z0) at the heights z, z0 = sigma^2 / (pi G S) (the
-    isothermal sheet of the given surface density S, sigma at the
-    midplane). The derivative by the second-order three-point formula on
-    the radii. NaN where it has no density.
+    midplane or at given heights above it (the radial Jeans equation, see
+    traits.PressureSupportJeans and traits.VHTraitMass), with the
+    azimuthal means of its density rho at each height (its density polar
+    traits times its density height traits, where its selection traits
+    keep it; of a thin disk, its density polar traits, times its density
+    at its midplane per unit surface density, if given, as the given
+    density is) and of rho
+    sigma^2, sigma its velocity dispersion at each height (its dispersion
+    polar traits times its dispersion height traits, and the dispersion
+    of its vertical equilibrium in quadrature, if any). The derivative by
+    the second-order three-point formula on the radii. NaN where it has
+    no density.
 
     A disk whose dispersion is not isotropic (see traits) has the radial
     Jeans equation of its velocity ellipsoid: (R / rho) d(rho
     sigma_R^2)/dR + sigma_R^2 - sigma_phi^2, with the azimuthal means of
     rho sigma_R^2 and of rho sigma_phi^2 (the means of sigma_R^2 -
-    sigma_phi^2 weighted by rho); in the isothermal sheet, rho is
-    proportional to S^2 / sigma_z^2 and z0 = sigma_z^2 / (pi G S). With
-    every dispersion isotropic, the support above.
+    sigma_phi^2 weighted by rho). With every dispersion isotropic, the
+    support above.
 
     Parameters
     ----------
@@ -724,23 +719,21 @@ def pressure_support(
         The values of the parameters of the disk (see NodalDiskDensity).
     radii : np.ndarray
         The radii (arcsec).
-    mode : str
-        The pressure support: 'jeans' or 'self_gravitating'.
     density : np.ndarray, optional
-        The density (e.g. of a mass component) to take instead of that of
-        the disk: for 'jeans', at the radii at the midplane (in any unit),
-        or at the radii and the heights (an array of shape (len(radii),
-        len(heights))); for 'self_gravitating', the surface density at
-        the radii (Msun/kpc^2 with heights; required with them).
+        The density (e.g. of its fluid) to take instead of that of the
+        disk: at the radii at the midplane (in any unit), or at the radii
+        and the heights (an array of shape (len(radii), len(heights))); of
+        a thin disk, the surface density.
     equilibrium : np.ndarray, optional
         The dispersion of the vertical equilibrium of the disk at its
-        subnodes (km/s, see traits.DPTraitEquilibrium), interpolated linearly
-        between them, as the disk is evaluated.
+        subnodes (km/s, see traits.DPTraitEquilibrium), interpolated
+        linearly between them, as the disk is evaluated.
     heights : np.ndarray, optional
         The heights (arcsec) above the midplane; by default, the midplane.
-    kpc_per_arcsec : float, optional
-        The length of an arcsec (kpc) in the galaxy of the disk: required
-        for 'self_gravitating' with heights.
+    midplane : np.ndarray, optional
+        Of a thin disk that does not draw its vertical equilibrium, its
+        density at its midplane per unit surface density at the radii (1 /
+        arcsec, see traits.RHTraitEquilibrium.midplane_density).
 
     Returns
     -------
@@ -752,26 +745,18 @@ def pressure_support(
     params = _with_inputs(disk, params)
     r = np.asarray(radii, dtype=float)[:, None]
     z = np.zeros(1) if heights is None else np.asarray(heights, dtype=float)
-    sheet = mode == 'self_gravitating'
-    if sheet and heights is not None and (
-            density is None or kpc_per_arcsec is None):
-        raise ValueError(
-            "the self_gravitating pressure support at heights takes the "
-            "surface density of a mass component and the length of an "
-            "arcsec")
     # (the height traits before the azimuths: of shape (traits, heights,
     # radii, 1))
-    density_heights = _at_heights(disk, plan, params, 'rht', r, z) \
-        if not sheet else np.ones((1, 1, len(r), 1))
-    dispersion_heights = _at_heights(
-        disk, plan, params, 'dht', r, np.zeros(1) if sheet else z)
+    density_heights = _at_heights(disk, plan, params, 'rht', r, z)
+    dispersion_heights = _at_heights(disk, plan, params, 'dht', r, z)
     given = None if density is None \
         else np.asarray(density, dtype=float).reshape(len(r), -1).T[..., None]
+    if midplane is not None:
+        factor = np.asarray(midplane, dtype=float)[:, None]
+        density_heights = density_heights * factor
+        given = None if given is None else given * factor
     balanced = 0 if equilibrium is None \
         else np.interp(r, disk.subrnodes(), equilibrium)
-    # (pi G S z: z / z0 times sigma^2, of shape (heights, radii, 1))
-    sheet_heights = None if not sheet or heights is None \
-        else np.pi * G * given * z[:, None, None] * kpc_per_arcsec
     isotropic = _isotropic(disk)
     directions = ('iso',) if isotropic else ('rad', 'tan', 'ver')
 
@@ -782,9 +767,9 @@ def pressure_support(
             plan.evaluate_polar_traits(params, 'dpt', r, theta)[:, None]
             * dispersion_heights, balanced, directions)
         if isotropic:
-            radial = tangential = vertical = sigmas[0]
+            radial = tangential = sigmas[0]
         else:
-            radial, tangential, vertical = sigmas
+            radial, tangential, _ = sigmas
         if given is not None:
             own = np.broadcast_to(given, np.broadcast_shapes(
                 given.shape, radial.shape))
@@ -793,28 +778,9 @@ def pressure_support(
                 plan.evaluate_polar_traits(params, 'rpt', r, theta)[:, None]
                 * density_heights, axis=0, dtype=float)
             own = own * _selected(disk, plan, params, r, theta)
-        if not sheet:
-            rows = (own, own * radial ** 2)
-            if not isotropic:
-                rows += (own * tangential ** 2,)
-        else:
-            # (rho ~ S^2 / sigma_z^2: infinite without dispersion, where
-            # the disk has no thickness and no pressure; nor any above it)
-            squared = own ** 2
-            if sheet_heights is not None:
-                shape = np.broadcast_shapes(
-                    sheet_heights.shape, vertical.shape)
-                u = np.divide(
-                    sheet_heights, vertical ** 2, where=vertical != 0,
-                    out=np.where(np.broadcast_to(
-                        sheet_heights, shape) != 0, np.inf, 0.0))
-                with np.errstate(over='ignore'):
-                    squared = squared / np.cosh(u) ** 2
-            rho = np.divide(
-                squared, vertical ** 2, where=vertical != 0,
-                out=np.where(squared != 0, np.inf, 0.0))
-            rows = (rho, squared) if isotropic else (
-                rho, rho * radial ** 2, rho * tangential ** 2)
+        rows = (own, own * radial ** 2)
+        if not isotropic:
+            rows += (own * tangential ** 2,)
         rows = np.stack(rows)
         # (the heights in the rows of the azimuthal means)
         return rows.reshape(-1, *rows.shape[2:])

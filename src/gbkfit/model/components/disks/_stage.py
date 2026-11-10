@@ -26,8 +26,8 @@ from ..base import ComponentStage, ComponentState
 from ..roles import Emission
 from ._disk import NodalDisk, DiskPlan
 from ._profiles import (
-    NodalDiskDensity, density_waves, jeans_dispersions, pressure_support,
-    rms_heights, rotation, surface_density)
+    NodalDiskDensity, density_waves, dispersion, jeans_dispersions,
+    pressure_support, rms_heights, rotation, surface_density)
 
 
 __all__ = [
@@ -52,6 +52,13 @@ _EQUILIBRIUM_DESCRIPTION = (
     "equilibrium takes there (the circular velocity, vcirc, km/s, or the "
     "surface density, surface_density, Msun/kpc^2), and the velocity "
     "dispersion that holds it up (sigma, km/s).")
+_HEIGHT_DESCRIPTION = (
+    "The vertical equilibrium of the thickness of the disk of the "
+    "component at its subnodes (radius, arcsec): the scale height of its "
+    "profile (height, arcsec), what the equilibrium takes there (the "
+    "rotation, vcirc, km/s, or the surface density of its fluid, "
+    "surface_density, Msun/kpc^2), and the vertical dispersion that holds "
+    "it up (sigma, km/s).")
 
 @dataclasses.dataclass(frozen=True)
 class DiskState(ComponentState):
@@ -63,9 +70,11 @@ class DiskState(ComponentState):
     radii of each parameter (km/s; see traits.RotationInput), the factors
     of that rotation at heights, at its subnodes (see
     traits.RotationFactorsInput), the tables of its density waves at its
-    subnodes (see traits.WaveInput), and the face-on light of its image
-    traits (see traits.ImageInput); and the dispersion of its vertical
-    equilibrium at its subnodes (km/s), if it has one.
+    subnodes (see traits.WaveInput), the scale heights of the vertical
+    equilibrium of its thickness at its subnodes, if it draws one (see
+    traits.HeightInput), and the face-on light of its image traits (see
+    traits.ImageInput); and the dispersion of its vertical equilibrium at
+    its subnodes (km/s), if it has one.
     """
     rotation: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
     rotation_factors: dict[str, np.ndarray] = dataclasses.field(
@@ -73,6 +82,7 @@ class DiskState(ComponentState):
     waves: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
     image_light: dict[str, np.ndarray] = dataclasses.field(
         default_factory=dict)
+    heights: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
     equilibrium: np.ndarray | None = None
 
     def inputs(self) -> ParamValues:
@@ -80,8 +90,8 @@ class DiskState(ComponentState):
         Return the values of the parameters of the traits that the galaxy
         computes, of all kinds (see the class), by name.
         """
-        return self.rotation | self.rotation_factors | self.waves \
-            | self.image_light
+        return self.rotation | self.rotation_factors | self.heights \
+            | self.waves | self.image_light
 
 
 def plan_disk_stage(
@@ -101,8 +111,9 @@ def plan_disk_stage(
     otherwise. name is that of its component (None if unnamed), whose
     fluid it takes (see MassModel.fluid).
     """
-    takes = disk.circular_velocity_params() or disk.equilibrium() is not None \
-        or disk.wave_params() or disk.image_params()
+    takes = disk.circular_velocity_params() \
+        or disk.balance_gravity() is not None or disk.wave_params() \
+        or disk.image_params()
     if not (takes or followed):
         return None
     return DiskStage(
@@ -180,7 +191,7 @@ class DiskStage(ComponentStage):
         self._mass_per_unit = mass_per_unit
         self._images = None if not disk.image_params() \
             else ImageMaps(disk, label, sky_origin)
-        sampled = followed or disk.equilibrium() is not None \
+        sampled = followed or disk.balance_gravity() is not None \
             or disk.wave_params() or disk.pressure_supported_params()
         self._plan = disk.plan(driver, 0, np.float64) if sampled else None
 
@@ -244,6 +255,16 @@ class DiskStage(ComponentStage):
         disk = self._disk
         if out_extra is not None and self._images is not None:
             self._images.warn_inclination(values)
+        # (the thickness before the rotation, whose pressure takes it: drawn
+        # at the subnodes, or of a thin disk, at the radii of the pressure)
+        heights = {}
+        if disk.height_params():
+            heights = dict.fromkeys(
+                disk.height_params(),
+                self._height_scales(values, mass, out_extra))
+            values = values | heights
+        elif disk.height_equilibrium() is not None and out_extra is not None:
+            self._height_scales(values, mass, out_extra)
         equilibrium = None
         if disk.equilibrium() is not None:
             equilibrium = self._equilibrium(values, mass, out_extra)
@@ -253,11 +274,11 @@ class DiskStage(ComponentStage):
                 name: self._mass_rotation(
                     name, radii, values, mass, equilibrium, out_extra)
                 for name, radii in disk.circular_velocity_params().items()}
-            if heights := disk.rotation_factor_params():
+            if at := disk.rotation_factor_params():
                 factors = self._rotation_factors(
-                    heights, values, mass, equilibrium)
+                    at, values, mass, equilibrium)
         state = DiskState(
-            rotation=rotation, rotation_factors=factors,
+            rotation=rotation, rotation_factors=factors, heights=heights,
             image_light={name: values[name] for name in disk.image_params()},
             equilibrium=equilibrium)
         if disk.wave_params():
@@ -274,7 +295,7 @@ class DiskStage(ComponentStage):
         """
         disk = self._disk
         if not (self._followed or disk.circular_velocity_params()
-                or disk.equilibrium() is not None):
+                or disk.balance_gravity() is not None):
             return []
         radii = np.asarray(disk.rnodes())
         frame = disk.frame_params()
@@ -296,8 +317,9 @@ class DiskStage(ComponentStage):
         Return the rotation (km/s) that the gravity gives its parameter of
         the given name, at its radii (arcsec): of the circular velocity of
         the mass, and its pressure support, if any (with the dispersion of
-        its equilibrium, if any). With extra outputs, its table (see
-        state).
+        its equilibrium, if any, and of a thin disk, the density at its
+        midplane per unit surface density of its undrawn equilibrium at
+        the radii, if any). With extra outputs, its table (see state).
         """
         disk = self._disk
         kpc_per_arcsec = mass.kpc_per_arcsec
@@ -307,11 +329,16 @@ class DiskStage(ComponentStage):
         pressure = None
         if support := disk.pressure_supported_params().get(name):
             density = None if not disk.fluid() else _pressure_density(
-                mass.model, disk.fluid(), support.type(), R, mass.params,
-                mass.context)
+                mass.model, disk.fluid(), R, mass.params, mass.context,
+                surface=not disk.traits('rht'))
+            midplane = None
+            if (height := disk.height_equilibrium()) is not None \
+                    and not disk.height_params():
+                midplane = height.midplane_density(self._height_scales(
+                    values, mass, None, np.asarray(radii, dtype=float)))
             pressure = pressure_support(
-                disk, self._plan, values, radii, support.type(), density,
-                equilibrium)
+                disk, self._plan, values, radii, density, equilibrium,
+                midplane=midplane)
             v2 = v2 + pressure
         result = _rotation(
             v2, radii, self._lit(values, radii), f"the rotation of '{name}'")
@@ -350,11 +377,10 @@ class DiskStage(ComponentStage):
         support = next(iter(disk.pressure_supported_params().values()), None)
         if support is not None:
             density = None if not disk.fluid() else _pressure_density(
-                mass.model, disk.fluid(), support.type(), R, mass.params,
-                mass.context, z * kpc_per_arcsec)
+                mass.model, disk.fluid(), R, mass.params, mass.context,
+                z * kpc_per_arcsec)
             v2 = v2 + pressure_support(
-                disk, self._plan, values, r, support.type(), density,
-                equilibrium, z, kpc_per_arcsec)
+                disk, self._plan, values, r, density, equilibrium, z)
         v = _rotation(
             v2, r, self._lit(values, r),
             "the rotation at the heights of 'mass'")
@@ -406,12 +432,8 @@ class DiskStage(ComponentStage):
             sigma = _galaxy_dispersion(disk, plan, values, radii, mass)
             taken = {}
         else:
-            R = radii * mass.kpc_per_arcsec
-            surface = sum(
-                mass.model.component(name).surface_density(
-                    R, mass.model.component_params(name, mass.params),
-                    mass.context)
-                for name in mass.model.fluid(self._name, disk.fluid()))
+            surface = _fluid_surface_density(
+                mass, self._name, disk.fluid(), radii)
             sigma = _sheet_dispersion(
                 radii, lit, heights * mass.kpc_per_arcsec, surface)
             taken = dict(surface_density=surface * u.solMass / u.kpc ** 2)
@@ -422,27 +444,104 @@ class DiskStage(ComponentStage):
                 "Vertical equilibrium", _EQUILIBRIUM_DESCRIPTION)
         return sigma
 
+    def _height_scales(
+            self,
+            values: ParamValues,
+            mass: GalaxyMass | None,
+            out_extra: Extras | None,
+            radii: np.ndarray | None = None
+    ) -> np.ndarray:
+        """
+        Return the scale heights (arcsec) of the vertical equilibrium of
+        the thickness of its disk (see traits.RHTraitEquilibrium) at the
+        radii (arcsec; its subnodes by default), from the values of its
+        parameters and the mass of the galaxy (None without mass): of its
+        vertical dispersion at its midplane, and by its gravity, of the
+        surface density of its fluid ('sheet') or of the rotation of its
+        tangential traits ('rotation'). With extra outputs, its table (see
+        state).
+        """
+        disk = self._disk
+        gravity = disk.height_equilibrium().gravity()
+        if radii is None:
+            radii = np.asarray(disk.subrnodes())
+        lit = self._lit(values, radii)
+        sigma = dispersion(disk, self._plan, values, radii, direction='ver')
+        if gravity == 'sheet':
+            surface = _fluid_surface_density(
+                mass, self._name, disk.fluid(), radii)
+            # (z0 = sigma^2 / (pi G Sigma), kpc)
+            scale = np.divide(
+                sigma ** 2, np.pi * G * surface,
+                out=np.full_like(sigma, np.inf), where=surface > 0) \
+                / mass.kpc_per_arcsec
+            taken = dict(surface_density=surface * u.solMass / u.kpc ** 2)
+            why = "the surface density of its fluid is not positive"
+        else:
+            v = rotation(disk, self._plan, values, radii)
+            omega = np.divide(
+                v, radii, out=np.zeros_like(v), where=radii > 0)
+            if radii[0] == 0:
+                omega[0] = omega[1]
+            scale = np.divide(
+                sigma, omega, out=np.full_like(sigma, np.inf),
+                where=omega > 0)
+            taken = dict(vcirc=v * u.km / u.s)
+            why = "its rotation is not positive"
+        solved = np.isfinite(scale) & (scale > 0)
+        _check_solved(
+            solved, lit, radii, "the vertical equilibrium of the thickness",
+            f"{why}, or its vertical dispersion is 0")
+        # (no light there: any scale, of a profile that the kernels can
+        # draw)
+        scale = np.where(solved, scale, np.max(scale[solved], initial=1.0))
+        if out_extra is not None:
+            out_extra.add(
+                'equilibrium', _equilibrium_table(
+                    radii, scale, taken, sigma),
+                "Vertical equilibrium", _HEIGHT_DESCRIPTION)
+        return scale
+
+
+def _fluid_surface_density(
+        mass: GalaxyMass, name: str | None, fluid: tuple[str, ...],
+        radii: np.ndarray
+) -> np.ndarray:
+    """
+    Return the surface density (Msun/kpc^2) at the radii (arcsec) of the
+    fluid of a disk (of its component of the given name, None if
+    unnamed): of the mass disks of the given names, or of those that
+    follow it (see MassModel.fluid), their sum.
+    """
+    R = radii * mass.kpc_per_arcsec
+    return sum(
+        mass.model.component(fluid_name).surface_density(
+            R, mass.model.component_params(fluid_name, mass.params),
+            mass.context)
+        for fluid_name in mass.model.fluid(name, fluid))
+
 
 def _pressure_density(
         mass_model: MassModel,
         fluid: tuple[str, ...],
-        mode: str,
         R: np.ndarray,
         params: ParamValues,
         context: MassContext,
-        z: np.ndarray | None = None
+        z: np.ndarray | None = None,
+        surface: bool = False
 ) -> np.ndarray:
     """
     Return the density of the fluid of a pressure support (the mass disks
     of the given names; see traits.PressureSupport), their sum, at the
-    radii R (kpc), by its mode: for 'jeans', at their midplane, or at the
-    heights z (kpc; an array of shape (len(R), len(z))); for
-    'self_gravitating', their surface density.
+    radii R (kpc): at their midplane, or at the heights z (kpc; an array
+    of shape (len(R), len(z))); or their surface density, if surface (for
+    a thin disk, whose pressure takes the density at its midplane of its
+    vertical equilibrium, or of a constant thickness).
     """
     def density(name: str) -> np.ndarray:
         component = mass_model.component(name)
         own = mass_model.component_params(name, params)
-        if mode == 'self_gravitating':
+        if surface:
             return component.surface_density(R, own, context)
         if z is None:
             return component.density(R, np.zeros_like(R), own, context)

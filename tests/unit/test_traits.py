@@ -35,7 +35,10 @@ def kernel_consts_cases():
             # equilibrium, whose dispersion its galaxy derives)
             if cls in (traits.RPTraitImage, traits.DPTraitEquilibrium):
                 continue
-            if kind == 'rht':
+            if kind == 'rht' and type_ == 'equilibrium':
+                # (node-wise: its scale heights at the subnodes)
+                options, consts = dict(gravity='sheet', zmax=5.0), (5.0, True)
+            elif kind == 'rht':
                 options, consts = dict(zmax=5.0, nodewise=True), (5.0, True)
             elif kind == 'vht' and type_ == 'mass':
                 options, consts = dict(zmax=5.0), (5.0, 33)
@@ -81,12 +84,21 @@ SHARING = dict(rpt='Shape', vpt='Shape', dpt='Shape', zpt='Shape',
 
 def kernel_classes(kind):
     """
-    The types of traits of a family that the kernels evaluate, by type:
-    all but the vertical equilibrium, whose dispersion its galaxy derives.
+    The types of traits of a family that the kernels evaluate as their
+    own, by type: all but the vertical equilibria, whose dispersion its
+    galaxy derives, and whose thickness the kernels draw as the profile
+    of its gravity (see test_the_equilibrium_is_drawn_as_its_profile).
     """
     return {
         type_: cls for type_, cls in PARSERS[kind].registered_classes().items()
-        if cls is not traits.DPTraitEquilibrium}
+        if cls not in (traits.DPTraitEquilibrium, traits.RHTraitEquilibrium)}
+
+
+def test_the_equilibrium_is_drawn_as_its_profile():
+    assert traits.RHTraitEquilibrium('sheet', 5).uid() \
+        == traits.RHTraitSech2.uid()
+    assert traits.RHTraitEquilibrium('rotation', 5).uid() \
+        == traits.RHTraitGauss.uid()
 
 
 @pytest.mark.parametrize('kind', PARSERS)

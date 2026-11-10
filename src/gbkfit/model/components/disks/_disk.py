@@ -19,7 +19,8 @@ from ..base import ComponentState, FrameParams, NativeGrid
 from .._needs import Need, density_needs
 from ...gravity import Capability
 from ..geometries import GEOMETRY_PARAMS, geometry_pdesc
-from ..traits import DPTraitEquilibrium, PressureSupport, Trait
+from ..traits import (
+    DPTraitEquilibrium, PressureSupport, RHTraitEquilibrium, Trait)
 
 if TYPE_CHECKING:
     from ._stage import DiskState
@@ -52,6 +53,7 @@ class NodalDisk(abc.ABC):
             density_units: dict[str, astropy.units.UnitBase | None],
             opacity_lines: Sequence[int] = (),
             equilibrium: DPTraitEquilibrium | None = None,
+            height: RHTraitEquilibrium | None = None,
             pressure_support: PressureSupport | None = None,
             fluid: tuple[str, ...] = ()
     ):
@@ -65,7 +67,10 @@ class NodalDisk(abc.ABC):
         the line of each trait of line opacity ('opt'): its index among
         the lines of the emission. equilibrium is its vertical
         equilibrium, if any (see traits.DPTraitEquilibrium; not in
-        traits_, as the kernels do not evaluate it), pressure_support how
+        traits_, as the kernels do not evaluate it), height the vertical
+        equilibrium of its thickness, if any (see
+        traits.RHTraitEquilibrium: that of its density height traits, if
+        thick, and not drawn, if thin), pressure_support how
         the rotation of its velocity trait 'mass' is corrected for its
         pressure, if at all, and fluid the names of the mass disks whose
         densities they take, if given (see Disk).
@@ -84,6 +89,7 @@ class NodalDisk(abc.ABC):
             subrnodes, interp)
         self._opacity_lines = tuple(opacity_lines)
         self._equilibrium = equilibrium
+        self._height = height
         self._pressure_support = pressure_support
         self._fluid = tuple(fluid)
 
@@ -140,6 +146,33 @@ class NodalDisk(abc.ABC):
         dispersion of the equilibrium at its subnodes (see DiskState).
         """
         return self._equilibrium
+
+    def height_equilibrium(self) -> RHTraitEquilibrium | None:
+        """
+        Return the vertical equilibrium of its thickness, if any (see
+        traits.RHTraitEquilibrium): its galaxy gives the scale heights of
+        the equilibrium at its subnodes (see DiskState).
+        """
+        return self._height
+
+    def balance_gravity(self) -> str | None:
+        """
+        Return the gravity that its vertical equilibrium balances, of its
+        dispersion or of its thickness (see traits.BalanceGravity), if it
+        has one.
+        """
+        equilibrium = self._equilibrium if self._equilibrium is not None \
+            else self._height
+        return None if equilibrium is None else equilibrium.gravity()
+
+    def height_params(self) -> tuple[str, ...]:
+        """
+        Return the parameters that are not in pdescs, but whose values are
+        the scale heights of the vertical equilibrium of its thickness at
+        its subnodes (of a thick disk, which draws it), which its galaxy
+        gives (see DiskState).
+        """
+        return self._traits.height_params()
 
     def pressure_support(self) -> PressureSupport | None:
         """Return its pressure support, if any (see traits.VPTraitMass)."""
@@ -198,7 +231,8 @@ class NodalDisk(abc.ABC):
             missing |= {
                 name: np.full(params.pdescs[name].size(), np.nan)
                 for name in (*params.circular_velocity,
-                             *params.rotation_factor, *params.image)}
+                             *params.rotation_factor, *params.height,
+                             *params.image)}
             missing |= {
                 name: np.zeros(params.pdescs[name].size())
                 for name in params.wave}
@@ -228,9 +262,8 @@ class NodalDisk(abc.ABC):
         its vertical equilibrium balances its gravity (all but 'rotation',
         see traits.BalanceGravity).
         """
-        equilibrium = self._equilibrium
-        return bool(self.circular_velocity_params()) or (
-            equilibrium is not None and equilibrium.gravity() != 'rotation')
+        return bool(self.circular_velocity_params()) \
+            or self.balance_gravity() not in (None, 'rotation')
 
     def needs(self, name: str | None) -> tuple[Need, ...]:
         """
@@ -251,26 +284,29 @@ class NodalDisk(abc.ABC):
                 Capability.MASS,
                 f"the 'mass' velocity traits of the component {label} need "
                 f"the mass of their galaxy"))
-        if (support := self._pressure_support) is not None:
-            needs += density_needs(
-                self._fluid, support.type() == 'self_gravitating',
+        if (support := self._pressure_support) is not None \
+                and self._fluid:
+            # (of a thin disk, the surface density of its fluid, as its
+            # own, see DiskStage)
+            surface = not self.traits('rht')
+            kind = 'surface density' if surface else 'density'
+            needs.append(Need(
+                Capability.MASS,
                 f"the {support.type()} pressure support of the component "
-                f"{label}")
+                f"{label} takes the {kind}", self._fluid, surface))
         if self.rotation_factor_params():
             needs.append(Need(
                 Capability.FORCES,
                 f"the rotation at each height of the component {label} "
                 f"takes the radial force of the gravity of its galaxy off "
                 f"its plane"))
-        equilibrium = self._equilibrium
-        if equilibrium is None or equilibrium.gravity() == 'rotation':
+        gravity = self.balance_gravity()
+        if gravity in (None, 'rotation'):
             return tuple(needs)
-        what = (
-            f"the vertical equilibrium {equilibrium.gravity()!r} of the "
-            f"component {label}")
+        what = f"the vertical equilibrium {gravity!r} of the component {label}"
         needs.append(Need(
             Capability.MASS, f"{what} needs the mass of its galaxy"))
-        if equilibrium.gravity() == 'galaxy':
+        if gravity == 'galaxy':
             needs.append(Need(
                 Capability.FORCES,
                 f"{what} takes the vertical force of the gravity of its "

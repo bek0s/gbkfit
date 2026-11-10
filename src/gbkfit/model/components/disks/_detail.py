@@ -99,6 +99,9 @@ def dump_disk_component(
         count = 1 if disk.shared('rht') else None
         info.update(rhtraits=traits.rht_parser.dump(
             list(disk.traits('rht')[:count])))
+    elif (height := disk.height_equilibrium()) is not None:
+        # (of a thin disk, not drawn)
+        info.update(rhtraits=traits.rht_parser.dump(height))
     if kinematics is not None:
         info.update(kinematics.dump())
     if (support := disk.pressure_support()) is not None:
@@ -121,6 +124,7 @@ def dump_disk_component(
 def make_disk(
         rptraits: tuple[traits.RPTrait, ...],
         rhtraits: tuple[traits.RHTrait, ...],
+        height: traits.RHTraitEquilibrium | None,
         kinematics: KinematicTraits | None,
         pressure_support: traits.PressureSupport | None,
         fluid: tuple[str, ...],
@@ -171,7 +175,7 @@ def make_disk(
         opacity_lines=opacity_lines,
         equilibrium=kinematics.equilibrium() if kinematics is not None
         else None,
-        pressure_support=pressure_support, fluid=fluid)
+        height=height, pressure_support=pressure_support, fluid=fluid)
     if clouds is None:
         return SmoothDisk(**options)
     return CloudDisk(clouds, **options)

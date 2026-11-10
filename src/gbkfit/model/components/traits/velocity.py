@@ -24,7 +24,6 @@ from .shapes import PT_UID_NW_HARMONIC, PT_UID_NW_UNIFORM, PT_UID_UNIFORM
 __all__ = [
     'PressureSupport',
     'PressureSupportJeans',
-    'PressureSupportSelfGravitating',
     'VPTraitArctan',
     'VPTraitBar',
     'VPTraitBoissier',
@@ -109,12 +108,19 @@ class PressureSupportJeans(PressureSupport):
     """
     The pressure support of an isotropic gas at the midplane of its disk,
     the radial Jeans equation: v^2 = v_c^2 + (R / rho) d(rho sigma^2)/dR,
-    with the azimuthal means of the density rho at the midplane (of the
-    disk: its density traits times its density height traits at z = 0,
-    or its density traits if thin, the equation of a thin disk; or of its
-    fluid, at their midplane, as DysmalPy's pressure support of type 3)
-    and of rho sigma^2, sigma its velocity dispersion at the midplane.
-    See PressureSupport.
+    with the azimuthal means of the density rho at the midplane and of rho
+    sigma^2, sigma its velocity dispersion at the midplane. The density is
+    that of its fluid at their midplane, if it has one (as DysmalPy's
+    pressure support of type 3), or of the disk: its density traits times
+    its density height traits at z = 0; of a thin disk, its density
+    traits, the equation of a thin disk, times the density at its midplane
+    per unit surface density of its vertical equilibrium, if any (see
+    RHTraitEquilibrium). A thin disk in the equilibrium 'sheet' is then
+    the disk whose thickness its own gravity sets, rho ~ Sigma^2 /
+    sigma^2, so that v^2 = v_c^2 + 2 sigma^2 dln Sigma / dln R for an
+    axisymmetric disk of a uniform dispersion (Burkert et al. 2010;
+    DysmalPy's pressure support of types 1 and 2, for an exponential and
+    a Sersic Sigma). See PressureSupport.
     """
 
     @staticmethod
@@ -126,30 +132,8 @@ class PressureSupportJeans(PressureSupport):
         return 'Jeans equation'
 
 
-class PressureSupportSelfGravitating(PressureSupport):
-    """
-    The pressure support of a disk whose thickness its own gravity sets,
-    h ~ sigma^2 / S, of its surface density S (its density traits, or the
-    surface density of its fluid): rho ~ S^2 / sigma^2 and rho sigma^2 ~
-    S^2, so that v^2 = v_c^2 + 2 sigma^2 dln S / dln R for an
-    axisymmetric disk (Burkert et al. 2010), whatever its density height
-    traits (DysmalPy's pressure support of types 1 and 2, for an
-    exponential and a Sersic S). A disk whose dispersion is not isotropic
-    takes sigma_z in rho. See PressureSupport.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'self_gravitating'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Self-gravitating disk'
-
-
 pressure_support_parser = TypedParser(
-    PressureSupport, [PressureSupportJeans, PressureSupportSelfGravitating],
-    family='pressure_support')
+    PressureSupport, [PressureSupportJeans], family='pressure_support')
 
 
 class VPTraitUniform(VPTrait):

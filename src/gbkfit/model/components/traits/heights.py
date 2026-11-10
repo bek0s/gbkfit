@@ -470,17 +470,13 @@ class VHTraitMass(VHTrait):
     v(R, z) / v(R, 0) of that trait (see VPTraitMass), of the rotation of
     a circular orbit at the height z in the radial force of the mass of
     the galaxy there, v(R, z)^2 = -R F_R(R, z) (see gravity.Gravity), plus
-    the pressure support of the trait 'mass' at z, if any: 'jeans', with
-    the density of its disk at z (its density traits times its density
-    height traits) or that of the mass components of the mass of the
-    pressure support (their sum), and its dispersion at z (with its
-    dispersion height traits); 'self_gravitating', in the isothermal
-    sheet of the surface density S of the mass components of its mass
-    (required: the disk has no mass) and the dispersion sigma at the
-    midplane, of the density ~ sech^2(z / z0), z0 = sigma^2 / (pi G S).
-    v(R, z) is 0 where its square is negative, and NaN where it
-    is infinite, as at the midplane; the factor is 1 where v(R, 0) is 0
-    (no rotation at any height). Its galaxy computes it at each
+    the pressure support of its disk at z, if any (see PressureSupport):
+    with the density of its disk at z (its density traits times its
+    density height traits) or that of its fluid (their sum), and its
+    dispersion at z (with its dispersion height traits). v(R, z) is 0
+    where its square is negative, and NaN where it is infinite, as at the
+    midplane; the factor is 1 where v(R, 0) is 0 (no rotation at any
+    height). Its galaxy computes it at each
     evaluation, at the subnodes of the disk and at VHT_MASS_NHEIGHTS
     heights from 0 to zmax, and its disk interpolates it linearly between
     them; above zmax, it is the factor at zmax. The rings of the disk are

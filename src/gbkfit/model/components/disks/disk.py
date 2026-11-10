@@ -37,8 +37,7 @@ __all__ = [
 
 
 # The options of a thick disk that a thin one does not take
-_THICK_OPTIONS = (
-    'rhtraits', 'vhtraits', 'dhtraits', 'opacity', 'zptraits', 'clouds')
+_THICK_OPTIONS = ('vhtraits', 'dhtraits', 'opacity', 'zptraits', 'clouds')
 
 
 def _fluid(value: str | Sequence[str] | None) -> tuple[str, ...]:
@@ -59,30 +58,54 @@ def _fluid(value: str | Sequence[str] | None) -> tuple[str, ...]:
 
 def _check_balance(
         kinematics: KinematicTraits | None,
+        height: traits.RHTraitEquilibrium | None,
         support: traits.PressureSupport | None,
         fluid: tuple[str, ...],
         thick: bool
 ) -> None:
     """
     Check the vertical balance and the pressure of a disk of the given
-    kinematics, pressure support and fluid, thick or not: a vertical
-    equilibrium holds up the thickness of a thick disk; the pressure
-    corrects the rotation of its velocity trait 'mass', and at each
-    height (with the velocity height trait 'mass'), that of
-    'self_gravitating' in the sheet of the surface density of its fluid;
-    a fluid is what the pressure or the equilibrium 'sheet' takes.
+    kinematics, equilibrium of its thickness (if any), pressure support
+    and fluid, thick or not. A disk derives one side of its balance: its
+    dispersion (a thick disk's), or its thickness, from its dispersion,
+    isothermal in z (which on a thin disk gives its pressure support the
+    density at its midplane); the equilibrium 'rotation' takes the
+    rotation of its tangential traits; the pressure corrects the rotation
+    of its velocity trait 'mass'; a fluid is what the pressure or an
+    equilibrium 'sheet' takes.
 
     Raises
     ------
     ValueError
         If one of these does not hold.
     """
-    equilibrium = kinematics.equilibrium() if kinematics is not None \
+    dispersion = kinematics.equilibrium() if kinematics is not None \
         else None
-    if equilibrium is not None and not thick:
+    if dispersion is not None and not thick:
         raise ValueError(
-            "the vertical equilibrium holds up the thickness of a thick "
-            "disk: a thin disk has none")
+            "the vertical equilibrium of the dispersion holds up the "
+            "thickness of a thick disk: a thin disk has none")
+    if dispersion is not None and height is not None:
+        raise ValueError(
+            "a disk derives one side of its vertical balance: its thickness "
+            "(the equilibrium of its rhtraits) or its dispersion (that of "
+            "its dptraits), not both")
+    if height is not None and kinematics is None:
+        raise ValueError(
+            "the vertical equilibrium of the thickness of a disk takes its "
+            "dispersion: give it vptraits and dptraits")
+    if height is not None and any(
+            trait is not None and not isinstance(trait, traits.DHTraitOne)
+            for trait in kinematics.dhtraits() or ()):
+        raise ValueError(
+            "the vertical equilibrium of the thickness of a disk takes its "
+            "dispersion, isothermal in z: its dhtraits must be 'one'")
+    if height is not None and not thick and support is None:
+        raise ValueError(
+            "a thin disk does not draw its vertical equilibrium, which "
+            "gives its pressure support the density at its midplane: give "
+            "it pressure_support")
+    equilibrium = dispersion if dispersion is not None else height
     vptraits = kinematics.vptraits() if kinematics is not None else ()
     if equilibrium is not None and equilibrium.gravity() == 'rotation' \
             and not any(trait.direction() == 'tan' for trait in vptraits):
@@ -94,16 +117,6 @@ def _check_balance(
         raise ValueError(
             "the pressure support corrects the rotation of the disk in the "
             "gravity of its galaxy: give it the velocity trait 'mass'")
-    vhtraits = (kinematics.vhtraits() or ()) if kinematics is not None \
-        else ()
-    if support is not None and support.type() == 'self_gravitating' \
-            and not fluid and any(
-                isinstance(trait, traits.VHTraitMass) for trait in vhtraits):
-        raise ValueError(
-            "the velocity height trait 'mass' takes the self_gravitating "
-            "pressure support at each height in the sheet of the surface "
-            "density of its fluid, of the scale height sigma^2 / (pi G "
-            "Sigma): give the disk its fluid")
     sheet = equilibrium is not None and equilibrium.gravity() == 'sheet'
     if fluid and support is None and not sheet:
         raise ValueError(
@@ -157,19 +170,20 @@ class Disk(Component, abc.ABC):
         # (the options are checked by the constructor of the subclass)
         super().__init__(name, emission, opacity)
         thick = self.thick(Emission)
-        rptraits, rhtraits = density_traits(rptraits, rhtraits, thick)
+        rptraits, rhtraits, height = density_traits(
+            rptraits, rhtraits, thick)
         self._kinematics = kinematics = kinematic_traits(
             vptraits, dptraits, vhtraits, dhtraits)
         fluid = _fluid(fluid)
-        _check_balance(kinematics, pressure_support, fluid, thick)
+        _check_balance(kinematics, height, pressure_support, fluid, thick)
         self._clouds = clouds
         # In the form it was given in, for its configuration (see dump)
         self._rnodes = rnodes = as_nodes(rnodes)
         self._disk = _detail.make_disk(
-            rptraits, rhtraits, kinematics, pressure_support, fluid,
+            rptraits, rhtraits, height, kinematics, pressure_support, fluid,
             emission, opacity, zptraits, sptraits, thick=thick, loose=loose,
-            tilted=tilted,
-            rnodes=rnodes, rstep=rstep, interp=interp, clouds=clouds)
+            tilted=tilted, rnodes=rnodes, rstep=rstep, interp=interp,
+            clouds=clouds)
         self._lines = make_lines(self._disk.pdescs(), emission)
         self._bands = make_bands(self._disk.pdescs(), emission)
 
@@ -185,10 +199,18 @@ class Disk(Component, abc.ABC):
 
     def equilibrium(self) -> traits.DPTraitEquilibrium | None:
         """
-        Return its vertical equilibrium, if any (a thick disk's: the last
-        of its dispersion traits, see traits.DPTraitEquilibrium).
+        Return the vertical equilibrium of its dispersion, if any (a
+        thick disk's: the last of its dispersion traits, see
+        traits.DPTraitEquilibrium).
         """
         return self._disk.equilibrium()
+
+    def height_equilibrium(self) -> traits.RHTraitEquilibrium | None:
+        """
+        Return the vertical equilibrium of its thickness, if any (its one
+        density height trait, see traits.RHTraitEquilibrium).
+        """
+        return self._disk.height_equilibrium()
 
     def pressure_support(self) -> traits.PressureSupport | None:
         """Return its pressure support, if any (see traits.VPTraitMass)."""
@@ -287,6 +309,10 @@ class ThinDisk(Disk):
         Its density polar traits: the density per unit area of its plane,
         seen face-on (parameters 'rpt_*'). What the density is depends on
         its roles: light for a disk that emits.
+    rhtraits : RHTraitEquilibrium, optional
+        Its vertical equilibrium, which it does not draw: the thickness
+        that gives its pressure support the density at its midplane (see
+        traits.RHTraitEquilibrium); none by default.
     vptraits : VPTrait or Sequence of VPTrait, optional
         Its velocity polar traits (parameters 'vpt_*'; see
         parts.KinematicTraits). A disk with vptraits and dptraits moves;
@@ -297,13 +323,13 @@ class ThinDisk(Disk):
         direction, every direction needs its own or an isotropic one.
     pressure_support : PressureSupport, optional
         How the rotation of its velocity trait 'mass' is corrected for
-        its pressure: none (the default), 'jeans' or 'self_gravitating'
-        (see traits.PressureSupport).
+        its pressure: none (the default) or 'jeans' (see
+        traits.PressureSupport).
     fluid : str or Sequence of str, optional
         The names of the mass disks of its galaxy whose densities its
         pressure support takes instead of its own (e.g. its atomic and
-        molecular gas), and whose surface density holds a thick disk up
-        in the equilibrium 'sheet' (by default, the mass disks that follow
+        molecular gas), and whose surface density holds the disk up in
+        the equilibrium 'sheet' (by default, the mass disks that follow
         the disk).
     emission : Emission, optional
         The light it emits.
@@ -361,6 +387,7 @@ class ThinDisk(Disk):
     def __init__(
             self,
             rptraits: traits.RPTrait | Sequence[traits.RPTrait],
+            rhtraits: traits.RHTrait | Sequence[traits.RHTrait] | None = None,
             vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None = None,
             dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None = None,
             pressure_support: traits.PressureSupport | None = None,
@@ -376,7 +403,8 @@ class ThinDisk(Disk):
     ):
         check_options(ThinDisk.__init__, locals())
         super().__init__(
-            rptraits, None, vptraits, dptraits, None, None, pressure_support,
+            rptraits, rhtraits, vptraits, dptraits, None, None,
+            pressure_support,
             fluid, emission, None, None, sptraits, loose, tilted, rnodes,
             rstep, interp, None, name)
 
@@ -403,7 +431,9 @@ class ThickDisk(Disk):
         Its density height traits, the probability density of the
         distance from its plane: one that every polar trait shares
         (parameters 'rht_*'), or one for each polar trait, in their order
-        (parameters 'rht_*', 'rht2_*', ...).
+        (parameters 'rht_*', 'rht2_*', ...); or its vertical equilibrium,
+        the one that they all share, which its galaxy derives (see
+        traits.RHTraitEquilibrium).
     vptraits, dptraits : optional
         Its velocity and dispersion polar traits (as those of ThinDisk).
         A disk with both moves; one that emits lines must.

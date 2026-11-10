@@ -50,7 +50,9 @@ CONE_TRAITS = TraitTable('cone', dict(
         traits.RPTraitGauss, traits.RPTraitGGauss, traits.RPTraitLorentz,
         traits.RPTraitMoffat, traits.RPTraitSech2, traits.RPTraitNWUniform,
         traits.RPTraitNWHarmonic),
-    rht=tuple(traits.rht_parser.registered_classes().values()),
+    rht=tuple(
+        cls for cls in traits.rht_parser.registered_classes().values()
+        if cls is not traits.RHTraitEquilibrium),
     vpt=tuple(
         cls for cls in traits.vpt_parser.registered_classes().values()
         if cls not in (

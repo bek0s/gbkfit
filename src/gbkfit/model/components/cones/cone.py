@@ -125,7 +125,7 @@ class Cone(Component):
     ):
         check_options(Cone.__init__, locals())
         super().__init__(name, emission, opacity)
-        rptraits, rhtraits = density_traits(rptraits, rhtraits, True)
+        rptraits, rhtraits, _ = density_traits(rptraits, rhtraits, True)
         self._kinematics = kinematics = kinematic_traits(
             vptraits, dptraits, vhtraits, dhtraits)
         # In the form it was given in, for its configuration (see dump)

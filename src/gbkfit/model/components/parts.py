@@ -109,32 +109,57 @@ def density_traits(
         rptraits: traits.RPTrait | Sequence[traits.RPTrait],
         rhtraits: traits.RHTrait | Sequence[traits.RHTrait] | None,
         thick: bool
-) -> tuple[tuple[traits.RPTrait, ...], tuple[traits.RHTrait, ...]]:
+) -> tuple[
+        tuple[traits.RPTrait, ...], tuple[traits.RHTrait, ...],
+        traits.RHTraitEquilibrium | None]:
     """
     Return the density traits of a component as tuples: its polar traits,
     the density per unit area of its surface (the plane of a disk, seen
     face-on), and of a thick one, its height traits, the probability
     density of the distance from the surface of each (none for a thin
-    one).
+    one); and its vertical equilibrium, if any (see
+    traits.RHTraitEquilibrium): the one height trait that they all share,
+    drawn by a thick component, and on a thin one not drawn.
 
     Raises
     ------
     ValueError
-        If there are no polar traits or too many, or a thick component has
-        neither one height trait that they share nor one for each.
+        If there are no polar traits or too many, a thick component has
+        neither one height trait that they share nor one for each, a thin
+        one has height traits but its equilibrium, or the equilibrium is
+        not the one height trait, of a zmax if drawn and of none if not.
     """
     rptraits = _polar_traits('rptraits', rptraits)
-    if not thick:
-        return rptraits, ()
     if rhtraits is None:
-        raise ValueError(
-            "a thick component needs the height traits of its density "
-            "(rhtraits)")
+        if thick:
+            raise ValueError(
+                "a thick component needs the height traits of its density "
+                "(rhtraits)")
+        return rptraits, (), None
     rhtraits = _height_traits(
         'rhtraits', rhtraits, len(rptraits), 'rptraits')
     if None in rhtraits:
         raise ValueError("rhtraits cannot have empty items")
-    return rptraits, rhtraits
+    equilibrium = next((
+        trait for trait in rhtraits
+        if isinstance(trait, traits.RHTraitEquilibrium)), None)
+    if equilibrium is not None and len(rhtraits) != 1:
+        raise ValueError(
+            "the vertical equilibrium is the one density height trait of "
+            "its disk, which every density polar trait shares: give it "
+            "alone")
+    if not thick and equilibrium is None:
+        raise ValueError(
+            "a thin disk takes one density height trait, its vertical "
+            "equilibrium, which it does not draw (a disk whose density has "
+            "a height is a thick disk)")
+    if equilibrium is not None and equilibrium.drawn() != thick:
+        raise ValueError(
+            "a thick disk draws its vertical equilibrium within its zmax: "
+            "give it zmax" if thick else
+            "a thin disk does not draw its vertical equilibrium: give it no "
+            "zmax")
+    return rptraits, rhtraits if thick else (), equilibrium
 
 
 def kinematic_traits(

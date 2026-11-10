@@ -24,6 +24,7 @@ __all__ = [
     'DPTrait',
     'GalaxyInput',
     'HTrait',
+    'HeightInput',
     'ImageInput',
     'PTrait',
     'RHTrait',
@@ -72,6 +73,14 @@ class RotationFactorsInput(GalaxyInput):
     (arcsec; see VHTraitMass).
     """
     heights: tuple[float, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class HeightInput(GalaxyInput):
+    """
+    The scale heights of a vertical equilibrium at the subnodes (arcsec;
+    see RHTraitEquilibrium).
+    """
 
 
 @dataclasses.dataclass(frozen=True)
