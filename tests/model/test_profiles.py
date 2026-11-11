@@ -244,6 +244,29 @@ def test_groups_with_other_data_check_what_their_profiles_see():
         group.with_data([dataset(['vcirc_disk'], [1.0, 3.0] * u.kpc)])
 
 
+def test_plans_with_other_data_evaluate_profiles_at_their_radii():
+    # The plan of a profile takes its functions and its radii from its
+    # data: a plan with other data (see GroupPlan.with_data) shares it
+    # only where they are the same (lengths in another unit are)
+    def dataset(keys, radii):
+        return DatasetProfile({key: Data(np.ones(2)) for key in keys}, radii)
+    alone = galaxy_parser.load(dict(mass=copy.deepcopy(MASS)))
+    params = {k: v for k, v in PARAMS.items() if k != 'distance'}
+    plan = ObservationGroup(alone, ObservationProfile(
+        data=dataset(['vcirc'], [1.0, 3.0] * u.kpc))).plan()
+    assert plan.with_data([dataset(['vcirc'], [1e3, 3e3] * u.pc)])._plans[0] \
+        is plan._plans[0]
+    for keys, radii in [(['vcirc'], [5.0, 7.0] * u.kpc),
+                        (['vcirc_halo'], [1.0, 3.0] * u.kpc)]:
+        other = dataset(keys, radii)
+        fresh = ObservationGroup(
+            alone, ObservationProfile(data=other)).plan().model_h(params)[0]
+        copied = plan.with_data([other]).model_h(params)[0]
+        assert copied.keys() == fresh.keys()
+        for key in keys:
+            np.testing.assert_array_equal(copied[key]['d'], fresh[key]['d'])
+
+
 def test_profile_data_in_another_unit_are_converted():
     # (to the unit of the function: m/s to km/s, values and errors)
     radii = [1.0, 3.0] * u.kpc

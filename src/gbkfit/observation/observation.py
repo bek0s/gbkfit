@@ -330,6 +330,31 @@ class Observation(TypedSerializable, abc.ABC):
             likelihood (see __init__).
         """
 
+    def same_plan(self, other: 'Observation') -> bool:
+        """
+        Check whether its plan is also that of another observation, the
+        same one with other data (see with_data), which can then share it
+        (see GroupPlan.with_data): whether all that its plan takes from
+        its data is the same in the other.
+
+        Here, the unit of their light (see data_unit) and the floating
+        type of their models, which the data can choose (see dtype);
+        kinds whose plans take more from their data compare that too (see
+        ObservationProfile).
+
+        Parameters
+        ----------
+        other : Observation
+            The other observation.
+
+        Returns
+        -------
+        bool
+            True if the plan is also that of the other.
+        """
+        return _same_unit(self.data_unit(), other.data_unit()) \
+            and self.dtype() == other.dtype()
+
     def light_amplitudes(self, seen: SeenGalaxies) -> dict[str, str | None]:
         """
         Return the amplitudes of the light that its model takes (see
@@ -471,6 +496,17 @@ class Observation(TypedSerializable, abc.ABC):
             The images, by name.
         """
         return {}
+
+
+def _same_unit(a: DataUnit | None, b: DataUnit | None) -> bool:
+    """
+    Return whether two units of the light of data are the same (see
+    DataUnit, whose beams can be arrays, one for each spectral point).
+    """
+    if a is None or b is None:
+        return a is b
+    return all(np.array_equal(x, y) if isinstance(x, np.ndarray)
+               else x == y for x, y in zip(a, b))
 
 
 observation_parser = TypedParser(Observation, family='observation')
