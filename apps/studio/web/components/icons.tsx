@@ -60,6 +60,14 @@ export const ListIcon = () => (
   </Icon>
 );
 
+// A pin: keeps something in place (e.g. the list beside the screen)
+export const PinIcon = () => (
+  <Icon>
+    <path d="M9 4h6l-1 6 3 3H7l3-3z" />
+    <path d="M12 13v7" />
+  </Icon>
+);
+
 // The fit: a curve through a point
 export const FitIcon = () => (
   <Icon>

@@ -22,6 +22,14 @@ const COLUMNS = [
   { folder: 'galaxies', title: 'Galaxies' },
 ];
 
+// What the head of Home makes, in the order of the work (PSFs, LSFs and
+// noise models: from New in the bar, or the list of the observations)
+const MAKE = [
+  { folder: 'datasets', label: '+ Add data' },
+  { folder: 'observations', label: '+ New observation' },
+  { folder: 'galaxies', label: '+ New galaxy' },
+];
+
 // The links the map draws (of a source folder to a target folder); the
 // others (e.g. of a fit to its fitter) are not drawn
 const DRAWN = new Set(['observations>datasets', 'setups>observations', 'setups>galaxies']);
@@ -31,6 +39,9 @@ export function Home() {
   const info = useProject(project);
   const names = (folder: string) => info.data?.pieces[folder] ?? [];
   const empty = ['datasets', 'observations', 'galaxies', 'setups'].every((folder) => names(folder).length === 0);
+  // (the next thing to make, the button that stands out: the first of the
+  // data, an observation and a galaxy that the project has none of)
+  const next = MAKE.find(({ folder }) => names(folder).length === 0)?.folder ?? null;
   const counts = [
     [names('datasets').length, 'dataset', 'datasets'],
     [names('observations').length, 'observation', 'observations'],
@@ -47,11 +58,11 @@ export function Home() {
         </div>
         <span className="home-counts">{counts.map(([n, one, many]) => `${n} ${n === 1 ? one : many}`).join(' · ')}</span>
         <div className="head-actions">
-          <Button onClick={() => startAdding('datasets')}>+ Add data</Button>
-          <Button onClick={() => startAdding('observations')}>+ New observation</Button>
-          <Button kind="primary" onClick={() => startAdding('galaxies')}>
-            + New galaxy
-          </Button>
+          {MAKE.map(({ folder, label }) => (
+            <Button key={folder} kind={folder === next ? 'primary' : undefined} onClick={() => startAdding(folder)}>
+              {label}
+            </Button>
+          ))}
         </div>
       </div>
       {info.error && <p className="error screen-error">{info.error.message}</p>}

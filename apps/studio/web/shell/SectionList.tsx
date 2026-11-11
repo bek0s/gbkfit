@@ -1,52 +1,48 @@
 // The list of a section: its blocks only, in groups of one folder each
 // (see sections.ts), with a box that filters them by name and a "+ New"
-// on each group that makes a new block (see Making). Beside the screen (pinned), or hidden;
-// hidden, ☰ (or Ctrl+B) opens it over the screen, and opening a block
-// closes it. Whether it is pinned is remembered for each section.
+// on each group that makes a new block (see Making). It opens over the
+// screen as a section of the rail is clicked or hovered, and closes as
+// the mouse leaves it (or Escape, or a block opens); pinned, it stays
+// beside the screen, as the list of the section on the stage (Ctrl+B pins
+// it or not).
 import { useEffect, useState } from 'react';
 import { useProject } from '../api/queries';
-import { ListIcon } from '../components/icons';
+import { PinIcon } from '../components/icons';
 import { Button, IconButton, NavItem, TextField } from '../components/ui/basics';
 import { useStudio } from '../studio';
-import { useRemembered } from './remember';
-import { sectionNamed, sectionOf, type Group as GroupInfo, type SectionKey } from './sections';
+import { sectionNamed, type Group as GroupInfo, type SectionKey } from './sections';
 
 // The blocks a group shows before 'show all'
 const SHOWN = 12;
-
-// Whether the list of the section on the stage is pinned, and how to pin
-// it or not (remembered by section)
-export function useListPinned(): [boolean, (pinned: boolean) => void] {
-  const { screen } = useStudio();
-  const section = sectionOf(screen);
-  const [hidden, setHidden] = useRemembered<SectionKey[]>('lists-hidden', []);
-  return [
-    !hidden.includes(section),
-    (pinned: boolean) => setHidden(pinned ? hidden.filter((key) => key !== section) : [...hidden, section]),
-  ];
-}
 
 // Whether a section has a list (home and compare have none, yet)
 export function hasList(key: SectionKey): boolean {
   return sectionNamed(key).groups.length > 0;
 }
 
-export function SectionList({ flyout, onClose }: { flyout: boolean; onClose: () => void }) {
-  const { project, screen } = useStudio();
-  const section = sectionNamed(sectionOf(screen));
-  const [pinned, setPinned] = useListPinned();
+export function SectionList({
+  section: key,
+  pinned,
+  onPin,
+  onOpen,
+}: {
+  section: SectionKey;
+  pinned: boolean;
+  onPin: (pinned: boolean) => void;
+  // Called when a block opens (e.g. to close the list over the screen)
+  onOpen: () => void;
+}) {
+  const { project } = useStudio();
+  const section = sectionNamed(key);
   const [find, setFind] = useState('');
   const query = find.trim().toLowerCase();
   if (project === null) return null;
   return (
-    <nav className="list" data-flyout={flyout || undefined} aria-label={`The ${section.title.toLowerCase()} of the project`}>
+    <nav className="list" aria-label={`The ${section.title.toLowerCase()} of the project`}>
       <div className="list-head">
         <b>{section.title}</b>
-        <IconButton label={pinned ? 'Hide the list (Ctrl+B)' : 'Pin the list (Ctrl+B)'} pressed={pinned} onClick={() => {
-          setPinned(!pinned);
-          onClose();
-        }}>
-          <ListIcon />
+        <IconButton label={pinned ? 'Unpin the list: it opens from the rail (Ctrl+B)' : 'Pin the list beside the screen (Ctrl+B)'} pressed={pinned} onClick={() => onPin(!pinned)}>
+          <PinIcon />
         </IconButton>
       </div>
       <div className="list-find">
@@ -54,25 +50,25 @@ export function SectionList({ flyout, onClose }: { flyout: boolean; onClose: () 
       </div>
       <div className="list-groups">
         {section.groups.map((group) => (
-          <Group key={group.folder} project={project} group={group} find={query} titled={section.groups.length > 1} onOpen={onClose} />
+          <Group key={group.folder} project={project} group={group} find={query} titled={section.groups.length > 1} onOpen={onOpen} />
         ))}
       </div>
     </nav>
   );
 }
 
-// Ctrl+B pins the list or not
-export function useListKey(toggle: () => void): void {
+// A key held down with Ctrl (or Cmd) does something, anywhere on the page
+export function useCtrlKey(key: string, act: () => void): void {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b') {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === key) {
         event.preventDefault();
-        toggle();
+        act();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [toggle]);
+  }, [key, act]);
 }
 
 function Group({
@@ -99,7 +95,13 @@ function Group({
     <div className="list-group">
       <div className="list-group-head">
         {titled ? <span>{group.title}</span> : <span />}
-        <Button kind="small" onClick={() => startAdding(group.folder)}>
+        <Button
+          kind="small"
+          onClick={() => {
+            startAdding(group.folder);
+            onOpen();
+          }}
+        >
           + New
         </Button>
       </div>
