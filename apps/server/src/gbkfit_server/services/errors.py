@@ -5,6 +5,7 @@ their responses (e.g. not found).
 
 
 __all__ = [
+    'Cancelled',
     'Failed',
     'Invalid',
     'NotFound',
@@ -26,3 +27,7 @@ class Invalid(ServiceError):
 
 class Failed(ServiceError):
     """A service failed (e.g. the worker of a session ended)."""
+
+
+class Cancelled(ServiceError):
+    """What a request asked for was cancelled (e.g. a render)."""

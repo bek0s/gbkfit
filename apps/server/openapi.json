@@ -1077,7 +1077,7 @@
     "/api/v1/views/galaxy": {
       "post": {
         "summary": "View Galaxy",
-        "description": "Render a galaxy of the options of a piece of a project at values of\nits parameters, through an ideal observation (see Renders.galaxy): a\nframe of its maps (ny, nx; named 'light', 'velocity', 'vx', 'vy',\n'dispersion' and '{component}/{map}'; NaN where there is no light),\nwhose header has the size of the pixels (step, arcsec), the pixels\nacross (size), its curves (by name, with 'radius'; null where not\ndefined) and the problems of those that could not be drawn.",
+        "description": "Render a galaxy of the options of a piece of a project at values of\nits parameters, through an ideal observation (see Renders.galaxy): a\nframe of its maps (ny, nx; named 'light', 'velocity', 'vx', 'vy',\n'dispersion' and '{component}/{map}'; NaN where there is no light),\nwhose header has the size of the pixels (step, arcsec), the pixels\nacross (size), its curves (by name, with 'radius'; null where not\ndefined) and the problems of those that could not be drawn. The\nrender is cancelled if the client goes away (see RenderPool).",
         "operationId": "view_galaxy_api_v1_views_galaxy_post",
         "requestBody": {
           "content": {
@@ -1112,7 +1112,7 @@
     "/api/v1/views/galaxy-cube": {
       "post": {
         "summary": "View Galaxy Cube",
-        "description": "Render the cube of a galaxy (see Renders.cube), of its components that\nemit lines, and keep it for the views of cubes (channel, spectrum and\nmoments) at the path returned.",
+        "description": "Render the cube of a galaxy (see Renders.cube), of its components that\nemit lines, and keep it for the views of cubes (channel, spectrum and\nmoments) at the path returned. The render is cancelled if the client\ngoes away (see RenderPool).",
         "operationId": "view_galaxy_cube_api_v1_views_galaxy_cube_post",
         "requestBody": {
           "content": {
@@ -1151,7 +1151,7 @@
     "/api/v1/views/observed": {
       "post": {
         "summary": "View Observed",
-        "description": "Evaluate a galaxy through an observation of its project (see\nRenders.observed), and keep its arrays (the model of each item, and\nthe data and errors of the observation, if it has them) for the views\nof cubes (channel, spectrum and moments), each at the path returned.",
+        "description": "Evaluate a galaxy through an observation of its project (see\nRenders.observed), and keep its arrays (the model of each item, and\nthe data and errors of the observation, if it has them) for the views\nof cubes (channel, spectrum and moments), each at the path returned.\nThe render is cancelled if the client goes away (see RenderPool).",
         "operationId": "view_observed_api_v1_views_observed_post",
         "requestBody": {
           "content": {
@@ -1173,6 +1173,62 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/renders": {
+      "get": {
+        "summary": "Renders",
+        "description": "Return the renders that run long (see RenderPool), in the order they\nstarted; the events 'render' tell their changes.",
+        "operationId": "renders_api_v1_renders_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RenderInfo"
+                  },
+                  "type": "array",
+                  "title": "Response Renders Api V1 Renders Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/renders/{id_}/cancel": {
+      "post": {
+        "summary": "Cancel Render",
+        "description": "Cancel a render: drop it if it waits, and stop it if it runs.",
+        "operationId": "cancel_render_api_v1_renders__id___cancel_post",
+        "parameters": [
+          {
+            "name": "id_",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id "
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -2537,6 +2593,17 @@
             "type": "integer",
             "title": "Size",
             "default": 160
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
           }
         },
         "type": "object",
@@ -2545,7 +2612,7 @@
           "galaxy"
         ],
         "title": "GalaxyRenderRequest",
-        "description": "A galaxy to render (see Renders.galaxy): the project of its piece, its\noptions (its files relative to the project), the values of its\nparameters (numbers, or lists of them for vectors; the defaults for\nthose not given), how it is seen ('sky', 'face-on' or 'edge-on'), and\nthe pixels across."
+        "description": "A galaxy to render (see Renders.galaxy): the project of its piece, its\noptions (its files relative to the project), the values of its\nparameters (numbers, or lists of them for vectors; the defaults for\nthose not given), how it is seen ('sky', 'face-on' or 'edge-on'), and\nthe pixels across; and what it is, for the pages that show the\nrenders that run long (e.g. the name of its piece)."
       },
       "GalaxyRequest": {
         "properties": {
@@ -2988,6 +3055,17 @@
           "observation": {
             "type": "string",
             "title": "Observation"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
           }
         },
         "type": "object",
@@ -2997,7 +3075,7 @@
           "observation"
         ],
         "title": "ObservedRequest",
-        "description": "A galaxy to observe (see Renders.observed): the project of its piece,\nits options and the values of its parameters (as a galaxy to render;\nthe defaults for those not given, also of the observation), and the\nobservation of the project that sees it, by name."
+        "description": "A galaxy to observe (see Renders.observed): the project of its piece,\nits options and the values of its parameters (as a galaxy to render;\nthe defaults for those not given, also of the observation), and the\nobservation of the project that sees it, by name; and what the galaxy\nis, for the pages that show the renders that run long."
       },
       "PSFRequest": {
         "properties": {
@@ -3131,6 +3209,28 @@
         "title": "PSFViewInfo",
         "description": "A PSF drawn on pixels (see Responses.psf): its values (rows of y,\nfrom the bottom; they sum to 1), the size of the pixels (x, y;\narcsec), the solid angle of its beam (arcsec^2) and the full width at\nhalf maximum of the circular Gaussian of that beam (arcsec; none for\na point), and its full widths at half maximum along its major and\nminor axes (arcsec) and the position angle of its major axis\n(degrees; none if round), as measured (none for a point)."
       },
+      "PieceLink": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/PieceReference"
+          },
+          "target": {
+            "$ref": "#/components/schemas/PieceReference"
+          },
+          "missing": {
+            "type": "boolean",
+            "title": "Missing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "missing"
+        ],
+        "title": "PieceLink",
+        "description": "A piece (or a setup) that names a piece (source), the piece it names\n(target), and whether that piece is missing (named, but not in the\nproject: e.g. deleted)."
+      },
       "PieceReference": {
         "properties": {
           "folder": {
@@ -3148,7 +3248,7 @@
           "name"
         ],
         "title": "PieceReference",
-        "description": "A piece (or a setup) that names another: its folder and name."
+        "description": "A piece (or a setup) of a project: its folder and name."
       },
       "PieceRename": {
         "properties": {
@@ -3292,16 +3392,24 @@
             },
             "type": "array",
             "title": "Runs"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/PieceLink"
+            },
+            "type": "array",
+            "title": "Links"
           }
         },
         "type": "object",
         "required": [
           "path",
           "pieces",
-          "runs"
+          "runs",
+          "links"
         ],
         "title": "ProjectInfo",
-        "description": "A project: its path, the names of its pieces and setups by folder\n(e.g. 'galaxies'), and the paths of its runs."
+        "description": "A project: its path, the names of its pieces and setups by folder\n(e.g. 'galaxies'), the paths of its runs, and its links: each piece or\nsetup that names a piece, with the piece it names (see PieceLink)."
       },
       "ProjectRename": {
         "properties": {
@@ -3330,6 +3438,40 @@
         ],
         "title": "ProjectRequest",
         "description": "A project to create: its folder (its path)."
+      },
+      "RenderInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "what": {
+            "type": "string",
+            "title": "What"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "elapsed": {
+            "type": "number",
+            "title": "Elapsed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "what",
+          "kind",
+          "stage",
+          "elapsed"
+        ],
+        "title": "RenderInfo",
+        "description": "A render that runs long (see RenderPool): its id, what it renders\n(e.g. \"galaxy ngc2403\"), its kind ('galaxy', 'cube' or 'observed'),\nthe stage it has reached (e.g. 'evaluating') and the seconds since it\nstarted."
       },
       "RunInfo": {
         "properties": {

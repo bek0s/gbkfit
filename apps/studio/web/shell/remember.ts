@@ -1,5 +1,5 @@
 // What the page remembers in this browser (e.g. the open project, the
-// recent ones, the folded parts of the tree). Storage can be missing or
+// recent ones, the lists hidden). Storage can be missing or
 // refused (e.g. a private window): the page then forgets.
 import { useEffect, useState } from 'react';
 

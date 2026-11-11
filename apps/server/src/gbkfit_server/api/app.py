@@ -15,7 +15,8 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.requests import HTTPConnection
 
-from gbkfit_server.services.errors import Failed, Invalid, NotFound
+from gbkfit_server.services.errors import (
+    Cancelled, Failed, Invalid, NotFound)
 from gbkfit_server.services.server import Server
 from .models import ServerInfo
 from .pages import installed_pages
@@ -36,7 +37,8 @@ API = '/api/v1'
 _ERRORS = {
     NotFound: status.HTTP_404_NOT_FOUND,
     Invalid: status.HTTP_400_BAD_REQUEST,
-    Failed: status.HTTP_500_INTERNAL_SERVER_ERROR}
+    Failed: status.HTTP_500_INTERNAL_SERVER_ERROR,
+    Cancelled: status.HTTP_409_CONFLICT}
 
 
 def create_app(

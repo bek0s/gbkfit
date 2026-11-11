@@ -4,7 +4,7 @@ import { NavItem } from '../components/ui/basics';
 import { Dialog } from '../components/ui/overlays';
 import { useStudio } from '../studio';
 import { DATA_KINDS } from './blocks';
-import type { AdderProps } from './Tree';
+import type { AdderProps } from './Making';
 
 export function DataKindDialog({ onDone }: AdderProps) {
   const { go } = useStudio();

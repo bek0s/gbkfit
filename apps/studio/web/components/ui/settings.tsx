@@ -20,8 +20,9 @@ import { CheckIcon, SettingsIcon } from '../icons';
 import { NavItem } from './basics';
 import { Check, Segments } from './inputs';
 import { Dialog } from './overlays';
+import { setSheetSide, useSheetSide, type SheetSide } from './sheet';
 
-const SECTIONS = ['Appearance', 'Maps'] as const;
+const SECTIONS = ['Appearance', 'Layout', 'Maps'] as const;
 type Section = (typeof SECTIONS)[number];
 
 export function SettingsButton() {
@@ -50,7 +51,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
             <NavItem key={each} label={each} active={each === section} onClick={() => setSection(each)} />
           ))}
         </nav>
-        <div className="settings-page">{section === 'Appearance' ? <Appearance /> : <Maps />}</div>
+        <div className="settings-page">{section === 'Appearance' ? <Appearance /> : section === 'Layout' ? <Layout /> : <Maps />}</div>
       </div>
       {problem ? (
         <p className="settings-file" data-problem>
@@ -117,6 +118,26 @@ function Appearance() {
         </div>
       </Setting>
     </>
+  );
+}
+
+function Layout() {
+  const side = useSheetSide();
+  return (
+    <Setting
+      name="The sheet of a screen"
+      help="Where the options of what a screen edits go (a dataset, an observation, a galaxy), beside its picture: on the left, before what they show, or on the right, at the edge of the window."
+    >
+      <Segments<SheetSide>
+        label="The side of the sheet"
+        value={side}
+        onChange={setSheetSide}
+        items={[
+          { value: 'left', label: 'Left' },
+          { value: 'right', label: 'Right' },
+        ]}
+      />
+    </Setting>
   );
 }
 

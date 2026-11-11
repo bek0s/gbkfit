@@ -38,7 +38,7 @@ from .models import (
     ObservedInfo, ObservedRequest, PSFRequest, PSFViewInfo,
     PieceReference, PieceRename, PieceRequest, PreferencesInfo,
     PreparationInfo,
-    ProjectInfo, ProjectRename, ProjectRequest, RunInfo,
+    ProjectInfo, ProjectRename, ProjectRequest, RenderInfo, RunInfo,
     SessionInfo, SessionRequest, SpectrumView)
 
 
@@ -321,8 +321,15 @@ def galaxy_parameters(server: ServerDep, request: GalaxyRequest) -> GalaxyInfo:
         from_attributes=True)
 
 
+def _what(label: str | None) -> str:
+    """Return what a render of a galaxy renders, for the pages."""
+    return f"galaxy {label}" if label else "a galaxy"
+
+
 @router.post('/views/galaxy', response_class=Response, responses=_FRAME)
-def view_galaxy(server: ServerDep, request: GalaxyRenderRequest) -> Response:
+async def view_galaxy(
+        server: ServerDep, request: GalaxyRenderRequest,
+        connection: Request) -> Response:
     """
     Render a galaxy of the options of a piece of a project at values of
     its parameters, through an ideal observation (see Renders.galaxy): a
@@ -330,11 +337,13 @@ def view_galaxy(server: ServerDep, request: GalaxyRenderRequest) -> Response:
     'dispersion' and '{component}/{map}'; NaN where there is no light),
     whose header has the size of the pixels (step, arcsec), the pixels
     across (size), its curves (by name, with 'radius'; null where not
-    defined) and the problems of those that could not be drawn.
+    defined) and the problems of those that could not be drawn. The
+    render is cancelled if the client goes away (see RenderPool).
     """
-    render = server.renders.galaxy(
-        request.project, request.galaxy, request.properties, request.view,
-        request.size)
+    render = await server.renders.render('galaxy', dict(
+        project=request.project, options=request.galaxy,
+        properties=request.properties, view=request.view,
+        size=request.size), _what(request.label), connection.is_disconnected)
     header = dict(
         step=render.step, size=render.size, curves=render.curves,
         problems=render.problems)
@@ -345,16 +354,19 @@ def view_galaxy(server: ServerDep, request: GalaxyRenderRequest) -> Response:
 
 
 @router.post('/views/galaxy-cube')
-def view_galaxy_cube(
-        server: ServerDep, request: GalaxyRenderRequest) -> CubeRenderInfo:
+async def view_galaxy_cube(
+        server: ServerDep, request: GalaxyRenderRequest,
+        connection: Request) -> CubeRenderInfo:
     """
     Render the cube of a galaxy (see Renders.cube), of its components that
     emit lines, and keep it for the views of cubes (channel, spectrum and
-    moments) at the path returned.
+    moments) at the path returned. The render is cancelled if the client
+    goes away (see RenderPool).
     """
-    cube = server.renders.cube(
-        request.project, request.galaxy, request.properties, request.view,
-        request.size)
+    cube = await server.renders.render('cube', dict(
+        project=request.project, options=request.galaxy,
+        properties=request.properties, view=request.view,
+        size=request.size), _what(request.label), connection.is_disconnected)
     path = server.views.put(cube)
     nchannels, ny, nx = cube.values.shape
     return CubeRenderInfo(
@@ -362,16 +374,21 @@ def view_galaxy_cube(
 
 
 @router.post('/views/observed')
-def view_observed(server: ServerDep, request: ObservedRequest) -> ObservedInfo:
+async def view_observed(
+        server: ServerDep, request: ObservedRequest,
+        connection: Request) -> ObservedInfo:
     """
     Evaluate a galaxy through an observation of its project (see
     Renders.observed), and keep its arrays (the model of each item, and
     the data and errors of the observation, if it has them) for the views
     of cubes (channel, spectrum and moments), each at the path returned.
+    The render is cancelled if the client goes away (see RenderPool).
     """
-    observed = server.renders.observed(
-        request.project, request.galaxy, request.properties,
-        request.observation)
+    observed = await server.renders.render('observed', dict(
+        project=request.project, options=request.galaxy,
+        properties=request.properties, observation=request.observation),
+        f"{_what(request.label)} through {request.observation}",
+        connection.is_disconnected)
     arrays = []
     for array in observed.arrays:
         values = array.values if array.values.ndim == 3 \
@@ -386,6 +403,21 @@ def view_observed(server: ServerDep, request: ObservedRequest) -> ObservedInfo:
             step=list(observed.step), rpix=list(observed.rpix)))
     return ObservedInfo(
         observable=observed.observable, arrays=arrays, notes=observed.notes)
+
+
+@router.get('/renders')
+def renders(server: ServerDep) -> list[RenderInfo]:
+    """
+    Return the renders that run long (see RenderPool), in the order they
+    started; the events 'render' tell their changes.
+    """
+    return [RenderInfo.model_validate(r) for r in server.renders.running()]
+
+
+@router.post('/renders/{id_}/cancel', status_code=status.HTTP_204_NO_CONTENT)
+def cancel_render(server: ServerDep, id_: str) -> None:
+    """Cancel a render: drop it if it waits, and stop it if it runs."""
+    server.renders.cancel(id_)
 
 
 @router.get('/schema')

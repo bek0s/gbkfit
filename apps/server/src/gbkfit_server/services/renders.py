@@ -16,7 +16,7 @@ import logging
 import math
 import os
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, Literal
 
 import astropy.constants
@@ -90,7 +90,8 @@ class GalaxyRender:
     A galaxy rendered: the size of its pixels (arcsec) and their number
     across, its maps by name (ny, nx; 'light', 'velocity', 'vx', 'vy' and
     'dispersion' of all its components, and '{component}/{map}' of each
-    that has the map; NaN where there is no light), and its curves by name
+    that has the map, by its name, or its position if it has none, e.g.
+    'component0/light'; NaN where there is no light), and its curves by name
     ('radius', arcsec, and the functions of radii of the galaxy at them,
     e.g. 'rotation_gas' and 'vcirc_halo'; see GalaxyFunctions), with the
     problems of the curves that could not be drawn.
@@ -154,12 +155,14 @@ class Renders:
             options: Mapping[str, Any],
             properties: Mapping[str, Any],
             view: View = 'sky',
-            size: int = _SIZE
+            size: int = _SIZE,
+            progress: Callable[[str], None] | None = None
     ) -> GalaxyRender:
         """
         Render a galaxy of the options of a piece of a project, at the
         values of its parameters of the given properties (numbers, or
-        lists of them for vectors; the defaults for the others).
+        lists of them for vectors; the defaults for the others), telling
+        progress the stage it reaches, if given (e.g. 'evaluating').
 
         Raises
         ------
@@ -167,6 +170,8 @@ class Renders:
             If the galaxy or the values are not valid, or it cannot be
             rendered.
         """
+        tell = progress or _quiet
+        tell('setting up')
         galaxy, radius, step = self._load(project, options, view, size)
         try:
             observations = _observations(galaxy, size, step)
@@ -176,11 +181,13 @@ class Renders:
             values = _values(group, properties)
             plan = group.plan(DriverHost())
             extras = Extras()
+            tell('evaluating')
             plan.model_h(_oriented(galaxy, values, view), extras)
         # A mistake of the options or the values, or of the model at them
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
         maps = _maps(galaxy, extras)
+        tell('drawing the curves')
         curves, problems = _curves(galaxy, values, radius)
         return GalaxyRender(step, size, maps, curves, problems)
 
@@ -190,7 +197,8 @@ class Renders:
             options: Mapping[str, Any],
             properties: Mapping[str, Any],
             view: View = 'sky',
-            size: int = _SIZE
+            size: int = _SIZE,
+            progress: Callable[[str], None] | None = None
     ) -> Cube:
         """
         Render the cube of a galaxy (as galaxy renders its maps): of its
@@ -198,7 +206,8 @@ class Renders:
         its maps, whose channels of velocities (km/s; of the rest of the
         first line named, if any) hold their light: the velocities of its
         maps, each within _SIGMAS times its dispersion, of each line (at
-        most _NCHANNELS channels, of a round width).
+        most _NCHANNELS channels, of a round width); telling progress the
+        stage it reaches, if given.
 
         Raises
         ------
@@ -206,6 +215,8 @@ class Renders:
             If the galaxy or the values are not valid, or it has no
             component that emits lines, or it cannot be rendered.
         """
+        tell = progress or _quiet
+        tell('setting up')
         galaxy, _, step = self._load(project, options, view, size)
         try:
             seen = [
@@ -219,6 +230,7 @@ class Renders:
             group = ObservationGroup([galaxy], observations)
             values = _oriented(galaxy, _values(group, properties), view)
             extras = Extras()
+            tell('evaluating the maps')
             group.plan(DriverHost()).model_h(values, extras)
             low, high = _velocity_range(_maps(galaxy, extras))
             offsets = _line_offsets(seen)
@@ -229,6 +241,7 @@ class Renders:
             spectral = dict(size=nchannels, step=width, rpix=0, rval=low)
             cube = _observations(galaxy, size, step, spectral)[0]
             group = ObservationGroup([galaxy], [cube])
+            tell('evaluating the cube')
             data = group.plan(DriverHost()).model_h(values)[0]
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
@@ -241,7 +254,8 @@ class Renders:
             project: str,
             options: Mapping[str, Any],
             properties: Mapping[str, Any],
-            observation: str
+            observation: str,
+            progress: Callable[[str], None] | None = None
     ) -> Observed:
         """
         Evaluate a galaxy of the options of a piece of a project, at the
@@ -249,7 +263,8 @@ class Renders:
         the others, also of the observation), through an observation of
         the project (by name: the pieces it names, its dataset, PSF and
         LSF, in place): its model on the grid of the observation, through
-        its instrument and line of sight, and its data, if it has them.
+        its instrument and line of sight, and its data, if it has them;
+        telling progress the stage it reaches, if given.
 
         Raises
         ------
@@ -258,6 +273,8 @@ class Renders:
             the observation cannot see the galaxy (e.g. a thick disk along
             a flat line of sight).
         """
+        tell = progress or _quiet
+        tell('setting up')
         root = self._workspace.path(project)
         notes: list[str] = []
         try:
@@ -273,6 +290,7 @@ class Renders:
                 group = ObservationGroup([galaxy], seen)
                 values = _values(group, properties)
                 plan = group.plan(DriverHost())
+                tell('evaluating')
                 outputs = gbkfit.setup.evaluation_outputs(
                     plan, None, values, True, False, False) \
                     | gbkfit.setup.data_outputs(plan)
@@ -337,6 +355,10 @@ class Renders:
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
         return galaxy, radius, 2 * _MARGIN * radius / size
+
+
+def _quiet(stage: str) -> None:
+    """Hear the stage of a render, and do nothing with it."""
 
 
 class _noted:
@@ -556,12 +578,14 @@ def _maps(galaxy: Galaxy, extras: Extras) -> dict[str, np.ndarray]:
     sums: dict[str, np.ndarray] = {}
     weights = None
     total = None
-    for component in galaxy.components():
-        name = component.name() or 'component'
+    for i, component in enumerate(galaxy.components()):
+        # (the label of the component in the extras: its name, or its
+        # position, e.g. 'component0')
+        name = component.name() or f'component{i}'
         own = {}
         for key, extra in _MAPS.items():
             found = [x for x in extras if x.name == extra
-                     and x.ids.get('component', 'component') == name]
+                     and x.ids.get('component') == name]
             if found:
                 own[key] = np.asarray(found[0].value.data, dtype=float)
         if 'light' not in own:

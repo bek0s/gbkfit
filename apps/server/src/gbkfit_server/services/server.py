@@ -8,7 +8,7 @@ from .galaxies import Galaxies
 from .executors import Executor
 from .jobs import Jobs
 from .preferences import Preferences
-from .renders import Renders
+from .render_pool import RenderPool
 from .responses import Responses
 from .sessions import Sessions
 from .views import Views
@@ -44,7 +44,7 @@ class Server:
     views : Views
     responses : Responses
     galaxies : Galaxies
-    renders : Renders
+    renders : RenderPool
     preferences : Preferences
     """
 
@@ -59,11 +59,12 @@ class Server:
         self.views = Views(self.workspace)
         self.responses = Responses(self.workspace)
         self.galaxies = Galaxies(self.workspace)
-        self.renders = Renders(self.workspace)
+        self.renders = RenderPool(self.workspace, self.events)
         self.preferences = preferences if preferences is not None \
             else Preferences()
 
     async def close(self) -> None:
-        """Close the sessions, and stop the jobs."""
+        """Close the sessions, stop the jobs, and end the renders."""
         await self.sessions.close_all()
         await self.jobs.close()
+        await self.renders.close()

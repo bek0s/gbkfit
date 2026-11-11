@@ -11,7 +11,7 @@ import { MoreIcon } from '../components/icons';
 import { Button } from '../components/ui/basics';
 import { Dialog, DropMenu } from '../components/ui/overlays';
 import { useStudio } from '../studio';
-import { kindOf } from './blocks';
+import { kindOf } from './sections';
 
 export function useBlockHead(project: string, folder: string, name: string) {
   const [renaming, setRenaming] = useState(false);

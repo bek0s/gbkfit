@@ -15,6 +15,7 @@ export const keys = {
   preparation: (path: string) => ['preparation', path],
   view: (...parts: (string | number)[]) => ['view', ...parts],
   jobs: ['jobs'],
+  renders: ['renders'],
 };
 
 // The paths of the projects of the workspace
@@ -223,6 +224,29 @@ export function useJobs() {
   return useQuery({ queryKey: keys.jobs, queryFn: () => data(api.GET('/api/v1/jobs')) });
 }
 
+// Stop a job (that runs, or waits)
+export function useStopJob() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => data(api.POST('/api/v1/jobs/{id_}/stop', { params: { path: { id_: id } } })),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.jobs }),
+  });
+}
+
+// The renders that run long (refreshed by the events of the server)
+export function useRenders() {
+  return useQuery({ queryKey: keys.renders, queryFn: () => data(api.GET('/api/v1/renders')) });
+}
+
+// Cancel a render: dropped if it waits, stopped if it runs
+export function useCancelRender() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => data(api.POST('/api/v1/renders/{id_}/cancel', { params: { path: { id_: id } } })),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.renders }),
+  });
+}
+
 // A job (refreshed as its state changes, by the events of the server)
 export function useJob(id: string | null) {
   return useQuery({
@@ -376,6 +400,40 @@ export function useLines() {
 // directions of its velocity and dispersion traits
 export function useComponentTraits() {
   return useQuery({ queryKey: ['components'], staleTime: Infinity, queryFn: () => data(api.GET('/api/v1/components')) });
+}
+
+// The notes of a project: the text of its README.md ('' if it has none)
+export function useNotes(project: string | null) {
+  return useQuery({
+    queryKey: ['notes', project ?? ''],
+    enabled: project !== null,
+    queryFn: async () => {
+      const { data: text, error, response } = await api.GET('/api/v1/files/{path}', {
+        params: { path: { path: `${project}/README.md` } },
+        parseAs: 'text',
+      });
+      if (response.status === 404) return '';
+      if (!response.ok || text === undefined) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+      return text;
+    },
+  });
+}
+
+// Write the notes of a project (its README.md)
+export function useSaveNotes(project: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (text: string) => {
+      const { error, response } = await api.PUT('/api/v1/files/{path}', {
+        params: { path: { path: `${project}/README.md` } },
+        body: text,
+        bodySerializer: (body: string) => body,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey: ['notes', project] }),
+  });
 }
 
 // Write the options of a block of a project (by its path)

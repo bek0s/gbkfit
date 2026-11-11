@@ -359,7 +359,8 @@ export interface paths {
          *     'dispersion' and '{component}/{map}'; NaN where there is no light),
          *     whose header has the size of the pixels (step, arcsec), the pixels
          *     across (size), its curves (by name, with 'radius'; null where not
-         *     defined) and the problems of those that could not be drawn.
+         *     defined) and the problems of those that could not be drawn. The
+         *     render is cancelled if the client goes away (see RenderPool).
          */
         post: operations["view_galaxy_api_v1_views_galaxy_post"];
         delete?: never;
@@ -381,7 +382,8 @@ export interface paths {
          * View Galaxy Cube
          * @description Render the cube of a galaxy (see Renders.cube), of its components that
          *     emit lines, and keep it for the views of cubes (channel, spectrum and
-         *     moments) at the path returned.
+         *     moments) at the path returned. The render is cancelled if the client
+         *     goes away (see RenderPool).
          */
         post: operations["view_galaxy_cube_api_v1_views_galaxy_cube_post"];
         delete?: never;
@@ -405,8 +407,50 @@ export interface paths {
          *     Renders.observed), and keep its arrays (the model of each item, and
          *     the data and errors of the observation, if it has them) for the views
          *     of cubes (channel, spectrum and moments), each at the path returned.
+         *     The render is cancelled if the client goes away (see RenderPool).
          */
         post: operations["view_observed_api_v1_views_observed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Renders
+         * @description Return the renders that run long (see RenderPool), in the order they
+         *     started; the events 'render' tell their changes.
+         */
+        get: operations["renders_api_v1_renders_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/renders/{id_}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Render
+         * @description Cancel a render: drop it if it waits, and stop it if it runs.
+         */
+        post: operations["cancel_render_api_v1_renders__id___cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1067,7 +1111,8 @@ export interface components {
          *     options (its files relative to the project), the values of its
          *     parameters (numbers, or lists of them for vectors; the defaults for
          *     those not given), how it is seen ('sky', 'face-on' or 'edge-on'), and
-         *     the pixels across.
+         *     the pixels across; and what it is, for the pages that show the
+         *     renders that run long (e.g. the name of its piece).
          */
         GalaxyRenderRequest: {
             /** Project */
@@ -1094,6 +1139,8 @@ export interface components {
              * @default 160
              */
             size: number;
+            /** Label */
+            label?: string | null;
         };
         /**
          * GalaxyRequest
@@ -1298,7 +1345,8 @@ export interface components {
          * @description A galaxy to observe (see Renders.observed): the project of its piece,
          *     its options and the values of its parameters (as a galaxy to render;
          *     the defaults for those not given, also of the observation), and the
-         *     observation of the project that sees it, by name.
+         *     observation of the project that sees it, by name; and what the galaxy
+         *     is, for the pages that show the renders that run long.
          */
         ObservedRequest: {
             /** Project */
@@ -1316,6 +1364,8 @@ export interface components {
             };
             /** Observation */
             observation: string;
+            /** Label */
+            label?: string | null;
         };
         /**
          * PSFRequest
@@ -1366,8 +1416,20 @@ export interface components {
             ] | null;
         };
         /**
+         * PieceLink
+         * @description A piece (or a setup) that names a piece (source), the piece it names
+         *     (target), and whether that piece is missing (named, but not in the
+         *     project: e.g. deleted).
+         */
+        PieceLink: {
+            source: components["schemas"]["PieceReference"];
+            target: components["schemas"]["PieceReference"];
+            /** Missing */
+            missing: boolean;
+        };
+        /**
          * PieceReference
-         * @description A piece (or a setup) that names another: its folder and name.
+         * @description A piece (or a setup) of a project: its folder and name.
          */
         PieceReference: {
             /** Folder */
@@ -1441,7 +1503,8 @@ export interface components {
         /**
          * ProjectInfo
          * @description A project: its path, the names of its pieces and setups by folder
-         *     (e.g. 'galaxies'), and the paths of its runs.
+         *     (e.g. 'galaxies'), the paths of its runs, and its links: each piece or
+         *     setup that names a piece, with the piece it names (see PieceLink).
          */
         ProjectInfo: {
             /** Path */
@@ -1452,6 +1515,8 @@ export interface components {
             };
             /** Runs */
             runs: string[];
+            /** Links */
+            links: components["schemas"]["PieceLink"][];
         };
         /**
          * ProjectRename
@@ -1468,6 +1533,25 @@ export interface components {
         ProjectRequest: {
             /** Path */
             path: string;
+        };
+        /**
+         * RenderInfo
+         * @description A render that runs long (see RenderPool): its id, what it renders
+         *     (e.g. "galaxy ngc2403"), its kind ('galaxy', 'cube' or 'observed'),
+         *     the stage it has reached (e.g. 'evaluating') and the seconds since it
+         *     started.
+         */
+        RenderInfo: {
+            /** Id */
+            id: string;
+            /** What */
+            what: string;
+            /** Kind */
+            kind: string;
+            /** Stage */
+            stage: string;
+            /** Elapsed */
+            elapsed: number;
         };
         /**
          * RunInfo
@@ -2315,6 +2399,55 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ObservedInfo"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renders_api_v1_renders_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderInfo"][];
+                };
+            };
+        };
+    };
+    cancel_render_api_v1_renders__id___cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
