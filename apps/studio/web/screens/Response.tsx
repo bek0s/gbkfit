@@ -27,6 +27,7 @@ import { Choice, NumberField, QuantityInput, Segments, splitQuantity } from '../
 import { Dock, DockSection } from '../components/ui/dock';
 import { useBlockHead } from '../shell/BlockMenu';
 import { kindOf } from '../shell/sections';
+import { BlockLinks } from '../shell/BlockLinks';
 import { useStudio } from '../studio';
 import { useUnsaved } from './editing';
 import { objectAt, textAt } from './observation/model';
@@ -200,6 +201,7 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
           </div>
           {head.title}
         </div>
+        <BlockLinks folder={folder} name={name} />
         <div className="head-actions">
           {dirty && <span className="why">Not saved</span>}
           {update.error && <span className="error">{update.error.message}</span>}

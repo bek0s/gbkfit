@@ -111,6 +111,17 @@ h2 { margin: 0; font: var(--text-heading); }
 .activity-item[data-state="failed"] em { color: var(--err); }
 .activity-note { margin: 0; color: var(--faint); font: var(--text-caption); }
 
+/* the links of a block in the head of its screen: what it uses, what
+   uses it */
+.block-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding-bottom: 3px; min-width: 0; }
+.link-side { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.link-label { color: var(--faint); font: var(--text-caption); }
+.link-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 9px; border: 1px solid var(--line2); border-radius: 99px; background: none; color: var(--fg2); font: var(--text-data-small); cursor: pointer; }
+.link-chip small { color: var(--faint); font: var(--text-caption); }
+.link-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--fg); }
+.link-chip[data-missing] { border-style: dashed; color: var(--warn); cursor: default; }
+.link-more { color: var(--faint); font: var(--text-caption); }
+
 /* a section without blocks */
 .empty-section-body { margin: auto; display: grid; gap: 16px; justify-items: center; padding: 40px; }
 .empty-section-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }

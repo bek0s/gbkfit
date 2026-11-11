@@ -13,6 +13,7 @@ import { Button } from '../../components/ui/basics';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { useRemembered } from '../../shell/remember';
 import { useStudio } from '../../studio';
+import { BlockLinks } from '../../shell/BlockLinks';
 import { useUnsaved } from '../editing';
 import { COMPONENT_STARTS, GALAXY_PARTS, isSpheroid, nameBase, partsOf, withThickness, type Part } from './catalogue';
 import { useGalaxyDraft } from './draft';
@@ -184,6 +185,7 @@ export function GalaxyScreen({ name }: { name: string }) {
           <div className="eyebrow">Galaxy</div>
           {head.title}
         </div>
+        <BlockLinks folder="galaxies" name={name} />
         <div className="head-actions">
           <div className="gx-history" role="group" aria-label="History">
             <button onClick={draft.undo} disabled={!draft.canUndo} title="Undo (Ctrl+Z)" aria-label="Undo">

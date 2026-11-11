@@ -19,6 +19,7 @@ import { Dock, DockSection, NeedsNote as DockNeeds } from '../../components/ui/d
 import { Segments } from '../../components/ui/inputs';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
+import { BlockLinks } from '../../shell/BlockLinks';
 import { useUnsaved } from '../editing';
 import { Files } from './Files';
 import { requestKey, useDraftState, usePrepJob, useResolved, type DraftState } from './hooks';
@@ -166,6 +167,7 @@ export function Dataset({ name }: { name: string }) {
           <div className="eyebrow">Dataset{kind ? ` · ${KINDS[kind].title}` : ''}</div>
           {head.title}
         </div>
+        <BlockLinks folder="datasets" name={name} />
         <div className="head-actions">
           {kind && <Button onClick={startEditing}>Edit</Button>}
           {head.menu}

@@ -10,6 +10,7 @@ import { membersOf, SchemaForm, titleOf, typeOf, type Options } from '../../comp
 import { Dock, DockSection, NeedsNote } from '../../components/ui/dock';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
+import { BlockLinks } from '../../shell/BlockLinks';
 import { arraysOf, draftOfDataset, EMPTY_ITEM, kept, KINDS, kindOfType } from '../dataset/model';
 import { SaveActions, useEditedBlock } from '../editing';
 import { checksOf, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, objectAt, psfEllipse, textAt } from './model';
@@ -75,6 +76,7 @@ export function ObservationScreen({ name }: { name: string }) {
           <div className="eyebrow">Observation{options ? ` · ${title('observation', options.type)}` : ''}</div>
           {head.title}
         </div>
+        <BlockLinks folder="observations" name={name} />
         <div className="head-actions">
           <NeedsNote needs={needs.map((need) => ({ text: need.text, at: need.section }))} />
           <SaveActions edited={edited} />
