@@ -56,6 +56,19 @@ def test_student_t_noise_has_the_dispersion_and_heavier_tails():
         NoiseStudentT(2, rms=1)
 
 
+def test_student_t_noise_of_an_error_map(tmp_path):
+    # Its dispersion is that of Gaussian noise: rms or an error map
+    error = np.tile(np.linspace(1, 3, 128), (128, 1))
+    noise = NoiseStudentT(5, error=error)
+    assert noise.rms() is None
+    loaded = noise_parser.load(
+        noise_parser.dump(noise, prefix=f'{tmp_path}/'))
+    np.testing.assert_array_equal(loaded.error(), error)
+    np.testing.assert_array_equal(
+        loaded.sigma(GRID, SIGNAL), np.broadcast_to(error, SIGNAL.shape))
+    assert NoiseStudentT(5, rms=2).rms() == 2
+
+
 def test_poisson_noise_counts_the_signal():
     # Of a gain of 4 counts per unit: the data are whole counts / 4, of
     # the dispersion sqrt(4 s) / 4; a signal below 0 counts as 0

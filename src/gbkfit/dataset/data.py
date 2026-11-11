@@ -550,3 +550,12 @@ def dump_data(
         info['spectral_correlation'] = lsf_parser.dump(
             spectral, prefix=f'{prefix}spectral_correlation_', **kwargs)
     return info
+
+
+def item_filenames(prefix: str, key: str) -> dict[str, str]:
+    """Return the files of the arrays of a data item (see dump_data)."""
+    return dict(
+        data=f'{prefix}{key}_d.fits',
+        mask=f'{prefix}{key}_m.fits',
+        error=f'{prefix}{key}_e.fits',
+        footprint=f'{prefix}{key}_f.fits')

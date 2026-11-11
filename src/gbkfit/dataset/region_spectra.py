@@ -12,18 +12,14 @@ from gbkfit.config import DataFile, check_options
 from gbkfit.grid import Grid, SpectralAxis, make_cube_grid
 from gbkfit.io import ErrorKind, MaskKind, write_spectra
 from gbkfit.region import Regions, regions_parser
-from . import _detail, _outliers, _resampling
-from .base import Dataset
-from .data import Data, dump_data
+from . import _grids, _outliers
+from .base import Dataset, cleaned
+from .data import Data, dump_data, item_filenames
 
 
 __all__ = [
     'DatasetRegionSpectra'
 ]
-
-
-# The axes of its blocks of residuals (see resample_blocks)
-_BLOCK_AXES = ('the regions', 'the channels')
 
 
 class DatasetRegionSpectra(Dataset):
@@ -58,6 +54,13 @@ class DatasetRegionSpectra(Dataset):
 
     # (the velocity along FITS y)
     spectral_axis = 1
+
+    # The axes of its blocks of residuals (see resample_blocks): runs of
+    # consecutive regions, in their order, so of 1 region unless their
+    # order follows the sky (e.g. fibres in a row), and of channels. The
+    # noise that neighbouring regions share (e.g. bins smaller than the
+    # beam) is then not kept.
+    block_axes = ('the regions', 'the channels')
 
     config_constructors = ('from_files',)
 
@@ -127,7 +130,7 @@ class DatasetRegionSpectra(Dataset):
             The dataset.
         """
         check_options(DatasetRegionSpectra.from_files, locals())
-        references = _detail.file_references(1, None, None, spectral)
+        references = _grids.file_references(1, None, None, spectral)
         spectra, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
@@ -136,8 +139,8 @@ class DatasetRegionSpectra(Dataset):
             spectral_type=references['spectral_type'])
         dataset = cls(
             spectra, regions,
-            _detail.cube_coords(coords, None, None, spectral)['spectral'])
-        return _detail.cleaned(dataset, outliers)
+            _grids.cube_coords(coords, None, None, spectral)['spectral'])
+        return cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -148,7 +151,7 @@ class DatasetRegionSpectra(Dataset):
         def write(filename: str, array: np.ndarray) -> None:
             write_spectra(filename, array, coords, overwrite=overwrite)
         item = dump_data(
-            self['spectra'], _detail.item_filenames(prefix, 'spectra'), write,
+            self['spectra'], item_filenames(prefix, 'spectra'), write,
             dump_path, f'{prefix}spectra_', overwrite)
         return dict(
             type=self.type(),
@@ -191,31 +194,6 @@ class DatasetRegionSpectra(Dataset):
     def spectral_grid(self) -> Grid:
         """Return the grid of the spectral axis (one axis)."""
         return self._spectral_grid
-
-    def check_blocks(self, size: Sequence[float]) -> None:
-        """
-        Raise ValueError unless the size is of blocks of regions and channels:
-        a positive integer for each of the regions and the channels (see
-        resample_blocks).
-        """
-        _resampling.block_size(size, _BLOCK_AXES)
-
-    def resample_blocks(
-            self,
-            residuals: Mapping[str, np.ndarray],
-            size: Sequence[float],
-            rng: np.random.Generator
-    ) -> dict[str, np.ndarray]:
-        """
-        Return residuals of its spectra redrawn in blocks of regions and
-        channels (see Dataset.resample_blocks), of the size (regions,
-        channels): runs of consecutive regions, in their order, so of 1 region
-        unless their order follows the sky (e.g. fibres in a row). The noise
-        that neighbouring regions share (e.g. bins smaller than the beam) is
-        then not kept.
-        """
-        return _resampling.resample_blocks(
-            residuals, size, _BLOCK_AXES, rng)
 
     def screen_outliers(
             self, size: Sequence[float], nsigma: float

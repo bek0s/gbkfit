@@ -438,7 +438,8 @@ class DatasetVisibilities(Dataset):
                 f'&& ANTENNA1 != ANTENNA2')
             uvw = -rows.getcol('UVW')
             visibilities = rows.getcol(column)
-            flags = rows.getcol('FLAG') | rows.getcol('FLAG_ROW')[:, None, None]
+            flags = rows.getcol('FLAG') \
+                | rows.getcol('FLAG_ROW')[:, None, None]
             weights = rows.getcol('WEIGHT_SPECTRUM') \
                 if 'WEIGHT_SPECTRUM' in rows.colnames() \
                 and rows.iscelldefined('WEIGHT_SPECTRUM', 0) \

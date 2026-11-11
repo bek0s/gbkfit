@@ -16,10 +16,10 @@ from gbkfit.observation import GroupPlan, ModelData, ObservationGroup
 from gbkfit.params import (
     ParamDesc, ParamValues, Solution, Solve, with_elements)
 from gbkfit.utils import threadutils
-from ._amplitudes import amplitude_blocks
+from ._amplitude_blocks import amplitude_blocks
 from ._block import Block
-from ._orbits import orbit_blocks
-from ._scales import scale_blocks
+from ._orbit_blocks import orbit_blocks
+from ._scale_blocks import scale_blocks
 
 
 __all__ = [
@@ -114,24 +114,24 @@ class Objective:
     than fitted (see Solve and ParamSpace): those that the models are
     linear in, in blocks solved together. The plan of the group gives the
     models as linear in them, and the comparisons weigh their pieces (see
-    Comparison.linear_form). A flux scale of an observation (see
-    ObservationSky; ScaleBlock): the model is evaluated with it at 1, the
-    comparison of the observation gives its sums, its solve its values,
-    and the comparison then compares the model times them (see
-    Comparison.evaluate). Amplitudes of the light of components (see
-    Component.light_amplitudes; AmplitudeBlock), solved together where
-    their parts of the model fall on the same data (in one or several
-    observations): the plan gives the models with them at 0 and the piece
-    of each (see GroupPlan.amplitude_pieces), and the models are evaluated
-    at their values. They do not go with a solved flux scale of the same
-    observation (the model is then not linear in both). The weights of the
-    orbits of the stars of a spheroid (see Component.orbit_weights;
-    OrbitBlock): the models of the observations that see the stars are
-    linear in them (the orbits in the series of their data, see
-    OrbitRecording), and the models are evaluated at their values. The
-    priors of the solved values add residuals after those of the data;
-    the log-likelihood has the values integrated out, or at their best
-    values (see Solve). They are nuisance parameters (see
+    Comparison.linear_form and Comparison.weighted_pieces). A flux scale
+    of an observation (see ObservationSky; ScaleBlock): the model is
+    evaluated with it at 1, the comparison of the observation gives its
+    sums, its solve its values, and the comparison then compares the model
+    times them (see Comparison.evaluate). Amplitudes of the light of
+    components (see Component.light_amplitudes; AmplitudeBlock), solved
+    together where their parts of the model fall on the same data (in one
+    or several observations): the plan gives the models with them at 0
+    and the piece of each (see GroupPlan.amplitude_pieces), and the models
+    are evaluated at their values. They do not go with a solved flux scale
+    of the same observation (the model is then not linear in both). The
+    weights of the orbits of the stars of a spheroid (see
+    Component.orbit_weights; OrbitBlock): the models of the observations
+    that see the stars are linear in them (the orbits in the series of
+    their data, see OrbitRecording), and the models are evaluated at their
+    values. The priors of the solved values add residuals after those of
+    the data; the log-likelihood has the values integrated out, or at
+    their best values (see Solve). They are nuisance parameters (see
     Evaluation.nnuisance); an evaluation gives their values (see
     evaluate).
 
@@ -185,19 +185,22 @@ class Objective:
                 observations, group_plan.observation_drivers()))
         self._solves = dict(solves or {})
         # The blocks of each kind, each of the solves left by the others
-        self._orbits = orbit_blocks(
+        self._orbit_blocks = orbit_blocks(
             group_plan, self._comparisons, self._solves)
-        self._scales = scale_blocks(
-            group, self._comparisons, _unclaimed(self._solves, self._orbits))
-        # The observations with solved scales
-        self._scaled = sorted({block.observation() for block in self._scales})
-        self._amplitudes = amplitude_blocks(
+        self._scale_blocks = scale_blocks(
+            group, self._comparisons,
+            _unclaimed(self._solves, self._orbit_blocks))
+        # The observations with solved scales, by index
+        self._scaled_observations = sorted(
+            {block.observation() for block in self._scale_blocks})
+        self._amplitude_blocks = amplitude_blocks(
             group, self._comparisons, group_plan.observation_drivers(),
-            _unclaimed(self._solves, (*self._orbits, *self._scales)),
-            self._scaled)
+            _unclaimed(
+                self._solves, (*self._orbit_blocks, *self._scale_blocks)),
+            self._scaled_observations)
         # Every block, in the order of their values (see evaluate)
         self._blocks: tuple[Block, ...] = (
-            *self._scales, *self._amplitudes, *self._orbits)
+            *self._scale_blocks, *self._amplitude_blocks, *self._orbit_blocks)
         self._reset_memory()
 
     def _reset_memory(self) -> None:
@@ -288,7 +291,7 @@ class Objective:
             return
         for comparison_ in self._comparisons:
             comparison_.prepare()
-        for i in self._scaled:
+        for i in self._scaled_observations:
             observation = self._group.observations()[i]
             _, scale = observation.flux_scale()
             shape = tuple(
@@ -330,11 +333,11 @@ class Objective:
             out_extra: Extras | None = None
     ) -> float:
         """
-        Return the log-likelihood of all observations: -chi2 / 2, and
-        with solved values, their integral (see Solve). The
-        part of the Gaussian normalisation that depends only on the errors
-        of the data is left out (with a fitted noise, the rest is in the
-        chi-square, as its noise residuals).
+        Return the log-likelihood of all observations: -chi2 / 2, and with
+        solved values, their integral (see Solve). The part of the Gaussian
+        normalisation that depends only on the errors of the data is left
+        out (with a fitted noise, the rest is in the chi-square, as its
+        noise residuals).
 
         Parameters
         ----------
@@ -358,9 +361,9 @@ class Objective:
         """
         Return the AICp of all observations (Lipka & Thomas 2021): the
         chi-square of the data plus twice the effective number of the
-        solved values (see Evaluation.nnuisance), without the residuals of their
-        priors, which are not of the data (with the noise residuals of a
-        fitted noise, which are). Of models whose solved values are
+        solved values (see Evaluation.nnuisance), without the residuals of
+        their priors, which are not of the data (with the noise residuals
+        of a fitted noise, which are). Of models whose solved values are
         regularised by their priors (e.g. the weights of orbits), the
         lower, the better: the chi-square alone prefers the weakest
         regularisation, which fits the noise. Without solved values, it is
@@ -582,8 +585,8 @@ class Objective:
         """
         Return the number of residuals of the data that count: those of the
         comparisons (see Comparison.nresiduals); not the residuals of the
-        priors of solved values (see Evaluation.nnuisance), nor the noise residuals
-        (see LikelihoodGaussian), which are not of the data.
+        priors of solved values (see Evaluation.nnuisance), nor the noise
+        residuals (see LikelihoodGaussian), which are not of the data.
         """
         return sum(c.nresiduals() for c in self._comparisons)
 
@@ -746,13 +749,13 @@ class Objective:
         solutions: dict[Block, Solution] = {}
         with group_plan.lock():
             values = self._unscaled(params)
-            for block in self._amplitudes:
+            for block in self._amplitude_blocks:
                 pieces = group_plan.amplitude_pieces(
                     values, block.amplitudes(), block.observations())
                 solutions[block] = block.solve(pieces, values)
                 values = with_elements(
                     values, block.amplitudes(), solutions[block].values)
-            if self._orbits:
+            if self._orbit_blocks:
                 with group_plan.timers().measure('objective_orbits'):
                     values = self._solve_orbits(values, solutions)
             models = group_plan.model_d(values, out_extra)
@@ -776,11 +779,11 @@ class Objective:
         """
         with threadutils.blas_limit(_ORBIT_BLAS_THREADS):
             series = self._group_plan.orbit_series(params)
-            for orbit, series_j in zip(self._orbits, series):
-                solution = orbit.solve(series_j, params)
-                solutions[orbit] = solution
+            for block, series_j in zip(self._orbit_blocks, series):
+                solution = block.solve(series_j, params)
+                solutions[block] = solution
                 params = params | {
-                    orbit.recording().weights(): solution.values}
+                    block.recording().weights(): solution.values}
         return params
 
     def _unscaled(self, params: ParamValues) -> ParamValues:
@@ -789,7 +792,7 @@ class Objective:
         flux scales at 1 (copies of those of their parameters).
         """
         values = params
-        for block in self._scales:
+        for block in self._scale_blocks:
             values = block.neutral(values)
         return values
 
@@ -806,14 +809,14 @@ class Objective:
         """
         scales: list[dict[str, DeviceArray]] = [
             {} for _ in range(self.nobservations())]
-        for i in self._scaled:
+        for i in self._scaled_observations:
             self._h_scales[i][...] = 1
-        for block in self._scales:
+        for block in self._scale_blocks:
             i = block.observation()
             solution = block.solve(models[i], params)
             solutions[block] = solution
             block.place(solution.values, self._h_scales[i])
-        for i in self._scaled:
+        for i in self._scaled_observations:
             observation = self._group.observations()[i]
             self._group_plan.observation_drivers()[i].mem_copy_h2d(
                 self._h_scales[i], self._d_scales[i])

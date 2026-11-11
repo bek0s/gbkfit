@@ -20,8 +20,7 @@ from gbkfit.model import DepthUnit, Galaxy
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import iterutils
 from ._group_plan import GroupPlan
-from ._scene import SeenGalaxies
-from .observation import Observation
+from .observation import Observation, SeenGalaxies, SkyFrame
 
 
 __all__ = [
@@ -46,7 +45,7 @@ class DepthGroup(NamedTuple):
     galaxies: tuple[str, ...]
 
 
-class _Frame(NamedTuple):
+class _FrameShift(NamedTuple):
     """
     How an observation moves what it sees into its frame (see
     ObservationGroup): the parameters of the centres (x and y) and of the
@@ -89,6 +88,21 @@ class _Frame(NamedTuple):
         return moved
 
 
+class _Member(NamedTuple):
+    """
+    An observation of a group, with what the group keeps of it, made once
+    (see ObservationGroup): its label (the id 'observation' of its extra
+    outputs; see ObservationGroup.observation_label), the indices of the
+    galaxies it sees, those galaxies as it sees them (see
+    ObservationGroup.seen_by), and how it moves them into its frame.
+    """
+    observation: Observation
+    label: str
+    seen: tuple[int, ...]
+    galaxies: SeenGalaxies
+    shift: _FrameShift
+
+
 class ObservationGroup:
     """
     Galaxies and the observations of them, evaluated together.
@@ -102,7 +116,7 @@ class ObservationGroup:
 
     The centres of the components (xpos, ypos) are measured from the
     origin of the frame of the first observation on the sky (see
-    Observation.sky_origin): its reference pixel, at the RA and Dec of its
+    Observation.sky_frame): its reference pixel, at the RA and Dec of its
     grid (see Observable.sky_rval). The other observations on the sky
     see them moved by where that origin is in their frames, from their
     RA and Dec: e.g. a cube whose reference pixel is 2 arcsec west of that
@@ -117,7 +131,7 @@ class ObservationGroup:
     astrometry); each galaxy seen on the sky needs an observation on the
     sky without them. The centres of what an observation adds in the
     frame of the model (e.g. the masses of its lens, see
-    Observation.centre_params) are moved with those of the components.
+    SkyFrame.centre_params) are moved with those of the components.
     The observations that are not on the sky see the parameters as they
     are.
 
@@ -165,16 +179,16 @@ class ObservationGroup:
             cosmology: Cosmology | None = None
     ):
         self._galaxies = iterutils.tuplify(galaxies)
-        self._observations = iterutils.tuplify(observations)
+        observations = iterutils.tuplify(observations)
         if not self._galaxies:
             raise ValueError("at least one galaxy is required")
-        if not self._observations:
+        if not observations:
             raise ValueError("at least one observation is required")
         galaxy_names = [galaxy.name() for galaxy in self._galaxies]
         if len(galaxy_names) > 1 and None in galaxy_names:
             raise ValueError(
                 "the galaxies need names when there are several")
-        observation_names = [obs.name() for obs in self._observations]
+        observation_names = [obs.name() for obs in observations]
         self._prefixes = item_prefixes(
             galaxy_names, 'galaxies', 'galaxy', False)
         item_prefixes(
@@ -214,7 +228,7 @@ class ObservationGroup:
                 unit='arcsec', default=0)
             for separation in self._separations.values()}
         self._pdescs = _with_observation_pdescs(
-            self._galaxy_pdescs, self._observations)
+            self._galaxy_pdescs, observations)
         self._constants, _ = iterutils.merge_with_prefixes(
             [galaxy.constants() for galaxy in self._galaxies], self._prefixes)
         # The ids of the galaxies and of the observations in the extra
@@ -223,31 +237,31 @@ class ObservationGroup:
         self._galaxy_labels = [
             f'galaxy{i}' if name is None else name
             for i, name in enumerate(galaxy_names)]
-        self._observation_labels = [
+        labels = [
             f'observation{i}' if name is None else name
             for i, name in enumerate(observation_names)]
         # (the origin of the frame of the parameters of the galaxies)
-        first = _first_on_sky(self._observations)
-        self._sky_origin = None if first is None \
-            else self._observations[first].sky_origin()
+        frames = [observation.sky_frame() for observation in observations]
+        first = _first_on_sky(frames)
+        self._sky_origin = None if first is None else frames[first].origin
         seen = []
-        for i, observation in enumerate(self._observations):
+        for i, observation in enumerate(observations):
             with config_path('observations', i):
-                seen.append(self._seen(i, observation))
-        # The indices of the galaxies that each observation sees
-        self._seen_galaxies = tuple(tuple(indices) for indices in seen)
-        self._frames = tuple(
-            self._frame(seen, observation, alignment)
-            for seen, observation, alignment in zip(
-                seen, self._observations, _alignments(self._observations)))
-        _check_offsets(self._galaxies, self._observations, seen)
-        _warn_frames(self._galaxies, self._observations, seen)
-        _warn_unused_masses(self._galaxies, self._observations, seen)
+                seen.append(tuple(self._seen(i, observation)))
+        self._members = tuple(
+            _Member(
+                observation, label, indices, self._galaxies_seen(indices),
+                self._frame_shift(indices, frame, alignment))
+            for observation, label, indices, frame, alignment in zip(
+                observations, labels, seen, frames, _alignments(frames)))
+        _check_offsets(self._galaxies, frames, seen)
+        _warn_frames(self._galaxies, frames, seen)
+        _warn_unused_masses(self._galaxies, observations, seen)
         # (every rule about what each sees, here, without devices: the
         # plans fail only for resources)
-        for i, observation in enumerate(self._observations):
+        for i, member in enumerate(self._members):
             with config_path('observations', i):
-                observation.check(self.seen_by(i))
+                member.observation.check(member.galaxies)
 
     def _seen(self, i: int, observation: Observation) -> list[int]:
         """Return the indices of the galaxies that observation i sees."""
@@ -265,62 +279,12 @@ class ObservationGroup:
                 f"galaxies are {known}")
         return sorted(known.index(name) for name in names)
 
-    def _frame(
-            self,
-            seen: list[int],
-            observation: Observation,
-            alignment: tuple[float, float]
-    ) -> _Frame:
+    def _galaxies_seen(self, seen: tuple[int, ...]) -> SeenGalaxies:
         """
-        Return the frame of an observation that sees the galaxies of the
-        given indices, with the given alignment (see _Frame).
+        Return the galaxies of the given indices as an observation that
+        sees them sees them (see seen_by): in the depth order of those of
+        them in it (a group of which it sees one galaxy is that galaxy).
         """
-        names = dict(x=[], y=[], v=[])
-        for g in seen:
-            galaxy, mapping = self._galaxies[g], self._mappings[g]
-            for i, component in enumerate(galaxy.components()):
-                params = galaxy.component_param_names(i)
-                frame = component.frame_params()
-                for key, own in zip('xyv', (frame.x, frame.y, frame.vsys)):
-                    name = None if own is None else mapping[params[own]]
-                    if name is not None and name not in names[key]:
-                        names[key].append(name)
-        # (and the centres of what the observation adds, e.g. its lens)
-        for x, y in observation.centre_params():
-            names['x'].append(x)
-            names['y'].append(y)
-        return _Frame(
-            tuple(names['x']), tuple(names['y']), tuple(names['v']),
-            alignment, observation.offset_params())
-
-    def has_data(self) -> bool:
-        """
-        Check whether every observation has data (as those of an
-        objective, see Objective).
-        """
-        return all(
-            observation.data() is not None
-            for observation in self._observations)
-
-    def require_data(self) -> None:
-        """
-        Raise ValueError unless every observation has data (e.g. those of
-        an objective, see Objective).
-        """
-        if missing := [
-                i for i, observation in enumerate(self._observations)
-                if observation.data() is None]:
-            raise ValueError(
-                f"every observation of an objective needs data; these have "
-                f"none: {missing}")
-
-    def seen_by(self, index: int) -> SeenGalaxies:
-        """
-        Return the galaxies that the observation of the given index sees,
-        as it sees them: in the depth order of those of them in it (a
-        group of which it sees one galaxy is that galaxy).
-        """
-        seen = self._seen_galaxies[index]
         order = None
         if self._depth_order is not None:
             order = []
@@ -338,6 +302,66 @@ class ObservationGroup:
             tuple(self._galaxy_labels[j] for j in seen),
             None if order is None else tuple(order), self._sky_origin,
             self._cosmology)
+
+    def _frame_shift(
+            self,
+            seen: Sequence[int],
+            frame: SkyFrame | None,
+            alignment: tuple[float, float]
+    ) -> _FrameShift:
+        """
+        Return how an observation that sees the galaxies of the given
+        indices, of the given frame on the sky (None if it is not on the
+        sky), moves them into its frame, with the given alignment (see
+        _FrameShift).
+        """
+        names = dict(x=[], y=[], v=[])
+        for g in seen:
+            galaxy, mapping = self._galaxies[g], self._mappings[g]
+            for i, component in enumerate(galaxy.components()):
+                params = galaxy.component_param_names(i)
+                own = component.frame_params()
+                for key, param in zip('xyv', (own.x, own.y, own.vsys)):
+                    name = None if param is None else mapping[params[param]]
+                    if name is not None and name not in names[key]:
+                        names[key].append(name)
+        # (and the centres of what the observation adds, e.g. its lens)
+        for x, y in () if frame is None else frame.centre_params:
+            names['x'].append(x)
+            names['y'].append(y)
+        return _FrameShift(
+            tuple(names['x']), tuple(names['y']), tuple(names['v']),
+            alignment,
+            (None, None, None) if frame is None else frame.offsets)
+
+    def has_data(self) -> bool:
+        """
+        Check whether every observation has data (as those of an
+        objective, see Objective).
+        """
+        return all(
+            member.observation.data() is not None
+            for member in self._members)
+
+    def require_data(self) -> None:
+        """
+        Raise ValueError unless every observation has data (e.g. those of
+        an objective, see Objective).
+        """
+        if missing := [
+                i for i, member in enumerate(self._members)
+                if member.observation.data() is None]:
+            raise ValueError(
+                f"every observation of an objective needs data; these have "
+                f"none: {missing}")
+
+    def seen_by(self, index: int) -> SeenGalaxies:
+        """
+        Return the galaxies that the observation of the given index sees,
+        as it sees them: in the depth order of those of them in it (a
+        group of which it sees one galaxy is that galaxy).
+        """
+        return self._members[index].galaxies
 
     def plan(
             self,
@@ -394,7 +418,8 @@ class ObservationGroup:
             from gbkfit.driver.drivers.host import DriverHost
             driver = DriverHost()
         drivers = dict(drivers or {})
-        galaxies, observations = self._galaxy_labels, self._observation_labels
+        galaxies = self._galaxy_labels
+        observations = [member.label for member in self._members]
         if unknown := sorted(drivers.keys() - {*galaxies, *observations}):
             raise ValueError(
                 f"there are drivers of unknown galaxies or observations "
@@ -412,7 +437,11 @@ class ObservationGroup:
         """
         Return a group of the same galaxies and observations, with other
         data: one dataset for each observation (e.g. those of a bootstrap;
-        see Observation.with_data), under its likelihood.
+        see Observation.with_data), under its likelihood. A group whose
+        observations keep their parameters (see same_params) is a copy of
+        this one, with the parameters in the units of the new data; one
+        whose observations have other parameters (e.g. a likelihood of
+        data that they had none of) is made again.
 
         Raises
         ------
@@ -420,25 +449,35 @@ class ObservationGroup:
             If there is not one dataset per observation, or a dataset does
             not suit its observation.
         """
-        if len(datasets) != len(self._observations):
+        if len(datasets) != len(self._members):
             raise ValueError(
-                f"there are {len(self._observations)} observations, but "
+                f"there are {len(self._members)} observations, but "
                 f"{len(datasets)} datasets")
         observations = [
-            obs.with_data(data)
-            for obs, data in zip(self._observations, datasets)]
-        if any(new.pdescs().keys() != old.pdescs().keys()
-               for new, old in zip(observations, self._observations)):
+            member.observation.with_data(data)
+            for member, data in zip(self._members, datasets)]
+        if not _same_params(self.observations(), observations):
             return type(self)(
                 self._galaxies, observations, self._given_depth_order,
                 self._cosmology)
         group = copy.copy(self)
-        group._observations = tuple(observations)
+        group._members = tuple(
+            member._replace(observation=observation)
+            for member, observation in zip(self._members, observations))
         # (of the same names, but in the units of the new data: e.g. those
         # of a fitted noise, see Likelihood.param_units)
         group._pdescs = _with_observation_pdescs(
             self._galaxy_pdescs, observations)
         return group
+
+    def same_params(self, other: 'ObservationGroup') -> bool:
+        """
+        Check whether each observation has the parameters, by name, of
+        that of another group of the same observations (e.g. a group with
+        other data; see with_data, which copies the group then rather than
+        make it again).
+        """
+        return _same_params(other.observations(), self.observations())
 
     def galaxies(self) -> tuple[Galaxy, ...]:
         """Return the galaxies."""
@@ -446,11 +485,11 @@ class ObservationGroup:
 
     def observations(self) -> tuple[Observation, ...]:
         """Return the observations."""
-        return self._observations
+        return tuple(member.observation for member in self._members)
 
     def nobservations(self) -> int:
         """Return the number of observations."""
-        return len(self._observations)
+        return len(self._members)
 
     def observation_label(self, index: int) -> str:
         """
@@ -458,7 +497,7 @@ class ObservationGroup:
         outputs (and in the outputs of the tasks): its name, or
         'observation{index}'.
         """
-        return self._observation_labels[index]
+        return self._members[index].label
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
@@ -528,7 +567,7 @@ class ObservationGroup:
         Return the indices of the galaxies that the observation of the
         given index sees.
         """
-        return self._seen_galaxies[index]
+        return self._members[index].seen
 
     def moved(self, index: int, params: ParamValues) -> ParamValues:
         """
@@ -536,7 +575,7 @@ class ObservationGroup:
         them: the centres and systemic velocities of what it sees moved
         into its frame (see the class).
         """
-        return self._frames[index].moved(params)
+        return self._members[index].shift.moved(params)
 
     def frame_shifts(
             self, index: int, params: ParamValues
@@ -545,9 +584,9 @@ class ObservationGroup:
         Return how the observation of the given index moves what it sees
         into its frame (see moved): the shifts of the centres, x and y
         (arcsec), and of the systemic velocities (km/s), at the values of
-        the offsets of its frame (see Observation.offset_params).
+        the offsets of its frame (see SkyFrame).
         """
-        return self._frames[index].shifts(params)
+        return self._members[index].shift.shifts(params)
 
     def orbit_components(self, index: int) -> tuple[tuple[int, int], ...]:
         """
@@ -556,10 +595,9 @@ class ObservationGroup:
         Observation.orbit_components), each as the index of its galaxy (in
         the group) and its own index.
         """
-        seen = self._seen_galaxies[index]
-        components = self._observations[index].orbit_components(
-            self.seen_by(index))
-        return tuple((seen[g], i) for g, i in components)
+        member = self._members[index]
+        components = member.observation.orbit_components(member.galaxies)
+        return tuple((member.seen[g], i) for g, i in components)
 
     def light_amplitudes(self, index: int) -> dict[str, str | None]:
         """
@@ -567,8 +605,8 @@ class ObservationGroup:
         observation of the given index takes, each with None if its model
         is linear in it, or why not (see Observation.light_amplitudes).
         """
-        return self._observations[index].light_amplitudes(
-            self.seen_by(index))
+        member = self._members[index]
+        return member.observation.light_amplitudes(member.galaxies)
 
     def model_params(self, index: int) -> tuple[str, ...]:
         """
@@ -578,14 +616,14 @@ class ObservationGroup:
         of its likelihood, which only the comparison with its data reads
         (e.g. those of a fitted noise; see Likelihood.pdescs).
         """
-        observation = self._observations[index]
-        seen = self._seen_galaxies[index]
-        likelihood = observation.likelihood()
-        own = observation.pdescs().keys() - (
+        member = self._members[index]
+        likelihood = member.observation.likelihood()
+        own = member.observation.pdescs().keys() - (
             set() if likelihood is None else likelihood.pdescs().keys())
         return (
-            tuple(name for g in seen for name in self._mappings[g].values())
-            + tuple(self._separations[g] for g in seen
+            tuple(name for g in member.seen
+                  for name in self._mappings[g].values())
+            + tuple(self._separations[g] for g in member.seen
                     if g in self._separations)
             + tuple(sorted(own)))
 
@@ -594,6 +632,18 @@ class ObservationGroup:
 # or whose frames turn by more (deg; see _alignments)
 _ALIGNMENT_SEPARATION_WARNING = 1.0
 _ALIGNMENT_ROTATION_WARNING = 0.1
+
+
+def _same_params(
+        olds: Sequence[Observation], news: Sequence[Observation]
+) -> bool:
+    """
+    Return whether each of the new observations has the parameters, by
+    name, of the old one in its place (see ObservationGroup.same_params).
+    """
+    return all(
+        new.pdescs().keys() == old.pdescs().keys()
+        for new, old in zip(news, olds))
 
 
 def _with_observation_pdescs(
@@ -644,25 +694,26 @@ def _warn_unused_masses(
             f"use it")
 
 
-def _first_on_sky(observations: Sequence[Observation]) -> int | None:
+def _first_on_sky(frames: Sequence[SkyFrame | None]) -> int | None:
     """
-    Return the index of the first observation on the sky (see
-    Observation.sky_origin), whose frame is that of the parameters of the
+    Return the index of the first observation on the sky, of those of
+    the given frames on the sky (None for those that are not on it; see
+    Observation.sky_frame), whose frame is that of the parameters of the
     galaxies; None if none is.
     """
     return next(
-        (i for i, observation in enumerate(observations)
-         if observation.sky_origin() is not None), None)
+        (i for i, frame in enumerate(frames) if frame is not None), None)
 
 
 def _alignments(
-        observations: Sequence[Observation]
+        frames: Sequence[SkyFrame | None]
 ) -> list[tuple[float, float]]:
     """
     Return where the origin of the frame of the first observation on the
-    sky is in the frame of each (arcsec, x to the west and y to the
-    north), of the RA and Dec of their origins (see
-    Observation.sky_origin); (0, 0) for those that are not on the sky.
+    sky is in the frame of each, of those of the given frames on the sky
+    (arcsec, x to the west and y to the north), of the RA and Dec of their
+    origins (see Observation.sky_frame); (0, 0) for those that are not on
+    the sky (None).
     Warn (see warn) of origins more than
     _ALIGNMENT_SEPARATION_WARNING apart (e.g. one of data without
     coordinates, at RA and Dec 0), and of frames that turn by more than
@@ -670,10 +721,10 @@ def _alignments(
     of an origin far from the first, near a pole, also turns by about the
     separation times tan(Dec).
     """
-    f = _first_on_sky(observations)
+    f = _first_on_sky(frames)
     if f is None:
-        return [(0.0, 0.0)] * len(observations)
-    origins = [observation.sky_origin() for observation in observations]
+        return [(0.0, 0.0)] * len(frames)
+    origins = [None if frame is None else frame.origin for frame in frames]
     first = SkyCoord(*origins[f], unit='deg')
     alignments = []
     for i, origin in enumerate(origins):
@@ -708,20 +759,21 @@ def _alignments(
 
 def _check_offsets(
         galaxies: Sequence[Galaxy],
-        observations: Sequence[Observation],
+        frames: Sequence[SkyFrame | None],
         seen: Sequence[Sequence[int]]
 ) -> None:
     """
     Raise ValueError if every observation on the sky that sees a galaxy
-    has offsets of position, or of velocity (see ObservationSky): they
-    would move its centre, or its systemic velocity, with nothing to place
-    it.
+    has offsets of position, or of velocity (see ObservationSky), of the
+    frame on the sky of each observation (None for those that are not on
+    it) and the galaxies each sees: they would move its centre, or its
+    systemic velocity, with nothing to place it.
     """
     for g, galaxy in enumerate(galaxies):
         offsets = [
-            obs.offset_params()
-            for obs, indices in zip(observations, seen)
-            if g in indices and obs.sky_origin() is not None]
+            frame.offsets
+            for frame, indices in zip(frames, seen)
+            if g in indices and frame is not None]
         for kind, k in (('position', 0), ('velocity', 2)):
             if offsets and all(params[k] is not None for params in offsets):
                 raise ValueError(
@@ -732,26 +784,28 @@ def _check_offsets(
 
 def _warn_frames(
         galaxies: Sequence[Galaxy],
-        observations: Sequence[Observation],
+        frames: Sequence[SkyFrame | None],
         seen: Sequence[Sequence[int]]
 ) -> None:
     """
     Warn (see warn) if the observations that see a galaxy
     without offsets of velocity have velocities in different frames of
-    rest (see Observation.velocity_frame): their systemic velocities
-    differ (by up to some 30 km/s).
+    rest (see SkyFrame), of the frame on the sky of each observation
+    (None for those that are not on it) and the galaxies each sees: their
+    systemic velocities differ (by up to some 30 km/s).
     """
     for g, galaxy in enumerate(galaxies):
-        frames = {
-            i: obs.velocity_frame()
-            for i, (obs, indices) in enumerate(zip(observations, seen))
-            if g in indices and obs.velocity_frame() is not None
-            and obs.offset_params()[2] is None}
-        if len(set(frames.values())) > 1:
+        rests = {
+            i: frame.velocity_frame
+            for i, (frame, indices) in enumerate(zip(frames, seen))
+            if g in indices and frame is not None
+            and frame.velocity_frame is not None
+            and frame.offsets[2] is None}
+        if len(set(rests.values())) > 1:
             warn(
                 f"the observations of galaxy {galaxy.name() or g} have "
                 f"velocities in different frames of rest (by observation: "
-                f"{frames}), whose systemic velocities differ by up to some "
+                f"{rests}), whose systemic velocities differ by up to some "
                 f"30 km/s: give all but one offsets of velocity (offsets: "
                 f"{{velocity: true}}), or data in one frame")
 

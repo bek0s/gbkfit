@@ -1,26 +1,34 @@
 """
 The base of the datasets: named data items of one shape, and where they
-were measured (see Dataset), and the correlation of their noise (see
-NoiseCorrelation).
+were measured (see Dataset; DatasetGrid, of data on a grid), and the
+correlation of their noise (see NoiseCorrelation).
 """
 
 import abc
 import copy
+import logging
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Any, NamedTuple, Self
 
 import numpy as np
 
-from gbkfit.config import TypedParser, TypedSerializable
+from gbkfit.config import (
+    TypedParser, TypedSerializable, config_path, parse_options)
+from gbkfit.grid import Grid, SpectralAxis
 from gbkfit.utils import iterutils
+from . import _grids, _outliers, _resampling
 from .data import Data
 
 
 __all__ = [
     'Dataset',
+    'DatasetGrid',
     'NoiseCorrelation',
     'dataset_parser'
 ]
+
+
+_log = logging.getLogger(__name__)
 
 
 class NoiseCorrelation(NamedTuple):
@@ -44,8 +52,10 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
     A dataset is a read-only mapping of the names of its items to the
     items. A subclass declares the number of axes of its items (ndim),
-    and the index of their spectral axis, if any (spectral_axis, FITS
-    order).
+    the index of their spectral axis, if any (spectral_axis, FITS
+    order), and the axes along which their residuals are cut into blocks
+    for bootstraps, if they are (block_axes, FITS order; their names, for
+    messages, e.g. ('x', 'y'); see resample_blocks).
 
     Parameters
     ----------
@@ -61,6 +71,9 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
     ndim: int
 
     spectral_axis: int | None = None
+
+    # (None: not cut along its axes; see check_blocks)
+    block_axes: tuple[str, ...] | None = None
 
     def __init__(self, items: Mapping[str, Data]):
         if not items:
@@ -218,11 +231,12 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
     def check_blocks(self, size: Sequence[float]) -> None:
         """
         Raise ValueError unless its data can be redrawn in blocks of a
-        size (see resample_blocks): the kinds of data that offer it say
-        what their blocks are; the others raise it.
+        size (see resample_blocks): a positive integer for each of the
+        axes of its blocks (block_axes). The kinds of data whose blocks are
+        not along their axes say what they are (e.g. cells of the uv
+        plane); those without blocks raise it.
         """
-        raise ValueError(
-            f"the residuals of {self.type()} data cannot be redrawn in blocks")
+        _resampling.block_size(size, self._required_block_axes())
 
     def resample_blocks(
             self,
@@ -236,8 +250,9 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         block drawn at random (with replacement) from the blocks with
         residuals in all of their values, in every item. The items share
         the draws, so that the correlations of their residuals remain.
-        The kinds of data that offer it say what their blocks are (see
-        check_blocks); the others raise ValueError.
+        The blocks are along its axes (block_axes), unless the kind of
+        data says otherwise (e.g. cells of the uv plane; see
+        check_blocks); the kinds of data without blocks raise ValueError.
 
         Parameters
         ----------
@@ -262,8 +277,19 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
             If the kind of data does not offer it, the size is not one of
             its blocks, or no block has residuals in all of its values.
         """
-        raise ValueError(
-            f"the residuals of {self.type()} data cannot be redrawn in blocks")
+        return _resampling.resample_blocks(
+            residuals, size, self._required_block_axes(), rng)
+
+    def _required_block_axes(self) -> tuple[str, ...]:
+        """
+        Return the axes of its blocks (see block_axes), or raise
+        ValueError if its residuals are not cut along its axes.
+        """
+        if self.block_axes is None:
+            raise ValueError(
+                f"the residuals of {self.type()} data cannot be redrawn in "
+                f"blocks")
+        return self.block_axes
 
     def noise_correlation(self, key: str) -> NoiseCorrelation | None:
         """
@@ -316,6 +342,118 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         """
         raise ValueError(
             f"the spectra of {self.type()} data cannot be masked whole")
+
+
+class DatasetGrid(Dataset):
+    """
+    A dataset on a grid (see Grid): its items have a value in each cell
+    (e.g. each pixel of an image, or each position along a slit and
+    channel of long-slit spectra). The grid is of the shape of the items
+    and of the world coordinates given, with a spectral axis, the last,
+    if the kind of data has one (see spectral_axis).
+
+    Its outliers are screened in windows along the axes of its grid, as
+    its residuals are redrawn in blocks along them (see block_axes,
+    screen_outliers and resample_blocks).
+
+    Parameters
+    ----------
+    items : Mapping
+        The data items, by name; at least one.
+    step, rpix, rval : float or Sequence of float, optional
+        The world coordinates of the axes on the sky (see Coords); their
+        defaults are those of make_grid.
+    rota : float, optional
+        The rotation of the grid on the sky (see Coords).
+    spectral : SpectralAxis, optional
+        The spectral axis of the kinds of data with one (see
+        make_cube_grid): its world coordinates, the convention of its
+        velocities, its rest and its medium; the data give its size.
+
+    Raises
+    ------
+    ValueError
+        If the items are not valid (see Dataset), the spectral axis has
+        another number of channels, or the grid is not valid.
+    """
+
+    # The axes of the grid (see Dataset), along which are both its
+    # windows and its blocks
+    block_axes: tuple[str, ...]
+
+    def __init__(
+            self,
+            items: Mapping[str, Data],
+            step: float | Sequence[float] | None = None,
+            rpix: float | Sequence[float] | None = None,
+            rval: float | Sequence[float] | None = None,
+            rota: float | None = None,
+            spectral: SpectralAxis | None = None
+    ):
+        super().__init__(items)
+        if self.spectral_axis is None:
+            self._grid = _grids.dataset_grid(self, step, rpix, rval, rota)
+        else:
+            self._grid = _grids.cube_grid(
+                self, step, rpix, rval, rota, spectral)
+
+    def grid(self) -> Grid:
+        """
+        Return the grid of the values of its items (e.g. of the pixels of
+        an image).
+
+        Returns
+        -------
+        Grid
+            The grid.
+        """
+        return self._grid
+
+    def screen_outliers(self, size: Sequence[float], nsigma: float) -> Self:
+        """
+        Return a copy of it with the outliers of its data items masked
+        (see Dataset.screen_outliers): of the other values of a window
+        about each, of the size given along each of its axes (block_axes;
+        e.g. pixels along x and y of an image).
+        """
+        return _outliers.screen_grid(self, size, self.block_axes, nsigma)
+
+
+def cleaned(
+        dataset: Dataset,
+        outliers: Mapping[str, Any] | None,
+        mask_whole_spectra: bool = False
+) -> Dataset:
+    """
+    Return a dataset with its outliers masked, if given the options size
+    and nsigma (see Dataset.screen_outliers), and then every spectrum with
+    a masked value masked whole, but for the channels masked in every
+    spectrum, if asked (see Dataset.mask_whole_spectra); and log how many
+    values each item loses to each.
+    """
+    if outliers is not None:
+        with config_path('outliers'):
+            options = parse_options(
+                dict(outliers), required={'size', 'nsigma'})
+            dataset = _logged(
+                dataset,
+                dataset.screen_outliers(options['size'], options['nsigma']),
+                "outliers masked in the data")
+    if mask_whole_spectra:
+        dataset = _logged(
+            dataset, dataset.mask_whole_spectra(),
+            "values masked with whole spectra")
+    return dataset
+
+
+def _logged(before: Dataset, after: Dataset, what: str) -> Dataset:
+    """Return a dataset after a change, and log how many values it masked."""
+    counts = {
+        key: int(np.count_nonzero(before[key].mask())
+                 - np.count_nonzero(after[key].mask()))
+        for key in before}
+    _log.info(f"{what}: {counts}")
+    return after
 
 
 class DatasetTypedParser(TypedParser):

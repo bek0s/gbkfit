@@ -4,7 +4,7 @@ rotation curve).
 """
 
 import os.path
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Annotated, Any
 
 import astropy.units as u
@@ -15,7 +15,7 @@ from astropy.table import Table
 from gbkfit.config import (
     Column, FilePath, Unit, check_options, config_path)
 from gbkfit.io import read_column, read_table
-from . import _detail, _resampling
+from . import _tables
 from .base import Dataset
 from .data import Data, DataColumns
 
@@ -24,10 +24,6 @@ __all__ = [
     'DatasetProfile',
     'check_profile_radii'
 ]
-
-
-# The axes of its blocks of residuals (see resample_blocks)
-_BLOCK_AXES = ('the radii',)
 
 
 def check_profile_radii(
@@ -95,6 +91,11 @@ class DatasetProfile(Dataset):
 
     ndim = 1
 
+    # The axes of its blocks of residuals (see resample_blocks): runs of
+    # consecutive radii, in their order (e.g. of 3, for the points of a
+    # rotation curve closer than the beam that measured them)
+    block_axes = ('the radii',)
+
     config_constructors = ('from_file',)
 
     @staticmethod
@@ -151,7 +152,7 @@ class DatasetProfile(Dataset):
         data = {}
         for key, item in items.items():
             with config_path(key):
-                data[key] = _detail.table_item(table, item)
+                data[key] = _tables.table_item(table, item)
         return cls(data, radii, assumed_distance)
 
     def dump(
@@ -213,26 +214,4 @@ class DatasetProfile(Dataset):
         if given.
         """
         return self._assumed_distance
-
-    def check_blocks(self, size: Sequence[float]) -> None:
-        """
-        Raise ValueError unless the size is of blocks of radii: a positive
-        integer for each of the radii (see resample_blocks).
-        """
-        _resampling.block_size(size, _BLOCK_AXES)
-
-    def resample_blocks(
-            self,
-            residuals: Mapping[str, np.ndarray],
-            size: Sequence[float],
-            rng: np.random.Generator
-    ) -> dict[str, np.ndarray]:
-        """
-        Return residuals of its data redrawn in blocks of radii (see
-        Dataset.resample_blocks), of the size (radii): runs of consecutive
-        radii, in their order (e.g. of 3, for the points of a rotation
-        curve closer than the beam that measured them).
-        """
-        return _resampling.resample_blocks(
-            residuals, size, _BLOCK_AXES, rng)
 

@@ -14,11 +14,13 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid, SpectraData, SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from gbkfit.region import Regions, regions_parser
-from . import _detail, _model_cube
-from ._detail import Rota, Rpix, Rval, Size, Step
-from ._region_sums import RegionSumsPlan, flux_weights
-from .base import FluxScale, ModelData, Observable
+from gbkfit.region import Regions
+from . import _model_cube
+from ._data_units import flux_data_unit
+from ._options import Rota, Rpix, Rval, Size, Step
+from ._regions import (
+    RegionsObservable, RegionsObservablePlan, spatial_options_from_regions)
+from .base import FluxScale, ModelData
 
 if TYPE_CHECKING:
     import scipy.sparse
@@ -34,7 +36,7 @@ __all__ = [
 ]
 
 
-class RegionSpectra(Observable):
+class RegionSpectra(RegionsObservable):
     """
     Spectra in regions of the sky (e.g. fibres, apertures, bins, or the
     whole field): the summed spectrum of each region. The spectra are the
@@ -89,14 +91,7 @@ class RegionSpectra(Observable):
         # regions on a grid
         return (
             ('regions', 'spectral')
-            + _detail.spatial_options_from_regions(dataset.regions()))
-
-    @classmethod
-    def load(
-            cls, info: dict[str, Any],
-            dataset: DatasetRegionSpectra | None = None
-    ) -> 'RegionSpectra':
-        return _detail.load_observable(cls, info, dataset)
+            + spatial_options_from_regions(dataset.regions()))
 
     @classmethod
     def from_data(
@@ -137,21 +132,11 @@ class RegionSpectra(Observable):
             SpectralAxis.of(dataset.spectral_grid()),
             size, step, rpix, rval, rota)
 
-    def dump(
-            self,
-            data: DatasetRegionSpectra | None = None,
-            prefix: str = '',
-            dump_path: bool = True,
-            overwrite: bool = False
+    def _dump_options(
+            self, prefix: str, dump_path: bool, overwrite: bool
     ) -> dict[str, Any]:
-        info = dict(type=self.type())
-        if data is None:
-            info.update(
-                regions=regions_parser.dump(
-                    self._regions, prefix=prefix, dump_path=dump_path,
-                    overwrite=overwrite),
-                spectral=self.spectral().dump())
-        return info | _detail.dump_spatial_grid(self, self._regions)
+        return dict(spectral=self.spectral().dump()) \
+            | self._dump_spatial_grid()
 
     def __init__(
             self,
@@ -164,26 +149,13 @@ class RegionSpectra(Observable):
             rota: Rota | None = None
     ):
         check_options(RegionSpectra.__init__, locals())
-        spatial = _detail.spatial_grid_of_regions(
-            regions, size, step, rpix, rval, rota)
-        coords = spatial.coords
-        super().__init__(
-            spatial.size, coords.step, coords.rpix, coords.rval, coords.rota,
-            spectral)
-        self._regions = regions
-        # The area of each pixel in the regions, so that their sums are
-        # fluxes (an error if apertures are not inside the grid)
-        self._weights = flux_weights(regions, spatial)
+        super().__init__(regions, size, step, rpix, rval, rota, spectral)
         valid = regions.valid()
         if valid is not None and len(valid) != self.spectral_grid().size[0]:
             raise ValueError(
                 f"the valid pixels of the regions are of {len(valid)} "
                 f"channels; the spectral axis has "
                 f"{self.spectral_grid().size[0]}")
-
-    def regions(self) -> Regions:
-        """Return the regions."""
-        return self._regions
 
     def spectral_grid(self) -> Grid:
         """Return the grid of the spectral axis (one axis)."""
@@ -201,7 +173,7 @@ class RegionSpectra(Observable):
             dataset: Dataset | None,
             light: LightUnit | None = None
     ) -> DataUnit | None:
-        return _detail.region_data_unit(dataset, 'spectra', False, light)
+        return flux_data_unit(dataset, 'spectra', False, light)
 
     def light_items(self) -> tuple[str, ...]:
         return ('spectra',)
@@ -223,9 +195,7 @@ class RegionSpectra(Observable):
     def _require_matching_coordinates(
             self, dataset: DatasetRegionSpectra
     ) -> None:
-        if dataset.regions() != self._regions:
-            raise ValueError(
-                "the data and the observable have different regions")
+        super()._require_matching_coordinates(dataset)
         if dataset.spectral_grid() != self.spectral_grid():
             raise ValueError(
                 f"the spectra have the spectral axis "
@@ -234,16 +204,6 @@ class RegionSpectra(Observable):
 
     def output(self, data: np.ndarray) -> SpectraData:
         return SpectraData(data, self.spectral_grid().coords)
-
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
-        if pixel_weights is not None:
-            raise ValueError(
-                "region_spectra does not support pixel_weights yet")
 
     def plan(
             self,
@@ -260,16 +220,8 @@ class RegionSpectra(Observable):
     ) -> 'RegionSpectraPlan':
         # The masking of ModelCube is disabled: every pixel of a region adds
         # to its spectrum
-        spectral = self.spectral()
         model_cube = _model_cube.ModelCube(
-            size=self.size(),
-            step=self.step(),
-            rpix=self.rpix(),
-            rval=self.rval(),
-            rota=self.rota(),
-            rest=spectral.rest(),
-            medium=spectral.medium(),
-            convention=spectral.convention(),
+            self._grid,
             oversampling=tuple(oversampling),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
@@ -278,11 +230,11 @@ class RegionSpectra(Observable):
             dtype=dtype,
             fft_dtype=fft_dtype)
         return RegionSpectraPlan(
-            self._weights, self._regions.valid(), model_cube, driver, scene,
-            line_of_sight, foreground, dtype, flux_scale)
+            self._flux_weights, self._regions.valid(), model_cube, driver,
+            scene, line_of_sight, foreground, dtype, flux_scale)
 
 
-class RegionSpectraPlan(_detail.CubeObservablePlan):
+class RegionSpectraPlan(RegionsObservablePlan):
     """
     The evaluation of a RegionSpectra: the sums of the pixels of the
     regions in each channel of the cube, of those valid there if the
@@ -302,11 +254,8 @@ class RegionSpectraPlan(_detail.CubeObservablePlan):
             flux_scale: str | None
     ):
         super().__init__(
-            model_cube, driver, scene, line_of_sight, foreground, dtype, None,
-            flux_scale)
-        self._sums = RegionSumsPlan(weights, driver, dtype)
-        self._spectra = driver.mem_alloc_d(
-            (model_cube.size()[2], self._sums.nregions()), dtype)
+            weights, model_cube, driver, scene, line_of_sight, foreground,
+            dtype, flux_scale)
         self._valid = self._valid_cube = None
         if valid is not None:
             self._valid = driver.mem_copy_h2d(valid.astype(dtype))
@@ -318,5 +267,4 @@ class RegionSpectraPlan(_detail.CubeObservablePlan):
             # (on any driver: its arrays take the ufuncs of numpy)
             np.multiply(cube, self._valid, out=self._valid_cube)
             cube = self._valid_cube
-        self._sums.evaluate(cube, self._spectra)
-        return dict(spectra=dict(d=self._spectra, m=None, w=None))
+        return dict(spectra=dict(d=self._sum_regions(cube), m=None, w=None))

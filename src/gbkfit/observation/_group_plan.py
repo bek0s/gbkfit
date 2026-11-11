@@ -6,17 +6,18 @@ linear in amplitudes of their light (LinearPieces).
 """
 
 import concurrent.futures
+import contextlib
 import contextvars
 import copy
 import functools
 import threading
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
 import numpy as np
 
 from gbkfit.config import config_path
-from gbkfit.dataset import Data, Dataset
+from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import DataUnit, Extras, GalaxyFunctions, GalaxyState
 from gbkfit.model.mass.units import G
@@ -24,9 +25,7 @@ from gbkfit.params import (
     ParamFunctions, ParamValues, ParamView, StageCache, with_elements)
 from gbkfit.utils import threadutils, timeutils
 from ._orbits import OrbitRecording, OrbitSeries, orbit_recordings
-from .noise import Noise
-from .observables import HostModelData, ModelData
-from .observation import Observation
+from .observables import ModelData, ObservablePlan
 
 if TYPE_CHECKING:
     from .group import ObservationGroup
@@ -61,8 +60,9 @@ class GroupPlan:
     A group of galaxies and observations planned on devices (see
     ObservationGroup.plan): the stage of each galaxy and the plan of each
     observation, each on its driver, which own the memory of the models.
-    It evaluates the models of the observations (see model_d) and their
-    mock data (see mock).
+    It evaluates the models of the observations (see model_d), and lends
+    the plans of the observations to draw their mock data (see
+    borrow_plans and draw_mocks).
 
     Its evaluations write the memory of its plans, under its lock (see
     lock): threads that evaluate it at the same time wait for each other.
@@ -273,8 +273,8 @@ class GroupPlan:
         model_d), but those of the observations that its recordings of
         orbits model (see orbit_series): the copy has recordings of its
         own, in the series of its data. A copy whose observations have
-        other parameters (e.g. a likelihood of data that they had none of)
-        has plans of its own.
+        other parameters (e.g. a likelihood of data that they had none of;
+        see ObservationGroup.same_params) has plans of its own.
 
         Raises
         ------
@@ -283,11 +283,10 @@ class GroupPlan:
             not suit its observation.
         """
         group = self._group.with_data(datasets)
-        olds, news = self._group.observations(), group.observations()
-        if any(new.pdescs().keys() != old.pdescs().keys()
-               for new, old in zip(news, olds)):
+        if not group.same_params(self._group):
             return type(self)(
                 group, self._galaxy_drivers, self._observation_drivers)
+        olds, news = self._group.observations(), group.observations()
         copied = copy.copy(self)
         copied._group = group
         copied._init_recordings()
@@ -426,6 +425,29 @@ class GroupPlan:
                     recording.record, states=states))
                 for recording, cache in zip(
                     self._recordings, self._recording_caches)]
+
+    @contextlib.contextmanager
+    def borrow_plans(self) -> Iterator[tuple[ObservablePlan, ...]]:
+        """
+        Lend the plans of the observations (see Observation.plan), under
+        its lock (see lock), to evaluate them apart from its evaluations
+        (e.g. to draw their mock data, see draw_mocks): they write over
+        the memory of the models, so it forgets their last evaluations
+        (see model_d) when they are given back.
+
+        Yields
+        ------
+        tuple of ObservablePlan
+            The plan of each observation, on its driver.
+        """
+        with self._lock:
+            try:
+                yield self._plans
+            finally:
+                # (their evaluations overwrite the model data of the
+                # observations)
+                for cache in self._model_caches:
+                    cache.forget()
 
     def close(self) -> None:
         """
@@ -716,119 +738,6 @@ class GroupPlan:
                             h_item[k] = driver.mem_copy_d2h(
                                 d_array, h_item[k])
 
-    def mock(
-            self,
-            params: ParamValues,
-            noises: Noise | Sequence[Noise],
-            nmocks: int = 1,
-            nsamples: int = 100,
-            seed: int | None = None
-    ) -> list[list[Dataset]]:
-        """
-        Draw mock data of the observations: their model data measured
-        from what their instruments record of the model plus noise (see
-        ObservablePlan.mock), with their errors.
-
-        The data that are what the instrument records plus the noise (e.g.
-        spectra) have its dispersion as their errors, and declare its
-        correlation; those measured from them (e.g. moments) the scatter
-        of their values over nsamples other draws (the standard deviation,
-        of the values that are finite in at least two draws; the others
-        are missing). The mock data have the unit and the beam of the
-        model of their observation (see Observation.model_unit): those of
-        its data, if it has data, or else those its options give it (e.g.
-        the unit of ObservationSky). Those of the observations
-        that a recording of orbits models are of the orbits as they are, as
-        without data (see OrbitMomentsPlan): their model, of the orbits in
-        the series of their data (see model_d), is not of what their
-        instruments record.
-
-        Parameters
-        ----------
-        params : dict
-            The parameters of the group (see ObservationGroup.pdescs).
-        noises : Noise or Sequence of Noise
-            The noise of the data of every observation, or of each.
-        nmocks : int, optional
-            The number of mock datasets of each observation.
-        nsamples : int, optional
-            The number of draws of the errors of measured data.
-        seed : int, optional
-            The seed of the random numbers; the same seed gives the same
-            mock data. By default, the mock data differ from run to run.
-
-        Returns
-        -------
-        list of list of Dataset
-            The mock datasets of each observation, in the units of its
-            model.
-
-        Raises
-        ------
-        ValueError
-            If there is not one noise per observation, or one, a noise does
-            not suit the data of its observation (see Noise.draw), or
-            nmocks or nsamples (needed) is below 1 or 2.
-        """
-        observations = self._group.observations()
-        noises = list(noises) if isinstance(noises, Sequence) \
-            else [noises] * len(observations)
-        if len(noises) != len(observations):
-            raise ValueError(
-                f"there are {len(observations)} observations, but "
-                f"{len(noises)} noises")
-        if nmocks < 1:
-            raise ValueError(f"nmocks must be at least 1; it is {nmocks}")
-        streams = np.random.SeedSequence(seed).spawn(len(observations))
-        with self._lock:
-            states = self._galaxy_states(params, None)
-            try:
-                return [
-                    self._mock(
-                        i, params, states, noise, stream, nmocks, nsamples)
-                    for i, (noise, stream) in enumerate(zip(noises, streams))]
-            finally:
-                # (the draws overwrite the model data of the observations)
-                for cache in self._model_caches:
-                    cache.forget()
-
-    def _mock(
-            self,
-            index: int,
-            params: ParamValues,
-            states: Sequence[GalaxyState],
-            noise: Noise,
-            stream: np.random.SeedSequence,
-            nmocks: int,
-            nsamples: int
-    ) -> list[Dataset]:
-        """
-        Draw the mock datasets of the observation of the given index (see
-        mock), in the states of the galaxies, with the random numbers of
-        the stream.
-        """
-        group = self._group
-        observation, plan = group.observations()[index], self._plans[index]
-        with config_path('observations', index):
-            exact = plan.has_exact_errors()
-            if not exact and nsamples < 2:
-                raise ValueError(
-                    f"the errors of measured data are the scatter of "
-                    f"nsamples draws, at least 2; nsamples is {nsamples}")
-            options = _mock_options(observation, noise, exact)
-            draws, errors = plan.mock(
-                group.moved(index, params),
-                [states[g] for g in group.seen_galaxies(index)],
-                noise, np.random.default_rng(stream),
-                nmocks + (0 if exact else nsamples))
-        if errors is None:
-            errors = _scatter(draws[nmocks:])
-        return [
-            observation.make_dataset({
-                key: Data(item['d'], error=errors[key], **options[key])
-                for key, item in draw.items()})
-            for draw in draws[:nmocks]]
-
 
 def _alloc_pieces(
         driver: Driver, model: ModelData, size: int
@@ -895,63 +804,3 @@ def _same_unit(a: DataUnit | None, b: DataUnit | None) -> bool:
         return a is b
     return all(np.array_equal(x, y) if isinstance(x, np.ndarray)
                else x == y for x, y in zip(a, b))
-
-
-def _mock_options(
-        observation: Observation, noise: Noise, exact: bool
-) -> dict[str, dict[str, Any]]:
-    """
-    Return the options of the mock data of each data item of an
-    observation (see GroupPlan.mock): the unit and the beam of its model
-    (see Observation.model_unit), the footprint of its data, if any, and
-    the correlation of the noise of those that are what the instrument
-    records plus the noise (exact errors).
-
-    Raises
-    ------
-    ValueError
-        If the spatial correlation of their noise varies along the
-        spectral axis (e.g. the PSF of the instrument), which their errors
-        cannot take (see Data).
-    """
-    spatial, spectral = noise.correlations() if exact else (None, None)
-    if spatial == 'instrument':
-        # (only observations on the sky draw noise correlated by their
-        # instrument; see Noise.draw)
-        spatial = observation.instrument().psf()
-    if spatial is not None and spatial.varies():
-        raise ValueError(
-            "the noise of the mock data is correlated on the sky by a PSF "
-            "that varies along the spectral axis (e.g. that of the "
-            "instrument), but the errors of data take one correlation for "
-            "all the channels: give the noise a correlation that does not "
-            "vary")
-    data = observation.data()
-    options = {}
-    for key in observation.keys():
-        unit, beam = observation.model_unit(key)
-        options[key] = dict(
-            unit=unit, beam=beam,
-            footprint=None if data is None else data[key].footprint(),
-            spatial_correlation=spatial, spectral_correlation=spectral)
-    return options
-
-
-def _scatter(draws: Sequence[HostModelData]) -> dict[str, np.ndarray]:
-    """
-    Return the scatter of the values of each data item over draws of
-    them: the standard deviation of the values that are finite in at
-    least two draws (NaN for the others).
-    """
-    scatter = {}
-    for key in draws[0]:
-        values = np.stack([draw[key]['d'] for draw in draws])
-        finite = np.isfinite(values)
-        count = finite.sum(axis=0)
-        values = np.where(finite, values, 0)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            mean = values.sum(axis=0) / count
-            variance = np.where(
-                finite, (values - mean) ** 2, 0).sum(axis=0) / (count - 1)
-        scatter[key] = np.where(count >= 2, np.sqrt(variance), np.nan)
-    return scatter

@@ -13,7 +13,7 @@ import numpy as np
 from gbkfit.observation import (
     Comparison, GroupPlan, OrbitRecording, OrbitSeries)
 from gbkfit.params import (
-    ParamValues, ParamView, Solution, Solve, StageCache, element_name,
+    ParamValues, ParamView, Solution, Solve, StageCache, element_names,
     solve_together_rows)
 from ._block import Block
 
@@ -168,11 +168,10 @@ def orbit_blocks(
         by one solve, or an orbit solve cannot be made (see OrbitBlock).
     """
     pdescs = group_plan.group().pdescs()
-    orbits = []
+    blocks = []
     for recording in group_plan.orbit_recordings():
         param = recording.weights()
-        elements = [
-            element_name(param, k) for k in range(pdescs[param].size())]
+        elements = element_names(param, range(pdescs[param].size()))
         if not all(element in solves for element in elements):
             raise ValueError(
                 f"the weights of the orbits of the stars of "
@@ -184,7 +183,7 @@ def orbit_blocks(
             raise ValueError(
                 f"the weights of the orbits {param!r} are solved by one "
                 f"solve")
-        orbits.append(OrbitBlock(
+        blocks.append(OrbitBlock(
             recording, group_plan, comparisons, elements,
             solves[elements[0]]))
-    return tuple(orbits)
+    return tuple(blocks)

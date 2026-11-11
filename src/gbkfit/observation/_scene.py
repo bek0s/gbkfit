@@ -1,48 +1,28 @@
 """
-What an observation sees: the galaxies it sees (SeenGalaxies), and the
-scene of the components whose light it sees, checked along its line of
-sight (make_scene; see gbkfit.model.Scene).
+The scene of an observation on the sky (see ObservationSky): the
+components whose light it sees, of the galaxies it sees (see
+SeenGalaxies), checked along its line of sight (make_scene; see
+gbkfit.model.Scene).
 """
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 
 import gbkfit.units
 from gbkfit.config import check_name
-from gbkfit.cosmology import Cosmology
 from gbkfit.model import (
-    STARS, Band, BandEmission, Component, DataUnit, DepthUnit, Emission,
-    Galaxy, LineEmission, Scene, StarsEmission,
-    named_components)
+    STARS, Band, BandEmission, Component, DataUnit, Emission, Galaxy,
+    LineEmission, Scene, StarsEmission, named_components)
+from .observation import SeenGalaxies
 
 if TYPE_CHECKING:
     from .line_of_sight import LineOfSight
 
 
 __all__ = [
-    'SeenGalaxies',
     'check_component_names',
     'make_scene'
 ]
-
-
-class SeenGalaxies(NamedTuple):
-    """
-    The galaxies an observation sees (see ObservationGroup): the
-    galaxies, the mapping of the parameters of each to those of the
-    observation group, their labels (the id 'galaxy' of their extra
-    outputs), their order along the line of sight, front to back (in
-    units, see DepthUnit; None if not given), the RA and Dec (degrees) of
-    the origin of the frame of their parameters (that of the first
-    observation on the sky; None without one), and their cosmology (see
-    ObservationGroup).
-    """
-    galaxies: tuple[Galaxy, ...]
-    mappings: tuple[dict[str, str], ...]
-    labels: tuple[str, ...]
-    order: tuple[DepthUnit, ...] | None
-    sky_origin: tuple[float, float] | None
-    cosmology: Cosmology
 
 
 def make_scene(

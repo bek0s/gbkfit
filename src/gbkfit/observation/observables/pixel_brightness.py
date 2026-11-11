@@ -13,8 +13,12 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData
 from gbkfit.instrument import Instrument
 from gbkfit.model import BandEmission, DataUnit, LightUnit
-from . import _detail, _model_cube
-from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
+from . import _model_cube
+from ._cube_plan import CubeObservablePlan
+from ._data_units import data_unit
+from ._options import (
+    MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size,
+    dataset_grid_options, grid_options)
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
@@ -85,13 +89,6 @@ class PixelBrightness(Observable):
         return 'Pixel brightness (image)'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any],
-            dataset: DatasetPixelBrightness | None = None
-    ) -> 'PixelBrightness':
-        return _detail.load_observable(cls, info, dataset)
-
-    @classmethod
     def from_data(
             cls,
             dataset: DatasetPixelBrightness,
@@ -120,23 +117,12 @@ class PixelBrightness(Observable):
         """
         check_options(PixelBrightness.from_data, locals())
         return cls(
-            **_detail.grid_options(dataset.grid()), median_size=median_size)
+            **grid_options(dataset.grid()), median_size=median_size)
 
-    def dump(
-            self,
-            data: DatasetPixelBrightness | None = None,
-            prefix: str = '',
-            dump_path: bool = True,
-            overwrite: bool = False
+    def _dump_options(
+            self, prefix: str, dump_path: bool, overwrite: bool
     ) -> dict[str, Any]:
-        return _detail.without_options_from_data(self, dict(
-            type=self.type(),
-            size=self.size(),
-            step=self.step(),
-            rpix=self.rpix(),
-            rval=self.rval(),
-            rota=self.rota(),
-            median_size=self._median_size), data)
+        return dict(median_size=self._median_size)
 
     def __init__(
             self,
@@ -149,7 +135,7 @@ class PixelBrightness(Observable):
     ):
         check_options(PixelBrightness.__init__, locals())
         super().__init__(size, step, rpix, rval, rota)
-        _detail.check_median_size(median_size)
+        check_median_size(median_size)
         self._median_size = median_size
 
     def keys(self) -> tuple[str, ...]:
@@ -159,14 +145,14 @@ class PixelBrightness(Observable):
             self, items: Mapping[str, Data]
     ) -> DatasetPixelBrightness:
         return DatasetPixelBrightness(
-            items['brightness'], **_detail.dataset_grid_options(self.grid()))
+            items['brightness'], **dataset_grid_options(self.grid()))
 
     def data_unit(
             self,
             dataset: Dataset | None,
             light: LightUnit | None = None
     ) -> DataUnit | None:
-        return _detail.data_unit(
+        return data_unit(
             dataset, 'brightness', abs(self.step()[0] * self.step()[1]),
             False, light)
 
@@ -205,15 +191,12 @@ class PixelBrightness(Observable):
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'PixelBrightnessPlan':
-        # The cube of an image has one channel
+        # The cube of an image has one channel (of no width)
+        coords = self._grid.coords
         model_cube = _model_cube.ModelCube(
-            size=self.size() + (1,),
-            step=self.step() + (0,),
-            rpix=self.rpix() + (0,),
-            rval=self.rval() + (0,),
-            rota=self.rota(),
-            rest=None,
-            medium=None,
+            Grid(self._grid.size + (1,), coords._replace(
+                step=coords.step + (0,), rpix=coords.rpix + (0,),
+                rval=coords.rval + (0,)), 2),
             oversampling=tuple(oversampling) + (1,),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
@@ -227,7 +210,7 @@ class PixelBrightness(Observable):
             pixel_weights, flux_scale)
 
 
-class PixelBrightnessPlan(_detail.CubeObservablePlan):
+class PixelBrightnessPlan(CubeObservablePlan):
 
     def _model_grid(self) -> Grid:
         # Image models are evaluated on the x and y axes

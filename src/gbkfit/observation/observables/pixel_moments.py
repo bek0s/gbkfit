@@ -14,9 +14,13 @@ from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from . import _detail, _model_cube, _moments
-from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
+from . import _model_cube, _moments
+from ._cube_plan import CubeObservablePlan
+from ._data_units import data_unit
 from ._moments import FluxFloor, Method
+from ._options import (
+    MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size,
+    dataset_grid_options, grid_options)
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
@@ -118,13 +122,6 @@ class PixelMoments(Observable):
         return super().options_from_data(dataset) + ('orders',)
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any],
-            dataset: DatasetPixelMoments | None = None
-    ) -> 'PixelMoments':
-        return _detail.load_observable(cls, info, dataset)
-
-    @classmethod
     def from_data(
             cls,
             dataset: DatasetPixelMoments,
@@ -162,30 +159,20 @@ class PixelMoments(Observable):
         """
         check_options(PixelMoments.from_data, locals())
         return cls(
-            **_detail.grid_options(dataset.grid()),
+            **grid_options(dataset.grid()),
             spectral=_moments.spectral_axis(spectral, dataset),
             flux_floor=flux_floor, orders=dataset.orders(), method=method,
             median_size=median_size)
 
-    def dump(
-            self,
-            data: DatasetPixelMoments | None = None,
-            prefix: str = '',
-            dump_path: bool = True,
-            overwrite: bool = False
+    def _dump_options(
+            self, prefix: str, dump_path: bool, overwrite: bool
     ) -> dict[str, Any]:
-        return _detail.without_options_from_data(self, dict(
-            type=self.type(),
-            size=self.size(),
-            step=self.step(),
-            rpix=self.rpix(),
-            rval=self.rval(),
-            rota=self.rota(),
+        return dict(
             spectral=self._spectral.dump(),
             flux_floor=self._flux_floor,
             orders=self._orders,
             method=self._method,
-            median_size=self._median_size), data)
+            median_size=self._median_size)
 
     def __init__(
             self,
@@ -202,7 +189,7 @@ class PixelMoments(Observable):
     ):
         check_options(PixelMoments.__init__, locals())
         super().__init__(size, step, rpix, rval, rota)
-        _detail.check_median_size(median_size)
+        check_median_size(median_size)
         self._median_size = median_size
         self._orders = _moments.check_moment_orders(orders, method)
         self._spectral = _moments.spectral_axis(spectral)
@@ -217,14 +204,14 @@ class PixelMoments(Observable):
         moments, hermite = _moments.moment_maps(
             items, self._orders, self._method)
         return DatasetPixelMoments(
-            moments, hermite, **_detail.dataset_grid_options(self.grid()))
+            moments, hermite, **dataset_grid_options(self.grid()))
 
     def data_unit(
             self,
             dataset: Dataset | None,
             light: LightUnit | None = None
     ) -> DataUnit | None:
-        return _detail.data_unit(
+        return data_unit(
             dataset, 'moment0' if 0 in self._orders else None,
             abs(self.step()[0] * self.step()[1]), True, light)
 
@@ -297,7 +284,7 @@ class PixelMoments(Observable):
             pixel_weights, flux_scale)
 
 
-class PixelMomentsPlan(_detail.CubeObservablePlan):
+class PixelMomentsPlan(CubeObservablePlan):
 
     def __init__(
             self,
@@ -322,6 +309,6 @@ class PixelMomentsPlan(_detail.CubeObservablePlan):
         # The moment maps, one mask shared by all of them, and the weight
         # map of each moment
         plan = self._model_cube_plan
+        grid = self._model_cube.grid()
         return self._moments.evaluate(
-            self._model_cube.step(), self._model_cube.zero(), plan.cube(),
-            plan.weights())
+            grid.coords.step, grid.zero(), plan.cube(), plan.weights())

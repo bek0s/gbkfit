@@ -12,7 +12,8 @@ import astropy.units
 import numpy as np
 
 from gbkfit.config import (
-    TypedParser, TypedSerializable, make_typed_desc)
+    TypedParser, TypedSerializable, make_typed_desc,
+    parse_options_for_callable)
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import (
@@ -22,6 +23,9 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import (
     DataUnit, Emission, Extras, GalaxyState, LightUnit)
 from gbkfit.params import ParamValues
+from ._options import (
+    GRID_OPTIONS, dump_grid, require_no_options_from_data,
+    without_options_from_data)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -74,8 +78,9 @@ class Observable(TypedSerializable, abc.ABC):
     (spectral_axis, None if none) and the class of its datasets
     (dataset_class). Its from_data makes it from data, which give some of
     its options (see options_from_data), and its dump(data) leaves those
-    out. The files of its options (e.g. regions without data) are named
-    with the prefix of the dump, as those of the datasets.
+    out (see load and dump; a subclass gives its options but its grid,
+    see _dump_options). The files of its options (e.g. regions without
+    data) are named with the prefix of the dump, as those of the datasets.
 
     Parameters
     ----------
@@ -154,9 +159,87 @@ class Observable(TypedSerializable, abc.ABC):
         tuple of str
             The names of the options.
         """
-        grid = ('size', 'step', 'rpix', 'rval', 'rota')
-        return grid + (
+        return GRID_OPTIONS + (
             ('spectral',) if cls.spectral_axis is not None else ())
+
+    @classmethod
+    def load(
+            cls, info: dict[str, Any], dataset: Dataset | None = None
+    ) -> Self:
+        """
+        Load an observable from its configuration: with its __init__, or
+        with its from_data and the given dataset, whose options (see
+        options_from_data) the configuration must not repeat.
+
+        Parameters
+        ----------
+        info : dict
+            The options.
+        dataset : Dataset, optional
+            The data, if any.
+
+        Returns
+        -------
+        Observable
+            The observable.
+
+        Raises
+        ------
+        ConfigError
+            If the configuration has an option that the data give.
+        """
+        if dataset is None:
+            return cls(**parse_options_for_callable(info, cls.__init__))
+        require_no_options_from_data(cls, info, dataset)
+        return cls.from_data(dataset, **parse_options_for_callable(
+            info, cls.from_data, ignore_params=['dataset']))
+
+    def dump(
+            self,
+            data: Dataset | None = None,
+            prefix: str = '',
+            dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        """
+        Dump the observable to its configuration: its type, its grid (see
+        dump_grid) and its other options (see _dump_options), without
+        those that its data give, if any (see options_from_data).
+        Observables with options in files that their data give (e.g.
+        regions) override this: such a file is written only without data.
+
+        Parameters
+        ----------
+        data : Dataset, optional
+            The data, whose options the configuration leaves out.
+        prefix : str, optional
+            The start of the names of the files of its options (e.g. the
+            table of a trace).
+        dump_path : bool, optional
+            Whether the configuration has the paths of the files, or only
+            their names.
+        overwrite : bool, optional
+            Whether to overwrite existing files.
+
+        Returns
+        -------
+        dict
+            The options.
+        """
+        return without_options_from_data(self, dict(
+            type=self.type(), **dump_grid(self._grid),
+            **self._dump_options(prefix, dump_path, overwrite)), data)
+
+    @abc.abstractmethod
+    def _dump_options(
+            self, prefix: str, dump_path: bool, overwrite: bool
+    ) -> dict[str, Any]:
+        """
+        Return the configuration of its options but those that dump
+        writes itself (its type and its grid, see dump), in their order
+        in the configuration; prefix, dump_path and overwrite are those of
+        dump.
+        """
 
     def __init__(
             self,

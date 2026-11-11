@@ -91,7 +91,7 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
     # that do), and the noise of mock data goes through it: their errors
     # are the scatter of draws, about 0.41 of the noise for 3 x 3 pixels
     # (not the noise itself, 2.4 times too large)
-    from gbkfit.observation import NoiseGauss
+    from gbkfit.observation import MockOptions, NoiseGauss, draw_mocks
     assert PixelBrightness(size=(8, 8)).linear_in_light()
     assert not PixelBrightness(size=(8, 8), median_size=3).linear_in_light()
     assert not PixelSpectra(
@@ -102,8 +102,8 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
     params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()
-    (mock,), = group.plan(driver).mock(
-        params, NoiseGauss(rms=1.0), nsamples=50, seed=1)
+    [[mock]] = draw_mocks(group.plan(driver), params, MockOptions(
+        NoiseGauss(rms=1.0), nsamples=50, seed=1))
     error = np.nanmedian(mock['brightness'].error())
     assert error == pytest.approx(0.41, abs=0.08)
 

@@ -6,13 +6,10 @@ exposure.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import numpy as np
-
 from gbkfit.config import DataFile, check_options
-from gbkfit.grid import Grid
 from gbkfit.io import ErrorKind, MaskKind
-from . import _detail, _outliers, _resampling
-from .base import Dataset
+from . import _grids
+from .base import DatasetGrid, cleaned
 from .data import Data
 
 
@@ -21,12 +18,7 @@ __all__ = [
 ]
 
 
-# The axes of its blocks and windows (see resample_blocks and
-# screen_outliers)
-_AXES = ('x', 'y')
-
-
-class DatasetSlitlessSpectra(Dataset):
+class DatasetSlitlessSpectra(DatasetGrid):
     """
     Slitless spectra: an image of a grism (or prism) exposure, where the
     light of each wavelength lands away from its place on the sky. The
@@ -54,6 +46,10 @@ class DatasetSlitlessSpectra(Dataset):
     # position share the axes of the detector
     ndim = 2
     spectral_axis = None
+
+    # The axes of its blocks and windows (see resample_blocks and
+    # screen_outliers): of pixels of the detector
+    block_axes = ('x', 'y')
 
     config_constructors = ('from_files',)
 
@@ -129,15 +125,15 @@ class DatasetSlitlessSpectra(Dataset):
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam,
             error_kind=error_kind, mask_kind=mask_kind, footprint=footprint)
-        dataset = cls(item, **_detail.grid_coords(coords, step, rota))
-        return _detail.cleaned(dataset, outliers)
+        dataset = cls(item, **_grids.grid_coords(coords, step, rota))
+        return cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        return _detail.flatten_single_item(
-            _detail.dump_grid_dataset(self, prefix, dump_path, overwrite),
+        return _grids.flatten_single_item(
+            _grids.dump_grid_dataset(self, prefix, dump_path, overwrite),
             'spectra')
 
     def __init__(
@@ -149,39 +145,4 @@ class DatasetSlitlessSpectra(Dataset):
             rota: float | None = None
     ):
         check_options(DatasetSlitlessSpectra.__init__, locals())
-        super().__init__(dict(spectra=spectra))
-        self._grid = _detail.dataset_grid(self, step, rpix, rval, rota)
-
-    def grid(self) -> Grid:
-        """Return the grid of the pixels of the detector."""
-        return self._grid
-
-    def check_blocks(self, size: Sequence[float]) -> None:
-        """
-        Raise ValueError unless the size is of blocks of pixels of the
-        detector: a positive integer for each of x and y (see resample_blocks).
-        """
-        _resampling.block_size(size, _AXES)
-
-    def resample_blocks(
-            self,
-            residuals: Mapping[str, np.ndarray],
-            size: Sequence[float],
-            rng: np.random.Generator
-    ) -> dict[str, np.ndarray]:
-        """
-        Return residuals of its image redrawn in blocks of pixels of the
-        detector (see Dataset.resample_blocks), of the size (x, y).
-        """
-        return _resampling.resample_blocks(
-            residuals, size, _AXES, rng)
-
-    def screen_outliers(
-            self, size: Sequence[float], nsigma: float
-    ) -> 'DatasetSlitlessSpectra':
-        """
-        Return a copy of it with the outliers of its image masked (see
-        Dataset.screen_outliers): of the other pixels of a window of the size
-        (x, y) about each.
-        """
-        return _outliers.screen_grid(self, size, _AXES, nsigma)
+        super().__init__(dict(spectra=spectra), step, rpix, rval, rota)

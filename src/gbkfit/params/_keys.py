@@ -15,6 +15,7 @@ from gbkfit.params.pdescs import ParamDesc
 
 __all__ = [
     'element_name',
+    'element_names',
     'with_elements'
 ]
 

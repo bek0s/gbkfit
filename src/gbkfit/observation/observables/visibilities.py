@@ -18,8 +18,10 @@ from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.params import ParamValues
-from . import _detail, _model_cube
-from ._detail import Rota, Rpix, Rval
+from . import _model_cube
+from ._cube_plan import CubeObservablePlan
+from ._data_units import flux_data_unit
+from ._options import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
 from .base import HostModelData, ModelData, Observable
 
@@ -162,13 +164,6 @@ class Visibilities(Observable):
         return ('coverage',)
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any],
-            dataset: DatasetVisibilities | None = None
-    ) -> 'Visibilities':
-        return _detail.load_observable(cls, info, dataset)
-
-    @classmethod
     def from_data(
             cls,
             dataset: DatasetVisibilities,
@@ -212,11 +207,18 @@ class Visibilities(Observable):
             dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
+        # (the dump of the coverage writes a file: only without data,
+        # which give it; the grid is that of the field, without its size)
         info = dict(type=self.type())
         if data is None:
             info.update(coverage=self._coverage.dump(
                 prefix, dump_path, overwrite))
-        return info | dict(
+        return info | self._dump_options(prefix, dump_path, overwrite)
+
+    def _dump_options(
+            self, prefix: str, dump_path: bool, overwrite: bool
+    ) -> dict[str, Any]:
+        return dict(
             fov=self._fov,
             step=self.step()[:2],
             rpix=self.rpix()[:2],
@@ -298,7 +300,7 @@ class Visibilities(Observable):
     ) -> DataUnit | None:
         # (the visibilities are sums of the flux of the pixels: of their
         # surface brightness times their area, see VisibilitiesPlan)
-        return _detail.region_data_unit(dataset, 're', False, light)
+        return flux_data_unit(dataset, 're', False, light)
 
     def light_items(self) -> tuple[str, ...]:
         return ('re', 'im')
@@ -387,15 +389,11 @@ class Visibilities(Observable):
         valid = np.isfinite(visibilities) & np.isfinite(w)
         w = np.where(valid, w, 0)
         weighted = np.where(valid, visibilities, 0) * w
-        frequencies = self._coverage.frequencies()
-        if frequencies[1] > frequencies[0]:
+        transform, increasing_frequency = self._make_transform(
+            driver, np.dtype(np.float64))
+        if increasing_frequency:
             # (the channels of the grid are from the highest frequency)
-            frequencies, weighted, w = \
-                frequencies[::-1], weighted[::-1], w[::-1]
-        transform = uv_transforms[self._transform](
-            driver, self.grid().spatial(), self._coverage.uvw(), frequencies,
-            self._coverage.phase_centre(),
-            _EPS[np.dtype(np.float64)] if self._eps is None else self._eps)
+            weighted, w = weighted[::-1], w[::-1]
         images = driver.mem_alloc_d(self.size()[::-1], np.complex128)
         transform.adjoint(
             driver.mem_copy_h2d(np.ascontiguousarray(weighted)), images)
@@ -446,13 +444,7 @@ class Visibilities(Observable):
         that checks its first evaluation (refinement, made then), if any.
         """
         model_cube = _model_cube.ModelCube(
-            size=self.size(),
-            step=self.step(),
-            rpix=self.rpix(),
-            rval=self.rval(),
-            rota=self.rota(),
-            rest=self.spectral().rest(),
-            medium=None,
+            self._grid,
             oversampling=tuple(oversampling),
             primary_beam=instrument.primary_beam(),
             psf=None,
@@ -460,22 +452,35 @@ class Visibilities(Observable):
             smooth_weights=False,
             dtype=dtype,
             fft_dtype=fft_dtype)
-        # The channels of the cube are those of the data from the highest
-        # frequency
+        transform, increasing_frequency = self._make_transform(
+            driver, dtype)
+        return VisibilitiesPlan(
+            transform, abs(self.step()[0] * self.step()[1]),
+            increasing_frequency, model_cube, driver, scene, line_of_sight,
+            foreground, dtype, flux_scale, refinement)
+
+    def _make_transform(
+            self, driver: Driver, dtype: np.dtype
+    ) -> tuple[UVTransform, bool]:
+        """
+        Return the transform of the cube of the model on a driver (see
+        uv_transforms), of the tolerance of its floating type (see eps),
+        and whether the channels of the data are in the order of
+        increasing frequency. The channels of the cube are those of the
+        data from the highest frequency: those of data of increasing
+        frequency are those of the cube in reverse.
+        """
         frequencies = self._coverage.frequencies()
-        reversed_ = bool(frequencies[1] > frequencies[0])
+        increasing_frequency = bool(frequencies[1] > frequencies[0])
         transform = uv_transforms[self._transform](
             driver, self.grid().spatial(), self._coverage.uvw(),
-            frequencies[::-1] if reversed_ else frequencies,
+            frequencies[::-1] if increasing_frequency else frequencies,
             self._coverage.phase_centre(),
             _EPS[np.dtype(dtype)] if self._eps is None else self._eps)
-        return VisibilitiesPlan(
-            transform, abs(self.step()[0] * self.step()[1]), reversed_,
-            model_cube, driver, scene, line_of_sight, foreground, dtype,
-            flux_scale, refinement)
+        return transform, increasing_frequency
 
 
-class VisibilitiesPlan(_detail.CubeObservablePlan):
+class VisibilitiesPlan(CubeObservablePlan):
     """
     The evaluation of visibilities: the transform of the flux of the
     pixels of the cube of the model, recorded as the instrument records it
@@ -499,7 +504,7 @@ class VisibilitiesPlan(_detail.CubeObservablePlan):
             self,
             transform: UVTransform,
             area: float,
-            reversed_: bool,
+            increasing_frequency: bool,
             model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
@@ -515,8 +520,8 @@ class VisibilitiesPlan(_detail.CubeObservablePlan):
         self._refinement = refinement
         self._transform = transform
         self._area = area
-        self._reversed = reversed_
-        shape = (model_cube.size()[2], transform.nrows())
+        self._increasing_frequency = increasing_frequency
+        shape = (model_cube.grid().size[2], transform.nrows())
         spectral = model_cube.grid().spectral().coords
         self._noise_grid = make_grid(
             shape[::-1], (1, spectral.step[0]), (0, 0), (0, spectral.rval[0]),
@@ -576,7 +581,7 @@ class VisibilitiesPlan(_detail.CubeObservablePlan):
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
-    ) -> list[HostModelData]:
+    ) -> tuple[list[HostModelData], dict[str, np.ndarray] | None]:
         self._evaluate_model(params, galaxies, None)
         self._model_cube_plan.record(self._flux_scale(params))
         recorded = self._to_host(self._measure())
@@ -604,7 +609,8 @@ class VisibilitiesPlan(_detail.CubeObservablePlan):
         visibilities = self._visibilities
         self._transform(
             self._model_cube_plan.cube(),
-            visibilities[::-1] if self._reversed else visibilities)
+            visibilities[::-1] if self._increasing_frequency
+            else visibilities)
         self._driver.math_mul(visibilities, self._area, out=visibilities)
         self._driver.mem_copy_d2d(visibilities.real, self._re)
         self._driver.mem_copy_d2d(visibilities.imag, self._im)

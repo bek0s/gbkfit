@@ -13,8 +13,12 @@ from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from . import _detail, _model_cube
-from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
+from . import _model_cube
+from ._cube_plan import CubeObservablePlan
+from ._data_units import data_unit
+from ._options import (
+    MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size,
+    dataset_grid_options, grid_options, warn_unsmoothed_weights)
 from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
@@ -84,13 +88,6 @@ class PixelSpectra(Observable):
         return 'Pixel spectra (cube)'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any],
-            dataset: DatasetPixelSpectra | None = None
-    ) -> 'PixelSpectra':
-        return _detail.load_observable(cls, info, dataset)
-
-    @classmethod
     def from_data(
             cls,
             dataset: DatasetPixelSpectra,
@@ -120,21 +117,15 @@ class PixelSpectra(Observable):
         """
         check_options(PixelSpectra.from_data, locals())
         return cls(
-            **_detail.grid_options(dataset.grid()),
+            **grid_options(dataset.grid()),
             smooth_weights=smooth_weights, median_size=median_size)
 
-    def dump(
-            self,
-            data: DatasetPixelSpectra | None = None,
-            prefix: str = '',
-            dump_path: bool = True,
-            overwrite: bool = False
+    def _dump_options(
+            self, prefix: str, dump_path: bool, overwrite: bool
     ) -> dict[str, Any]:
-        return _detail.without_options_from_data(self, dict(
-            type=self.type(),
-            **_detail.dump_grid(self.grid()),
+        return dict(
             smooth_weights=self._smooth_weights,
-            median_size=self._median_size), data)
+            median_size=self._median_size)
 
     def __init__(
             self,
@@ -149,7 +140,7 @@ class PixelSpectra(Observable):
     ):
         check_options(PixelSpectra.__init__, locals())
         super().__init__(size, step, rpix, rval, rota, spectral)
-        _detail.check_median_size(median_size)
+        check_median_size(median_size)
         self._smooth_weights = smooth_weights
         self._median_size = median_size
 
@@ -158,14 +149,14 @@ class PixelSpectra(Observable):
 
     def make_dataset(self, items: Mapping[str, Data]) -> DatasetPixelSpectra:
         return DatasetPixelSpectra(
-            items['spectra'], **_detail.dataset_grid_options(self.grid()))
+            items['spectra'], **dataset_grid_options(self.grid()))
 
     def data_unit(
             self,
             dataset: Dataset | None,
             light: LightUnit | None = None
     ) -> DataUnit | None:
-        return _detail.data_unit(
+        return data_unit(
             dataset, 'spectra', abs(self.step()[0] * self.step()[1]), False,
             light)
 
@@ -192,7 +183,7 @@ class PixelSpectra(Observable):
             oversampling: Sequence[int],
             pixel_weights: 'Weights | None'
     ) -> None:
-        _detail.warn_unsmoothed_weights(self._smooth_weights, instrument)
+        warn_unsmoothed_weights(self._smooth_weights, instrument)
 
     def plan(
             self,
@@ -207,16 +198,8 @@ class PixelSpectra(Observable):
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'PixelSpectraPlan':
-        spectral = self.spectral()
         model_cube = _model_cube.ModelCube(
-            size=self.size(),
-            step=self.step(),
-            rpix=self.rpix(),
-            rval=self.rval(),
-            rota=self.rota(),
-            rest=spectral.rest(),
-            medium=spectral.medium(),
-            convention=spectral.convention(),
+            self.grid(),
             oversampling=tuple(oversampling),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
@@ -230,7 +213,7 @@ class PixelSpectra(Observable):
             pixel_weights, flux_scale)
 
 
-class PixelSpectraPlan(_detail.CubeObservablePlan):
+class PixelSpectraPlan(CubeObservablePlan):
 
     def has_exact_errors(self) -> bool:
         # (but through a median filter, whose noise no formula gives: then

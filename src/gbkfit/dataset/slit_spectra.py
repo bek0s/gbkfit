@@ -5,13 +5,11 @@ The dataset of spectra along a long slit.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import numpy as np
-
 from gbkfit.config import DataFile, check_options
-from gbkfit.grid import Grid, SpectralAxis
+from gbkfit.grid import SpectralAxis
 from gbkfit.io import ErrorKind, MaskKind
-from . import _detail, _outliers, _resampling
-from .base import Dataset
+from . import _grids
+from .base import DatasetGrid, cleaned
 from .data import Data
 
 
@@ -20,12 +18,7 @@ __all__ = [
 ]
 
 
-# The axes of its blocks and windows (see resample_blocks and
-# screen_outliers)
-_AXES = ('the position along the slit', 'the channels')
-
-
-class DatasetSlitSpectra(Dataset):
+class DatasetSlitSpectra(DatasetGrid):
     """
     Spectra along a long slit.
 
@@ -53,6 +46,10 @@ class DatasetSlitSpectra(Dataset):
     # the spectral axis
     ndim = 2
     spectral_axis = 1
+
+    # The axes of its blocks and windows (see resample_blocks and
+    # screen_outliers): of positions along the slit and channels
+    block_axes = ('the position along the slit', 'the channels')
 
     config_constructors = ('from_files',)
 
@@ -133,7 +130,7 @@ class DatasetSlitSpectra(Dataset):
             The dataset.
         """
         check_options(DatasetSlitSpectra.from_files, locals())
-        references = _detail.file_references(1, rpix, rval, spectral)
+        references = _grids.file_references(1, rpix, rval, spectral)
         item, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
@@ -141,15 +138,15 @@ class DatasetSlitSpectra(Dataset):
             error_kind=error_kind, mask_kind=mask_kind, footprint=footprint,
             spectral_type=references['spectral_type'])
         dataset = cls(
-            item, **_detail.cube_coords(coords, step, rota, spectral))
-        return _detail.cleaned(dataset, outliers)
+            item, **_grids.cube_coords(coords, step, rota, spectral))
+        return cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        return _detail.flatten_single_item(
-            _detail.dump_grid_dataset(self, prefix, dump_path, overwrite),
+        return _grids.flatten_single_item(
+            _grids.dump_grid_dataset(self, prefix, dump_path, overwrite),
             'spectra')
 
     def __init__(
@@ -162,42 +159,5 @@ class DatasetSlitSpectra(Dataset):
             spectral: SpectralAxis | None = None
     ):
         check_options(DatasetSlitSpectra.__init__, locals())
-        super().__init__(dict(spectra=spectra))
-        self._grid = _detail.cube_grid(
-            self, step, rpix, rval, rota, spectral)
-
-    def grid(self) -> Grid:
-        """Return the grid of the positions and channels."""
-        return self._grid
-
-    def check_blocks(self, size: Sequence[float]) -> None:
-        """
-        Raise ValueError unless the size is of blocks of positions along the
-        slit and channels: a positive integer for each of the position along
-        the slit and the channels (see resample_blocks).
-        """
-        _resampling.block_size(size, _AXES)
-
-    def resample_blocks(
-            self,
-            residuals: Mapping[str, np.ndarray],
-            size: Sequence[float],
-            rng: np.random.Generator
-    ) -> dict[str, np.ndarray]:
-        """
-        Return residuals of its spectra redrawn in blocks of positions along
-        the slit and channels (see Dataset.resample_blocks), of the size
-        (position along the slit, channels).
-        """
-        return _resampling.resample_blocks(
-            residuals, size, _AXES, rng)
-
-    def screen_outliers(
-            self, size: Sequence[float], nsigma: float
-    ) -> 'DatasetSlitSpectra':
-        """
-        Return a copy of it with the outliers of its spectra masked (see
-        Dataset.screen_outliers): of the other values of a window of the size
-        (position along the slit, channels) about each.
-        """
-        return _outliers.screen_grid(self, size, _AXES, nsigma)
+        super().__init__(
+            dict(spectra=spectra), step, rpix, rval, rota, spectral)

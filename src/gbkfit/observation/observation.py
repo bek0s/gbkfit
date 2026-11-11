@@ -1,11 +1,13 @@
 """
 The base of the observations: data of galaxies, and how the model of
-the galaxies gives them (see Observation).
+the galaxies gives them (see Observation), the galaxies an observation
+sees (see SeenGalaxies), and the frame of an observation on the sky (see
+SkyFrame).
 """
 
 import abc
 from collections.abc import Mapping, Sequence
-from typing import Self
+from typing import NamedTuple, Self
 
 import astropy.units
 import numpy as np
@@ -13,21 +15,73 @@ from astropy.table import Table
 
 from gbkfit.config import (
     TypedParser, TypedSerializable, check_name)
+from gbkfit.cosmology import Cosmology
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectraData
 from gbkfit.io import Beam
-from gbkfit.model import DataUnit
+from gbkfit.model import DataUnit, DepthUnit, Galaxy
 from gbkfit.params import ParamDesc, pdescs_with_units
-from ._scene import SeenGalaxies
 from .likelihood import Likelihood, LikelihoodGaussian
 from .observables import FluxScale, ObservablePlan
 
 
 __all__ = [
     'Observation',
+    'SeenGalaxies',
+    'SkyFrame',
     'observation_parser'
 ]
+
+
+class SeenGalaxies(NamedTuple):
+    """
+    The galaxies an observation sees (see ObservationGroup): the
+    galaxies, the mapping of the parameters of each to those of the
+    observation group, their labels (the id 'galaxy' of their extra
+    outputs), their order along the line of sight, front to back (in
+    units, see DepthUnit; None if not given), the RA and Dec (degrees) of
+    the origin of the frame of their parameters (that of the first
+    observation on the sky; None without one), and their cosmology (see
+    ObservationGroup).
+    """
+    galaxies: tuple[Galaxy, ...]
+    mappings: tuple[dict[str, str], ...]
+    labels: tuple[str, ...]
+    order: tuple[DepthUnit, ...] | None
+    sky_origin: tuple[float, float] | None
+    cosmology: Cosmology
+
+
+class SkyFrame(NamedTuple):
+    """
+    The frame of the model of an observation on the sky (see
+    Observation.sky_frame), in which it sees the galaxies (see
+    ObservationGroup).
+
+    Attributes
+    ----------
+    origin : tuple of float
+        The RA and Dec (degrees) of its origin, from which the centres of
+        what the observation sees are measured (e.g. the reference pixel
+        of the grid of its data, see Observable.sky_rval).
+    offsets : tuple of (str or None)
+        The names of the parameters of the offsets of the frame, of x, y
+        and the velocity (see ObservationSky): None for those it does not
+        fit.
+    velocity_frame : str or None
+        The frame of rest of its velocities (FITS SPECSYS, see FRAMES), if
+        known.
+    centre_params : tuple of tuple of str
+        The names of the parameters of the centres (x and y) of what the
+        observation adds to the galaxies it sees in the frame of the model
+        (e.g. the masses of its lens), which the frame moves as the
+        centres of their components (see ObservationGroup).
+    """
+    origin: tuple[float, float]
+    offsets: tuple[str | None, str | None, str | None]
+    velocity_frame: str | None
+    centre_params: tuple[tuple[str, str], ...]
 
 
 class Observation(TypedSerializable, abc.ABC):
@@ -158,29 +212,13 @@ class Observation(TypedSerializable, abc.ABC):
             self._likelihood.pdescs(),
             self._likelihood.param_units(self._data))
 
-    def offset_params(self) -> tuple[str | None, str | None, str | None]:
+    def sky_frame(self) -> SkyFrame | None:
         """
-        Return the names of the parameters of the offsets of its frame
-        on the sky, of x, y and the velocity (see ObservationSky): None
-        for those it does not fit; here, none.
-        """
-        return None, None, None
-
-    def velocity_frame(self) -> str | None:
-        """
-        Return the frame of rest of its velocities (FITS SPECSYS, see
-        FRAMES), if known; here, it is not.
+        Return the frame of its model on the sky, in which it sees the
+        galaxies (see SkyFrame and ObservationGroup); here, None: its data
+        are not on the sky.
         """
         return None
-
-    def centre_params(self) -> tuple[tuple[str, str], ...]:
-        """
-        Return the names of the parameters of the centres (x and y) of what
-        it adds to the galaxies it sees in the frame of the model (e.g. the
-        masses of its lens), which its frame moves as the centres of their
-        components (see ObservationGroup); none here.
-        """
-        return ()
 
     def takes_mass(self) -> bool:
         """
@@ -189,15 +227,6 @@ class Observation(TypedSerializable, abc.ABC):
         circular velocity, see ObservationProfile); here, it does not.
         """
         return False
-
-    def sky_origin(self) -> tuple[float, float] | None:
-        """
-        Return the RA and Dec (degrees) of the origin of the frame of its
-        model on the sky, from which the centres of what it sees are
-        measured (see ObservationGroup); here, None: its data are not on
-        the sky.
-        """
-        return None
 
     def keys(self) -> tuple[str, ...]:
         """Return the names of its data items (e.g. 'spectra')."""
@@ -248,7 +277,7 @@ class Observation(TypedSerializable, abc.ABC):
         """
         Return the unit of the values of a data item of its model, and
         their beam, of a unit per beam: those that data of the model
-        have (e.g. mock data; see GroupPlan.mock).
+        have (e.g. mock data; see draw_mocks).
 
         Here, those of its data, if any (None for those they lack), and
         none without data; kinds whose model has a unit without data add
@@ -279,7 +308,7 @@ class Observation(TypedSerializable, abc.ABC):
     ) -> Self:
         """
         Return a copy of it with other data (e.g. mock data; see
-        GroupPlan.mock).
+        draw_mocks).
 
         Parameters
         ----------

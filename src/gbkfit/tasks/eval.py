@@ -49,7 +49,7 @@ def eval_(
     The mode 'mock' writes the models (as 'model'), and mock data of the
     observations: their models measured from what their instruments
     record of the models plus noise, with their errors (see
-    GroupPlan.mock). Each mock k is the files of the data of each
+    draw_mocks). Each mock k is the files of the data of each
     observation (in mocks/<k>/observations/<observation>/, kind
     'mock_data') and a configuration that fits them (mocks/<k>/
     config.yaml, 'mock_config'): the configuration with each observation
@@ -60,7 +60,7 @@ def eval_(
       (see Noise);
     - nmocks (1), nsamples (100) and seed (none): the number of mocks,
       the number of draws of the errors of measured data (e.g. moments),
-      and the seed of the random numbers (see GroupPlan.mock);
+      and the seed of the random numbers (see draw_mocks);
     - likelihood (optional): the likelihood of the mock data of every
       observation, or a list of one (or null) for each, in the mock
       configurations; by default that of its data, if it has data, or

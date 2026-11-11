@@ -21,6 +21,7 @@ from gbkfit.model.components.spheroids import (
 from gbkfit.params import ModelEvaluationError, ParamValues
 from .observables import ModelData
 from .observables._moments import moment_item
+from .observables._orbit_sky import bins_sky_grid
 
 if TYPE_CHECKING:
     from .group import ObservationGroup
@@ -104,7 +105,7 @@ class OrbitRecording:
     At each recording (see record), the orbits of the state of the
     spheroid (see OrbitLibraryState) are integrated once, on the driver of
     its galaxy, and recorded in the bins of every observation through its
-    PSF (see RegionMoments.sky_grid), in the Gauss-Hermite series of the
+    PSF (see bins_sky_grid), in the Gauss-Hermite series of the
     data of each bin (its V and sigma; Rix et al. 1997): gamma h_m of
     each orbit, g_m. The model of a bin is then linear in the light of the
     orbits w_k (see OrbitLibraryState.orbit_light: their shares of the
@@ -179,13 +180,15 @@ class OrbitRecording:
             for observation, i in zip(observed, observations))
         self._order = max(data.order for data in self._data)
         self._grids = tuple(
-            observation.observable().sky_grid(
-                observation.instrument(), observation.oversampling())
+            bins_sky_grid(
+                observation.observable().regions(), observation.instrument(),
+                observation.oversampling())
             for observation in observed)
         # (and those of the offsets of the frames of its observations)
         self._reads = tuple(dict.fromkeys((*self._names.values(), *(
             name for observation in observed
-            for name in observation.offset_params() if name is not None))))
+            for name in observation.sky_frame().offsets
+            if name is not None))))
         self._integrator: OrbitIntegrator | None = None
         # (whether it warned of orbits cut by the most steps, and of those
         # whose energy drifted: once each)

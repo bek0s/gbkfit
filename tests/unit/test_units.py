@@ -10,7 +10,7 @@ from gbkfit.grid import Coords, Grid
 from gbkfit.model.components._units import (
     BandFactors, DataUnit, LineFactors, line_factors, mass_per_unit)
 from gbkfit.model.components.lines import Band
-from gbkfit.observation.observables._detail import flux_per_area
+from gbkfit.observation.observables._data_units import flux_per_area
 from gbkfit.units import (
     format_quantity, format_unit, parse_quantity, parse_unit, spatial_unit)
 

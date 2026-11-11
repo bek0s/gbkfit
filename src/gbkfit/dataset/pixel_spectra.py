@@ -8,11 +8,11 @@ from typing import Any
 import numpy as np
 
 from gbkfit.config import DataFile, check_options
-from gbkfit.grid import Grid, SpectralAxis
+from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSF, PSF
 from gbkfit.io import ErrorKind, MaskKind
-from . import _detail, _outliers, _resampling
-from .base import Dataset, NoiseCorrelation
+from . import _grids
+from .base import DatasetGrid, NoiseCorrelation, cleaned
 from .data import Data
 
 
@@ -21,12 +21,7 @@ __all__ = [
 ]
 
 
-# The axes of its blocks and windows (see resample_blocks and
-# screen_outliers)
-_AXES = ('x', 'y', 'the channels')
-
-
-class DatasetPixelSpectra(Dataset):
+class DatasetPixelSpectra(DatasetGrid):
     """
     Spectra on a grid of pixels: a spectral cube.
 
@@ -51,6 +46,10 @@ class DatasetPixelSpectra(Dataset):
     # The axes of a spectral cube: x, y and the spectral axis
     ndim = 3
     spectral_axis = 2
+
+    # The axes of its blocks and windows (see resample_blocks and
+    # screen_outliers): of pixels and channels
+    block_axes = ('x', 'y', 'the channels')
 
     config_constructors = ('from_files',)
 
@@ -142,7 +141,7 @@ class DatasetPixelSpectra(Dataset):
             The dataset.
         """
         check_options(DatasetPixelSpectra.from_files, locals())
-        references = _detail.file_references(2, rpix, rval, spectral)
+        references = _grids.file_references(2, rpix, rval, spectral)
         item, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
@@ -150,15 +149,15 @@ class DatasetPixelSpectra(Dataset):
             references['velocity'], error_kind, footprint,
             spectral_type=references['spectral_type'], mask_kind=mask_kind)
         dataset = cls(
-            item, **_detail.cube_coords(coords, step, rota, spectral))
-        return _detail.cleaned(dataset, outliers, mask_whole_spectra)
+            item, **_grids.cube_coords(coords, step, rota, spectral))
+        return cleaned(dataset, outliers, mask_whole_spectra)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        return _detail.flatten_single_item(
-            _detail.dump_grid_dataset(self, prefix, dump_path, overwrite),
+        return _grids.flatten_single_item(
+            _grids.dump_grid_dataset(self, prefix, dump_path, overwrite),
             'spectra')
 
     def __init__(
@@ -171,44 +170,8 @@ class DatasetPixelSpectra(Dataset):
             spectral: SpectralAxis | None = None
     ):
         check_options(DatasetPixelSpectra.__init__, locals())
-        super().__init__(dict(spectra=spectra))
-        self._grid = _detail.cube_grid(
-            self, step, rpix, rval, rota, spectral)
-
-    def grid(self) -> Grid:
-        """Return the grid of the pixels and channels."""
-        return self._grid
-
-    def check_blocks(self, size: Sequence[float]) -> None:
-        """
-        Raise ValueError unless the size is of blocks of pixels and channels:
-        a positive integer for each of x, y and the channels (see
-        resample_blocks).
-        """
-        _resampling.block_size(size, _AXES)
-
-    def resample_blocks(
-            self,
-            residuals: Mapping[str, np.ndarray],
-            size: Sequence[float],
-            rng: np.random.Generator
-    ) -> dict[str, np.ndarray]:
-        """
-        Return residuals of its cube redrawn in blocks of pixels and channels
-        (see Dataset.resample_blocks), of the size (x, y, channels).
-        """
-        return _resampling.resample_blocks(
-            residuals, size, _AXES, rng)
-
-    def screen_outliers(
-            self, size: Sequence[float], nsigma: float
-    ) -> 'DatasetPixelSpectra':
-        """
-        Return a copy of it with the outliers of its cube masked (see
-        Dataset.screen_outliers): of the other voxels of a window of the size
-        (x, y, channels) about each.
-        """
-        return _outliers.screen_grid(self, size, _AXES, nsigma)
+        super().__init__(
+            dict(spectra=spectra), step, rpix, rval, rota, spectral)
 
     def mask_whole_spectra(self) -> 'DatasetPixelSpectra':
         """
@@ -229,4 +192,4 @@ class DatasetPixelSpectra(Dataset):
         separations of its pixels and channels (see
         Dataset.noise_correlation).
         """
-        return _detail.grid_noise_correlation(self, key)
+        return _grids.grid_noise_correlation(self, key)
