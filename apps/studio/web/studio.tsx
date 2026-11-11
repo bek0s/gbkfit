@@ -1,6 +1,6 @@
 // The state of the Studio that its parts share: the open project and the
-// recent ones, the screen on the stage, the blocks opened last, the tree
-// folded or not, and the folder where a new block is being named. Leaving
+// recent ones, the screen on the stage, the blocks opened last, and the
+// folder where a new block is being made (see shell/Making). Leaving
 // a screen whose edits are not saved asks first, in a dialog.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useProjects } from './api/queries';
@@ -21,8 +21,6 @@ export interface Studio {
   go: (screen: Screen) => void;
   // The blocks of the open project opened last, the latest first
   visited: Screen[];
-  folded: boolean;
-  setFolded: (folded: boolean) => void;
   adding: string | null;
   startAdding: (folder: string | null) => void;
   // What the page remembers of a project or a block follows it as it is
@@ -47,7 +45,6 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [project, setProject] = useRemembered<string | null>('project', null);
   const [recent, setRecent] = useRemembered<string[]>('recent-projects', []);
   const [visited, setVisited] = useRemembered<Record<string, Screen[]>>('visited', {});
-  const [folded, setFolded] = useRemembered('tree-folded', false);
   const [screen, setScreen] = useState<Screen>(() => parseAddress(window.location.hash));
   const [adding, setAdding] = useState<string | null>(null);
 
@@ -155,14 +152,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     [project, screen, setVisited],
   );
 
-  const startAdding = useCallback(
-    (folder: string | null) => {
-      setAdding(folder);
-      // (the field of its name is in the tree)
-      if (folder !== null) setFolded(false);
-    },
-    [setFolded],
-  );
+  const startAdding = useCallback((folder: string | null) => setAdding(folder), []);
 
   const studio = useMemo<Studio>(
     () => ({
@@ -172,15 +162,13 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       screen,
       go,
       visited: project === null ? [] : (visited[project] ?? []),
-      folded,
-      setFolded,
       adding,
       startAdding,
       movedProject,
       movedBlock,
       setUnsaved,
     }),
-    [project, openProject, recent, screen, go, visited, folded, setFolded, adding, startAdding, movedProject, movedBlock, setUnsaved],
+    [project, openProject, recent, screen, go, visited, adding, startAdding, movedProject, movedBlock, setUnsaved],
   );
   return (
     <StudioContext.Provider value={studio}>

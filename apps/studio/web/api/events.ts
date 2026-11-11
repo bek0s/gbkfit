@@ -26,6 +26,8 @@ export function useServerEvents(): boolean {
     };
     source.addEventListener('job', changed);
     source.addEventListener('run', changed);
+    // (a render that runs long starts, reaches a stage, or ends)
+    source.addEventListener('render', () => void client.invalidateQueries({ queryKey: keys.renders }));
     source.addEventListener('preferences', (event) => preferencesChanged((JSON.parse(event.data) as { values: Record<string, unknown> }).values));
     return () => source.close();
   }, [client]);

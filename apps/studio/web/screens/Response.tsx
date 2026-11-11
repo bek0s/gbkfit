@@ -26,7 +26,7 @@ import { Button, NavItem } from '../components/ui/basics';
 import { Choice, NumberField, QuantityInput, Segments, splitQuantity } from '../components/ui/inputs';
 import { Dock, DockSection } from '../components/ui/dock';
 import { useBlockHead } from '../shell/BlockMenu';
-import { kindOf } from '../shell/blocks';
+import { kindOf } from '../shell/sections';
 import { useStudio } from '../studio';
 import { useUnsaved } from './editing';
 import { objectAt, textAt } from './observation/model';

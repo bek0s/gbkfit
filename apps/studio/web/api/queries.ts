@@ -15,6 +15,7 @@ export const keys = {
   preparation: (path: string) => ['preparation', path],
   view: (...parts: (string | number)[]) => ['view', ...parts],
   jobs: ['jobs'],
+  renders: ['renders'],
 };
 
 // The paths of the projects of the workspace
@@ -221,6 +222,29 @@ export function useMoments(path: string, hdu: number, snr: number, enabled: bool
 
 export function useJobs() {
   return useQuery({ queryKey: keys.jobs, queryFn: () => data(api.GET('/api/v1/jobs')) });
+}
+
+// Stop a job (that runs, or waits)
+export function useStopJob() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => data(api.POST('/api/v1/jobs/{id_}/stop', { params: { path: { id_: id } } })),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.jobs }),
+  });
+}
+
+// The renders that run long (refreshed by the events of the server)
+export function useRenders() {
+  return useQuery({ queryKey: keys.renders, queryFn: () => data(api.GET('/api/v1/renders')) });
+}
+
+// Cancel a render: dropped if it waits, stopped if it runs
+export function useCancelRender() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => data(api.POST('/api/v1/renders/{id_}/cancel', { params: { path: { id_: id } } })),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.renders }),
+  });
 }
 
 // A job (refreshed as its state changes, by the events of the server)

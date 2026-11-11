@@ -1,10 +1,10 @@
-// The Studio: a bar (the tabs of the tasks, the state of the server, and
-// the settings), the tree of the blocks of the open project, and the
-// stage, with one screen at a time.
-import { useServerEvents } from './api/events';
-import { useJobs } from './api/queries';
+// The Studio: the bar (the project, New, Go to and the activity of the
+// server), the rail of its sections down the left, the list of the
+// section on the stage (pinned beside it, or hidden and opened over it),
+// and the stage, with one screen at a time.
+import { useCallback, useState } from 'react';
 import { Logo } from './components/icons';
-import { SettingsButton } from './components/ui/settings';
+import { Button } from './components/ui/basics';
 import { Dataset, NewDataset } from './screens/dataset/DatasetScreen';
 import { isKind } from './screens/dataset/model';
 import { GalaxyScreen } from './screens/galaxy/GalaxyScreen';
@@ -13,10 +13,13 @@ import { ObservationScreen } from './screens/observation/ObservationScreen';
 import { Pending } from './screens/Pending';
 import { ResponseScreen } from './screens/Response';
 import { Welcome } from './screens/Welcome';
-import { kindOf } from './shell/blocks';
+import { ActivityPill } from './shell/Activity';
+import { Adding, GoTo, NewMenu } from './shell/Making';
 import { address, type Screen } from './shell/navigation';
-import { Tabs } from './shell/Tabs';
-import { Tree } from './shell/Tree';
+import { ProjectMenu } from './shell/ProjectMenu';
+import { Rail } from './shell/Rail';
+import { hasList, SectionList, useListKey, useListPinned } from './shell/SectionList';
+import { kindOf, sectionNamed, sectionOf, type SectionKey } from './shell/sections';
 import { StudioProvider, useStudio } from './studio';
 
 export function App() {
@@ -28,9 +31,14 @@ export function App() {
 }
 
 function Layout() {
-  const { project, screen, folded } = useStudio();
+  const { project, screen } = useStudio();
+  const [pinned, setPinned] = useListPinned();
+  const [flyout, setFlyout] = useState(false);
+  const listed = project !== null && hasList(sectionOf(screen));
+  // (Ctrl+B pins the list or not)
+  useListKey(useCallback(() => setPinned(!pinned), [pinned, setPinned]));
   return (
-    <div className={folded ? 'app folded' : 'app'}>
+    <div className="app" data-list={listed ? (pinned ? 'pinned' : 'hidden') : 'none'}>
       <header className="bar">
         <div className="logo">
           <Logo />
@@ -38,24 +46,30 @@ function Layout() {
             GBKFIT <span>Studio</span>
           </span>
         </div>
-        <Tabs />
-        <ServerStatus />
-        <SettingsButton />
+        <div className="bar-project">
+          <ProjectMenu />
+        </div>
+        <span className="bar-space" />
+        <NewMenu />
+        <GoTo />
+        <ActivityPill />
       </header>
-      <Tree />
-      <main className="stage">{project === null ? <Welcome /> : <ScreenView screen={screen} />}</main>
-    </div>
-  );
-}
-
-// Whether the page is connected to the server, and how many jobs run
-function ServerStatus() {
-  const connected = useServerEvents();
-  const running = (useJobs().data ?? []).filter((job) => job.state === 'running').length;
-  return (
-    <div className="status" data-state={connected ? (running ? 'run' : 'ok') : 'off'}>
-      <span className="dot" />
-      {connected ? `connected · ${running} running` : 'not connected'}
+      <Rail />
+      {listed && pinned && <SectionList flyout={false} onClose={() => undefined} />}
+      <main className="stage">
+        {listed && !pinned && (
+          <button type="button" className="list-handle" title="Open the list (Ctrl+B pins it)" onClick={() => setFlyout(!flyout)}>
+            ☰
+          </button>
+        )}
+        {listed && !pinned && flyout && (
+          <div className="list-flyout" onMouseLeave={() => setFlyout(false)}>
+            <SectionList flyout onClose={() => setFlyout(false)} />
+          </div>
+        )}
+        {project === null ? <Welcome /> : <ScreenView screen={screen} />}
+      </main>
+      <Adding />
     </div>
   );
 }
@@ -64,6 +78,8 @@ function ScreenView({ screen }: { screen: Screen }) {
   switch (screen.kind) {
     case 'home':
       return <Home />;
+    case 'section':
+      return <EmptySection section={screen.key} />;
     case 'block':
       if (screen.folder === 'datasets') return <Dataset key={address(screen)} name={screen.name} />;
       if (screen.folder === 'psfs') return <ResponseScreen key={address(screen)} family="psf" name={screen.name} />;
@@ -75,8 +91,28 @@ function ScreenView({ screen }: { screen: Screen }) {
       if (!isKind(screen.data)) return <Pending eyebrow="New dataset" title="This kind of data comes later" />;
       return <NewDataset key={address(screen)} kind={screen.data} />;
     case 'compare':
-      return <Pending eyebrow="Compare with data" title="Galaxies and data" />;
+      return <Pending eyebrow="Compare" title="Models, data and observations side by side" />;
     case 'fit':
       return <Pending eyebrow="Fit" title="Fits and their runs" />;
   }
+}
+
+// A section of blocks with none: what it holds, and how to make the first
+function EmptySection({ section }: { section: SectionKey }) {
+  const { startAdding } = useStudio();
+  const { title, groups } = sectionNamed(section);
+  return (
+    <section className="screen empty-section">
+      <div className="empty-section-body">
+        <h1>No {title.toLowerCase()} yet</h1>
+        <div className="empty-section-actions">
+          {groups.map((group) => (
+            <Button key={group.folder} kind={group === groups[0] ? 'primary' : undefined} onClick={() => startAdding(group.folder)}>
+              New {group.kind.toLowerCase()}…
+            </Button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }

@@ -1,7 +1,7 @@
 // The basic controls (of Mantine; see theme.ts): buttons of a few kinds,
 // buttons of an icon, a close button, a row of a list to navigate (a
 // block, a view, a file), text fields, a callout, and the tabs of the bar.
-import { ActionIcon, Alert, Button as MantineButton, CloseButton, NavLink, Tabs, TextInput } from '@mantine/core';
+import { ActionIcon, Alert, Button as MantineButton, CloseButton, NavLink, TextInput } from '@mantine/core';
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
 // A button: primary (the main action of a screen), danger (an action that
@@ -201,31 +201,5 @@ export function Callout({ children }: { children: ReactNode }) {
     <Alert variant="light" color="accent" radius="sm" className="ui-callout">
       {children}
     </Alert>
-  );
-}
-
-// The tabs of a bar: one is current (none: null); a tab can be off, and
-// have a mark at its right (e.g. a dot)
-export function BarTabs<T extends string>({
-  tabs,
-  value,
-  onChange,
-  label,
-}: {
-  tabs: { value: T; label: string; disabled?: boolean; mark?: ReactNode }[];
-  value: T | null;
-  onChange: (value: T) => void;
-  label: string;
-}) {
-  return (
-    <Tabs value={value} onChange={(next) => next && onChange(next as T)} className="ui-tabs" aria-label={label}>
-      <Tabs.List>
-        {tabs.map((tab) => (
-          <Tabs.Tab key={tab.value} value={tab.value} disabled={tab.disabled} rightSection={tab.mark}>
-            {tab.label}
-          </Tabs.Tab>
-        ))}
-      </Tabs.List>
-    </Tabs>
   );
 }

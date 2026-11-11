@@ -4,7 +4,7 @@
 import { Button, NavItem } from '../components/ui/basics';
 import type { ReactNode } from 'react';
 import { useProject } from '../api/queries';
-import { kindOf } from '../shell/blocks';
+import { kindOf } from '../shell/sections';
 import { address } from '../shell/navigation';
 import { useStudio } from '../studio';
 

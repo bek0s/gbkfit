@@ -26,6 +26,40 @@ export const ModelIcon = () => (
   </Icon>
 );
 
+// Home: a house
+export const HomeIcon = () => (
+  <Icon>
+    <path d="M4 11l8-7 8 7" />
+    <path d="M6 9.5V20h12V9.5" />
+    <path d="M10 20v-5h4v5" />
+  </Icon>
+);
+
+// Observations: an eye, which sees through an instrument
+export const ObservationIcon = () => (
+  <Icon>
+    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z" />
+    <circle cx="12" cy="12" r="2.6" />
+  </Icon>
+);
+
+// Compare: two pictures side by side
+export const CompareIcon = () => (
+  <Icon>
+    <rect x="3" y="5" width="7.5" height="14" rx="1.5" />
+    <rect x="13.5" y="5" width="7.5" height="14" rx="1.5" />
+    <path d="M5.5 15l2-3 1.5 1.5" />
+    <path d="M16 15l2-4 1.5 2.5" />
+  </Icon>
+);
+
+// The list beside the screen, to show or hide
+export const ListIcon = () => (
+  <Icon>
+    <path d="M4 6h16M4 12h16M4 18h16" />
+  </Icon>
+);
+
 // The fit: a curve through a point
 export const FitIcon = () => (
   <Icon>
