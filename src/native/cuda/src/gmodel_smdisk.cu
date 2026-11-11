@@ -7,11 +7,11 @@
 namespace gbkfit::cuda {
 
 // The kernel of a smooth disk (see mcdisk_kernel, gmodel_mcdisk.cu)
-template<typename T, bool Anisotropic> auto
+template<typename T, bool FullKinematics> auto
 smdisk_kernel(const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
 {
     namespace k = kernels;
-    constexpr bool A = Anisotropic;
+    constexpr bool A = FullKinematics;
     return f.fields && a.opt.uids ? k::gmodel_smdisk_evaluate<T, 0, 1, 1, A>
             : f.fields ? k::gmodel_smdisk_evaluate<T, 0, 1, 0, A>
             : g.opacity ? k::gmodel_smdisk_evaluate<T, 1, 0, 0, A>
@@ -29,7 +29,8 @@ GModelWrapper<T>::gmodel_smdisk_evaluate(
             * gbkfit::gmodel_smdisk_size_z(a, g);
     // (see gmodel_mcdisk_evaluate)
     launch("gmodel_smdisk_evaluate", n,
-            gbkfit::gmodel_disk_anisotropic(a) ? smdisk_kernel<T, true>(a, g, f)
+            gbkfit::gmodel_disk_full_kinematics(a)
+            ? smdisk_kernel<T, true>(a, g, f)
             : smdisk_kernel<T, false>(a, g, f),
             a, g, f);
 }

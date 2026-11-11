@@ -2213,6 +2213,74 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
         rtol=1e-5, atol=1e-7)
 
 
+@pytest.mark.parametrize('line_of_sight, disk_type', [
+    ('flat', 'smooth'),
+    ('grid', 'smooth'),
+    ('grid', 'clouds')])
+def test_pressure_support_corrects_fitted_tangential_traits(
+        driver, line_of_sight, disk_type):
+    # Without the trait 'mass', the pressure support corrects the sum of
+    # the tangential traits, a fitted circular velocity v_c, at each point
+    # (no mass needed): sign(v_c) sqrt(v_c^2 + P), P = (R / rho) d(rho
+    # sigma^2)/dR at the subnodes, linear between them; as the disk whose
+    # node-wise speed at its subnodes is the corrected one, up to the
+    # interpolation between them (small for a flat curve)
+    from gbkfit.model.components._nodal import subring_radii
+    thick = line_of_sight == 'grid'
+    subrnodes = np.array(subring_radii(DISK['rnodes'], DISK['rstep']))
+    vcirc = np.full_like(subrnodes, 150)
+    disk = dict(dptraits=dict(type='exponential'))
+    properties = DISK_PROPERTIES | dict(rpt_s=1.2, dpt_a=30, dpt_s=10)
+    if thick:
+        properties |= dict(rht_s=1)
+    density = np.exp(-subrnodes / 1.2)
+    support = subrnodes * np.gradient(
+        density * (30 * np.exp(-subrnodes / 10)) ** 2, subrnodes,
+        edge_order=2) / density
+    assert np.all(vcirc ** 2 + support >= 0) and np.max(-support) > 500
+    nodewise = dict(type='nw_uniform', direction='tan', sampling='subrings')
+    supported = disk_galaxy(
+        disk_type, nodewise, thick=thick,
+        pressure_support=dict(type='jeans'), **disk)
+    given = disk_galaxy(disk_type, nodewise, thick=thick, **disk)
+    expected = evaluate(driver, given, line_of_sight, properties | dict(
+        vpt_vt=np.sqrt(vcirc ** 2 + support)))
+    np.testing.assert_allclose(
+        evaluate(driver, supported, line_of_sight, properties | dict(
+            vpt_vt=vcirc)),
+        expected, rtol=0, atol=2e-5 * np.max(expected))
+
+
+def test_the_rotation_function_is_corrected_for_the_pressure():
+    # The rotation of the galaxy's functions is the corrected curve that
+    # the kernels draw, linear in the support between the subnodes
+    from gbkfit.model.components._nodal import subring_radii
+    subrnodes = np.array(subring_radii(DISK['rnodes'], DISK['rstep']))
+    density = np.exp(-subrnodes / 1.2)
+    support = subrnodes * np.gradient(
+        density * (30 * np.exp(-subrnodes / 10)) ** 2, subrnodes,
+        edge_order=2) / density
+    galaxy = disk_galaxy(
+        'smooth', dict(type='uniform', direction='tan'),
+        pressure_support=dict(type='jeans'),
+        dptraits=dict(type='exponential'))
+    bound = galaxy.plan_functions().bind(DISK_PROPERTIES | dict(
+        rpt_s=1.2, dpt_a=30, dpt_s=10, vpt_vt=150))
+    radii = np.linspace(0.1, 19.9, 50)
+    np.testing.assert_allclose(
+        bound['rotation'](radii),
+        np.sqrt(150 ** 2 + np.interp(radii, subrnodes, support)),
+        rtol=1e-10)
+
+
+def test_a_fluid_needs_the_mass():
+    # (as the pressure of a fitted curve, which needs no mass, takes it)
+    with pytest.raises(ValueError, match="it needs the mass of its galaxy"):
+        disk_galaxy(
+            'smooth', dict(type='uniform', direction='tan'),
+            pressure_support=dict(type='jeans'), fluid='gas')
+
+
 def test_pressure_support_option():
     # An option of the disk, with the fluid whose densities it takes; the
     # velocity trait 'mass' takes none

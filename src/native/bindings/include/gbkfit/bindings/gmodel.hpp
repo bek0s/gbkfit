@@ -79,6 +79,7 @@ struct DiskArrays
     Values posa_incl_sincos;
     Values deq;
     bool deq_vertical;
+    Values vpress;
 };
 
 // The arrays that describe a cone: its sides, its radial nodes (shells),
@@ -535,7 +536,7 @@ struct GModel
                         Array<Device, const int, nb::ndim<1>> dpt_directions,
                         Array<Device, const int, nb::ndim<1>> opt_rows,
                         Values posa_incl_sincos, Values deq,
-                        bool deq_vertical) {
+                        bool deq_vertical, Values vpress) {
                     auto optional = [](const Traits* traits) {
                         return traits ? std::optional(*traits) : std::nullopt;
                     };
@@ -545,7 +546,8 @@ struct GModel
                             optional(vpt), optional(vht), optional(dpt),
                             optional(dht), optional(zpt), optional(spt),
                             optional(opt), vpt_directions, dpt_directions,
-                            opt_rows, posa_incl_sincos, deq, deq_vertical};
+                            opt_rows, posa_incl_sincos, deq, deq_vertical,
+                            vpress};
                 },
                 nb::arg("loose"), nb::arg("tilted"),
                 nb::arg("rnodes").noconvert(),
@@ -569,7 +571,8 @@ struct GModel
                 nb::arg("posa_incl_sincos").noconvert().none()
                         = nb::none(),
                 nb::arg("deq").noconvert().none() = nb::none(),
-                nb::arg("deq_vertical") = false);
+                nb::arg("deq_vertical") = false,
+                nb::arg("vpress").noconvert().none() = nb::none());
 
         nb::class_<Cone>(m, ("Cone" + suffix).c_str())
                 .def("__init__", [](
@@ -900,6 +903,10 @@ private:
         require(!disk.deq_vertical || disk.deq.is_valid(),
                 "deq_vertical needs deq");
         a.deq_vertical = disk.deq_vertical;
+        require(!disk.vpress.is_valid()
+                || disk.vpress.shape(0) == size_t(a.nrnodes),
+                "vpress needs a value for each node");
+        a.vpress = data(disk.vpress);
         return a;
     }
 

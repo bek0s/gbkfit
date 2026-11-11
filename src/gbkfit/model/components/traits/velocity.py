@@ -85,17 +85,21 @@ def _splits_bar(r: np.ndarray, params: dict[str, np.ndarray]) -> np.ndarray:
 
 class PressureSupport(TypedSerializable, abc.ABC):
     """
-    How the rotation of a disk in the gravity of its galaxy is corrected
-    for its pressure (the option pressure_support of a disk; see
-    VPTraitMass): with the density of the disk, or that of its fluid, the
-    mass disks of its option fluid, whose densities add up (e.g. its
-    atomic and its molecular gas), with the dispersion of the disk. A
-    disk whose dispersion is not isotropic (see the package docstring)
-    takes the Jeans equation of its velocity ellipsoid: v^2 = v_c^2 + (R /
-    rho) d(rho sigma_R^2)/dR + sigma_R^2 - sigma_phi^2. The dispersion is
-    that of its dispersion traits, with that of its vertical equilibrium
-    in quadrature, if any (see DPTraitEquilibrium); the azimuthal means
-    are those of mass.SurfaceComponent, and the derivative is by the
+    How the rotation of a disk is corrected for its pressure (the option
+    pressure_support of a disk): that of its velocity trait 'mass' in the
+    gravity of its galaxy (see VPTraitMass), or without it, the sum of its
+    tangential velocity traits, taken as a fitted circular velocity v_c,
+    at each point, sign(v_c) sqrt(max(0, v_c^2 + P)), P the support at its
+    midplane at its subnodes, linear between them (the rotation that the
+    kernels draw). It takes the density of the disk, or that of its fluid,
+    the mass disks of its option fluid, whose densities add up (e.g. its
+    atomic and its molecular gas), with the dispersion of the disk. A disk
+    whose dispersion is not isotropic (see the package docstring) takes
+    the Jeans equation of its velocity ellipsoid: v^2 = v_c^2 + (R / rho)
+    d(rho sigma_R^2)/dR + sigma_R^2 - sigma_phi^2. The dispersion is that
+    of its dispersion traits, with that of its vertical equilibrium in
+    quadrature, if any (see DPTraitEquilibrium); the azimuthal means are
+    those of mass.SurfaceComponent, and the derivative is by the
     second-order three-point formula on the rings; NaN without density
     (see _profiles.pressure_support).
     """

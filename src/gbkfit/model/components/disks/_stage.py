@@ -60,6 +60,13 @@ _GALAXY_HEIGHT_DESCRIPTION = (
     "share of its column within a height step of its zmax (edge: what "
     "zmax cuts, if not small), and the vertical dispersion that holds it "
     "up (sigma, km/s).")
+_PRESSURE_DESCRIPTION = (
+    "The pressure support of the disk of the component, which corrects "
+    "the rotation of its tangential velocity traits, at its subnodes "
+    "(radius, arcsec): the rotation of the traits (vcirc, km/s), the "
+    "pressure ((R / rho) d(rho sigma^2)/dR, pressure, (km/s)^2) and the "
+    "rotation corrected for it, sign(vcirc) sqrt(max(0, vcirc^2 + "
+    "pressure)) (vrot, km/s).")
 _HEIGHT_DESCRIPTION = (
     "The vertical equilibrium of the thickness of the disk of the "
     "component at its subnodes (radius, arcsec): the scale height of its "
@@ -81,8 +88,10 @@ class DiskState(ComponentState):
     subnodes (see traits.WaveInput), the scale heights of the vertical
     equilibrium of its thickness at its subnodes, if it draws one (see
     traits.HeightInput), and the face-on light of its image traits (see
-    traits.ImageInput); and the dispersion of its vertical equilibrium at
-    its subnodes (km/s), if it has one.
+    traits.ImageInput); the dispersion of its vertical equilibrium at
+    its subnodes (km/s), if it has one; and its pressure support at its
+    subnodes ((km/s)^2), if it corrects its tangential velocity traits
+    (see NodalDisk.pressure_corrects_traits).
     """
     rotation: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
     rotation_factors: dict[str, np.ndarray] = dataclasses.field(
@@ -92,6 +101,7 @@ class DiskState(ComponentState):
         default_factory=dict)
     heights: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
     equilibrium: np.ndarray | None = None
+    pressure: np.ndarray | None = None
 
     def inputs(self) -> ParamValues:
         """
@@ -114,11 +124,13 @@ def plan_disk_stage(
     Plan the part of a disk of the given emission in the stage of its
     galaxy (see Component.plan_stage), of its links to the mass, if it
     takes anything from the galaxy (the circular velocity of the mass, an
-    equilibrium, density waves, the light of image traits) or the mass
-    follows it; None otherwise.
+    equilibrium, the pressure support of its tangential traits, density
+    waves, the light of image traits) or the mass follows it; None
+    otherwise.
     """
     takes = disk.circular_velocity_params() \
-        or disk.balance_gravity() is not None or disk.wave_params() \
+        or disk.balance_gravity() is not None \
+        or disk.pressure_corrects_traits() or disk.wave_params() \
         or disk.image_params()
     if not (takes or links.followed):
         return None
@@ -141,10 +153,11 @@ class DiskStage(ComponentStage):
     equilibrium at its subnodes, if it has one (see
     traits.DPTraitEquilibrium): in the rotation of its traits
     ('rotation'), in the vertical force of the mass ('galaxy'), or in the
-    surface density of its fluid ('sheet'); and the
-    tables of its density waves (the traits 'spiral', see
-    NodalDisk.wave_params), in its rotation, at its subnodes: its state
-    (see DiskState).
+    surface density of its fluid ('sheet'); its pressure support at its
+    subnodes, without the velocity trait 'mass' (see
+    NodalDisk.pressure_corrects_traits); and the tables of its density
+    waves (the traits 'spiral', see NodalDisk.wave_params), in its
+    rotation, at its subnodes: its state (see DiskState).
 
     Its profiles are sampled on the given driver and in float64, whatever
     the drivers and dtypes of the observations (pressure support and
@@ -195,7 +208,7 @@ class DiskStage(ComponentStage):
         self._images = None if not disk.image_params() \
             else ImageMaps(disk, label, sky_origin)
         sampled = followed or disk.balance_gravity() is not None \
-            or disk.wave_params() or disk.pressure_supported_params()
+            or disk.wave_params() or disk.pressure_support() is not None
         self._plan = disk.plan(driver, 0, np.float64) if sampled else None
 
     def thickness(
@@ -253,8 +266,10 @@ class DiskStage(ComponentStage):
         _rotation); the factors of its rotation at the heights of its
         velocity height trait 'mass', at its subnodes (see
         _rotation_factors); the dispersion of its equilibrium at its
-        subnodes (km/s); the tables of its density waves; and the face-on
-        light of its image traits. With extra outputs: for each parameter
+        subnodes (km/s); the pressure support that corrects its tangential
+        velocity traits at its subnodes ((km/s)^2; 0 where it is not
+        finite and the disk has no light); the tables of its density
+        waves; and the face-on light of its image traits. With extra outputs: for each parameter
         of its circular velocity, '{parameter}_rotation', a table of its
         radii, in the plane of the disk at its midplane ('radius', arcsec;
         'radius_kpc'), the Newtonian circular velocity of each component
@@ -268,8 +283,11 @@ class DiskStage(ComponentStage):
         arcsec), what its equilibrium takes there: the circular velocity
         ('vcirc', km/s; 'rotation') or the surface density
         ('surface_density', Msun/kpc^2; 'sheet'; none for 'galaxy'), and
-        the dispersion of its equilibrium ('sigma', km/s);
-        and a warning if it has image traits and is near edge-on (see
+        the dispersion of its equilibrium ('sigma', km/s); with the
+        pressure support of its tangential traits, 'pressure', a table of
+        its subnodes ('radius', arcsec), the rotation of the traits
+        ('vcirc', km/s), the pressure ('pressure', (km/s)^2) and the
+        rotation corrected for it ('vrot', km/s); and a warning if it has image traits and is near edge-on (see
         ImageMaps.warn_inclination).
         """
         disk = self._disk
@@ -286,6 +304,10 @@ class DiskStage(ComponentStage):
         equilibrium = None
         if disk.equilibrium() is not None:
             equilibrium = self._equilibrium(values, mass, out_extra)
+        pressure = None
+        if disk.pressure_corrects_traits():
+            pressure = self._traits_pressure(
+                values, mass, equilibrium, out_extra)
         rotation, factors = {}, {}
         if mass is not None and disk.circular_velocity_params():
             rotation = {
@@ -298,7 +320,7 @@ class DiskStage(ComponentStage):
         state = DiskState(
             rotation=rotation, rotation_factors=factors, heights=heights,
             image_light={name: values[name] for name in disk.image_params()},
-            equilibrium=equilibrium)
+            equilibrium=equilibrium, pressure=pressure)
         if disk.wave_params():
             state = dataclasses.replace(
                 state, waves=density_waves(disk, self._plan, values, state))
@@ -345,18 +367,9 @@ class DiskStage(ComponentStage):
         vcirc2 = mass.field.vcirc2(R)
         v2 = vcirc2
         pressure = None
-        if support := disk.pressure_supported_params().get(name):
-            density = None if not disk.fluid() else _pressure_density(
-                mass.model, disk.fluid(), R, mass.params, mass.context,
-                surface=not disk.traits('rht'))
-            midplane = None
-            if (height := disk.height_equilibrium()) is not None \
-                    and not disk.height_params():
-                midplane = height.midplane_density(self._height_scales(
-                    values, mass, None, np.asarray(radii, dtype=float)))
-            pressure = pressure_support(
-                disk, self._plan, values, radii, density, equilibrium,
-                midplane=midplane)
+        if disk.pressure_supported_params().get(name):
+            pressure = self._pressure(
+                values, mass, equilibrium, np.asarray(radii, dtype=float))
             v2 = v2 + pressure
         result = _rotation(
             v2, radii, self._lit(values, radii), f"the rotation of '{name}'")
@@ -368,6 +381,79 @@ class DiskStage(ComponentStage):
                     vcirc2, pressure, result),
                 f"Rotation curve ({name})", _ROTATION_DESCRIPTION)
         return result
+
+    def _traits_pressure(
+            self,
+            values: ParamValues,
+            mass: GalaxyMass | None,
+            equilibrium: np.ndarray | None,
+            out_extra: Extras | None
+    ) -> np.ndarray:
+        """
+        Return the pressure support ((km/s)^2) of its disk at its
+        subnodes, which corrects the rotation of its tangential velocity
+        traits (see NodalDisk.pressure_corrects_traits): 0 where it is not
+        finite and the disk has no light (see _rotation). With extra
+        outputs, its table (see state).
+
+        Raises
+        ------
+        ModelEvaluationError
+            If it is not finite at a subnode with light.
+        """
+        disk = self._disk
+        radii = np.asarray(disk.subrnodes(), dtype=float)
+        pressure = self._pressure(values, mass, equilibrium, radii)
+        finite = np.isfinite(pressure)
+        _check_solved(
+            finite, self._lit(values, radii), radii,
+            "the pressure support of the tangential traits",
+            "it is not finite (e.g. at a jump of the surface density of a "
+            "thin disk)")
+        pressure = np.where(finite, pressure, 0)
+        if out_extra is not None:
+            vcirc = rotation(disk, self._plan, values, radii)
+            v2 = vcirc ** 2 + pressure
+            kms = u.km / u.s
+            table = Table()
+            table['radius'] = radii * u.arcsec
+            table['vcirc'] = vcirc * kms
+            table['pressure'] = pressure * kms ** 2
+            table['vrot'] = np.sign(vcirc) * np.sqrt(np.maximum(v2, 0)) * kms
+            out_extra.add(
+                'pressure', table, "Pressure support",
+                _PRESSURE_DESCRIPTION)
+        return pressure
+
+    def _pressure(
+            self,
+            values: ParamValues,
+            mass: GalaxyMass | None,
+            equilibrium: np.ndarray | None,
+            radii: np.ndarray
+    ) -> np.ndarray:
+        """
+        Return the pressure support ((km/s)^2) of its disk at the radii
+        (arcsec; see pressure_support), with the density of its fluid, if
+        it has one (of the mass), the dispersion of its equilibrium, if
+        any, and of a thin disk, the density at its midplane per unit
+        surface density of its undrawn equilibrium, if any.
+        """
+        disk = self._disk
+        density = None
+        if disk.fluid():
+            density = _pressure_density(
+                mass.model, disk.fluid(),
+                radii * mass.context.kpc_per_arcsec, mass.params,
+                mass.context, surface=not disk.traits('rht'))
+        midplane = None
+        if (height := disk.height_equilibrium()) is not None \
+                and not disk.height_params():
+            midplane = height.midplane_density(
+                self._height_scales(values, mass, None, radii))
+        return pressure_support(
+            disk, self._plan, values, radii, density, equilibrium,
+            midplane=midplane)
 
     def _rotation_factors(
             self,

@@ -505,7 +505,11 @@ def rotation(
     Return the rotation of a disk at its midplane, at radii (arcsec, on
     the disk), in km/s: the azimuthal mean of the sum of its tangential
     velocity traits (their speeds), each times its velocity height trait
-    at z = 0; 0 without them.
+    at z = 0; 0 without them. With the pressure support of its tangential
+    traits in its state (see DiskState.pressure), the mean v corrected
+    for it, as the kernels draw it: sign(v) sqrt(max(0, v^2 + P)), P
+    linear between its subnodes (without its state, its circular
+    velocity).
 
     Parameters
     ----------
@@ -519,7 +523,8 @@ def rotation(
         The radii (arcsec).
     state : DiskState, optional
         What its galaxy gives it (e.g. the rotation of its velocity trait
-        'mass'), if anything.
+        'mass', or the pressure support of its tangential traits), if
+        anything.
     """
     params = _with_inputs(disk, params, state)
     r = np.asarray(radii, dtype=float)[:, None]
@@ -538,8 +543,12 @@ def rotation(
     axisymmetric = all(
         trait.axisymmetric()
         for trait, along in zip(disk.traits('vpt'), tangential) if along)
-    return _azimuthal_mean(
+    v = _azimuthal_mean(
         values, axisymmetric, _edges(disk, params, ('vpt',), r[:, 0]))[0]
+    if state is None or state.pressure is None:
+        return v
+    pressure = np.interp(r[:, 0], disk.subrnodes(), state.pressure)
+    return np.copysign(np.sqrt(np.maximum(v ** 2 + pressure, 0)), v)
 
 
 def density_waves(
@@ -566,11 +575,12 @@ def density_waves(
         The values of the parameters of the disk (see NodalDiskDensity).
     state : DiskState
         What its galaxy gives it so far: the rotation of its velocity
-        traits 'mass', if any.
+        traits 'mass', or the pressure support of its tangential traits,
+        if any.
     """
     params = _with_inputs(disk, params, state)
     r = np.asarray(disk.subrnodes(), dtype=float)
-    v = rotation(disk, plan, params, r)
+    v = rotation(disk, plan, params, r, state)
     dv = np.gradient(v, r, edge_order=2)
     density = _density_without_waves(disk, plan, params, r) \
         if any(isinstance(trait, RPTraitSpiral)

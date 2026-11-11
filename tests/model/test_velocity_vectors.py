@@ -23,6 +23,7 @@ SPEEDS = [
     dict(type='uniform', direction='rad'),
     dict(type='uniform', direction='ver'),
     dict(type='bar')]
+PRESSURE = dict(type='jeans')
 SPEED_VALUES = dict(
     vpt_vt=100, vpt2_vr=20, vpt3_vv=10, vpt4_v=30, vpt4_p=20, vpt4_s=2)
 
@@ -44,6 +45,17 @@ COMPONENTS = dict(
         disk(THICK), dict(rpt_a=1, rpt_s=3, rht_s=1, dpt_a=10) | SPEED_VALUES),
     cloud_disk=(
         disk(THICK, clouds=dict(cflux=1e-3)),
+        dict(rpt_a=1, rpt_s=3, rht_s=1, dpt_a=10) | SPEED_VALUES),
+    # (the pressure support corrects the rotation of the tangential trait)
+    thin_disk_pressure=(
+        disk(dict(rptraits=dict(type='exponential')),
+             pressure_support=PRESSURE),
+        dict(rpt_a=1, rpt_s=3, dpt_a=10) | SPEED_VALUES),
+    thick_disk_pressure=(
+        disk(THICK, pressure_support=PRESSURE),
+        dict(rpt_a=1, rpt_s=3, rht_s=1, dpt_a=10) | SPEED_VALUES),
+    cloud_disk_pressure=(
+        disk(THICK, clouds=dict(cflux=1e-3), pressure_support=PRESSURE),
         dict(rpt_a=1, rpt_s=3, rht_s=1, dpt_a=10) | SPEED_VALUES),
     cone=(
         dict(

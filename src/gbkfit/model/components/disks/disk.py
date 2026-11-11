@@ -69,8 +69,9 @@ def _check_balance(
     isothermal in z (which on a thin disk gives its pressure support the
     density at its midplane); the equilibrium 'rotation' takes the
     rotation of its tangential traits; the pressure corrects the rotation
-    of its velocity trait 'mass'; a fluid is what the pressure or an
-    equilibrium 'sheet' takes.
+    of its velocity trait 'mass', or without it, of its tangential traits
+    (a fitted curve of circular velocity); a fluid is what the pressure or
+    an equilibrium 'sheet' takes.
 
     Raises
     ------
@@ -110,11 +111,11 @@ def _check_balance(
         raise ValueError(
             "the vertical equilibrium 'rotation' takes the rotation of the "
             "tangential velocity traits of the disk: it has none")
-    if support is not None and not any(
-            isinstance(trait, traits.VPTraitMass) for trait in vptraits):
+    if support is not None \
+            and not any(trait.direction() == 'tan' for trait in vptraits):
         raise ValueError(
-            "the pressure support corrects the rotation of the disk in the "
-            "gravity of its galaxy: give it the velocity trait 'mass'")
+            "the pressure support corrects the rotation of the tangential "
+            "velocity traits of the disk: it has none")
     sheet = equilibrium is not None and equilibrium.gravity() == 'sheet'
     if fluid and support is None and not sheet:
         raise ValueError(
@@ -328,9 +329,9 @@ class ThinDisk(Disk):
         isotropic or each along a direction: once one is along a
         direction, every direction needs its own or an isotropic one.
     pressure_support : PressureSupport, optional
-        How the rotation of its velocity trait 'mass' is corrected for
-        its pressure: none (the default) or 'jeans' (see
-        traits.PressureSupport).
+        How the rotation of its velocity trait 'mass', or without it of
+        its tangential velocity traits, is corrected for its pressure:
+        none (the default) or 'jeans' (see traits.PressureSupport).
     fluid : str or Sequence of str, optional
         The names of the mass disks of its galaxy whose densities its
         pressure support takes instead of its own (e.g. its atomic and

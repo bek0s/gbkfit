@@ -271,9 +271,9 @@ class NodalDisk(abc.ABC):
         """
         Return what it needs from its galaxy (see Need), as the disk of the
         component of the given name and fluid in its galaxy (see
-        ComponentLinks): the mass, for its velocity traits 'mass' and its
-        vertical equilibrium (but 'rotation', which takes the rotation of
-        its traits); the forces of the mass, for its rotation at each
+        ComponentLinks): the mass, for its velocity traits 'mass', the
+        fluid that it names and its vertical equilibrium (but 'rotation',
+        which takes the rotation of its traits); the forces of the mass, for its rotation at each
         height (see rotation_factor_params) and the equilibrium 'galaxy';
         and the densities of the fluid that it names, for its pressure
         support, and the surface densities of its fluid in its galaxy
@@ -287,6 +287,11 @@ class NodalDisk(abc.ABC):
                 Capability.MASS,
                 f"the 'mass' velocity traits of the component {label} need "
                 f"the mass of their galaxy"))
+        if self._fluid:
+            needs.append(Need(
+                Capability.MASS,
+                f"the fluid of the component {label} names mass disks: it "
+                f"needs the mass of its galaxy"))
         if (support := self._pressure_support) is not None \
                 and self._fluid:
             # (of a thin disk, the surface density of its fluid, as its
@@ -328,6 +333,16 @@ class NodalDisk(abc.ABC):
         support = self._pressure_support
         return {} if support is None else dict.fromkeys(
             self.circular_velocity_params(), support)
+
+    def pressure_corrects_traits(self) -> bool:
+        """
+        Return whether its pressure support corrects the rotation of its
+        tangential velocity traits, as the kernels evaluate them (see
+        DiskState.pressure): if it has one and no velocity trait 'mass',
+        whose rotation takes it instead (see pressure_supported_params).
+        """
+        return self._pressure_support is not None \
+            and not self.circular_velocity_params()
 
     def rotation_factor_params(self) -> dict[str, float]:
         """
@@ -402,6 +417,9 @@ class DiskPlan(NativePlan):
         sizes['lines'] = 3 * nlines
         # The dispersion of the vertical equilibrium at each subnode
         sizes['deq'] = nsubrnodes if disk.equilibrium() is not None else 0
+        # The pressure support of the tangential traits at each subnode
+        sizes['vpress'] = nsubrnodes if disk.pressure_corrects_traits() \
+            else 0
         # The sines and cosines of posa and incl, for the search of the
         # ring of each point of a loose or tilted disk
         sizes['posa_incl_sincos'] = 4 * sizes['posa']
@@ -431,7 +449,9 @@ class DiskPlan(NativePlan):
             deq=buffer.device('deq')
             if disk.equilibrium() is not None else None,
             deq_vertical=disk.equilibrium() is not None
-            and disk.equilibrium().direction() == 'ver')
+            and disk.equilibrium().direction() == 'ver',
+            vpress=buffer.device('vpress')
+            if disk.pressure_corrects_traits() else None)
 
         self._disk = disk
         self._driver = driver
@@ -458,6 +478,8 @@ class DiskPlan(NativePlan):
         state = typing.cast('DiskState | None', state)
         if self._disk.equilibrium() is not None:
             self._buffer.host('deq')[:] = state.equilibrium
+        if self._disk.pressure_corrects_traits():
+            self._buffer.host('vpress')[:] = state.pressure
         params = self._write_params(
             dict(params) | self._disk.trait_inputs(state), lines)
         evaluate_native(

@@ -237,7 +237,7 @@ dmodel_regions_sum(
 
 template<
         typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
-        bool Anisotropic, bool HasVectors>
+        bool FullKinematics, bool HasVectors>
 void
 gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const GridArgs<T>& g, const MCDiskArgs<T>& mc,
@@ -250,7 +250,7 @@ gmodel_mcdisk_evaluate(
     {
         gbkfit::gmodel_mcdisk_evaluate_cloud<
                 atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
-                Anisotropic, HasVectors>(ci, a, g, mc, f);
+                FullKinematics, HasVectors>(ci, a, g, mc, f);
     }
 
     // The fields of each voxel, from the moments of its clouds.
@@ -266,7 +266,7 @@ gmodel_mcdisk_evaluate(
 
 template<
         typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
-        bool Anisotropic>
+        bool FullKinematics>
 void
 gmodel_smdisk_evaluate(
         const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
@@ -283,7 +283,7 @@ gmodel_smdisk_evaluate(
     for(int z = 0; z < size_z; ++z) {
 
     gbkfit::gmodel_smdisk_evaluate_spaxel<
-            add<T>, HasOpacity, HasFields, HasLineOpacity, Anisotropic>(
+            add<T>, HasOpacity, HasFields, HasLineOpacity, FullKinematics>(
                     x, y, z, a, g, f);
 
     }
@@ -602,17 +602,18 @@ struct Wrapper
     }
 
     // (the kernels of the fields of disks with line opacity and without, of
-    // disks dimmed by opacity, and of the others, each of an isotropic
-    // dispersion and of an anisotropic one, with the velocity as a vector
-    // and without it: see gmodel_mcdisk_evaluate_cloud)
+    // disks dimmed by opacity, and of the others, each of the full
+    // kinematics and not (see gmodel_disk_full_kinematics), with the
+    // velocity as a vector and without it: see
+    // gmodel_mcdisk_evaluate_cloud)
     static void
     gmodel_mcdisk_evaluate(
             const DiskArgs<T>& a, const GridArgs<T>& g,
             const MCDiskArgs<T>& mc, const FieldsArgs<T>& f) {
-        const bool anisotropic = gbkfit::gmodel_disk_anisotropic(a);
-        if (anisotropic && g.vvec_cmp)
+        const bool full = gbkfit::gmodel_disk_full_kinematics(a);
+        if (full && g.vvec_cmp)
             mcdisk_evaluate<true, true>(a, g, mc, f);
-        else if (anisotropic)
+        else if (full)
             mcdisk_evaluate<true, false>(a, g, mc, f);
         else if (g.vvec_cmp)
             mcdisk_evaluate<false, true>(a, g, mc, f);
@@ -620,12 +621,12 @@ struct Wrapper
             mcdisk_evaluate<false, false>(a, g, mc, f);
     }
 
-    template<bool Anisotropic, bool HasVectors> static void
+    template<bool FullKinematics, bool HasVectors> static void
     mcdisk_evaluate(
             const DiskArgs<T>& a, const GridArgs<T>& g,
             const MCDiskArgs<T>& mc, const FieldsArgs<T>& f) {
         namespace k = kernels;
-        constexpr bool A = Anisotropic;
+        constexpr bool A = FullKinematics;
         constexpr bool V = HasVectors;
         if (f.fields && a.opt.uids)
             k::gmodel_mcdisk_evaluate<T, false, true, true, A, V>(
@@ -645,18 +646,18 @@ struct Wrapper
     gmodel_smdisk_evaluate(
             const DiskArgs<T>& a, const GridArgs<T>& g,
             const FieldsArgs<T>& f) {
-        if (gbkfit::gmodel_disk_anisotropic(a))
+        if (gbkfit::gmodel_disk_full_kinematics(a))
             smdisk_evaluate<true>(a, g, f);
         else
             smdisk_evaluate<false>(a, g, f);
     }
 
-    template<bool Anisotropic> static void
+    template<bool FullKinematics> static void
     smdisk_evaluate(
             const DiskArgs<T>& a, const GridArgs<T>& g,
             const FieldsArgs<T>& f) {
         namespace k = kernels;
-        constexpr bool A = Anisotropic;
+        constexpr bool A = FullKinematics;
         if (f.fields && a.opt.uids)
             k::gmodel_smdisk_evaluate<T, false, true, true, A>(a, g, f);
         else if (f.fields)

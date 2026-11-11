@@ -10,11 +10,11 @@ namespace gbkfit::cuda {
 // opacity and without, of disks dimmed by opacity, or of the others, with
 // the velocity as a vector or without it (see
 // gmodel_mcdisk_evaluate_cloud)
-template<typename T, bool Anisotropic, bool HasVectors> auto
+template<typename T, bool FullKinematics, bool HasVectors> auto
 mcdisk_kernel(const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
 {
     namespace k = kernels;
-    constexpr bool A = Anisotropic;
+    constexpr bool A = FullKinematics;
     constexpr bool V = HasVectors;
     return f.fields && a.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1, A, V>
             : f.fields ? k::gmodel_mcdisk_evaluate<T, 0, 1, 0, A, V>
@@ -22,11 +22,11 @@ mcdisk_kernel(const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f
             : k::gmodel_mcdisk_evaluate<T, 0, 0, 0, A, V>;
 }
 
-template<typename T, bool Anisotropic> auto
+template<typename T, bool FullKinematics> auto
 mcdisk_kernel(const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
 {
-    return g.vvec_cmp ? mcdisk_kernel<T, Anisotropic, true>(a, g, f)
-            : mcdisk_kernel<T, Anisotropic, false>(a, g, f);
+    return g.vvec_cmp ? mcdisk_kernel<T, FullKinematics, true>(a, g, f)
+            : mcdisk_kernel<T, FullKinematics, false>(a, g, f);
 }
 
 
@@ -35,10 +35,10 @@ GModelWrapper<T>::gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const GridArgs<T>& g, const MCDiskArgs<T>& mc,
         const FieldsArgs<T>& f)
 {
-    // (of an isotropic dispersion or an anisotropic one: see
-    // gmodel_disk_dispersion)
+    // (of the full kinematics or not: see gmodel_disk_full_kinematics)
     launch("gmodel_mcdisk_evaluate", mc.nclouds,
-            gbkfit::gmodel_disk_anisotropic(a) ? mcdisk_kernel<T, true>(a, g, f)
+            gbkfit::gmodel_disk_full_kinematics(a)
+            ? mcdisk_kernel<T, true>(a, g, f)
             : mcdisk_kernel<T, false>(a, g, f),
             a, g, mc, f);
     // The fields of each voxel, from the moments of its clouds

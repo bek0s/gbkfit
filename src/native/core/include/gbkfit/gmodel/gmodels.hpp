@@ -466,29 +466,78 @@ struct Unprojected
     }
 };
 
-// The velocity of the velocity traits of a disk (or of a spheroid) at the
-// point (x, y) of its frame, at the radius r and the azimuth theta, with
-// its height traits at the height h, as a vector of its frame (see
-// vp_disk_vector, with the height z): the speeds of the traits along their
-// directions (of directions), and of planar ones in its plane (see
-// vp_trait_plane_x)
+// The speed v of the tangential velocity traits of a disk at the radius r
+// in the ring rnidx, corrected for its pressure support vpress at its
+// nodes (see DiskArgs::vpress): sign(v) sqrt(max(0, v^2 + vpress)), the
+// speed of a fluid whose circular velocity is v
+template<typename T> constexpr T
+gmodel_disk_tangential(T v, int rnidx, const T* rnodes, const T* vpress, T r)
+{
+    const T v2 = v * v + nodewise(r, rnidx, rnodes, vpress);
+    return std::copysign(std::sqrt(std::max(v2, T(0))), v);
+}
+
+// The velocity of the velocity traits of a disk at the point (x, y) of
+// its frame, as a vector of its frame, but for its planar traits along x,
+// with a pressure support vpress: that of gmodel_disk_velocity, its
+// tangential traits as one, corrected for it (see gmodel_disk_tangential)
 template<typename T> constexpr void
-gmodel_disk_velocity(
+gmodel_disk_velocity_pressure(
         T* out, const TraitSet<T>& pt, const TraitSet<T>& ht,
         const int* directions, int rnidx, const T* rnodes, int nrnodes,
-        T x, T y, T r, T theta, T h, T z, T incl)
+        T x, T y, T r, T theta, T h, T z, T incl, const T* vpress)
 {
-    out[0] = out[1] = out[2] = 0;
+    T vtan = 0;
     gmodel_traits_each<vp_trait<T>, vh_trait<T>>(
             [&](int i, T value) {
                 if (directions[i] == VPT_DIRECTION_PLANE)
                     out[1] += value;
+                else if (directions[i] == VPT_DIRECTION_TAN)
+                    vtan += value;
                 else
                     vp_disk_vector(
                             out, value, directions[i], r, theta, z, incl);
             },
             pt, ht, rnidx, rnodes, nrnodes, x, y, r, theta, h,
             Unprojected{});
+    vp_disk_vector(
+            out, gmodel_disk_tangential(vtan, rnidx, rnodes, vpress, r),
+            VPT_DIRECTION_TAN, r, theta, z, incl);
+}
+
+// The velocity of the velocity traits of a disk (or of a spheroid) at the
+// point (x, y) of its frame, at the radius r and the azimuth theta, with
+// its height traits at the height h, as a vector of its frame (see
+// vp_disk_vector, with the height z): the speeds of the traits along their
+// directions (of directions), and of planar ones in its plane (see
+// vp_trait_plane_x); with a pressure support (vpress, of a disk), the
+// tangential ones as one, corrected for it (see
+// gmodel_disk_velocity_pressure)
+template<typename T> constexpr void
+gmodel_disk_velocity(
+        T* out, const TraitSet<T>& pt, const TraitSet<T>& ht,
+        const int* directions, int rnidx, const T* rnodes, int nrnodes,
+        T x, T y, T r, T theta, T h, T z, T incl,
+        const T* vpress = nullptr)
+{
+    out[0] = out[1] = out[2] = 0;
+    if (vpress) {
+        gmodel_disk_velocity_pressure(
+                out, pt, ht, directions, rnidx, rnodes, nrnodes,
+                x, y, r, theta, h, z, incl, vpress);
+    } else {
+        gmodel_traits_each<vp_trait<T>, vh_trait<T>>(
+                [&](int i, T value) {
+                    if (directions[i] == VPT_DIRECTION_PLANE)
+                        out[1] += value;
+                    else
+                        vp_disk_vector(
+                                out, value, directions[i], r, theta, z,
+                                incl);
+                },
+                pt, ht, rnidx, rnodes, nrnodes, x, y, r, theta, h,
+                Unprojected{});
+    }
     gmodel_traits_each<vp_trait_plane_x<T>, vh_trait<T>>(
             [&](int i, T value) {
                 if (directions[i] == VPT_DIRECTION_PLANE)
@@ -496,6 +545,57 @@ gmodel_disk_velocity(
             },
             pt, ht, rnidx, rnodes, nrnodes, x, y, r, theta, h,
             Unprojected{});
+}
+
+// The speed on the line of sight of the velocity traits of a disk at the
+// point (x, y) of its frame, with a pressure support: that of
+// gmodel_disk_los_velocity, its tangential traits as one, corrected for
+// it (see gmodel_disk_tangential)
+template<typename T> constexpr T
+gmodel_disk_los_velocity_pressure(
+        const DiskArgs<T>& a, int rnidx,
+        T x, T y, T r, T theta, T h, T z, T incl)
+{
+    T sum = 0;
+    T vtan = 0;
+    gmodel_traits_each<vp_trait<T>, vh_trait<T>>(
+            [&](int i, T value) {
+                if (a.vpt_directions[i] == VPT_DIRECTION_TAN)
+                    vtan += value;
+                else
+                    sum += vp_disk_project(
+                            value, a.vpt_directions[i], r, theta, z, incl);
+            },
+            a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes, x, y, r, theta, h,
+            Unprojected{});
+    return sum + vp_disk_project(
+            gmodel_disk_tangential(vtan, rnidx, a.rnodes, a.vpress, r),
+            VPT_DIRECTION_TAN, r, theta, z, incl);
+}
+
+// The speed on the line of sight of the velocity traits of a disk at the
+// point (x, y) of its frame, at the radius r and the azimuth theta, with
+// its height traits at the height h, seen at the inclination incl
+// (radians), each projected by its direction at the height z (see
+// vp_disk_project); with a pressure support, the tangential ones as one,
+// corrected for it (see gmodel_disk_los_velocity_pressure), in the kernels
+// of the full kinematics (see gmodel_disk_full_kinematics)
+template<bool FullKinematics, typename T> constexpr T
+gmodel_disk_los_velocity(
+        const DiskArgs<T>& a, int rnidx,
+        T x, T y, T r, T theta, T h, T z, T incl)
+{
+    if constexpr (FullKinematics) {
+        if (a.vpress)
+            return gmodel_disk_los_velocity_pressure(
+                    a, rnidx, x, y, r, theta, h, z, incl);
+    }
+    return gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
+            a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes, x, y, r, theta, h,
+            [&](int i, T value) {
+                return vp_disk_project(
+                        value, a.vpt_directions[i], r, theta, z, incl);
+            });
 }
 
 // The velocity of the velocity traits of a cone at the point (x, y, z) of
@@ -532,13 +632,17 @@ gmodel_ellipsoid_dispersion(T srad, T stan, T sver, T theta, T incl)
     return std::sqrt(rad * rad + tan * tan + ver * ver);
 }
 
-// Whether the dispersion of a disk is anisotropic: its dispersion traits
-// have directions, or the dispersion of its equilibrium is along z only
-// (see gmodel_disk_dispersion)
+// Whether a disk takes the kernels of the full kinematics (their template
+// parameter FullKinematics), which alone have the code of its rarer terms,
+// so that the other kernels have none of its registers and local memory
+// (on a GPU): its dispersion is anisotropic (its dispersion traits have
+// directions, or the dispersion of its equilibrium is along z only, see
+// gmodel_disk_dispersion), or its pressure support corrects its tangential
+// traits (see gmodel_disk_los_velocity)
 template<typename T> constexpr bool
-gmodel_disk_anisotropic(const DiskArgs<T>& a)
+gmodel_disk_full_kinematics(const DiskArgs<T>& a)
 {
-    return a.dpt_directions || a.deq_vertical;
+    return a.dpt_directions || a.deq_vertical || a.vpress;
 }
 
 // The velocity dispersion of a disk on the line of sight at the point
@@ -546,16 +650,15 @@ gmodel_disk_anisotropic(const DiskArgs<T>& a)
 // it, seen at the inclination incl (radians): its dispersion traits (each
 // polar trait times its height trait), positive, with the dispersion of
 // its vertical equilibrium in quadrature. Isotropic, the absolute value of
-// the sum of the traits. Anisotropic (see gmodel_disk_anisotropic), the
-// velocity ellipsoid: the dispersion along each direction (radial,
+// the sum of the traits. In the kernels of the full kinematics (see
+// gmodel_disk_full_kinematics), the velocity ellipsoid (of an isotropic
+// dispersion, the same): the dispersion along each direction (radial,
 // tangential, vertical) is the absolute value of the sum of the isotropic
 // traits and those along it, with the equilibrium along every direction
 // or along z only (deq_vertical), and that on the line of sight is
 // sqrt(s_tan^2 cos^2(theta) sin^2(incl) + s_rad^2 sin^2(theta) sin^2(incl)
-// + s_ver^2 cos^2(incl)). Anisotropic is a template parameter, so that the
-// kernels of isotropic disks have none of the code of the ellipsoid (nor
-// its registers and local memory, on a GPU).
-template<bool Anisotropic, typename T> constexpr T
+// + s_ver^2 cos^2(incl)).
+template<bool FullKinematics, typename T> constexpr T
 gmodel_disk_dispersion(
         const DiskArgs<T>& a, int rnidx, T x, T y, T r, T theta, T h, T incl)
 {
@@ -563,7 +666,7 @@ gmodel_disk_dispersion(
     // Ideally, we want the caller to never use parameter values that result in
     // a negative dispersion. Unfortunately, this is hard to achieve.
     // Forcing a positive dispersion is a reasonable solution.
-    if constexpr (!Anisotropic)
+    if constexpr (!FullKinematics)
     {
         const T dvalue = std::abs(gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
                 a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
@@ -869,14 +972,15 @@ gmodel_fields_vref(const DiskArgs<T>& a)
 // opacity dims the disk (g.opacity is not null), HasFields whether it
 // writes the fields of the march instead of its light (f.fields is not
 // null), HasLineOpacity whether they have its line opacity (a.opt has
-// traits), Anisotropic whether its dispersion is anisotropic (see
-// gmodel_disk_dispersion), and HasVectors whether it writes its velocity
+// traits), FullKinematics whether it has the rarer terms of the
+// kinematics (see gmodel_disk_full_kinematics), and HasVectors whether it writes its velocity
 // as a vector (g.vvec_cmp is not null): template parameters, so that the
 // other kernels have none of their code (nor its registers and local
 // memory, on a GPU).
 template<
         auto AtomicAddFunT, bool HasOpacity, bool HasFields,
-        bool HasLineOpacity, bool Anisotropic, bool HasVectors, typename T>
+        bool HasLineOpacity, bool FullKinematics, bool HasVectors,
+        typename T>
 constexpr void
 gmodel_mcdisk_evaluate_cloud(
         int ci, const DiskArgs<T>& a, const GridArgs<T>& g,
@@ -1002,13 +1106,8 @@ gmodel_mcdisk_evaluate_cloud(
     const int z = pz;
 
     // Velocity traits: their speeds, projected on the line of sight
-    vvalue = gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
-            a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
-            xd, yd, rd, theta, height,
-            [&](int i, T value) {
-                return vp_disk_project(
-                        value, a.vpt_directions[i], rd, theta, height, incli);
-            });
+    vvalue = gmodel_disk_los_velocity<FullKinematics>(
+            a, rnidx, xd, yd, rd, theta, height, height, incli);
 
     // Apply systemic velocity
     vvalue += vsysi;
@@ -1018,13 +1117,14 @@ gmodel_mcdisk_evaluate_cloud(
     if (HasVectors) {
         gmodel_disk_velocity(
                 vvec, a.vpt, a.vht, a.vpt_directions, rnidx, a.rnodes,
-                a.nrnodes, xd, yd, rd, theta, height, height, incli);
+                a.nrnodes, xd, yd, rd, theta, height, height, incli,
+                FullKinematics ? a.vpress : nullptr);
         gmodel_vector_to_grid(vvec, posai, incli, g);
     }
 
     // Dispersion traits, and the dispersion of the vertical equilibrium,
     // on the line of sight
-    dvalue = gmodel_disk_dispersion<Anisotropic>(
+    dvalue = gmodel_disk_dispersion<FullKinematics>(
             a, rnidx, xd, yd, rd, theta, height, incli);
 
     // The opacity in front of the light, and the light that it lets
@@ -1240,11 +1340,11 @@ gmodel_smdisk_size_z(const DiskArgs<T>& a, const GridArgs<T>& g)
 // it must be atomic if they are evaluated in parallel. Only this voxel
 // writes to its other outputs. HasOpacity is whether opacity dims the disk,
 // HasFields whether it writes the fields of the march, HasLineOpacity
-// whether they have its line opacity, and Anisotropic whether its
-// dispersion is anisotropic (see gmodel_mcdisk_evaluate_cloud).
+// whether they have its line opacity, and FullKinematics whether it has
+// the rarer terms of the kinematics (see gmodel_mcdisk_evaluate_cloud).
 template<
         auto AddFunT, bool HasOpacity, bool HasFields, bool HasLineOpacity,
-        bool Anisotropic, typename T>
+        bool FullKinematics, typename T>
 constexpr void
 gmodel_smdisk_evaluate_spaxel(
         int x, int y, int z, const DiskArgs<T>& a, const GridArgs<T>& g,
@@ -1367,15 +1467,9 @@ gmodel_smdisk_evaluate_spaxel(
     }
 
     // Velocity traits: their speeds, projected on the line of sight
-    vvalue = gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
-            a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
-            xn, yn, rn, theta, zn,
-            [&](int i, T value) {
-                // (a thin disk is in its plane: zn is not a height)
-                return vp_disk_project(
-                        value, a.vpt_directions[i], rn, theta,
-                        is_thin ? T(0) : zn, incli);
-            });
+    // (a thin disk is in its plane: zn is not a height)
+    vvalue = gmodel_disk_los_velocity<FullKinematics>(
+            a, rnidx, xn, yn, rn, theta, zn, is_thin ? T(0) : zn, incli);
 
     // Apply systemic velocity
     vvalue += vsysi;
@@ -1386,13 +1480,13 @@ gmodel_smdisk_evaluate_spaxel(
         gmodel_disk_velocity(
                 vvec, a.vpt, a.vht, a.vpt_directions, rnidx, a.rnodes,
                 a.nrnodes, xn, yn, rn, theta, zn, is_thin ? T(0) : zn,
-                incli);
+                incli, FullKinematics ? a.vpress : nullptr);
         gmodel_vector_to_grid(vvec, posai, incli, g);
     }
 
     // Dispersion traits, and the dispersion of the vertical equilibrium,
     // on the line of sight
-    dvalue = gmodel_disk_dispersion<Anisotropic>(
+    dvalue = gmodel_disk_dispersion<FullKinematics>(
             a, rnidx, xn, yn, rn, theta, zn, incli);
 
     // The opacity in front of the light (that of a thin disk is a layer,

@@ -9,7 +9,7 @@ namespace gbkfit::cuda::kernels {
 
 template<
         typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
-        bool Anisotropic, bool HasVectors>
+        bool FullKinematics, bool HasVectors>
 __global__ void
 gmodel_mcdisk_evaluate(
         GBKFIT_GRID_CONSTANT const DiskArgs<T> a,
@@ -26,7 +26,7 @@ gmodel_mcdisk_evaluate(
     // gmodel_mcdisk_evaluate_cloud)
     gbkfit::gmodel_mcdisk_evaluate_cloud<
             atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
-            Anisotropic, HasVectors>(tid, a, g, mc, f);
+            FullKinematics, HasVectors>(tid, a, g, mc, f);
 }
 
 template<typename T> __global__ void
@@ -44,7 +44,7 @@ gmodel_mcdisk_fields_moments(DiskArgs<T> a, GridArgs<T> g, FieldsArgs<T> f)
 
 template<
         typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
-        bool Anisotropic>
+        bool FullKinematics>
 __global__ void
 gmodel_smdisk_evaluate(
         GBKFIT_GRID_CONSTANT const DiskArgs<T> a,
@@ -67,7 +67,7 @@ gmodel_smdisk_evaluate(
 
     gbkfit::gmodel_smdisk_evaluate_spaxel<
             atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
-            Anisotropic>(x, y, z, a, g, f);
+            FullKinematics>(x, y, z, a, g, f);
 }
 
 template<typename T, bool HasOpacity, bool HasFields>

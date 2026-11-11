@@ -49,6 +49,13 @@ struct DiskArgs
     // quadrature, along every direction or along z only (deq_vertical)
     const T* deq = nullptr;
     bool deq_vertical = false;
+
+    // The pressure support of the disk at each node, (R / rho) d(rho
+    // sigma^2)/dR ((km/s)^2), if its fitted tangential velocity traits take
+    // it: their speed v is sign(v) sqrt(max(0, v^2 + vpress)), the
+    // circular velocity of the traits corrected for the pressure (see
+    // gmodel_disk_tangential)
+    const T* vpress = nullptr;
 };
 
 // The kinds of traits of a disk: the trait sets of DiskArgs
