@@ -340,7 +340,7 @@ class DiskStage(ComponentStage):
         the radii, if any). With extra outputs, its table (see state).
         """
         disk = self._disk
-        kpc_per_arcsec = mass.kpc_per_arcsec
+        kpc_per_arcsec = mass.context.kpc_per_arcsec
         R = np.asarray(radii, dtype=float) * kpc_per_arcsec
         vcirc2 = mass.field.vcirc2(R)
         v2 = vcirc2
@@ -386,7 +386,7 @@ class DiskStage(ComponentStage):
         v(R, 0) is 0.
         """
         disk = self._disk
-        kpc_per_arcsec = mass.kpc_per_arcsec
+        kpc_per_arcsec = mass.context.kpc_per_arcsec
         r = np.asarray(disk.subrnodes(), dtype=float)
         z = np.array(list(heights.values()))
         R = r * kpc_per_arcsec
@@ -453,7 +453,7 @@ class DiskStage(ComponentStage):
             surface = _fluid_surface_density(
                 mass, self._fluid, radii)
             sigma = _sheet_dispersion(
-                radii, lit, heights * mass.kpc_per_arcsec, surface)
+                radii, lit, heights * mass.context.kpc_per_arcsec, surface)
             taken = dict(surface_density=surface * u.solMass / u.kpc ** 2)
         if out_extra is not None:
             out_extra.add(
@@ -514,7 +514,7 @@ class DiskStage(ComponentStage):
         trait = disk.height_equilibrium()
         radii = np.asarray(disk.subrnodes())
         z = trait.heights()
-        kpc = mass.kpc_per_arcsec
+        kpc = mass.context.kpc_per_arcsec
         sigma = dispersion(disk, self._plan, values, radii, direction='ver')
         with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
             fine = np.linspace(0, trait.zmax(), 4 * (len(z) - 1) + 1)
@@ -593,7 +593,7 @@ class DiskStage(ComponentStage):
             scale = np.divide(
                 sigma ** 2, np.pi * G * surface,
                 out=np.full_like(sigma, np.inf), where=surface > 0) \
-                / mass.kpc_per_arcsec
+                / mass.context.kpc_per_arcsec
             taken = dict(surface_density=surface * u.solMass / u.kpc ** 2)
             why = "the surface density of its fluid is not positive"
         else:
@@ -630,7 +630,7 @@ def _fluid_surface_density(
     fluid of a disk, the mass disks of the given names (see MassLinks),
     their sum.
     """
-    R = radii * mass.kpc_per_arcsec
+    R = radii * mass.context.kpc_per_arcsec
     return sum(
         mass.model.component(name).surface_density(
             R, mass.model.component_params(name, mass.params),
@@ -709,7 +709,7 @@ def _galaxy_dispersion(
     the vertical force of the mass of its galaxy (see jeans_dispersions);
     at the centre, the value at the next subnode.
     """
-    kpc = mass.kpc_per_arcsec
+    kpc = mass.context.kpc_per_arcsec
 
     def vertical_force(R: np.ndarray, z: np.ndarray) -> np.ndarray:
         R, z = np.broadcast_arrays(R, z)

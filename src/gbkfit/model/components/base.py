@@ -483,15 +483,15 @@ class GalaxyMass:
     """
     The mass of a galaxy in one evaluation: its model, the values of the
     parameters of the mass and the gravity of the galaxy, the context of
-    the mass, the length of an arcsec in the galaxy (kpc; None without a
-    distance, which only what takes it needs, see Capability.DISTANCE),
-    and the field of the mass in the gravity of the galaxy (see Gravity;
-    None while the mass is built, see ComponentStage.thickness).
+    the mass (with the length of an arcsec in the galaxy, kpc; None
+    without a distance, which only what takes it needs, see
+    Capability.DISTANCE), and the field of the mass in the gravity of the
+    galaxy (see Gravity; None while the mass is built, see
+    ComponentStage.thickness).
     """
     model: 'MassModel'
     params: ParamValues
     context: 'MassContext'
-    kpc_per_arcsec: float | None
     field: 'GravityField'
 
 

@@ -387,7 +387,7 @@ class GalaxyStage:
         # (the thicknesses that the mass sets of the components that it
         # follows, of the surface densities of their fluids, which do not
         # take them: then the densities of those thicknesses)
-        built = GalaxyMass(mass_model, view, context, scale, None)
+        built = GalaxyMass(mass_model, view, context, None)
         thicknesses = {
             i: self._stages[i].thickness(lights[i], built)
             for i in self._followed}
@@ -397,7 +397,7 @@ class GalaxyStage:
                     lights[i] | thicknesses[i], scale)
                 for i in self._followed})
         return GalaxyMass(
-            mass_model, view, context, scale,
+            mass_model, view, context,
             galaxy.gravity().field(mass_model, view, context))
 
     def _groundwork(

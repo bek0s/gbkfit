@@ -327,7 +327,7 @@ def test_the_mass_of_a_sersic_spheroid_is_that_of_its_light():
     # n re^2 ie e^b b^-2n Gamma(2n) arcsec^2, in kpc: the mass spheroid of
     # that Sersic profile and shape, to any radius
     mass, stars = bulge_mass(BULGE, BULGE_PROPERTIES)
-    kpc = mass.kpc_per_arcsec
+    kpc = mass.context.kpc_per_arcsec
     upsilon = BULGE_PROPERTIES['mass_stars_upsilon']
     light = sersic_light(3, 2, 1.5)
     same = MassSpheroid('same', ProfileSersic(), ShapeFlattened())
@@ -360,7 +360,7 @@ def test_the_mass_of_an_mge_is_that_of_its_gaussians():
         if not name.startswith('bulge_')} | dict(
         bulge_i0=[3, 1], bulge_sigma=[0.5, 2], bulge_q=[1, 0.5])
     mass, stars = bulge_mass(bulge, properties)
-    kpc = mass.kpc_per_arcsec
+    kpc = mass.context.kpc_per_arcsec
     upsilon = properties['mass_stars_upsilon']
     own = dict(upsilon=upsilon)
     masses = [upsilon * 2 * np.pi * i0 * (s * kpc) ** 2
@@ -415,13 +415,13 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
     light = {name: value for name, value in BULGE_PROPERTIES.items()
              if name != 'mass_stars_upsilon'}
     mass, _ = bulge_mass(BULGE, BULGE_PROPERTIES)
-    total = sersic_light(3, 2, 1.5) * mass.kpc_per_arcsec ** 2
+    total = sersic_light(3, 2, 1.5) * mass.context.kpc_per_arcsec ** 2
     followed = evaluate(STARS, dict(mass_stars_upsilon=upsilon))
     same = evaluate(
         dict(type='spheroid', name='same', profile=dict(type='sersic'),
              shape=dict(type='flattened')),
         dict(mass_same_log_m=np.log10(upsilon * total),
-             mass_same_re=1.5 * mass.kpc_per_arcsec, mass_same_n=3,
+             mass_same_re=1.5 * mass.context.kpc_per_arcsec, mass_same_n=3,
              mass_same_q=0.6))
     np.testing.assert_allclose(
         followed, same, rtol=1e-5, atol=1e-6 * same.max())
@@ -488,7 +488,7 @@ def test_the_jeans_tables_of_a_gaussian_around_a_point_mass_are_exact():
     galaxy = jeans_galaxy()
     state = galaxy.plan_stage().evaluate(JEANS_PROPERTIES)
     tables = state.states[0]
-    kpc = state.mass.kpc_per_arcsec
+    kpc = state.mass.context.kpc_per_arcsec
     R, z = table_points(tables)
     r = np.hypot(R, z) * kpc
     exact = gaussian_sigma(r, S * kpc)
@@ -552,7 +552,7 @@ def test_the_jeans_tables_of_a_rotating_flattened_spheroid():
         stars_q=[q], stars_beta_z=beta_z, stars_kappa=kappa)
     state = jeans_galaxy().plan_stage().evaluate(properties)
     tables = state.states[0]
-    k = state.mass.kpc_per_arcsec
+    k = state.mass.context.kpc_per_arcsec
     gm = G * 10 ** LOG_M
     s = S * k
 
@@ -668,7 +668,7 @@ def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
     velocity = (np.arange(181) - 90) * 10.0
     pixels = (np.arange(32) - 15.5) * 2
     galaxy = jeans_galaxy()
-    kpc = galaxy.plan_stage().mass(properties).kpc_per_arcsec
+    kpc = galaxy.plan_stage().mass(properties).context.kpc_per_arcsec
     s, gm = S * kpc, G * 10 ** LOG_M
     for ix in (19, 21, 24, 27):
         spectrum = cube[:, 15, ix]

@@ -391,7 +391,7 @@ class JeansMotion(SpheroidMotion):
                 "the Jeans kinematics of a spheroid need the mass of its "
                 "galaxy")
         return jeans_forces(
-            light, self._rmax, mass.field, mass.kpc_per_arcsec)
+            light, self._rmax, mass.field, mass.context.kpc_per_arcsec)
 
     def state(
             self, values: ParamValues, groundwork: object

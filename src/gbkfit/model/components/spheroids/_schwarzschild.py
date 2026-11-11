@@ -241,7 +241,7 @@ def orbit_library(
     rng = np.random.default_rng(kinematics.seed())
     count = kinematics.norbits()
     table = potential_table(
-        mass.field, mass.kpc_per_arcsec,
+        mass.field, mass.context.kpc_per_arcsec,
         (rmax * _TABLE_SPAN[0], rmax * _TABLE_SPAN[1]),
         _TABLE_RADII, _TABLE_ANGLES)
     nodes = table.lnr_zero + table.lnr_step * np.arange(len(table.values))
@@ -270,7 +270,7 @@ def orbit_library(
     return OrbitLibraryState(
         table, np.hstack((positions, velocities)), shares / shares.sum(),
         cell_edges, _cell_light(light_terms, *cell_edges),
-        kinematics.turns(), mass.kpc_per_arcsec)
+        kinematics.turns(), mass.context.kpc_per_arcsec)
 
 
 def _angle_weights(table: PotentialTable) -> np.ndarray:
