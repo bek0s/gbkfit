@@ -60,10 +60,8 @@ class RegionSumsPlan:
         # The chunks of each region: from each start, at most _CHUNK
         # pixels to its end (the regions are contiguous in the matrix, and
         # empty regions have none)
-        starts, ends = indptr[:-1], indptr[1:]
-        chunk_starts = [np.arange(s, e, _CHUNK) for s, e in zip(starts, ends)]
-        counts = np.array([len(c) for c in chunk_starts])
-        chunk_starts = np.concatenate(chunk_starts).astype(np.int64)
+        starts = indptr[:-1].astype(np.int64)
+        counts = (indptr[1:] - starts + _CHUNK - 1) // _CHUNK
         self._chunked = bool(np.any(counts > 1))
         if not self._chunked:
             self._stages = [(
@@ -71,15 +69,19 @@ class RegionSumsPlan:
                 to_device(weights.indices, np.int32),
                 to_device(weights.data, dtype))]
             return
-        nchunks = len(chunk_starts)
-        last = ends[np.repeat(np.arange(self._nregions), counts)][-1]
-        # Stage 1: the sums of the chunks; stage 2: the sums of the chunks
-        # of each region
+        # (the chunks of region i are bounds[i] to bounds[i + 1]; chunk k
+        # of a region starts k _CHUNK pixels after it)
+        bounds = np.concatenate(([0], np.cumsum(counts)))
+        nchunks = int(bounds[-1])
+        chunk_starts = np.repeat(starts, counts) + _CHUNK * (
+            np.arange(nchunks) - np.repeat(bounds[:-1], counts))
+        # Stage 1: the sums of the chunks (the last ends with the matrix);
+        # stage 2: the sums of the chunks of each region
         self._stages = [
-            (to_device(np.append(chunk_starts, last), np.int32),
+            (to_device(np.append(chunk_starts, indptr[-1]), np.int32),
              to_device(weights.indices, np.int32),
              to_device(weights.data, dtype)),
-            (to_device(np.concatenate(([0], np.cumsum(counts))), np.int32),
+            (to_device(bounds, np.int32),
              to_device(np.arange(nchunks), np.int32),
              to_device(np.ones(nchunks), dtype))]
         self._nchunks = nchunks

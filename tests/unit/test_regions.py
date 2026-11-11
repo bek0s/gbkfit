@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import scipy.sparse
 
 from gbkfit.grid import make_grid
 from gbkfit.region import (
@@ -162,6 +163,13 @@ def test_bins_are_checked(index, message):
         RegionsBins(index)
 
 
+def test_pixels_of_no_bin_can_be_nan():
+    # (as maps of bins made from the tables of VorBin or GIST)
+    bins = RegionsBins(np.array([[0, np.nan], [1, 0]]))
+    np.testing.assert_array_equal(bins.index(), [[0, -1], [1, 0]])
+    assert bins.nregions() == 2
+
+
 def test_region_sums(driver):
     # The native sums of the regions of each channel of a cube equal the
     # product of the weights and the cube
@@ -179,6 +187,24 @@ def test_region_sums(driver):
     expected = (weights @ cube.reshape(7, -1).T).T
     np.testing.assert_allclose(
         driver.mem_copy_d2h(d_out), expected, rtol=1e-5)
+
+
+def test_region_sums_of_chunks_and_empty_regions(driver):
+    # Regions of 0 to 1000 pixels (in chunks of 256), the last ones empty
+    from gbkfit.observation.observables._region_sums import RegionSumsPlan
+    rng = np.random.default_rng(1)
+    lengths = np.append(rng.integers(0, 1000, 50), [0, 0])
+    indptr = np.concatenate(([0], np.cumsum(lengths)))
+    weights = scipy.sparse.csr_array(
+        (rng.random(indptr[-1]), rng.integers(0, 600, indptr[-1]), indptr),
+        shape=(len(lengths), 600))
+    cube = rng.random((3, 20, 30))
+    plan = RegionSumsPlan(weights, driver, np.float64)
+    d_out = driver.mem_alloc_d((3, len(lengths)), np.float64)
+    plan.evaluate(driver.mem_copy_h2d(cube), d_out)
+    np.testing.assert_allclose(
+        driver.mem_copy_d2h(d_out), (weights @ cube.reshape(3, -1).T).T,
+        rtol=1e-12)
 
 
 def test_aperture_position_angle_is_north_through_east():

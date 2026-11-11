@@ -149,7 +149,9 @@ class Data:
     mask : ndarray, optional
         The mask: 0 for the values to leave out; by default, none.
     error : ndarray, optional
-        The error of each value (its standard deviation).
+        The error of each value (its standard deviation); any value
+        (e.g. -1) where the values are masked, not finite or outside the
+        footprint.
     unit : str or astropy.units.UnitBase, optional
         The unit of the values and the errors (see
         gbkfit.units.parse_unit).
@@ -169,7 +171,8 @@ class Data:
     Raises
     ------
     ValueError
-        If the mask is not finite, an error is negative, the footprint has
+        If the mask is not finite, an error of a value that is finite, not
+        masked and inside the footprint is negative, the footprint has
         values other than 0 and 1, the arrays are not of one shape, the
         unit is not a unit, the widths of the beam are not positive, or a
         correlation varies.
@@ -211,17 +214,21 @@ class Data:
                 raise ValueError(
                     "the footprint must be 1 where the instrument looked and "
                     "0 elsewhere")
-        if error is not None and np.any(error < 0):
-            raise ValueError(
-                f"errors cannot be negative; {np.count_nonzero(error < 0)} "
-                f"are, down to {np.nanmin(error):g}")
         # The total mask: the values that are finite, not masked, and
         # with a finite, positive error, where the instrument looked
         total_mask = np.isfinite(data) & (mask != 0)
-        if error is not None:
-            total_mask &= np.isfinite(error) & (error > 0)
         if footprint is not None:
             total_mask &= footprint != 0
+        if error is not None:
+            # (negative errors are refused only where the values count: an
+            # error map can mark the others with one, e.g. -1)
+            negative = total_mask & (error < 0)
+            if np.any(negative):
+                raise ValueError(
+                    f"errors cannot be negative; "
+                    f"{np.count_nonzero(negative)} are, down to "
+                    f"{error[negative].min():g}")
+            total_mask &= np.isfinite(error) & (error > 0)
         data[~total_mask] = np.nan
         if error is not None:
             error[~total_mask] = np.nan

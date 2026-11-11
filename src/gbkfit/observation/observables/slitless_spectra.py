@@ -19,7 +19,8 @@ from gbkfit.config import (
     BasicParser, Serializable, Unit, check_options)
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
-from gbkfit.grid import Grid, SpectralAxis, make_convention
+from gbkfit.grid import (
+    Grid, SpectralAxis, make_convention, vacuum_wavelength)
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import iterutils
@@ -140,12 +141,34 @@ def pixel_footprints(
     pixel_footprint), from starts to ends (of shape (n, 2), pixels), of
     the given sizes (of shape (n, 2); pixels by default), on pixels of a
     response: the segment of each fraction, its pixel (p, q) and the
-    fraction.
+    fraction (none, of no segments).
+
+    Parameters
+    ----------
+    starts, ends : array_like
+        The ends of the segments (x, y; of shape (n, 2)).
+    sizes : array_like, optional
+        The widths of the boxes (pixels; of shape (n, 2)); a pixel by
+        default.
+    response : str, optional
+        The response of the pixels: 'box' (the default) or 'triangle'.
+
+    Returns
+    -------
+    index : np.ndarray
+        The segment of each fraction (integers).
+    p, q : np.ndarray
+        The pixel of each fraction (integers).
+    weights : np.ndarray
+        The fractions.
     """
     starts = np.asarray(starts, dtype=float).reshape(-1, 2)
     ends = np.asarray(ends, dtype=float).reshape(-1, 2)
     sizes = np.ones_like(starts) if sizes is None \
         else np.asarray(sizes, dtype=float).reshape(-1, 2)
+    if not len(starts):
+        return (np.empty(0, dtype=int), np.empty(0, dtype=int),
+                np.empty(0, dtype=int), np.empty(0))
     out: list[list[np.ndarray]] = [[], [], [], []]
     for first in range(0, len(starts), _FOOTPRINT_CHUNK):
         chunk = slice(first, first + _FOOTPRINT_CHUNK)
@@ -320,10 +343,11 @@ class SlitlessSpectra(Observable):
     land on the image (the reach of the trace at the corners of the image,
     then at those of that sky: the trace changes slowly across the
     detector). The trace (see Trace) gives the offsets of each wavelength
-    from the place of its undispersed light: the same at every place (see
-    TracePolynomial), or varying across the detector (see
-    TraceGrismConf). The spectral axis covers the lines; the continuum is
-    not modelled.
+    (in vacuum: of a rest wavelength in air, the channels are taken at
+    their wavelengths in vacuum) from the place of its undispersed light:
+    the same at every place (see TracePolynomial), or varying across the
+    detector (see TraceGrismConf). The spectral axis covers the lines; the
+    continuum is not modelled.
 
     An aperture in front of the disperser (e.g. the shutters of JWST
     NIRSpec; see SlitlessAperture) lets only the light of its open parts
@@ -634,12 +658,18 @@ class SlitlessSpectra(Observable):
 
     def _channel_edges(self) -> np.ndarray:
         """
-        Return the wavelengths (m) of the edges of each channel of the
-        model (one row each) at their velocities: rest (1 + v / c) of
-        optical velocities, rest exp(v / c) of log ones.
+        Return the wavelengths (m, in vacuum, as the traces take them) of
+        the edges of each channel of the model (one row each) at their
+        velocities: rest (1 + v / c) of optical velocities, rest exp(v /
+        c) of log ones, of the rest wavelength in vacuum.
         """
         spectral = self._spectral
         step, rest = spectral.step(), spectral.rest().value
+        if spectral.medium() == 'air':
+            # (the axis takes the refractive index of air at the rest
+            # wavelength, see VelocityConvention: the wavelengths in air
+            # and in vacuum are the same multiples of their rests)
+            rest = vacuum_wavelength(rest)
         centres = spectral.rval() + step * (
             np.arange(spectral.size()) - spectral.rpix())
         velocities = centres[:, None] + np.array([-0.5, 0.5]) * step
@@ -743,6 +773,10 @@ class SlitlessSpectra(Observable):
         for exposure in self._exposures:
             index, parts, part_sizes = self._open_parts(
                 base, centres + self._pixels(exposure.sky_offset()), sizes)
+            if not len(index):
+                # (no part of the sky of the cube is open in this exposure,
+                # whose light cannot land on the image; see _sky)
+                continue
             matrix = matrix + self._footprints_matrix(
                 edges, nx * ny, base[index], index, parts, part_sizes,
                 self._pixels(exposure.image_offset()), exposure.weight())

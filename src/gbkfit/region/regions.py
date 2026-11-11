@@ -92,11 +92,11 @@ class RegionsBins(Regions):
     """
     Bins of the pixels of a spatial grid (as Voronoi bins), given by the
     bin of each pixel. The bin of each pixel (index) is 0 to n - 1, or
-    negative for the pixels in no bin. Each bin is the sum of its pixels;
-    of spectra, optionally of those valid in each channel (valid: 1 or 0,
-    of shape (channels, ny, nx), e.g. those of a cube of which some
-    spaxels are masked in some channels; see prep_region_spectra), which
-    the model sums too.
+    negative or not finite (e.g. NaN) for the pixels in no bin. Each bin
+    is the sum of its pixels; of spectra, optionally of those valid in
+    each channel (valid: 1 or 0, of shape (channels, ny, nx), e.g. those
+    of a cube of which some spaxels are masked in some channels; see
+    prep_region_spectra), which the model sums too.
     """
 
     @staticmethod
@@ -197,7 +197,10 @@ class RegionsBins(Regions):
             raise ValueError(
                 f"the bins of the pixels must be an image; they have "
                 f"{index.ndim} axes")
-        if not np.all(np.isfinite(index)) or np.any(index != np.round(index)):
+        # (maps of bins, e.g. made from the tables of VorBin or GIST, often
+        # mark the pixels in no bin with NaN)
+        index = np.where(np.isfinite(index), index, -1)
+        if np.any(index != np.round(index)):
             raise ValueError("the bins of the pixels must be integers")
         index = index.astype(np.int64)
         nbins = int(index.max()) + 1

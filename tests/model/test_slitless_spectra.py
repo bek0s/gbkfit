@@ -7,11 +7,12 @@ by the trace of the disperser.
 import copy
 
 from gbkfit.config import ConfigError
-from gbkfit.grid import SpectralAxis
+from gbkfit.grid import SpectralAxis, air_refractive_index
 import gbkfit.params
 import numpy as np
 import pytest
-from gbkfit.observation.observables.slitless_spectra import pixel_footprint
+from gbkfit.observation.observables.slitless_spectra import (
+    pixel_footprint, pixel_footprints)
 from modelutils import group_plan, observation_group
 
 
@@ -103,6 +104,11 @@ def test_pixel_footprint_on_resampled_pixels_matches_sampling():
                 + vy - 0.5)
     sampled = [np.mean((x == a) & (y == b)) for a, b in zip(p, q)]
     np.testing.assert_allclose(sampled, weights, atol=3e-3)
+
+
+def test_pixel_footprints_of_no_boxes_are_none():
+    footprints = pixel_footprints(np.empty((0, 2)), np.empty((0, 2)))
+    assert [a.shape for a in footprints] == [(0,)] * 4
 
 
 @pytest.mark.parametrize('psf', [None, dict(type='gauss', sigma=1.5)])
@@ -220,6 +226,10 @@ def test_grismconf_traces_from_files(tmp_path):
     with pytest.raises(ValueError, match="no order '-1'"):
         TraceGrismConf.from_file(str(path), order=-1)
     path.write_text("# Wavelength unit: Angstrom\nBEAM_+1\n")
+    with pytest.raises(ValueError, match="not micron"):
+        TraceGrismConf.from_file(str(path))
+    # (a comment of the unit without a space after the '#')
+    path.write_text("#wavelength unit: nm\nBEAM_+1\n")
     with pytest.raises(ValueError, match="not micron"):
         TraceGrismConf.from_file(str(path))
 
@@ -378,6 +388,33 @@ def test_nods_subtract_the_other_exposures(driver):
         exposures=dict(image_offset=[0, 1])))
     np.testing.assert_allclose(
         up[1:], evaluate(driver, SLITLESS)[:-1], rtol=1e-5, atol=1e-9)
+
+
+def test_exposures_whose_light_misses_the_image_add_nothing(driver):
+    # Behind shutters, an exposure of the sky moved 100 pixels up, with
+    # its image moved back down, has none of the sky of the cube open in
+    # the aperture: none of its light lands on the image
+    shutters = SLITLESS | dict(aperture=dict(
+        type='shutters', size=[3, 2], pitch=3, count=3))
+    missing = shutters | dict(exposures=[
+        dict(), dict(sky_offset=[0, 100], image_offset=[0, -100])])
+    np.testing.assert_allclose(
+        evaluate(driver, missing), evaluate(driver, shutters),
+        rtol=1e-6, atol=1e-9)
+
+
+def test_slitless_spectra_of_air_wavelengths_take_traces_in_vacuum(driver):
+    # The traces take wavelengths in vacuum: the channels of a rest in air
+    # are at those in vacuum, so an axis of the wavelength in air of 4 um
+    # in vacuum gives the image of 4 um in vacuum (not one moved by
+    # 2.7e-4 of 4 um, 2.7 pixels)
+    air = 4e-6 / air_refractive_index(4e-6)
+    in_air = SLITLESS | dict(spectral=dict(
+        size=NZ, step=STEP, rest=f'{air!r} m', medium='air'))
+    expected = evaluate(driver, SLITLESS)
+    np.testing.assert_allclose(
+        evaluate(driver, in_air), expected, rtol=1e-6,
+        atol=1e-9 * expected.max())
 
 
 def test_an_aperture_lets_the_spectrograph_blur_the_spectra(driver):

@@ -182,9 +182,11 @@ def _add_moments(table: Table, sums: np.ndarray, volume: np.ndarray) -> None:
     with np.errstate(divide='ignore', invalid='ignore'):
         mean = sums[:, 1:] / light[:, None]
     vr, vR, vphi, vr2, vtheta2, vphi2, vR2, vz2 = mean.T
-    sigma_r2 = vr2 - vr ** 2
-    sigma_phi2 = vphi2 - vphi ** 2
-    sigma_R2 = vR2 - vR ** 2
+    # (rounding can leave the variances of cold cells, <v^2> - <v>^2,
+    # slightly negative; the NaN of cells without light stay)
+    sigma_r2 = np.maximum(vr2 - vr ** 2, 0)
+    sigma_phi2 = np.maximum(vphi2 - vphi ** 2, 0)
+    sigma_R2 = np.maximum(vR2 - vR ** 2, 0)
     table['light'] = light
     table['density'] = light / volume / u.arcsec ** 3
     table['v_phi'] = vphi * _KMS

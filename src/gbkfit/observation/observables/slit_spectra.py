@@ -245,6 +245,7 @@ class SlitSpectra(Observable):
         # over the slit)
         size, step = self.size(), self.step()
         rpix, rval = self.rpix(), self.rval()
+        spectral = self.spectral()
         across = oversampling[0] * max(1, round(self._slit_width / step[0]))
         dcube = _dcube.DCube(
             size=(size[0], 1, size[1]),
@@ -252,9 +253,9 @@ class SlitSpectra(Observable):
             rpix=(rpix[0], 0, rpix[1]),
             rval=(rval[0], 0, rval[1]),
             rota=self.rota(),
-            rest=self.rest(),
-            medium=self.medium(),
-            convention=self.convention(),
+            rest=spectral.rest(),
+            medium=spectral.medium(),
+            convention=spectral.convention(),
             oversampling=(oversampling[0], across, oversampling[1]),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
