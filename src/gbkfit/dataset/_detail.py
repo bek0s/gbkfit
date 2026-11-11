@@ -50,9 +50,9 @@ def cleaned(
     """
     Return a dataset with its outliers masked, if given the options size
     and nsigma (see Dataset.screen_outliers), and then every spectrum with
-    a masked value masked whole, if asked (see
-    Dataset.mask_whole_spectra); and log how many values each item loses
-    to each.
+    a masked value masked whole, but for the channels masked in every
+    spectrum, if asked (see Dataset.mask_whole_spectra); and log how many
+    values each item loses to each.
     """
     if outliers is not None:
         with config_path('outliers'):

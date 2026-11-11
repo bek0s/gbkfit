@@ -28,3 +28,6 @@ class Block(abc.ABC):
         Return what the log-likelihood takes of their values (see
         Solve.likelihood).
         """
+
+    def close(self) -> None:
+        """Release its memory, if any; the next solve allocates it again."""

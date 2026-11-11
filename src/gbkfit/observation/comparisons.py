@@ -225,10 +225,34 @@ class Comparison(abc.ABC):
         items is not c (m - d), of the model m of that value alone (W of
         linear_form diagonal), or None if it is (e.g. solved scales are
         solved from the sums of each spectrum, see scale_sums, and the
-        weights of orbits from c, the residual of the model d + 1): here,
-        the reason of linear_form.
+        weights of orbits from c, see pointwise_factors): here, the reason
+        of linear_form.
         """
         return self.linear_form(keys)
+
+    def pointwise_factors(
+            self, keys: Collection[str], params: ParamValues
+    ) -> dict[str, np.ndarray]:
+        """
+        Return the factor c of the weighted residual c (m - d) of each
+        value of the given data items (see pointwise_form), without the
+        pixel weights of the model, which multiply it (see Weights). Only
+        comparisons whose weighted residuals are pointwise give them.
+
+        Parameters
+        ----------
+        keys : Collection of str
+            The names of the data items.
+        params : ParamValues
+            The parameters, prefixed (see Objective.pdescs).
+
+        Returns
+        -------
+        dict
+            The factors of each item, by name: new arrays of its shape, in
+            float64.
+        """
+        raise NotImplementedError
 
     def weigh(
             self,
@@ -506,18 +530,11 @@ class ComparisonGaussian(Comparison):
             for key, noise in likelihood.fitted_noise().items()}
         self._noise_residuals = np.zeros(len(self._noise))
         self._white_floor = likelihood.white_floor()
-        # The whitening to take from a copy of it of other data, of each
-        # data item, by name (see share)
-        self._shared: dict[str, tuple[_Whitener, float]] = {}
 
     def _reset_memory(self) -> None:
         super()._reset_memory()
-        # The data items, one after the other, in 1d arrays: the data (d),
-        # masks (m) and errors (e), and their views as the nd arrays of
-        # each item
-        self._d_data_vector: DeviceArray | None = None
-        self._d_mask_vector: DeviceArray | None = None
-        self._d_error_vector: DeviceArray | None = None
+        # The data, masks and errors of the data items on the device, by
+        # name (errors only of the items that have them)
         self._d_data: dict[str, DeviceArray] = {}
         self._d_mask: dict[str, DeviceArray] = {}
         self._d_error: dict[str, DeviceArray] = {}
@@ -539,6 +556,9 @@ class ComparisonGaussian(Comparison):
         # are worth (see Whitening)
         self._whiteners: dict[str, _Whitener] = {}
         self._nindependent: dict[str, float] = {}
+        # The whitening to take from a copy of it of other data, of each
+        # data item, by name (see share), until prepared
+        self._shared: dict[str, tuple[_Whitener, float]] = {}
         # The share of its values that each data item whose noise is fitted
         # counts in its noise residual: 1, but the independent values they
         # are worth over their number for correlated noise (see
@@ -634,28 +654,22 @@ class ComparisonGaussian(Comparison):
         residuals of data items whose noise is correlated (once, for every
         evaluation; e.g. about 4 s for 7000 pixels), unless shared.
         """
-        keys = self._observation.keys()
-        npix = int(np.prod(shape))
-        nelem = npix * len(keys)
-        self._d_data_vector = driver.mem_alloc_d(nelem, dtype)
-        self._d_mask_vector = driver.mem_alloc_d(nelem, dtype)
-        self._d_error_vector = driver.mem_alloc_d(nelem, dtype)
-        for j, key in enumerate(keys):
+        for key in self._observation.keys():
             data = self._dataset[key]
-            slice_ = slice(j * npix, (j + 1) * npix)
-            self._d_data[key] = _copied(
-                driver, data.data(), self._d_data_vector[slice_], shape)
-            if data.mask() is not None:
-                self._d_mask[key] = _copied(
-                    driver, data.mask(), self._d_mask_vector[slice_], shape)
+            self._d_data[key] = driver.mem_copy_h2d(
+                np.asarray(data.data(), dtype))
+            self._d_mask[key] = driver.mem_copy_h2d(
+                np.asarray(data.mask(), dtype))
             if data.error() is not None:
-                self._d_error[key] = _copied(
-                    driver, data.error(), self._d_error_vector[slice_], shape)
+                self._d_error[key] = driver.mem_copy_h2d(
+                    np.asarray(data.error(), dtype))
             if key in self._footprints:
                 self._d_footprints[key] = driver.mem_copy_h2d(
                     self._footprints[key].astype(dtype))
             if key in self._shared:
-                whitener, nindependent = self._shared[key]
+                # (dropped once taken: the whitener of the other holds
+                # residuals of its own, which this one does not need)
+                whitener, nindependent = self._shared.pop(key)
                 self._whiteners[key] = whitener.shared()
                 self._nindependent[key] = nindependent
             elif (correlation := self._dataset.noise_correlation(key)) \
@@ -686,17 +700,20 @@ class ComparisonGaussian(Comparison):
         scaled = {
             key: self._scaled(model, key, scales)
             for key in self._observation.keys()}
+        # The weight of each data item, times the normalisation of the
+        # pixel weights of its model, which its noise residual takes too
+        weights = {}
         for key in self._observation.keys():
-            weight = (self._weights[key] if weighted else 1.0) \
+            weights[key] = (self._weights[key] if weighted else 1.0) \
                 * self._pixel_weight(model, key)
             residual = self._d_residual_nddata[key]
             self._backend.residual(
                 self._d_data[key],
                 self._d_error.get(key),
-                self._d_mask.get(key),
+                self._d_mask[key],
                 scaled[key],
                 model[key]['w'],
-                weight,
+                weights[key],
                 self._missing_residual,
                 *self._upper_limits[key],
                 *self._noise_values(key, params),
@@ -708,7 +725,7 @@ class ComparisonGaussian(Comparison):
             if weighted and key in self._whiteners:
                 self._whiteners[key](residual)
         if self._noise:
-            self._update_noise_residuals(model, scaled, params, weighted)
+            self._update_noise_residuals(model, scaled, weights, params)
 
     def linear_form(self, keys: Collection[str]) -> str | None:
         """
@@ -743,6 +760,29 @@ class ComparisonGaussian(Comparison):
                     f"mix the values")
         return None
 
+    def pointwise_factors(
+            self, keys: Collection[str], params: ParamValues
+    ) -> dict[str, np.ndarray]:
+        """
+        Return the factor c of the weighted residual c (m - d) of each
+        value of the given data items (see Comparison.pointwise_factors):
+        the weight of the item times the mask, over the noise of the value
+        (see LikelihoodGaussian.noise); 0 where the data mask it.
+        """
+        likelihood = self._observation.likelihood()
+        factors = {}
+        for key in keys:
+            item = self._dataset[key]
+            mask = np.asarray(item.mask(), np.float64)
+            error = None if item.error() is None \
+                else np.asarray(item.error(), np.float64)
+            # (the errors are NaN where the data mask the values)
+            factors[key] = np.where(
+                mask != 0,
+                self._weights[key] * mask
+                / likelihood.noise(key, error, params), 0)
+        return factors
+
     def weigh(
             self,
             pieces: LinearPieces,
@@ -765,7 +805,7 @@ class ComparisonGaussian(Comparison):
                 self._backend.residual(
                     self._d_zeros[key],
                     self._d_error.get(key),
-                    self._d_mask.get(key),
+                    self._d_mask[key],
                     pieces.pieces[key][k],
                     pieces.base[key]['w'],
                     weights[key],
@@ -812,7 +852,7 @@ class ComparisonGaussian(Comparison):
         h_sums = self._h_scale_sums[key, axis]
         d_sums = self._d_scale_sums[key, axis]
         self._backend.amplitude_sums(
-            self._d_data[key], self._d_error.get(key), self._d_mask.get(key),
+            self._d_data[key], self._d_error.get(key), self._d_mask[key],
             model[key]['d'], model[key]['w'],
             *self._noise_values(key, params), axis, *d_sums)
         for h, d in zip(h_sums, d_sums):
@@ -840,9 +880,7 @@ class ComparisonGaussian(Comparison):
             return 1.0
         driver = self._driver
         flat = weights.reshape(-1)
-        mask = self._d_mask.get(key)
-        unmasked = flat if mask is None \
-            else driver.math_mul(flat, mask.reshape(-1))
+        unmasked = driver.math_mul(flat, self._d_mask[key].reshape(-1))
         total = float(driver.math_matmul(unmasked, flat))
         return float(np.sqrt(self._nunmasked[key] / total)) \
             if total > 0 else 1.0
@@ -887,23 +925,21 @@ class ComparisonGaussian(Comparison):
             self,
             model: _Model,
             scaled: Mapping[str, DeviceArray],
-            params: ParamValues,
-            weighted: bool
+            weights: Mapping[str, float],
+            params: ParamValues
     ) -> None:
         """
-        Evaluate the noise residuals, with the weights of the data items
-        if weighted (as the residuals).
+        Evaluate the noise residuals, with the weight of each data item
+        that its residuals take (see evaluate).
         """
         driver = self._driver
         for j, (key, noise) in enumerate(self._noise.items()):
-            weight = (self._weights[key] if weighted else 1.0) \
-                * self._pixel_weight(model, key)
             self._backend.noise_sum(
                 self._d_error.get(key),
-                self._d_mask.get(key),
+                self._d_mask[key],
                 scaled[key],
                 model[key]['w'],
-                weight,
+                weights[key],
                 *self._noise_values(key, params),
                 noise.scale_min,
                 self._d_noise_sums[j:j + 1])
@@ -933,6 +969,14 @@ class ComparisonUser(Comparison):
     def __init__(self, observation: Observation, driver: Driver):
         super().__init__(observation, driver)
         self._likelihood: LikelihoodUser = observation.likelihood()
+        # The data, errors and mask of each data item that its function
+        # takes, by name: read-only views, so that it cannot change the
+        # dataset (e.g. by 'data -= 1')
+        self._arrays = {
+            key: tuple(map(_read_only, (
+                self._dataset[key].data(), self._dataset[key].error(),
+                self._dataset[key].mask())))
+            for key in observation.keys()}
         # The chi-square of a function of the log-likelihood
         self._chi2 = 0.0
 
@@ -949,13 +993,12 @@ class ComparisonUser(Comparison):
         driver = self._driver
         self._chi2 = 0.0
         for key in self._observation.keys():
-            item = self._dataset[key]
-            mask = item.mask()
+            data, error, mask = self._arrays[key]
             values = np.asarray(
                 driver.mem_copy_d2h(self._scaled(model, key, scales)),
                 dtype=np.float64)
             result = self._likelihood.evaluate(
-                key, item.data(), values, item.error(), mask, params)
+                key, data, values, error, mask, params)
             residuals = self._h_residual_nddata[key]
             if self._likelihood.form() == 'log_likelihood':
                 self._chi2 -= 2 * result
@@ -965,29 +1008,22 @@ class ComparisonUser(Comparison):
                 # (normalised to a mean square of 1 over the values the
                 # data do not mask, as ComparisonGaussian._pixel_weight)
                 weights = np.asarray(driver.mem_copy_d2h(weights), float)
-                unmasked = weights if mask is None else weights[mask != 0]
+                unmasked = weights[mask != 0]
                 total = float(np.sum(unmasked ** 2))
                 if total > 0:
                     weights = weights * np.sqrt(unmasked.size / total)
                 result = result * weights
-            if mask is not None:
-                result = np.where(mask != 0, result * mask, 0)
-            residuals[...] = result
+            residuals[...] = np.where(mask != 0, result * mask, 0)
         driver.mem_copy_h2d(self._h_residual_vector, self._d_residual_vector)
 
     def _terms_chi2(self) -> float:
         return self._chi2
 
 
-def _copied(
-        driver: Driver,
-        values: np.ndarray,
-        out: DeviceArray,
-        shape: tuple[int, ...]
-) -> DeviceArray:
-    """
-    Copy the values of a data item to a part of a 1d array on the device,
-    in its type, and return its view of their shape.
-    """
-    driver.mem_copy_h2d(values.ravel().astype(out.dtype), out)
-    return out.reshape(shape)
+def _read_only(array: np.ndarray | None) -> np.ndarray | None:
+    """Return a read-only view of an array, or None for None."""
+    if array is None:
+        return None
+    view = array.view()
+    view.flags.writeable = False
+    return view

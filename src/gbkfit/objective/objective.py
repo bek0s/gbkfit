@@ -207,7 +207,7 @@ class Objective:
         """
         for comparison_ in self._comparisons:
             comparison_.close()
-        for block in (*self._amplitudes, *self._orbits):
+        for block in self._blocks:
             block.close()
         # The solution of each block of the last evaluation, and the scales
         # of the observations with solved ones, on the host (h) and the

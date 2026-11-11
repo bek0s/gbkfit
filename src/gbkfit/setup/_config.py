@@ -5,15 +5,16 @@ description without devices (describe) and setting up (load).
 """
 
 import dataclasses
-import json
 import logging
 import os
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, NamedTuple, TypeVar
 
 import astropy.units
+import numpy as np
 import ruamel.yaml
 from annotated_types import Ge
+from ruamel.yaml.scalarbool import ScalarBoolean
 
 from gbkfit.config import (
     FORMAT_VERSION, ConfigError, ConfigProblem, Family, FilePath,
@@ -31,7 +32,7 @@ from gbkfit.observation import DepthGroup, MockOptions, ObservationGroup
 from gbkfit.params import (
     JointPrior, ParamDesc, ParamMode, ParamSpace, Property, load_pdescs_dict,
     param_space_parser)
-from gbkfit.utils import iterutils
+from gbkfit.utils import iterutils, numutils
 from ._setup import Setup
 
 
@@ -115,6 +116,10 @@ _SECTIONS = dict(
     version=_Section(
         Annotated[int, Ge(1)],
         "The version of the format (see gbkfit.config.FORMAT_VERSION)."),
+    root=_Section(
+        str,
+        "The directory that the relative paths of the configuration are "
+        "relative to, itself relative to the directory of its file."),
     galaxies=_Section(
         gbkfit.model.Galaxy, "The galaxies.", True, True,
         dict(driver=str)),
@@ -149,10 +154,12 @@ _SECTIONS = dict(
     mock=_Section(MockOptions, "Mock data of the observations."),
     bootstrap=_Section(BootstrapOptions, "A bootstrap of a fit."))
 
-# The required sections, and the others
+# The required sections, and the others (but those read before them, see
+# _check_version and _root)
 _REQUIRED = tuple(k for k, v in _SECTIONS.items() if v.required)
 _OPTIONAL = tuple(
-    k for k, v in _SECTIONS.items() if not v.required and k != 'version')
+    k for k, v in _SECTIONS.items()
+    if not v.required and k not in ('version', 'root'))
 
 
 def catalogue() -> dict[str, Family]:
@@ -308,7 +315,7 @@ class Description:
         Its warnings and its unknown names, then its error, if any, each
         with its path in the configuration (see ConfigProblem).
     config : dict or None
-        The configuration, as plain JSON values (see read_config), if it
+        The configuration, as plain values (see read_config), if it
         could be read.
     group : ObservationGroup or None
         Its galaxies and their observations, if it has no error before
@@ -345,7 +352,7 @@ def describe(
     and of a bootstrap as descriptions, with every rule of them checked
     (see ObservationGroup), but no drivers and no plans; and collect its
     problems, past its unknown names (see collect_problems). Its drivers
-    are checked by type only.
+    are checked by name and type only.
 
     Parameters
     ----------
@@ -370,7 +377,7 @@ def describe(
             else _config_file(config)
         cfg = file.config
         with paths_relative_to(file.root):
-            _check_driver_types(cfg)
+            _check_drivers(cfg)
             group = _load_observation_group(cfg)
             params = _load_params(
                 cfg, group.pdescs(), group.constants(),
@@ -542,8 +549,8 @@ def _prepare_config(
         optional: tuple[str, ...] = _OPTIONAL
 ) -> dict[str, Any]:
     """
-    Check the sections of a configuration, and return it as plain JSON
-    values: unknown sections are reported (see report_unknown)
+    Check the sections of a configuration, and return it as plain values
+    (see _plain): unknown sections are reported (see report_unknown)
     and left out, null sections are empty, and the sections 'galaxies' and
     'observations' are lists.
 
@@ -574,7 +581,32 @@ def _prepare_config(
                 raise ConfigError(
                     f"section '{s}' must be a dictionary or a list")
             config[s] = iterutils.listify(config[s])
-    return json.loads(json.dumps(config))
+    return _plain(config)
+
+
+def _plain(value: Any) -> Any:
+    """
+    Return a value of a configuration as plain values, in containers of
+    its own: mappings as dicts, lists and tuples as lists, numpy arrays
+    and scalars as lists and values of Python (see nativify), and other
+    numbers, bools and strings (e.g. those of ruamel.yaml, which keep
+    their style) as those of Python; the others as they are (e.g. a
+    Quantity, which some options take).
+    """
+    if isinstance(value, Mapping):
+        return {_plain(k): _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    # (not the subclasses of arrays, e.g. Quantity)
+    if isinstance(value, np.generic) or type(value) is np.ndarray:
+        return numutils.nativify(value)
+    # (the bools of ruamel.yaml with an anchor are ints)
+    if isinstance(value, (bool, ScalarBoolean)):
+        return bool(value)
+    for type_ in (int, float, str):
+        if isinstance(value, type_):
+            return type_(value)
+    return value
 
 
 def _merge_pdescs(
@@ -597,16 +629,17 @@ def _merge_pdescs(
     return pdescs1 | pdescs2
 
 
-def _check_driver_types(cfg: dict[str, Any]) -> None:
+def _check_drivers(cfg: dict[str, Any]) -> None:
     """
-    Check the types of the drivers of a configuration (see _load_drivers)
-    without loading them, which needs their packages (e.g. CuPy).
+    Check the names and the types of the drivers of a configuration (see
+    _load_drivers) without loading them, which needs their packages (e.g.
+    CuPy).
 
     Raises
     ------
     ConfigError
-        If it has both sections 'driver' and 'drivers', or a driver is not
-        a dictionary of a known type.
+        If it has both sections 'driver' and 'drivers', a name is invalid,
+        or a driver is not a dictionary of a known type.
     """
     if 'driver' in cfg and 'drivers' in cfg:
         raise ConfigError(
@@ -617,6 +650,9 @@ def _check_driver_types(cfg: dict[str, Any]) -> None:
     for name, info in infos.items():
         path = ('driver',) if name is None else ('drivers', name)
         with config_path(*path):
+            if name is not None \
+                    and (problem := name_problem(name)) is not None:
+                raise ConfigError(problem)
             type_ = info.get('type') if isinstance(info, Mapping) else None
             if type_ not in driver_parser.types():
                 raise ConfigError(
@@ -636,15 +672,13 @@ def _load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
         If it has both sections, a name is invalid, or a driver has an
         error.
     """
-    _check_driver_types(cfg)
+    _check_drivers(cfg)
     if 'driver' in cfg:
         with config_path('driver'):
             return {None: driver_parser.load(cfg['driver'])}
     drivers = {}
     for name, info in cfg.get('drivers', {}).items():
         with config_path('drivers', name):
-            if (problem := name_problem(name)) is not None:
-                raise ConfigError(problem)
             drivers[name] = driver_parser.load(info)
     return drivers
 

@@ -131,6 +131,15 @@ def test_golden_configurations_are_valid(validator, path):
     assert not errors
 
 
+def test_the_schema_takes_the_section_root(validator):
+    # (which load reads, and editors that validate against the schema
+    # flagged)
+    path = sorted(GOLDEN_DIR.glob('*/config.yaml'))[0]
+    config = ruamel.yaml.YAML(typ='safe').load(path)
+    assert not list(validator.iter_errors(config | dict(root='data')))
+    assert list(validator.iter_errors(config | dict(root=1)))
+
+
 def test_classes_have_the_schemas_of_their_configurations():
     # (a family's have the type, as its parser reads them; a member's are
     # its own options, as its load reads them)

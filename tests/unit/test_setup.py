@@ -334,6 +334,34 @@ def test_describe_checks_the_rules_of_a_fit():
     assert len(errors) == 1 and "needs option 'value'" in errors[0].message
 
 
+def test_describe_checks_the_names_of_the_drivers():
+    # (load refused a name that describe let through)
+    (problem,) = gbkfit.describe(dict(
+        version=VERSION, galaxies=[GALAXY],
+        observations=[observation(driver='gpu 0')], params=PARAMS,
+        drivers={'gpu 0': HOST})).problems
+    assert problem.path == ['drivers', 'gpu 0']
+    assert "invalid name 'gpu 0'" in problem.message
+
+
+def test_configurations_in_python_take_quantities_and_numpy_values():
+    # (a round trip through JSON refused them, though the options take
+    # them)
+    import astropy.units as u
+    size = np.array([8, 8])
+    config = dict(
+        version=VERSION, galaxies=[GALAXY], params=PARAMS,
+        lines=dict(line=6563 * u.AA), observations=[observation(
+            observable=dict(type='pixel_brightness', size=size),
+            oversampling=[np.int64(2), np.int64(2)])])
+    plain = _config._config_file(config).config
+    assert plain['lines']['line'] == 6563 * u.AA
+    assert plain['observations'][0]['observable']['size'] == [8, 8]
+    with gbkfit.load(config) as loaded:
+        model = loaded.group_plan.model_h(loaded.evaluate().values)[0]
+        assert model['brightness']['d'].shape == (8, 8)
+
+
 def test_the_units_of_a_configuration_are_read_as_fits_reads_them(tmp_path):
     # (several '/', which the FITS standard allows; names are not
     # corrected)
