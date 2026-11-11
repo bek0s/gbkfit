@@ -20,7 +20,7 @@ from ._detail import (
 from ._units import DataUnit
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
-    NativeGrid)
+    NativeGrid, SceneTarget)
 from .geometries import geometry_pdesc
 from .lines import Band, LinePlacement
 from .points import band_light, line_light
@@ -492,16 +492,15 @@ class Particles(Component):
 
     def plan(
             self,
-            driver: Driver,
-            spectral: Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None,
-            band: Band | None,
+            target: SceneTarget,
             emits: bool,
             opacity_ratios: np.ndarray | None,
-            data_unit: DataUnit | None,
             redshift: float
     ) -> ParticlesPlan:
+        driver, spectral, dtype = target.driver, target.spectral, target.dtype
+        lines, band, data_unit = target.lines, target.band, target.data_unit
+        # (it always emits: it has no opacity, so that a plan of it that
+        # does not emit, which would take no unit of the data, is not made)
         unit = self.emission().unit()
         if self._lines is None:
             return ParticlesPlan(

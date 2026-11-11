@@ -172,7 +172,8 @@ def test_point_round_trip():
 def test_point_plan_takes_a_dtype_or_its_type(driver):
     # The plans of the components take the dtype as np.dtype or its type
     from gbkfit.model import galaxy_parser
-    from gbkfit.model._component_plans import opacity_cubes
+    from gbkfit.model._opacity import opacity_cubes
+    from gbkfit.model import SceneTarget
     from gbkfit.model.scenes import IMAGE_SPECTRAL_AXIS
     from gbkfit.grid import make_grid
     galaxy = galaxy_parser.load(copy.deepcopy(BAND_POINT))
@@ -180,9 +181,10 @@ def test_point_plan_takes_a_dtype_or_its_type(driver):
     image = driver.mem_alloc_d((4, 6), np.float32)
     driver.mem_fill(image, 0)
     plan = galaxy.plan(
-        driver, grid, IMAGE_SPECTRAL_AXIS, None, np.float32, (0,),
-        opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
-        None, None, None, None)
+        SceneTarget(
+            driver, grid, IMAGE_SPECTRAL_AXIS, np.float32, None, None, None,
+            None), (0,),
+        opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0], None)
     plan.evaluate(
         dict(xpos=0.5, ypos=0.5, flux=2), {}, dict(image=image), None)
     assert driver.mem_copy_d2h(image).sum() == 2

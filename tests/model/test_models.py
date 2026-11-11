@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 from modelutils import split_case
 from gbkfit.grid import Coords, Grid, GridData
-from gbkfit.model import galaxy_parser
-from gbkfit.model._component_plans import opacity_cubes
+from gbkfit.model import SceneTarget, galaxy_parser
+from gbkfit.model._opacity import opacity_cubes
 from gbkfit.model.scenes import IMAGE_SPECTRAL_AXIS
 from gbkfit.observation import Depth, LineOfSightGrid
 from gbkfit.params import ParamModeOffsets
@@ -243,11 +243,11 @@ def image_plan(driver, galaxy, size):
     rpix = tuple(n / 2 - 0.5 for n in size)
     grid = Grid(size, Coords((1, 1), rpix, (0, 0), 0), None)
     return galaxy.plan(
-        driver, grid, IMAGE_SPECTRAL_AXIS,
-        LineOfSightGrid(Depth(extent='legacy')).depth_axis(grid, 0),
-        np.float32, (0,),
+        SceneTarget(
+            driver, grid, IMAGE_SPECTRAL_AXIS, np.float32, None, None, None,
+            None), (0,),
         opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
-        None, None, None, None)
+        LineOfSightGrid(Depth(extent='legacy')).depth_axis(grid, 0))
 
 
 def evaluate_image(driver, plan, size, params):

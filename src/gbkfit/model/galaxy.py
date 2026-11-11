@@ -5,14 +5,11 @@ Galaxies: their components and their mass, at one distance.
 from collections.abc import Sequence
 from typing import Any
 
-import numpy as np
-
 from gbkfit.config import (
     BasicParser, Serializable, TypedParser, check_name,
     check_options)
 from gbkfit.cosmology import Cosmology
 from gbkfit.driver import Driver
-from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils
 from ._functions import (
@@ -20,11 +17,10 @@ from ._functions import (
 from ._galaxy_plan import GalaxyPlan
 from ._galaxy_stage import GalaxyStage
 from ._relations import MassLinks, link
-from .components._units import DataUnit
-from .components.base import Component, DepthAxis, OpacityCubes
+from .components.base import (
+    Component, DepthAxis, OpacityCubes, SceneTarget)
 from .components.cones import Cone
 from .components.disks import ThickDisk, ThinDisk
-from .components.lines import Band
 from .components.particles import Particles
 from .components.points import Point
 from .components.roles import BandEmission
@@ -380,60 +376,38 @@ class Galaxy(Serializable):
 
     def plan(
             self,
-            driver: Driver,
-            grid: Grid,
-            spectral: Grid,
-            depth: DepthAxis | None,
-            dtype: np.dtype,
+            target: SceneTarget,
             emitters: Sequence[int],
             cubes: OpacityCubes,
-            lines: tuple[str, ...] | None,
-            band: Band | None,
-            data_unit: DataUnit | None,
-            smoothing: float | None
+            depth: DepthAxis | None
     ) -> GalaxyPlan:
         """
         Plan the evaluation of the galaxy on the grid of an observation.
 
         Parameters
         ----------
-        driver : Driver
-            The driver it is evaluated on.
-        grid : Grid
-            The grid of the x and y axes.
-        spectral : Grid
-            The spectral axis of the outputs (one axis).
-        depth : DepthAxis, optional
-            The axis along the line of sight; none for a galaxy evaluated
-            on the plane of the sky.
-        dtype : np.dtype
-            The floating type of the evaluation.
+        target : SceneTarget
+            What the scene of the observation asks of it: the driver, the
+            grids, the floating type, the lines or the band, the unit of
+            the data, which the light of its components takes (see
+            Component.plan), and the spectral smoothing of the instrument
+            (see LineResolution).
         emitters : Sequence of int
             The indices of the components whose light is evaluated (the
             opacity of all those with opacity is).
         cubes : OpacityCubes
             How the cubes of opacity of the observation hold its dust, and
             the dust that dims its light (see opacity_cubes).
-        lines : tuple of str, optional
-            The names of the emission lines evaluated; all if None.
-        band : Band, optional
-            The band of an image, if known.
-        data_unit : DataUnit, optional
-            The unit of the data of the observation, which the light of
-            the components takes (see Component.plan); None without data.
-        smoothing : float, optional
-            The dispersion (km/s) by which the instrument smooths the
-            spectra of the model, which the check of the resolution of
-            its light takes (see LineResolution); None for an image.
+        depth : DepthAxis, optional
+            The axis along the line of sight; none for a galaxy evaluated
+            on the plane of the sky.
 
         Returns
         -------
         GalaxyPlan
             The plan.
         """
-        return GalaxyPlan(
-            self, driver, grid, spectral, depth, dtype, emitters, cubes,
-            lines, band, data_unit, smoothing)
+        return GalaxyPlan(self, target, emitters, cubes, depth)
 
 
 galaxy_parser = BasicParser(Galaxy)

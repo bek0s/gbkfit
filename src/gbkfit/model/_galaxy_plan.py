@@ -7,14 +7,12 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from gbkfit.driver import DeviceArray, Driver
-from gbkfit.grid import Grid
+from gbkfit.driver import DeviceArray
 from gbkfit.params import ParamValues
 from ._component_plans import ComponentPlans
 from ._transfer import LineResolution
-from .components._units import DataUnit
-from .components.base import ComponentState, DepthAxis, OpacityCubes
-from .components.lines import Band
+from .components.base import (
+    ComponentState, DepthAxis, OpacityCubes, SceneTarget)
 from .extras import Extras
 
 if TYPE_CHECKING:
@@ -34,39 +32,31 @@ class GalaxyPlan:
     the absorbers in each voxel, then the light of the emitters, dimmed by
     the optical depth from the viewer to each voxel.
 
-    The parameters are those of ComponentPlans, and the spectral smoothing
-    of the instrument (km/s; see ComponentPlans.light_resolution; None
-    for an image).
+    The parameters are those of ComponentPlans; the target gives the
+    spectral smoothing of the instrument (km/s; see
+    ComponentPlans.light_resolution; None for an image).
     """
 
     def __init__(
             self,
             galaxy: 'Galaxy',
-            driver: Driver,
-            grid: Grid,
-            spectral: Grid,
-            depth: DepthAxis | None,
-            dtype: np.dtype,
+            target: SceneTarget,
             emitters: Sequence[int],
             cubes: OpacityCubes,
-            lines: tuple[str, ...] | None,
-            band: Band | None,
-            data_unit: DataUnit | None,
-            smoothing: float | None
+            depth: DepthAxis | None
     ):
-        plans = ComponentPlans(
-            galaxy, driver, grid, spectral, depth, dtype, emitters, cubes,
-            lines, band, data_unit)
+        plans = ComponentPlans(galaxy, target, depth, emitters, cubes)
         self._plans = plans
         self._depth = depth
-        self._smoothing = smoothing
+        self._smoothing = target.smoothing
         # The cubes of opacity
         self._odata = None
         if plans.ncubes:
-            self._odata = driver.mem_alloc_d(
+            self._odata = target.driver.mem_alloc_d(
                 (plans.ncubes,) + plans.native_grid['spat_size'][::-1],
-                dtype)
-            self._gmodel = driver.native_class('GModel', dtype)()
+                target.dtype)
+            self._gmodel = target.driver.native_class(
+                'GModel', target.dtype)()
 
     def evaluate(
             self,

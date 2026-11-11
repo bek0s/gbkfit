@@ -470,7 +470,7 @@ def test_dust_reads_its_law_in_its_frame():
     # of a line, its rest wavelength times D(vsys of the gas) / D(vsys of
     # the dust), the law at its rest wavelength when they move together
     from gbkfit.grid import doppler
-    from gbkfit.model._component_plans import opacity_cubes
+    from gbkfit.model._opacity import opacity_cubes
     from gbkfit.model.components.lines import catalogue_in_use
     band = catalogue_in_use().band('sdss_r')
     galaxy = dusty_galaxy(dict(type='band'), redshift=0.1)
@@ -493,7 +493,7 @@ def test_dust_reads_its_law_in_its_frame():
 def test_dust_of_each_systemic_velocity_is_a_kind():
     # (several wavelengths: a cube of each kind of dust, at most 4; one
     # law in frames of different vsys, parameters, is of several kinds)
-    from gbkfit.model._component_plans import opacity_cubes
+    from gbkfit.model._opacity import opacity_cubes
     lines = dict(type='lines', lines=['halpha', 'nii6583'])
     cubes = opacity_cubes(
         [dusty_galaxy(lines, dusts=2)], [[0]], None, None, np.float64)[0]

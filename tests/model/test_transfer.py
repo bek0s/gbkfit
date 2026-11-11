@@ -9,7 +9,7 @@ from modelutils import observation_group
 
 from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, Grid
-from gbkfit.model import Extras, galaxy_parser
+from gbkfit.model import Extras, SceneTarget, galaxy_parser
 from gbkfit.observation import DepthGroup
 
 
@@ -52,8 +52,10 @@ def component_plan(driver, component):
     """The plan of the light of a component (of a galaxy of it alone)."""
     galaxy = galaxy_parser.load(dict(components=[component]))
     return galaxy.components()[0].plan(
-        driver, SPECTRAL, np.dtype(np.float32), None, None, True, None,
-        None, 0.0)
+        SceneTarget(
+            driver, None, SPECTRAL, np.dtype(np.float32),
+            None, None, None, None),
+        True, None, 0.0)
 
 
 def evaluate_fields(driver, component, params, grid):

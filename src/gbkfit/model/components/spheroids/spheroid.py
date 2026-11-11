@@ -41,7 +41,7 @@ from .._native import (
 from .._units import DataUnit, mass_per_unit
 from ..base import (
     Component, ComponentLinks, ComponentState, FieldsLayout, FrameParams,
-    NativeGrid)
+    NativeGrid, SceneTarget)
 from ..geometries import geometry_pdesc
 from ..lines import Band
 from ..nodes import Nodes
@@ -757,16 +757,13 @@ class Spheroid(Component, abc.ABC):
 
     def plan(
             self,
-            driver: Driver,
-            spectral: Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None,
-            band: Band | None,
+            target: SceneTarget,
             emits: bool,
             opacity_ratios: np.ndarray | None,
-            data_unit: DataUnit | None,
             redshift: float
     ) -> NativeComponentPlan:
+        driver, spectral, dtype = target.driver, target.spectral, target.dtype
+        lines, band, data_unit = target.lines, target.band, target.data_unit
         emission = emission_setup(
             None, self._bands, self.emission().unit(), spectral, lines,
             band, emits, data_unit, redshift, ())

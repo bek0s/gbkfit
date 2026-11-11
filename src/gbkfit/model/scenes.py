@@ -15,14 +15,15 @@ import numpy as np
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid
 from gbkfit.params import ParamValues
-from ._component_plans import opacity_cubes
 from ._galaxy_plan import GalaxyPlan
+from ._opacity import opacity_cubes
 from ._transfer import (
     MAX_SUBCHANNELS, LineResolution, TransferMember, TransferPlan,
     check_emitters, warn_resolution)
 from ._galaxy_stage import GalaxyState
 from .components._units import DataUnit
-from .components.base import ComponentState, DepthAxis, FrameParams
+from .components.base import (
+    ComponentState, DepthAxis, FrameParams, SceneTarget)
 from .components.disks.disk import Disk
 from .components.lines import Band
 from .components.roles import STARS
@@ -116,12 +117,36 @@ class Scene:
         """Return the names of the emission lines drawn (all if None)."""
         return self._lines
 
+    def band(self) -> Band | None:
+        """Return the band of an image, if known."""
+        return self._band
+
     def emitters(self) -> tuple[tuple[int, ...], ...]:
         """
         Return the indices of the components of each galaxy whose light is
         drawn.
         """
         return self._emitters
+
+    def target(
+            self,
+            driver: Driver,
+            grid: Grid,
+            dtype: np.dtype,
+            smoothing: float | None
+    ) -> SceneTarget:
+        """
+        Return what it asks of each galaxy that it draws, and of their
+        components, on a driver, a grid (of an image, without a spectral
+        axis: one channel, IMAGE_SPECTRAL_AXIS), in a floating type, of the
+        spectral smoothing of the instrument (km/s; None for an image):
+        see SceneTarget.
+        """
+        image = grid.spectral_axis is None
+        return SceneTarget(
+            driver, grid if image else grid.spatial(),
+            IMAGE_SPECTRAL_AXIS if image else grid.spectral(), dtype,
+            self._lines, self._band, self._data_unit, smoothing)
 
     def galaxy_label(self, galaxy: int) -> str:
         """
@@ -210,12 +235,12 @@ class ScenePlan(abc.ABC):
     cube.
     """
 
-    def __init__(self, scene: Scene, grid: Grid):
-        image = grid.spectral_axis is None
+    def __init__(self, scene: Scene, grid: Grid, target: SceneTarget):
         self._scene = scene
-        self._key = 'image' if image else 'scube'
-        self._spatial = grid if image else grid.spatial()
-        self._spectral = IMAGE_SPECTRAL_AXIS if image else grid.spectral()
+        self._key = 'image' if grid.spectral_axis is None else 'scube'
+        self._target = target
+        self._spatial = target.spatial
+        self._spectral = target.spectral
 
     def evaluate(
             self,
@@ -285,17 +310,15 @@ class AdditiveScenePlan(ScenePlan):
             dtype: np.dtype,
             smoothing: float | None
     ):
-        super().__init__(scene, grid)
+        target = scene.target(driver, grid, dtype, smoothing)
+        super().__init__(scene, grid, target)
         # (the dust of each galaxy alone, see opacity_cubes)
         cubes = [
             opacity_cubes(
-                [galaxy], [emitters], scene._lines, scene._band, dtype)[0]
+                [galaxy], [emitters], target.lines, target.band, dtype)[0]
             for galaxy, emitters in zip(scene._galaxies, scene._emitters)]
         self._plans: tuple[GalaxyPlan, ...] = tuple(
-            galaxy.plan(
-                driver, self._spatial, self._spectral, depth, dtype, emitters,
-                galaxy_cubes, scene._lines, scene._band, scene._data_unit,
-                smoothing)
+            galaxy.plan(target, emitters, galaxy_cubes, depth)
             for galaxy, emitters, galaxy_cubes in zip(
                 scene._galaxies, scene._emitters, cubes))
         self._dust = [galaxy_cubes.model for galaxy_cubes in cubes]
@@ -314,7 +337,7 @@ class AdditiveScenePlan(ScenePlan):
         """
         for galaxy, emitters in zip(scene._galaxies, scene._emitters):
             opacity_cubes(
-                [galaxy], [emitters], scene._lines, scene._band, np.float64)
+                [galaxy], [emitters], scene.lines(), scene.band(), np.float64)
 
     def _evaluate(
             self,
@@ -371,7 +394,7 @@ class TransferScenePlan(ScenePlan):
             If it cannot.
         """
         opacity_cubes(
-            scene._galaxies, scene._emitters, scene._lines, scene._band,
+            scene._galaxies, scene._emitters, scene.lines(), scene.band(),
             np.float64)
         for unit in scene._order:
             check_emitters(
@@ -388,10 +411,11 @@ class TransferScenePlan(ScenePlan):
             subchannels: int,
             smoothing: float | None
     ):
-        super().__init__(scene, grid)
+        target = scene.target(driver, grid, dtype, smoothing)
+        super().__init__(scene, grid, target)
         spatial = self._spatial
         cubes = opacity_cubes(
-            scene._galaxies, scene._emitters, scene._lines, scene._band,
+            scene._galaxies, scene._emitters, target.lines, target.band,
             dtype)
         # (the dust of all the galaxies, which dims the light of those
         # behind it: one model, see opacity_cubes)
@@ -402,9 +426,8 @@ class TransferScenePlan(ScenePlan):
                 scene._galaxies, scene._emitters, cubes, depths)]
         self._plans: tuple[TransferPlan, ...] = tuple(
             TransferPlan(
-                [members[g] for g in unit.galaxies], driver, spatial,
-                self._spectral, dtype, scene._lines, scene._band,
-                scene._data_unit, slab, subchannels, smoothing)
+                [members[g] for g in unit.galaxies], target, slab,
+                subchannels)
             for unit in scene._order)
         self._subchannels = subchannels
         # (that of every galaxy)

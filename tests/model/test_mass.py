@@ -19,7 +19,7 @@ import scipy.special
 import gbkfit.cosmology
 from gbkfit.config import ConfigError
 from gbkfit.grid import SpectralAxis
-from gbkfit.model import Extras, galaxy_parser
+from gbkfit.model import Extras, SceneTarget, galaxy_parser
 from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceCosmological, DistanceParameter)
 from gbkfit.model.mass import (
@@ -1854,8 +1854,10 @@ def test_disk_densities_are_azimuthal_means(driver):
         rpt3_a=0.5, rpt3_s=0.3, rpt3_q=1, rpt3_p=0, dpt_a=10, spt_rmin=0,
         spt_rmax=18)
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
-        None, None, 0.0)
+        SceneTarget(
+            driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32),
+            None, None, None, None),
+        True, None, 0.0)
     density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
     radius = np.array(component.density_disk().subrnodes())
@@ -1889,8 +1891,10 @@ def test_disk_densities_are_exact_at_jumps(driver):
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
         rpt2_a=cells, vpt_vt=100, dpt_a=10, spt_p=17, spt_s=93)
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
-        None, None, 0.0)
+        SceneTarget(
+            driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32),
+            None, None, None, None),
+        True, None, 0.0)
     density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
     radius = np.array(component.density_disk().subrnodes())
@@ -1937,8 +1941,10 @@ def test_disk_densities_see_small_blobs(driver):
         rpt2_p=0, rpt3_a=np.ones(11), rpt3_p=np.full(11, 40.0),
         rpt3_s=np.full(11, 0.01))
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
-        None, None, 0.0)
+        SceneTarget(
+            driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64),
+            None, None, None, None),
+        True, None, 0.0)
     density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
     radius = np.array([10, 10.002, 15, 15.005, 15.02])
@@ -2106,8 +2112,10 @@ def test_pressure_support_is_the_jeans_equation(driver):
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
         dpt_a=30, dpt_s=10)
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
-        None, None, 0.0)
+        SceneTarget(
+            driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32),
+            None, None, None, None),
+        True, None, 0.0)
     disk = component.density_disk()
     radius = np.array(disk.subrnodes())
     np.testing.assert_allclose(
@@ -2142,8 +2150,10 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
         dpt_a=30, dpt_s=10) | (dict(rpt_b=1.5) if 'rpt_b' in component.pdescs()
                                else {})
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
-        None, None, 0.0)
+        SceneTarget(
+            driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64),
+            None, None, None, None),
+        True, None, 0.0)
     disk = component.density_disk()
     (name, support), = disk.pressure_supported_params().items()
     assert name == 'vpt_vt' and support.type() == 'jeans' \
@@ -2424,8 +2434,10 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
         rtol=1e-8, atol=1e-7)
     np.testing.assert_array_equal(factors[0], 1)
     plan = component.plan(
-        driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
-        None, None, 0.0).disk_plan()
+        SceneTarget(
+            driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64),
+            None, None, None, None),
+        True, None, 0.0).disk_plan()
     values = {p: params[p] for p in component.pdescs()} | state.inputs()
     heights = [0.125, 4.125, 7.875, 9]
     np.testing.assert_allclose(

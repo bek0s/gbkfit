@@ -12,14 +12,11 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 
 import gbkfit.units
-from gbkfit.driver import DeviceArray, Driver
-from gbkfit.grid import Grid
+from gbkfit.driver import DeviceArray
 from gbkfit.params import ModelEvaluationError, ParamValues
 from ._component_plans import ComponentPlans
-from .components._units import DataUnit
 from .components.base import (
-    ComponentState, DepthAxis, NativeGrid, OpacityCubes)
-from .components.lines import Band
+    ComponentState, DepthAxis, NativeGrid, OpacityCubes, SceneTarget)
 from .extras import Extras
 
 if TYPE_CHECKING:
@@ -190,13 +187,13 @@ class TransferPlan:
     to bound its memory: the absorbers and the volumes (e.g. thick disks)
     on the planes of each slab (the clouds of a Monte Carlo disk are drawn
     again for each, the same ones), the layers (e.g. thin disks, points)
-    once. The parameters are those of ComponentPlans (but those of each
-    galaxy: members; data_unit is that of all), the number of planes of a slab (slab; all if None),
-    and the number of sub-channels of each channel that the march
-    transfers the light of the channel at, if it carries line opacity
-    (subchannels; the light of the channel is their mean), and the
-    spectral smoothing of the instrument (km/s; see
-    ComponentPlans.light_resolution; None for an image).
+    once. The parameters are the galaxies (members, see TransferMember),
+    what the scene asks of them all (target, see SceneTarget: of its
+    spectral smoothing, see ComponentPlans.light_resolution), the number
+    of planes of a slab (slab; all if None), and the number of
+    sub-channels of each channel that the march transfers the light of
+    the channel at, if it carries line opacity (subchannels; the light of
+    the channel is their mean).
 
     Raises
     ------
@@ -207,18 +204,13 @@ class TransferPlan:
     def __init__(
             self,
             members: Sequence[TransferMember],
-            driver: Driver,
-            grid: Grid,
-            spectral: Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None,
-            band: Band | None,
-            data_unit: DataUnit | None,
+            target: SceneTarget,
             slab: int | None,
-            subchannels: int,
-            smoothing: float | None
+            subchannels: int
     ):
         check_emitters(sum(len(member.emitters) for member in members))
+        driver, dtype = target.driver, target.dtype
+        lines, band, data_unit = target.lines, target.band, target.data_unit
         # The depth axis: that of the galaxy, or of several, as long as
         # theirs together and a margin of 2 voxels each (see _placement)
         depth = members[0].depth
@@ -229,8 +221,7 @@ class TransferPlan:
         self._depth = depth
         self._plans = tuple(
             ComponentPlans(
-                member.galaxy, driver, grid, spectral, depth, dtype,
-                member.emitters, member.cubes, lines, band, data_unit)
+                member.galaxy, target, depth, member.emitters, member.cubes)
             for member in members)
         self._driver = driver
         self._dtype = dtype
@@ -238,7 +229,7 @@ class TransferPlan:
         self._light_unit = None if data_unit is None \
             else data_unit.cube_unit()
         self._subchannels = subchannels
-        self._smoothing = smoothing
+        self._smoothing = target.smoothing
         # (that of every galaxy: the cubes hold the dust of the scene)
         self._ncubes = self._plans[0].ncubes
         native_grid = self._plans[0].native_grid

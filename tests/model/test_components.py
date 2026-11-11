@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 from gbkfit.config import ConfigError, strict_mode
 from gbkfit.grid import Coords, Grid
-from gbkfit.model import BandEmission, LineEmission, galaxy_parser
-from gbkfit.model._component_plans import opacity_cubes
+from gbkfit.model import BandEmission, LineEmission, SceneTarget, galaxy_parser
+from gbkfit.model._opacity import opacity_cubes
 from gbkfit.observation import Depth, LineOfSightGrid
 from modelutils import located_message
 
@@ -277,11 +277,11 @@ def test_thick_disk_with_several_velocity_traits(name):
         (1, 1, 10), (7.5, 7.5, 5), (0, 0, 0), 0), 2)
     spatial = grid.spatial()
     plan = galaxy.plan(
-        DriverHost(), spatial, grid.spectral(),
-        LineOfSightGrid(Depth(extent='legacy')).depth_axis(spatial, 0),
-        np.float32, (0,),
+        SceneTarget(
+            DriverHost(), spatial, grid.spectral(), np.float32, None, None,
+            None, None), (0,),
         opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
-        None, None, None, None)
+        LineOfSightGrid(Depth(extent='legacy')).depth_axis(spatial, 0))
     plan.evaluate(params, {}, dict(scube=scube), None)
     assert scube.sum() > 0
 

@@ -37,7 +37,8 @@ __all__ = [
     'FrameParams',
     'GalaxyMass',
     'NativeGrid',
-    'OpacityCubes'
+    'OpacityCubes',
+    'SceneTarget'
 ]
 
 
@@ -64,7 +65,7 @@ class OpacityCubes(NamedTuple):
     and the ratios follow the systemic velocities of the components: the
     model of the dust (None without dust) changes the arrays in place at
     each evaluation (its method update, of the values of the parameters
-    of the galaxies; see _component_plans._DustModel), which the plans
+    of the galaxies; see _opacity._DustModel), which the plans
     read then.
     """
     ncubes: int
@@ -125,6 +126,29 @@ class FrameParams(NamedTuple):
     vsys: str | None
     posa: str | None
     incl: str | None
+
+
+@dataclasses.dataclass(frozen=True)
+class SceneTarget:
+    """
+    What one scene of an observation asks of each galaxy that it
+    evaluates, and of their components (see Scene.target): the driver of
+    the evaluation, the grid of its x and y axes (spatial) and its
+    spectral axis (one axis), the floating type, the names of the
+    emission lines evaluated (all if None), the band of an image (if
+    known), the unit of the data of the observation, which the light
+    takes (None without data; see Component.plan), and the dispersion
+    (km/s) by which the instrument smooths the spectra of the model (None
+    for an image; see LineResolution).
+    """
+    driver: Driver
+    spatial: Grid
+    spectral: Grid
+    dtype: np.dtype
+    lines: tuple[str, ...] | None
+    band: Band | None
+    data_unit: 'DataUnit | None'
+    smoothing: float | None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -396,14 +420,9 @@ class Component(TypedSerializable, abc.ABC):
     @abc.abstractmethod
     def plan(
             self,
-            driver: Driver,
-            spectral: Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None,
-            band: Band | None,
+            target: 'SceneTarget',
             emits: bool,
             opacity_ratios: np.ndarray | None,
-            data_unit: 'DataUnit | None',
             redshift: float
     ) -> 'ComponentPlan':
         """
@@ -412,16 +431,15 @@ class Component(TypedSerializable, abc.ABC):
 
         Parameters
         ----------
-        driver : Driver
-            The driver it is evaluated on.
-        spectral : Grid
-            The spectral axis of the outputs (one axis).
-        dtype : np.dtype
-            The floating type of the evaluation.
-        lines : tuple of str, optional
-            The names of the emission lines to evaluate; all if None.
-        band : Band, optional
-            The band of the image it is evaluated in, if known.
+        target : SceneTarget
+            What the scene asks of it: the driver, the spectral axis of the
+            outputs, the floating type, the emission lines to evaluate
+            (all if None), the band of an image, if known, and the unit of
+            the data of the observation, which its light is turned into
+            from the unit of its emission, if it has one (see
+            _units.LineFactors and BandFactors; None without data: its
+            light stays in the unit of its emission). A plan that does not
+            emit takes no unit.
         emits : bool
             Whether its light is evaluated (an observation sees it), or
             only its opacity.
@@ -431,11 +449,6 @@ class Component(TypedSerializable, abc.ABC):
             of each of its lines that it evaluates, in their order, or of
             its band (an array of shape (nrows, ncubes); see
             GalaxyPlan).
-        data_unit : DataUnit, optional
-            The unit of the data of the observation, which its light is
-            turned into from the unit of its emission, if it has one (see
-            _units.LineFactors and BandFactors); None without data: its
-            light stays in the unit of its emission.
         redshift : float
             The redshift of its galaxy, which places its named lines on
             the spectral axis (see Lines.factors) and, with a unit, dims its

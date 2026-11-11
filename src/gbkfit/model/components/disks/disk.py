@@ -20,7 +20,8 @@ from .._needs import Need
 from .._detail import Interp, RNodes, RStep
 from .._native import make_bands, make_lines
 from .._units import DataUnit
-from ..base import Component, ComponentLinks, ComponentPlan, FrameParams
+from ..base import (
+    Component, ComponentLinks, ComponentPlan, FrameParams, SceneTarget)
 from ..lines import Band
 from ..nodes import Nodes, as_nodes
 from ..roles import STARS, Emission, Opacity
@@ -285,16 +286,13 @@ class Disk(Component, abc.ABC):
 
     def plan(
             self,
-            driver: Driver,
-            spectral: Grid,
-            dtype: np.dtype,
-            lines: tuple[str, ...] | None,
-            band: Band | None,
+            target: SceneTarget,
             emits: bool,
             opacity_ratios: np.ndarray | None,
-            data_unit: DataUnit | None,
             redshift: float
     ) -> ComponentPlan:
+        driver, spectral, dtype = target.driver, target.spectral, target.dtype
+        lines, band, data_unit = target.lines, target.band, target.data_unit
         emission = self.emission()
         return _detail.disk_plan(
             self._disk, self._lines, self._bands,
