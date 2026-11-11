@@ -32,6 +32,7 @@ __all__ = [
     'ObservedRequest',
     'PSFRequest',
     'PSFViewInfo',
+    'PieceLink',
     'PieceReference',
     'PieceRename',
     'PieceRequest',
@@ -58,14 +59,33 @@ class ServerInfo(BaseModel):
     pages: list[str]
 
 
+class PieceReference(BaseModel):
+    """A piece (or a setup) of a project: its folder and name."""
+    folder: str
+    name: str
+
+
+class PieceLink(BaseModel):
+    """
+    A piece (or a setup) that names a piece (source), the piece it names
+    (target), and whether that piece is missing (named, but not in the
+    project: e.g. deleted).
+    """
+    source: PieceReference
+    target: PieceReference
+    missing: bool
+
+
 class ProjectInfo(BaseModel):
     """
     A project: its path, the names of its pieces and setups by folder
-    (e.g. 'galaxies'), and the paths of its runs.
+    (e.g. 'galaxies'), the paths of its runs, and its links: each piece or
+    setup that names a piece, with the piece it names (see PieceLink).
     """
     path: str
     pieces: dict[str, list[str]]
     runs: list[str]
+    links: list[PieceLink]
 
 
 class ProjectRename(BaseModel):
@@ -75,12 +95,6 @@ class ProjectRename(BaseModel):
 
 class PieceRename(BaseModel):
     """The new name of a piece (a path in its folder, without .yaml)."""
-    name: str
-
-
-class PieceReference(BaseModel):
-    """A piece (or a setup) that names another: its folder and name."""
-    folder: str
     name: str
 
 

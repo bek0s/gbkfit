@@ -411,11 +411,26 @@ class Project:
             _yaml_rt().dump(old, f)
         return filename
 
+    def links(self) -> list[tuple[tuple[str, str], tuple[str, str]]]:
+        """
+        Return the links of the pieces and setups of the project (see the
+        module): each piece or setup that names a piece, with the piece it
+        names, as ((folder, name), (folder, name)), once each, in the order
+        of the folders and of the names. A file that cannot be read names
+        none; a piece can be named and not exist (e.g. once deleted).
+        """
+        found: dict[tuple[tuple[str, str], tuple[str, str]], None] = {}
+        for folder in ('observations', 'setups'):
+            for name in self.names(folder):
+                content = _load_quietly(self._file(folder, name))
+                for parent, key, target in _named(folder, content):
+                    found[(folder, name), (target, parent[key])] = None
+        return list(found)
+
     def references(self, folder: str, name: str) -> list[tuple[str, str]]:
         """
-        Return the pieces and setups that name a piece (see the module):
-        their folders and names, in order. A file that cannot be read
-        names none.
+        Return the pieces and setups that name a piece (see links): their
+        folders and names, in order.
 
         Parameters
         ----------
@@ -424,14 +439,9 @@ class Project:
         name : str
             The name of the piece.
         """
-        found = []
-        for other in ('observations', 'setups'):
-            for other_name in self.names(other):
-                content = _load_quietly(self._file(other, other_name))
-                if any(target == folder and parent[key] == name
-                       for parent, key, target in _named(other, content)):
-                    found.append((other, other_name))
-        return found
+        return list(dict.fromkeys(
+            source for source, target in self.links()
+            if target == (folder, name)))
 
     def rename_piece(self, folder: str, name: str, new: str) -> str:
         """

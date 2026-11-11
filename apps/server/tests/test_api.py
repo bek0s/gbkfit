@@ -172,6 +172,22 @@ def test_pieces_are_renamed_with_their_names_and_deleted(client):
         '/api/v1/pieces/study/observations/sky/image.yaml').status_code == 404
 
 
+def test_a_project_gives_the_links_of_its_pieces(client):
+    # (each piece or setup that names a piece, and whether that is missing:
+    # the setup names its galaxy, observation and params; once a piece is
+    # deleted, its name stays, missing)
+    def link(folder, name, missing=False):
+        return dict(
+            source=dict(folder='setups', name='disk'),
+            target=dict(folder=folder, name=name), missing=missing)
+    assert client.get('/api/v1/projects/study').json()['links'] == [
+        link('galaxies', 'disk'), link('observations', 'image'),
+        link('params', 'disk')]
+    client.delete('/api/v1/pieces/study/observations/image.yaml')
+    assert link('observations', 'image', True) in client.get(
+        '/api/v1/projects/study').json()['links']
+
+
 def test_pieces_are_updated_and_their_comments_stay(client):
     path = client.post('/api/v1/pieces', json=dict(
         project='study', folder='psfs', name='beam')).json()

@@ -66,11 +66,15 @@ _PIECES = (
 class ProjectInfo:
     """
     A project: its path, the names of its pieces and setups by folder,
-    and the paths of its runs.
+    the paths of its runs, and its links: each piece or setup that names
+    a piece, with the piece it names and whether that piece is missing
+    ({source: {folder, name}, target: {folder, name}, missing}; see
+    gbkfit.project.Project.links).
     """
     path: str
     pieces: dict[str, list[str]]
     runs: list[str]
+    links: list[dict[str, Any]] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -153,7 +157,7 @@ class Workspace:
         """
         path = self.path(relative)
         try:
-            gbkfit.project.open(path)
+            target = gbkfit.project.open(path)
         except ValueError as e:
             raise NotFound(str(e)) from e
         pieces = {
@@ -165,7 +169,12 @@ class Workspace:
         runs = sorted(
             self.relative(manifest.parent)
             for manifest in Path(path, 'runs').rglob(gbkfit.outputs.MANIFEST))
-        return ProjectInfo(self.relative(path), pieces, runs)
+        links = [
+            dict(source=dict(folder=source[0], name=source[1]),
+                 target=dict(folder=folder, name=name),
+                 missing=name not in pieces.get(folder, ()))
+            for source, (folder, name) in target.links()]
+        return ProjectInfo(self.relative(path), pieces, runs, links)
 
     def create_project(self, relative: str) -> ProjectInfo:
         """

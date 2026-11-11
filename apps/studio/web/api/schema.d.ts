@@ -1366,8 +1366,20 @@ export interface components {
             ] | null;
         };
         /**
+         * PieceLink
+         * @description A piece (or a setup) that names a piece (source), the piece it names
+         *     (target), and whether that piece is missing (named, but not in the
+         *     project: e.g. deleted).
+         */
+        PieceLink: {
+            source: components["schemas"]["PieceReference"];
+            target: components["schemas"]["PieceReference"];
+            /** Missing */
+            missing: boolean;
+        };
+        /**
          * PieceReference
-         * @description A piece (or a setup) that names another: its folder and name.
+         * @description A piece (or a setup) of a project: its folder and name.
          */
         PieceReference: {
             /** Folder */
@@ -1441,7 +1453,8 @@ export interface components {
         /**
          * ProjectInfo
          * @description A project: its path, the names of its pieces and setups by folder
-         *     (e.g. 'galaxies'), and the paths of its runs.
+         *     (e.g. 'galaxies'), the paths of its runs, and its links: each piece or
+         *     setup that names a piece, with the piece it names (see PieceLink).
          */
         ProjectInfo: {
             /** Path */
@@ -1452,6 +1465,8 @@ export interface components {
             };
             /** Runs */
             runs: string[];
+            /** Links */
+            links: components["schemas"]["PieceLink"][];
         };
         /**
          * ProjectRename

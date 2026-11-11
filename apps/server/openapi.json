@@ -3131,6 +3131,28 @@
         "title": "PSFViewInfo",
         "description": "A PSF drawn on pixels (see Responses.psf): its values (rows of y,\nfrom the bottom; they sum to 1), the size of the pixels (x, y;\narcsec), the solid angle of its beam (arcsec^2) and the full width at\nhalf maximum of the circular Gaussian of that beam (arcsec; none for\na point), and its full widths at half maximum along its major and\nminor axes (arcsec) and the position angle of its major axis\n(degrees; none if round), as measured (none for a point)."
       },
+      "PieceLink": {
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/PieceReference"
+          },
+          "target": {
+            "$ref": "#/components/schemas/PieceReference"
+          },
+          "missing": {
+            "type": "boolean",
+            "title": "Missing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "target",
+          "missing"
+        ],
+        "title": "PieceLink",
+        "description": "A piece (or a setup) that names a piece (source), the piece it names\n(target), and whether that piece is missing (named, but not in the\nproject: e.g. deleted)."
+      },
       "PieceReference": {
         "properties": {
           "folder": {
@@ -3148,7 +3170,7 @@
           "name"
         ],
         "title": "PieceReference",
-        "description": "A piece (or a setup) that names another: its folder and name."
+        "description": "A piece (or a setup) of a project: its folder and name."
       },
       "PieceRename": {
         "properties": {
@@ -3292,16 +3314,24 @@
             },
             "type": "array",
             "title": "Runs"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/PieceLink"
+            },
+            "type": "array",
+            "title": "Links"
           }
         },
         "type": "object",
         "required": [
           "path",
           "pieces",
-          "runs"
+          "runs",
+          "links"
         ],
         "title": "ProjectInfo",
-        "description": "A project: its path, the names of its pieces and setups by folder\n(e.g. 'galaxies'), and the paths of its runs."
+        "description": "A project: its path, the names of its pieces and setups by folder\n(e.g. 'galaxies'), the paths of its runs, and its links: each piece or\nsetup that names a piece, with the piece it names (see PieceLink)."
       },
       "ProjectRename": {
         "properties": {

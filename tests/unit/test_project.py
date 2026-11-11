@@ -190,6 +190,17 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
         ('observations', 'ngc1313/hi'), ('setups', 'fit')]
     assert study.references('galaxies', 'arctan') == [('setups', 'fit')]
     assert study.references('datasets', 'other') == []
+    # (all of them at once, each once: the setup names the dataset twice)
+    assert study.links() == [
+        (('observations', 'ngc1313/hi'), ('datasets', 'ngc1313/hi')),
+        (('observations', 'ngc1313/hi'), ('psfs', 'beam')),
+        (('setups', 'fit'), ('galaxies', 'arctan')),
+        (('setups', 'fit'), ('observations', 'ngc1313/hi')),
+        (('setups', 'fit'), ('params', 'bounds')),
+        (('setups', 'fit'), ('params', 'ngc1313')),
+        (('setups', 'fit'), ('datasets', 'ngc1313/hi')),
+        (('setups', 'fit'), ('psfs', 'beam')),
+        (('setups', 'fit'), ('fitters', 'nautilus'))]
     # (renamed, the names of it follow; comments and layout stay)
     target = study.rename_piece('datasets', 'ngc1313/hi', 'hi')
     assert target == str(path / 'datasets/hi.yaml')
