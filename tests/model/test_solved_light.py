@@ -199,7 +199,7 @@ def test_the_pieces_of_a_model_are_its_parts_and_are_weighed(driver):
     comparison_ = obs.likelihood().comparison(obs, driver)
     comparison_.prepare()
     rows = driver.mem_alloc_d((2, image.size), np.float64)
-    comparison_.weigh(pieces, TRUTH, rows)
+    comparison_.weighted_pieces(pieces, TRUTH, rows)
     np.testing.assert_allclose(
         driver.mem_copy_d2h(rows), parts.reshape(2, -1) / ERROR,
         atol=atol / ERROR)

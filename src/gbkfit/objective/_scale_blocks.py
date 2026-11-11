@@ -11,7 +11,7 @@ import numpy as np
 
 from gbkfit.observation import (
     Comparison, FluxScale, ModelData, ObservationGroup)
-from gbkfit.params import ParamValues, Solution, Solve, element_name
+from gbkfit.params import ParamValues, Solution, Solve, element_names
 from ._block import Block
 
 
@@ -60,8 +60,7 @@ class ScaleBlock(Block):
         self._scale = scale
         self._solve = solve
         self._comparison = comparison
-        self._elements = (param,) if indices is None else tuple(
-            element_name(param, int(k)) for k in indices)
+        self._elements = tuple(element_names(param, indices))
 
     def observation(self) -> int:
         """Return the observation, by index."""
@@ -141,8 +140,8 @@ def scale_blocks(
             continue
         param, scale = flux_scale
         pdesc = pdescs[param]
-        names = [param] if pdesc.is_scalar() else [
-            element_name(param, k) for k in range(pdesc.size())]
+        names = element_names(
+            param, None if pdesc.is_scalar() else range(pdesc.size()))
         indices_of: dict[int, list[int]] = {}
         for k, name in enumerate(names):
             if name in solves:

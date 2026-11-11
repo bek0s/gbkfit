@@ -239,34 +239,27 @@ class LikelihoodGaussian(Likelihood):
     sqrt((f e)^2 + j^2) in place of its error. Each is a parameter of the
     observation, '{name}_noise_scale_{item}' and
     '{name}_noise_jitter_{item}' (the observation needs a name; see
-    Observation). The scale is
-    for errors that are off by a factor (e.g. too small, from noise
-    correlated within the beam), and without errors it is the noise
-    itself, in the unit of the data; the jitter, in the unit of the data,
-    is for scatter that the model cannot make (e.g. turbulence in a
-    velocity map, or clumps). Both at once need errors that differ between
-    values: with equal errors only (f e)^2 + j^2 counts.
+    Observation). The scale is for errors that are off by a factor (e.g.
+    too small, from noise correlated within the beam), and without errors
+    it is the noise itself, in the unit of the data; the jitter, in the
+    unit of the data, is for scatter that the model cannot make (e.g.
+    turbulence in a velocity map, or clumps). Both at once need errors
+    that differ between values: with equal errors only (f e)^2 + j^2
+    counts.
 
     A fitted noise makes the normalisation of the Gaussian count: each
     value adds c^2 log sigma^2 to -2 log L, c the factor of its residual
     (the weight of the item, times those of the model and of the data
-    mask), which the residuals lack. The objective adds it as one more
-    residual for each such item, after those of the data, its noise
-    residual: sqrt(sum c^2 log(sigma^2 / (f_ref e)^2)), f_ref the minimum
-    of the scale, at most 1 (1 if the scale is not fitted), so that the
-    sum is never negative (the scale is at least its minimum, the jitter
-    at least 0); the part it leaves out, c^2 log (f_ref e)^2, does not
-    depend on the noise. Least squares then fit the noise too, and
-    exactly, as do the other fitters. Masked values with an upper limit
-    take the fitted noise of their error, but add nothing (a probability
-    has no normalisation). Values the model lacks cost missing_residual,
-    which does not take the noise, and add the term of the noise of their
-    error, c^2 log(1 / f_ref^2), which the noise does not change: taking
-    their noise would bias the scale low (by about half their share of
-    the values), and adding nothing would make lacking a value cheaper by
-    the term (9.2 at a minimum scale of 0.01, against a missing_residual
-    of 3 costing 9). The chi-square has the noise residuals; the reduced
-    chi-square of a fit does not (see Objective.noise_chi2).
+    mask), which the residuals lack. The objective adds it, less a part
+    that the noise does not change, as one more residual for each such
+    item, after those of the data: its noise residual, never negative.
+    Least squares then fit the noise too, and exactly, as do the other
+    fitters. Masked values with an upper limit take the fitted noise of
+    their error, but add nothing (a probability has no normalisation).
+    Values the model lacks cost missing_residual, which does not take the
+    noise, and add a term that the noise does not change. The chi-square
+    has the noise residuals; the reduced chi-square of a fit does not (see
+    Evaluation.noise_chi2).
 
     The residuals of a data item whose noise is correlated (see Data:
     e.g. by the beam of a radio image) are whitened. The noise of its
@@ -283,29 +276,24 @@ class LikelihoodGaussian(Likelihood):
     beam on pixels much smaller than it); the noise of a cube correlated
     on the sky and along its spectral axis has a floor on each, C =
     C_xy' (x) C_z'. The determinant of C is the same at every parameter,
-    and left out of the log-likelihood. A fitted noise adds its noise
-    residual as above, of the terms of its values times the share
-    n_ind / n of the n values that count, n_ind the independent values
-    they are worth (see Whitening): its sum is n_ind log f^2 for a scale
-    f. With all n (the Gaussian of C exactly), the best scale would be
-    f^2 = chi2 / n, too small where the noise of the data has less
-    variance than the floor gives C (e.g. beam noise alone, which has
-    none from pixel to pixel): on 20 mocks of NGC 1313 of LVHIS, f = 0.47
-    of the true noise, and errors half the scatter of the fits; counting
-    n_ind, f = 1.00 and errors of the scatter (2026-10-21; the user chose
-    this, rather than the exact Gaussian). The mask of a cube must keep
-    whole spectra (the same pixels in every channel it keeps; a channel
-    it masks everywhere, e.g. a blank plane, is left out, and C_z' is
-    that of the channels kept), so that C is that product; and the noise
-    can be correlated on the sky over at most MAX_CORRELATED_PIXELS
-    pixels (C_xy' is a dense matrix).
-    Correlated noise does not go with upper limits (the probability of
-    correlated non-detections has no closed form), or with solved flux
-    scales of the item (see ObservationSky; the best scale of each
-    spectrum would depend on the others). Observations of correlated noise
-    are in float64 by default (see ObservationSky). Solved flux scales do
-    not go with upper limits of their items either: they are solved
-    without the terms of the limits.
+    and left out of the log-likelihood. The noise residual of a fitted
+    noise counts the values as the independent values they are worth
+    (see Whitening), not as their number: the exact Gaussian of C would
+    fit too small a scale where the noise of the data has less variance
+    than the floor gives C (e.g. beam noise alone).
+
+    The mask of a cube of correlated noise must keep whole spectra (the
+    same pixels in every channel it keeps; a channel it masks everywhere,
+    e.g. a blank plane, is left out, and C_z' is that of the channels
+    kept), so that C is that product; and the noise can be correlated on
+    the sky over at most MAX_CORRELATED_PIXELS pixels (C_xy' is a dense
+    matrix). Correlated noise does not go with upper limits (the
+    probability of correlated non-detections has no closed form), or with
+    solved flux scales of the item (see ObservationSky; the best scale of
+    each spectrum would depend on the others). Observations of correlated
+    noise are in float64 by default (see ObservationSky). Solved flux
+    scales do not go with upper limits of their items either: they are
+    solved without the terms of the limits.
 
     Parameters
     ----------
@@ -340,7 +328,7 @@ class LikelihoodGaussian(Likelihood):
         return 'Gaussian'
 
     def dump(self) -> dict[str, Any]:
-        limits = {} if self._upper_limits is None else dict(upper_limits={
+        limits = {} if not self._upper_limits else dict(upper_limits={
             key: _record_config(limit)
             for key, limit in self._upper_limits.items()})
         noise = {} if not self._noise else dict(noise={
@@ -364,8 +352,7 @@ class LikelihoodGaussian(Likelihood):
             else dict(weights)
         self._missing_residual = None if missing_residual is None \
             else float(missing_residual)
-        self._upper_limits = None if upper_limits is None \
-            else dict(upper_limits)
+        self._upper_limits = dict(upper_limits or {})
         for key, item in (noise or {}).items():
             _check_noise(key, item)
         self._noise = dict(noise or {})
@@ -427,7 +414,7 @@ class LikelihoodGaussian(Likelihood):
             limit.
         """
         weights = () if isinstance(self._weights, Real) else self._weights
-        named = {*weights, *(self._upper_limits or ()), *self._noise}
+        named = {*weights, *self._upper_limits, *self._noise}
         if unknown := sorted(named - set(keys)):
             raise ValueError(
                 f"the options of the likelihood name data items that the "
@@ -500,15 +487,12 @@ class LikelihoodGaussian(Likelihood):
         from .comparisons import ComparisonGaussian
         return ComparisonGaussian(observation, driver)
 
-    def upper_limit(self, key: str) -> tuple[float, float] | None:
+    def upper_limit(self, key: str) -> UpperLimit | None:
         """
         Return the detection limit below which the data item of the given
         name is where it is masked, and the noise there, if given.
         """
-        if self._upper_limits is None or key not in self._upper_limits:
-            return None
-        limit = self._upper_limits[key]
-        return limit.limit, limit.error
+        return self._upper_limits.get(key)
 
     def fitted_noise(self) -> dict[str, FittedNoise]:
         """
@@ -540,8 +524,7 @@ class Whitening:
     the correlation C of the data (without the white floor) gives them
     the chi-square tr(C C'^-1) on average, nindependent: the number of
     independent values they are worth (e.g. one in 4.5 of the pixels of
-    the moment maps of NGC 1313 of LVHIS, of a beam of 6.6 by 5.4 pixels,
-    with a floor of 0.01).
+    moment maps of a beam of 6.6 by 5.4 pixels, with a floor of 0.01).
     """
     pixels: np.ndarray
     spatial: np.ndarray | None

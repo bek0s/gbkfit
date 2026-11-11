@@ -5,7 +5,8 @@ and chi-square.
 """
 
 import abc
-from collections.abc import Collection, Mapping
+import math
+from collections.abc import Collection, Mapping, Sequence
 from typing import NamedTuple, Self
 
 import numpy as np
@@ -13,7 +14,8 @@ import numpy as np
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from ._group_plan import LinearPieces
-from .likelihood import LikelihoodUser, Whitening, whitening
+from .likelihood import LikelihoodUser, UpperLimit, Whitening, whitening
+from .observables import ModelData
 from .observation import Observation
 
 
@@ -24,9 +26,9 @@ __all__ = [
 ]
 
 
-# The model of an observation: the parts of each data item (see
-# Observation), by name
-_Model = Mapping[str, Mapping[str, DeviceArray | None]]
+# The upper limit of a data item without one, and its noise, as the
+# native residual takes them (see ComparisonGaussian.evaluate)
+_NO_UPPER_LIMIT = (np.nan, np.nan)
 
 
 class Comparison(abc.ABC):
@@ -45,8 +47,8 @@ class Comparison(abc.ABC):
     linear map W (see linear_form), and pointwise, of each value alone
     (see pointwise_form): elements of the parameters that the model is
     linear in can then be solved (see Objective). It gives the weighted
-    pieces of the model, W p (see weigh), and of a solved scale its sums
-    (see scale_sums).
+    pieces of the model, W p (see weighted_pieces), and of a solved scale
+    its sums (see scale_sums).
 
     Its memory on the device (and the host) is allocated by prepare and
     released by close. The methods of the residuals return arrays that the
@@ -80,7 +82,7 @@ class Comparison(abc.ABC):
         self._h_residual_sum: np.ndarray | None = None
         self._d_residual_sum: DeviceArray | None = None
         # The scaled model of each data item that has scales, by name
-        self._d_scaled: dict[str, DeviceArray] = {}
+        self._d_scaled_models: dict[str, DeviceArray] = {}
         # The native objective, for the driver of the observation
         self._backend = None
         self._prepared = False
@@ -153,18 +155,16 @@ class Comparison(abc.ABC):
         driver = self._driver
         dtype = self._observation.dtype()
         shape = self._dataset.shape()
-        npix = int(np.prod(shape))
         keys = self._observation.keys()
         (self._h_residual_vector,
-         self._d_residual_vector) = driver.mem_alloc_s(npix * len(keys), dtype)
+         self._d_residual_vector) = driver.mem_alloc_s(
+            math.prod(shape) * len(keys), dtype)
         (self._h_residual_sum,
          self._d_residual_sum) = driver.mem_alloc_s(1, np.float64)
-        for j, key in enumerate(keys):
-            slice_ = slice(j * npix, (j + 1) * npix)
-            self._h_residual_nddata[key] = \
-                self._h_residual_vector[slice_].reshape(shape)
-            self._d_residual_nddata[key] = \
-                self._d_residual_vector[slice_].reshape(shape)
+        self._h_residual_nddata = _item_views(
+            self._h_residual_vector, keys, shape)
+        self._d_residual_nddata = _item_views(
+            self._d_residual_vector, keys, shape)
         self._backend = driver.native_class('Objective', dtype)()
         self._prepare(driver, shape, dtype)
         self._prepared = True
@@ -182,7 +182,7 @@ class Comparison(abc.ABC):
     @abc.abstractmethod
     def evaluate(
             self,
-            model: _Model,
+            model: ModelData,
             params: ParamValues,
             weighted: bool,
             scales: Mapping[str, DeviceArray]
@@ -211,8 +211,8 @@ class Comparison(abc.ABC):
         Return why its weighted residuals of the given data items are not
         W (m - d), linear in the model m by a map W of their own, or None
         if they are (e.g. amplitudes of the light are solved from the
-        weighted pieces of the model, see weigh): here, they are not known
-        to be.
+        weighted pieces of the model, see weighted_pieces): here, they are
+        not known to be.
         """
         return (
             f"the likelihood of the observation, "
@@ -254,7 +254,7 @@ class Comparison(abc.ABC):
         """
         raise NotImplementedError
 
-    def weigh(
+    def weighted_pieces(
             self,
             pieces: LinearPieces,
             params: ParamValues,
@@ -281,7 +281,7 @@ class Comparison(abc.ABC):
 
     def scale_sums(
             self,
-            model: _Model,
+            model: ModelData,
             params: ParamValues,
             key: str,
             axis: int
@@ -359,9 +359,9 @@ class Comparison(abc.ABC):
         """
         return self._d_residual_nddata
 
-    def _scaled(
+    def _scaled_model(
             self,
-            model: _Model,
+            model: ModelData,
             key: str,
             scales: Mapping[str, DeviceArray]
     ) -> DeviceArray:
@@ -372,18 +372,19 @@ class Comparison(abc.ABC):
         if key not in scales:
             return model[key]['d']
         driver = self._driver
-        if key not in self._d_scaled:
-            self._d_scaled[key] = driver.mem_alloc_d(
+        if key not in self._d_scaled_models:
+            self._d_scaled_models[key] = driver.mem_alloc_d(
                 self._dataset.shape(), self._observation.dtype())
         return driver.math_mul(
-            model[key]['d'], scales[key], out=self._d_scaled[key])
+            model[key]['d'], scales[key], out=self._d_scaled_models[key])
 
 
-class _Noise(NamedTuple):
+class _NoiseParams(NamedTuple):
     """
-    The fitted noise of a data item (see LikelihoodGaussian): the names of
-    the parameters of its scale and of its jitter (None for those not
-    fitted), and the smallest scale (1 if the scale is not fitted).
+    The parameters of the fitted noise of a data item (see
+    LikelihoodGaussian): the names of those of its scale and of its jitter
+    (None for those not fitted), and the smallest scale (1 if the scale is
+    not fitted).
     """
     scale: str | None
     jitter: str | None
@@ -512,23 +513,23 @@ class ComparisonGaussian(Comparison):
         self._missing_residual = missing \
             if missing is not None and observation.model_can_lack_values() \
             else np.nan
-        # The upper limit of each data item where it is masked, and its
-        # noise (NaN for none), and the footprints of those that have both
-        self._upper_limits = {
-            key: likelihood.upper_limit(key) or (np.nan, np.nan)
-            for key in keys}
+        # The upper limit of the data items that have one, where they are
+        # masked, by name, and the footprints of those that have both
+        self._upper_limits: dict[str, UpperLimit] = {
+            key: limit for key in keys
+            if (limit := likelihood.upper_limit(key)) is not None}
         self._footprints = {
-            key: self._dataset[key].footprint() for key in keys
-            if likelihood.upper_limit(key) is not None
-            and self._dataset[key].footprint() is not None}
-        # The data items whose noise is fitted, by name, and their noise
-        # residuals, in float64 (each sums a term of every value of its
-        # item: float32 would round it off)
-        self._noise = {
-            key: _Noise(*likelihood.noise_params(key),
-                        noise.scale_min if noise.scale else 1.0)
+            key: footprint for key in self._upper_limits
+            if (footprint := self._dataset[key].footprint()) is not None}
+        # The parameters of the noise of the data items whose noise is
+        # fitted, by name, and their noise residuals, in float64 (each sums
+        # a term of every value of its item: float32 would round it off)
+        self._noise_params = {
+            key: _NoiseParams(
+                *likelihood.noise_params(key),
+                noise.scale_min if noise.scale else 1.0)
             for key, noise in likelihood.fitted_noise().items()}
-        self._noise_residuals = np.zeros(len(self._noise))
+        self._noise_residuals = np.zeros(len(self._noise_params))
         self._white_floor = likelihood.white_floor()
 
     def _reset_memory(self) -> None:
@@ -541,7 +542,8 @@ class ComparisonGaussian(Comparison):
         # The footprints of upper limits, by name
         self._d_footprints: dict[str, DeviceArray] = {}
         # Data of 0 of each item, by name, allocated on first use: the
-        # weighted residual of a piece of the model p is W p (see weigh)
+        # weighted residual of a piece of the model p is W p (see
+        # weighted_pieces)
         self._d_zeros: dict[str, DeviceArray] = {}
         # The sums of each item and axis of scales (A and B; see
         # scale_sums), allocated on first use
@@ -578,7 +580,7 @@ class ComparisonGaussian(Comparison):
             mask = self._dataset[key].mask()
             if key in self._footprints:
                 counted.append(self._footprints[key].ravel() != 0)
-            elif not np.isnan(self._upper_limits[key][0]):
+            elif key in self._upper_limits:
                 counted.append(np.ones(mask.size, dtype=bool))
             else:
                 counted.append(mask.ravel() != 0)
@@ -611,7 +613,7 @@ class ComparisonGaussian(Comparison):
         Return which values of data item key are censored (see ncensored),
         or None if it has no upper limit.
         """
-        if np.isnan(self._upper_limits[key][0]):
+        if key not in self._upper_limits:
             return None
         censored = self._dataset[key].mask() == 0
         if key in self._footprints:
@@ -626,7 +628,7 @@ class ComparisonGaussian(Comparison):
         """
         total = float(self.nresiduals())
         for key, n in self._nindependent.items():
-            total += n - np.count_nonzero(self._dataset[key].mask())
+            total += n - self._nunmasked[key]
         return total
 
     def share(self, other: Comparison) -> None:
@@ -679,26 +681,37 @@ class ComparisonGaussian(Comparison):
                 self._whiteners[key] = _Whitener.on_device(
                     driver, whitening_, shape, dtype)
                 self._nindependent[key] = whitening_.nindependent
-        if self._noise:
+        if self._noise_params:
             (self._h_noise_sums,
              self._d_noise_sums) = driver.mem_alloc_s(
-                len(self._noise), np.float64)
-        self._noise_shares = np.ones(len(self._noise))
-        for j, key in enumerate(self._noise):
+                len(self._noise_params), np.float64)
+        # The terms of the noise residual of an item whose noise is
+        # correlated count by the share n_ind / n of the n values that
+        # count, n_ind the independent values they are worth (see
+        # Whitening): their sum is n_ind log f^2 for a scale f. With all n
+        # (the Gaussian of C exactly), the best scale would be f^2 = chi2 /
+        # n, too small where the noise of the data has less variance than
+        # the floor gives C (e.g. beam noise alone, which has none from
+        # pixel to pixel): on 20 mocks of NGC 1313 of LVHIS, f = 0.47 of
+        # the true noise, and errors half the scatter of the fits; counting
+        # n_ind, f = 1.00 and errors of the scatter. Hence n_ind, rather
+        # than the exact Gaussian.
+        self._noise_shares = np.ones(len(self._noise_params))
+        for j, key in enumerate(self._noise_params):
             if key in self._nindependent:
-                self._noise_shares[j] = self._nindependent[key] \
-                    / np.count_nonzero(self._dataset[key].mask())
+                self._noise_shares[j] = \
+                    self._nindependent[key] / self._nunmasked[key]
 
     def evaluate(
             self,
-            model: _Model,
+            model: ModelData,
             params: ParamValues,
             weighted: bool,
             scales: Mapping[str, DeviceArray]
     ) -> None:
         driver = self._driver
-        scaled = {
-            key: self._scaled(model, key, scales)
+        scaled_models = {
+            key: self._scaled_model(model, key, scales)
             for key in self._observation.keys()}
         # The weight of each data item, times the normalisation of the
         # pixel weights of its model, which its noise residual takes too
@@ -711,11 +724,11 @@ class ComparisonGaussian(Comparison):
                 self._d_data[key],
                 self._d_error.get(key),
                 self._d_mask[key],
-                scaled[key],
+                scaled_models[key],
                 model[key]['w'],
                 weights[key],
                 self._missing_residual,
-                *self._upper_limits[key],
+                *self._upper_limits.get(key, _NO_UPPER_LIMIT),
                 *self._noise_values(key, params),
                 residual)
             if key in self._d_footprints:
@@ -724,8 +737,9 @@ class ComparisonGaussian(Comparison):
                     residual, self._d_footprints[key], out=residual)
             if weighted and key in self._whiteners:
                 self._whiteners[key](residual)
-        if self._noise:
-            self._update_noise_residuals(model, scaled, weights, params)
+        if self._noise_params:
+            self._update_noise_residuals(
+                model, scaled_models, weights, params)
 
     def linear_form(self, keys: Collection[str]) -> str | None:
         """
@@ -737,7 +751,7 @@ class ComparisonGaussian(Comparison):
         every value, see Observable.linear_in_light.)
         """
         for key in keys:
-            if not np.isnan(self._upper_limits[key][0]):
+            if key in self._upper_limits:
                 return (
                     f"'{key}' has an upper limit, whose residuals are not "
                     f"linear in the model")
@@ -783,7 +797,7 @@ class ComparisonGaussian(Comparison):
                 / likelihood.noise(key, error, params), 0)
         return factors
 
-    def weigh(
+    def weighted_pieces(
             self,
             pieces: LinearPieces,
             params: ParamValues,
@@ -798,7 +812,8 @@ class ComparisonGaussian(Comparison):
         weights = {
             key: self._weights[key] * self._pixel_weight(pieces.base, key)
             for key in keys}
-        noise = {key: self._noise_values(key, params) for key in keys}
+        noise_values = {
+            key: self._noise_values(key, params) for key in keys}
         for k, row in enumerate(out):
             for key in keys:
                 residual = self._d_residual_nddata[key]
@@ -809,27 +824,26 @@ class ComparisonGaussian(Comparison):
                     pieces.pieces[key][k],
                     pieces.base[key]['w'],
                     weights[key],
-                    np.nan, np.nan, np.nan,
-                    *noise[key],
+                    np.nan, *_NO_UPPER_LIMIT,
+                    *noise_values[key],
                     residual)
                 if key in self._whiteners:
                     self._whiteners[key](residual)
             driver.mem_copy_d2d(self._d_residual_vector, row)
 
     def _alloc_zeros(self) -> None:
-        """Allocate the data of 0 of each item (see weigh)."""
+        """Allocate the data of 0 of each item (see weighted_pieces)."""
         driver = self._driver
         shape = self._dataset.shape()
-        npix = int(np.prod(shape))
         keys = self._observation.keys()
-        zeros = driver.mem_alloc_d(npix * len(keys), self._observation.dtype())
+        zeros = driver.mem_alloc_d(
+            math.prod(shape) * len(keys), self._observation.dtype())
         driver.mem_fill(zeros, 0)
-        for j, key in enumerate(keys):
-            self._d_zeros[key] = zeros[j * npix:(j + 1) * npix].reshape(shape)
+        self._d_zeros = _item_views(zeros, keys, shape)
 
     def scale_sums(
             self,
-            model: _Model,
+            model: ModelData,
             params: ParamValues,
             key: str,
             axis: int
@@ -860,7 +874,7 @@ class ComparisonGaussian(Comparison):
         weight = (self._weights[key] * self._pixel_weight(model, key)) ** 2
         return weight * h_sums[0], weight * h_sums[1]
 
-    def _pixel_weight(self, model: _Model, key: str) -> float:
+    def _pixel_weight(self, model: ModelData, key: str) -> float:
         """
         Return the factor of the weights of the model of data item key (its
         pixel weights, see Weights) that makes their mean square over the
@@ -897,7 +911,7 @@ class ComparisonGaussian(Comparison):
             self._weights[key] ** 2 * self._nunmasked[key] * share
             * 2 * np.log(min(noise.scale_min, 1.0))
             for (key, noise), share in zip(
-                self._noise.items(), self._noise_shares)))
+                self._noise_params.items(), self._noise_shares)))
 
     def noise_residuals(self) -> np.ndarray:
         """
@@ -914,7 +928,7 @@ class ComparisonGaussian(Comparison):
         Return the scale and the jitter of the noise of data item key: 1
         and 0 for those that are not fitted.
         """
-        noise = self._noise.get(key)
+        noise = self._noise_params.get(key)
         if noise is None:
             return 1.0, 0.0
         scale = 1.0 if noise.scale is None else float(params[noise.scale])
@@ -923,21 +937,35 @@ class ComparisonGaussian(Comparison):
 
     def _update_noise_residuals(
             self,
-            model: _Model,
-            scaled: Mapping[str, DeviceArray],
+            model: ModelData,
+            scaled_models: Mapping[str, DeviceArray],
             weights: Mapping[str, float],
             params: ParamValues
     ) -> None:
         """
-        Evaluate the noise residuals, with the weight of each data item
-        that its residuals take (see evaluate).
+        Evaluate the noise residuals, of the scaled models of the data
+        items, with the weight of each item that its residuals take (see
+        evaluate).
         """
+        # The noise residual of an item is sqrt(sum c^2 log(sigma^2 /
+        # (f_ref e)^2)), f_ref the minimum of the scale, at most 1 (1 if
+        # the scale is not fitted): its part of -2 log L, sum c^2 log
+        # sigma^2, less sum c^2 log (f_ref e)^2, which does not depend on
+        # the noise, so that the sum is never negative, as a residual
+        # needs (the scale is at least its minimum, the jitter at least 0;
+        # see noise_constant). A value the model lacks costs
+        # missing_residual, which does not take the noise, and adds the
+        # term of the noise of its error, c^2 log(1 / f_ref^2), which the
+        # noise does not change: taking its noise would bias the scale low
+        # (by about half the share of such values), and adding nothing
+        # would make lacking a value cheaper by the term (9.2 at a minimum
+        # scale of 0.01, against a missing_residual of 3 costing 9).
         driver = self._driver
-        for j, (key, noise) in enumerate(self._noise.items()):
+        for j, (key, noise) in enumerate(self._noise_params.items()):
             self._backend.noise_sum(
                 self._d_error.get(key),
                 self._d_mask[key],
-                scaled[key],
+                scaled_models[key],
                 model[key]['w'],
                 weights[key],
                 *self._noise_values(key, params),
@@ -985,7 +1013,7 @@ class ComparisonUser(Comparison):
 
     def evaluate(
             self,
-            model: _Model,
+            model: ModelData,
             params: ParamValues,
             weighted: bool,
             scales: Mapping[str, DeviceArray]
@@ -995,7 +1023,7 @@ class ComparisonUser(Comparison):
         for key in self._observation.keys():
             data, error, mask = self._arrays[key]
             values = np.asarray(
-                driver.mem_copy_d2h(self._scaled(model, key, scales)),
+                driver.mem_copy_d2h(self._scaled_model(model, key, scales)),
                 dtype=np.float64)
             result = self._likelihood.evaluate(
                 key, data, values, error, mask, params)
@@ -1027,3 +1055,16 @@ def _read_only(array: np.ndarray | None) -> np.ndarray | None:
     view = array.view()
     view.flags.writeable = False
     return view
+
+
+def _item_views(
+        vector: DeviceArray, keys: Sequence[str], shape: tuple[int, ...]
+) -> dict[str, DeviceArray]:
+    """
+    Return the views of a 1d array of the values of data items of a
+    shape, one item after the other, as arrays of the shape, by name.
+    """
+    size = math.prod(shape)
+    return {
+        key: vector[j * size:(j + 1) * size].reshape(shape)
+        for j, key in enumerate(keys)}

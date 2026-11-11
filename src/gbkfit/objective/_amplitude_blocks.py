@@ -14,7 +14,7 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.observation import Comparison, LinearPieces, ObservationGroup
 from gbkfit.params import (
     ParamValues, Solution, Solve, check_together, element_name,
-    solve_together)
+    element_names, solve_together)
 from ._block import Block
 
 
@@ -48,9 +48,10 @@ class AmplitudeBlock(Block):
     The plan of the group gives the models of the observations as linear
     in them (see GroupPlan.amplitude_pieces): the base, with them at 0,
     and the piece of each. The comparison of each observation weighs the
-    pieces, the rows R (see Comparison.weigh), and gives the residuals r
-    of the base (see Comparison.evaluate): the sums over the observations
-    of N = R R^T and b = -R r are the normal equations of the amplitudes.
+    pieces, the rows R (see Comparison.weighted_pieces), and gives the
+    residuals r of the base (see Comparison.evaluate): the sums over the
+    observations of N = R R^T and b = -R r are the normal equations of
+    the amplitudes.
 
     Parameters
     ----------
@@ -130,7 +131,7 @@ class AmplitudeBlock(Block):
         for i, comparison, driver, sums in zip(
                 self._observations, self._comparisons, self._drivers,
                 self._sums):
-            comparison.weigh(pieces[i], params, sums.rows)
+            comparison.weighted_pieces(pieces[i], params, sums.rows)
             comparison.evaluate(pieces[i].base, params, True, {})
             driver.mem_copy_d2d(comparison.residual_vector_d(), sums.residuals)
             driver.math_matmul(sums.rows, sums.rows.T, out=sums.d_normal)
@@ -161,24 +162,25 @@ def amplitude_blocks(
         comparisons: Sequence[Comparison],
         drivers: Sequence[Driver],
         solves: Mapping[str, Solve],
-        scaled: Collection[int]
+        scaled_observations: Collection[int]
 ) -> tuple[AmplitudeBlock, ...]:
     """
     Return the solves of the amplitudes of the light of a group (see
     AmplitudeBlock), of the comparison and the driver of each observation,
-    and the solve of each solved element (by element name; all must be
-    amplitudes of the light): those of parameters whose models fall on the
-    same observations together.
+    the solve of each solved element (by element name; all must be
+    amplitudes of the light) and the observations with solved flux scales
+    (by index): those of parameters whose models fall on the same
+    observations together.
 
     Raises
     ------
     ValueError
         If an element is not an amplitude of the light, or one that a model
         is not linear in (with why), its observation has a solved flux
-        scale (in the given observations: the model is not linear in
-        both), the weighted residuals of its comparison are not linear in
-        the model (see Comparison.linear_form), or its solves cannot be
-        solved together (see check_together).
+        scale (the model is not linear in both), the weighted residuals of
+        its comparison are not linear in the model (see
+        Comparison.linear_form), or its solves cannot be solved together
+        (see check_together).
     """
     if not solves:
         return ()
@@ -194,12 +196,11 @@ def amplitude_blocks(
                 reasons.setdefault(param, reason)
     elements: dict[str, list[tuple[str, int | None]]] = {}
     for param, pdesc in pdescs.items():
-        names = [param] if pdesc.is_scalar() else [
-            element_name(param, k) for k in range(pdesc.size())]
-        for k, name in enumerate(names):
+        indices = None if pdesc.is_scalar() else range(pdesc.size())
+        for k, name in enumerate(element_names(param, indices)):
             if name in solves:
                 elements.setdefault(param, []).append(
-                    (param, None if pdesc.is_scalar() else k))
+                    (param, None if indices is None else k))
     if unknown := sorted(set(solves) - {
             element_name(*e) for es in elements.values() for e in es}):
         raise ValueError(f"these elements are not parameters: {unknown}")
@@ -215,7 +216,7 @@ def amplitude_blocks(
                 f"{param} cannot be solved: {reasons[param]}, so the model "
                 f"is not linear in it; fit it instead")
         for i in takers[param]:
-            if i in scaled:
+            if i in scaled_observations:
                 raise ValueError(
                     f"{param} cannot be solved with the solved flux scale of "
                     f"observation {i}: the model is not linear in both")

@@ -2,9 +2,9 @@
 Tests of the Schwarzschild kinematics of spheroids (its configuration,
 the gravity and the observations it takes), of the recording of the
 orbits in the bins of their stars with data (observation._orbits) and of
-the objective that solves their weights (objective._orbits): the sky of
-the bins, the light of the spheroid in them, the solved weights and the
-model of the bins there.
+the objective that solves their weights (objective._orbit_blocks): the
+sky of the bins, the light of the spheroid in them, the solved weights
+and the model of the bins there.
 """
 
 import copy
@@ -227,16 +227,16 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
     # The solve of the weights reads the noise of the bins (and their
     # orbits), not that of an image of the galaxy: a step in the noise of
     # the image keeps its solution, one in that of the bins solves again
-    import gbkfit.objective._orbits as orbits
+    import gbkfit.objective._orbit_blocks as orbit_blocks
     from gbkfit.dataset import DatasetPixelBrightness
     from gbkfit.observation import PixelBrightness
-    solved = orbits.solve_together_rows
+    solved = orbit_blocks.solve_together_rows
     solves = []
 
     def counted(*args):
         solves.append(args)
         return solved(*args)
-    monkeypatch.setattr(orbits, 'solve_together_rows', counted)
+    monkeypatch.setattr(orbit_blocks, 'solve_together_rows', counted)
     seen = observation(bins())
     stars = ObservationSky(
         seen.observable(), seen.line_of_sight(), instrument=seen.instrument(),
@@ -437,16 +437,17 @@ def test_mock_data_of_orbits_are_the_model_plus_noise(driver):
     # h3): their errors (of 30 draws) hold the model without data, about
     # one error from it
     from gbkfit.model import Extras
-    from gbkfit.observation import noise_parser
+    from gbkfit.observation import MockOptions, draw_mocks, noise_parser
     plan = ObservationGroup(
         [galaxy()], [without_data(observation(bins()))]).plan(driver)
     values = PROPERTIES | dict(stars_weights=np.ones(400))
     extras = Extras()
     model = plan.model_h(values, extras)[0]
     rms = extras.get('cube').data.max()
-    dataset, = plan.mock(
-        values, [noise_parser.load(dict(type='gauss', rms=rms))],
-        nsamples=30, seed=1)[0]
+    [[mock]] = draw_mocks(plan, values, MockOptions(
+        [noise_parser.load(dict(type='gauss', rms=rms))], nsamples=30,
+        seed=1))
+    dataset = mock.data()
     z = np.concatenate([
         (dataset[key].data() - model[key]['d']) / dataset[key].error()
         for key in model])
