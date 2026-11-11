@@ -186,14 +186,14 @@ function ProjectMap() {
   const linked = new Set(hovered === null ? [] : paths.filter((path) => path.ends.includes(hovered)).flatMap((path) => path.ends));
   return (
     <Panel title="How the project fits together" note="data and galaxies meet in the fits · hover a box to follow its links" className="home-map">
-      <div className="map" ref={map}>
-        <svg className="map-edges" viewBox={`0 0 ${size[0]} ${size[1]}`} aria-hidden="true">
+      <div className="pmap" ref={map}>
+        <svg className="pmap-edges" viewBox={`0 0 ${size[0]} ${size[1]}`} aria-hidden="true">
           {paths.map((path) => (
             <path key={path.key} d={path.d} data-lit={(hovered !== null && path.ends.includes(hovered)) || undefined} />
           ))}
         </svg>
         {COLUMNS.map((column) => (
-          <div key={column.folder} className="map-column">
+          <div key={column.folder} className="pmap-column">
             <small>{column.title}</small>
             {(info.data?.pieces[column.folder] ?? []).map((name) => {
               const key = id(column.folder, name);
@@ -202,7 +202,7 @@ function ProjectMap() {
                 <button
                   key={key}
                   type="button"
-                  className="map-node"
+                  className="pmap-node"
                   data-node={key}
                   data-gap={note !== null || undefined}
                   data-lit={hovered === key || undefined}
@@ -218,7 +218,7 @@ function ProjectMap() {
                 </button>
               );
             })}
-            {(info.data?.pieces[column.folder] ?? []).length === 0 && <p className="map-none">None yet.</p>}
+            {(info.data?.pieces[column.folder] ?? []).length === 0 && <p className="pmap-none">None yet.</p>}
           </div>
         ))}
       </div>
