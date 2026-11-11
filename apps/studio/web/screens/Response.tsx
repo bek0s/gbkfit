@@ -31,6 +31,7 @@ import { BlockLinks } from '../shell/BlockLinks';
 import { useStudio } from '../studio';
 import { useUnsaved } from './editing';
 import { objectAt, textAt } from './observation/model';
+import { SheetLayout } from '../components/ui/sheet';
 
 export type Family = 'psf' | 'lsf';
 
@@ -217,34 +218,40 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
       {schema.error && <p className="error screen-error">{schema.error.message}</p>}
       {options !== undefined && shown !== undefined && (
-        <div className="rs-body">
-          <div className="rs-view">
-          <Preview
-            family={family}
-            project={project}
-            options={shown}
-            step={step}
-            lsf={lsf}
-            pixels={<DrawnOn family={family} project={project} path={path} drawn={drawn} onDrawn={setDrawn} used={used} unit={lsf.at.unit ?? 'km/s'} />}
-            problem={of !== null && onData.problem && <p className="note response-problem">{onData.problem}</p>}
-          />
-          </div>
-          <Dock label={`The ${family.toUpperCase()}`}>
-            <DockSection id={`${family}-options`} title="Options">
-              {schema.data ? (
-                <SchemaForm defs={defs} def={family} project={project} value={options} onChange={setDraft} starts={STARTS} sliders />
+        <SheetLayout
+          className="rs-body"
+          width={400}
+          picture={
+            <div className="rs-view">
+            <Preview
+              family={family}
+              project={project}
+              options={shown}
+              step={step}
+              lsf={lsf}
+              pixels={<DrawnOn family={family} project={project} path={path} drawn={drawn} onDrawn={setDrawn} used={used} unit={lsf.at.unit ?? 'km/s'} />}
+              problem={of !== null && onData.problem && <p className="note response-problem">{onData.problem}</p>}
+            />
+            </div>
+          }
+          sheet={
+            <Dock label={`The ${family.toUpperCase()}`}>
+              <DockSection id={`${family}-options`} title="Options">
+                {schema.data ? (
+                  <SchemaForm defs={defs} def={family} project={project} value={options} onChange={setDraft} starts={STARTS} sliders />
+                ) : (
+                  <p className="note">Reading the options of the library…</p>
+                )}
+              </DockSection>
+              {family === 'psf' ? (
+                <PsfProperties project={project} options={shown} step={step} />
               ) : (
-                <p className="note">Reading the options of the library…</p>
+                schema.data && <LsfProperties project={project} path={path} options={shown} units={units} />
               )}
-            </DockSection>
-            {family === 'psf' ? (
-              <PsfProperties project={project} options={shown} step={step} />
-            ) : (
-              schema.data && <LsfProperties project={project} path={path} options={shown} units={units} />
-            )}
-            <NamedBy path={path} />
-          </Dock>
-        </div>
+              <NamedBy path={path} />
+            </Dock>
+          }
+        />
       )}
     </section>
   );

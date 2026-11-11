@@ -56,6 +56,7 @@ import {
 import { PrepareForm } from './Prepare';
 import { hasSpectralChoices, SpectralFields } from './Spectral';
 import { DatasetViewer, type Selection } from './Viewer';
+import { SheetLayout } from '../../components/ui/sheet';
 
 // The element of the page where the user gives what a place needs
 const PLACES: Record<Place, string> = {
@@ -176,24 +177,30 @@ export function Dataset({ name }: { name: string }) {
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
       {options && !kind && <p className="note screen-error">Datasets of the type {String(options.type)} have no screen yet.</p>}
       {kind && options && (
-        <div className="ds-body">
-          <div className="ds-view">
-            <DatasetViewer resolved={resolved} edits={null} selection={selection} onSelection={setSelection} />
-          </div>
-          <Dock label="The dataset">
-            <DockSection id="ds-made" title="Made from">
-              {preparation.isLoading ? <p className="note">…</p> : <MadeFrom project={root} kind={kind} dataset={options} record={record} />}
-            </DockSection>
-            <DockSection id={PLACES.files} title="Files">
-              <Files project={root} resolved={resolved} />
-            </DockSection>
-            {hasSpectralChoices(resolved) && (
-              <DockSection id={PLACES.spectral} title="Spectral axis">
-                <SpectralFields resolved={resolved} />
+        <SheetLayout
+          className="ds-body"
+          width={380}
+          picture={
+            <div className="ds-view">
+              <DatasetViewer resolved={resolved} edits={null} selection={selection} onSelection={setSelection} />
+            </div>
+          }
+          sheet={
+            <Dock label="The dataset">
+              <DockSection id="ds-made" title="Made from">
+                {preparation.isLoading ? <p className="note">…</p> : <MadeFrom project={root} kind={kind} dataset={options} record={record} />}
               </DockSection>
-            )}
-          </Dock>
-        </div>
+              <DockSection id={PLACES.files} title="Files">
+                <Files project={root} resolved={resolved} />
+              </DockSection>
+              {hasSpectralChoices(resolved) && (
+                <DockSection id={PLACES.spectral} title="Spectral axis">
+                  <SpectralFields resolved={resolved} />
+                </DockSection>
+              )}
+            </Dock>
+          }
+        />
       )}
     </section>
   );
@@ -391,53 +398,59 @@ function EditorBody({ project, editor, dataset }: { project: string; editor: Edi
           state.setEdits(edits);
         };
   return (
-    <div className="ds-body">
-      <div className="ds-view">
-        <DatasetViewer
-          key={view}
-          resolved={shown}
-          edits={view === 'original' ? draft.edits : null}
-          selection={selections[view]}
-          onSelection={(next) => setSelections((all) => ({ ...all, [view]: next }))}
-          actions={toggle}
-        />
-      </div>
-      <Dock label="The dataset">
-        <DockSection id={PLACES.files} title="Files" needed={places.has('files')}>
-          <Files
-            project={project}
-            resolved={resolved}
-            onItem={state.setItem}
-            onAdd={kind === 'moments' ? (key) => state.addItem(key, EMPTY_ITEM) : undefined}
-            onRemove={kind === 'moments' ? state.removeItem : undefined}
+    <SheetLayout
+      className="ds-body"
+      width={380}
+      picture={
+        <div className="ds-view">
+          <DatasetViewer
+            key={view}
+            resolved={shown}
+            edits={view === 'original' ? draft.edits : null}
+            selection={selections[view]}
+            onSelection={(next) => setSelections((all) => ({ ...all, [view]: next }))}
+            actions={toggle}
           />
-        </DockSection>
-        {hasSpectralChoices(resolved) && (
-          <DockSection id={PLACES.spectral} title="Spectral axis" needed={places.has('spectral')}>
-            <SpectralFields resolved={resolved} onChange={state.setSpectral} />
+        </div>
+      }
+      sheet={
+        <Dock label="The dataset">
+          <DockSection id={PLACES.files} title="Files" needed={places.has('files')}>
+            <Files
+              project={project}
+              resolved={resolved}
+              onItem={state.setItem}
+              onAdd={kind === 'moments' ? (key) => state.addItem(key, EMPTY_ITEM) : undefined}
+              onRemove={kind === 'moments' ? state.removeItem : undefined}
+            />
           </DockSection>
-        )}
-        {first && kept(first).length === KINDS[kind].ndim && (
-          <DockSection
-            id={PLACES.prepare}
-            title="Prepare"
-            note={hasEdits(draft.edits, keys) ? 'makes edited copies' : 'optional'}
-            needed={places.has('prepare')}
-            actions={
-              hasEdits(draft.edits, keys) && (
-                <Button kind="small" onClick={() => state.setEdits(NO_EDITS)}>
-                  Clear
-                </Button>
-              )
-            }
-          >
-            <PrepareForm resolved={resolved} onEdits={state.setEdits} onCropToSelection={cropToSelection} />
-            <PreviewBar editor={editor} onShow={() => setShowing('prepared')} />
-          </DockSection>
-        )}
-        {dataset && <p className="ds-dock-note">Saving prepares new copies from the originals; the copies of the last preparation that are no longer used go.</p>}
-      </Dock>
-    </div>
+          {hasSpectralChoices(resolved) && (
+            <DockSection id={PLACES.spectral} title="Spectral axis" needed={places.has('spectral')}>
+              <SpectralFields resolved={resolved} onChange={state.setSpectral} />
+            </DockSection>
+          )}
+          {first && kept(first).length === KINDS[kind].ndim && (
+            <DockSection
+              id={PLACES.prepare}
+              title="Prepare"
+              note={hasEdits(draft.edits, keys) ? 'makes edited copies' : 'optional'}
+              needed={places.has('prepare')}
+              actions={
+                hasEdits(draft.edits, keys) && (
+                  <Button kind="small" onClick={() => state.setEdits(NO_EDITS)}>
+                    Clear
+                  </Button>
+                )
+              }
+            >
+              <PrepareForm resolved={resolved} onEdits={state.setEdits} onCropToSelection={cropToSelection} />
+              <PreviewBar editor={editor} onShow={() => setShowing('prepared')} />
+            </DockSection>
+          )}
+          {dataset && <p className="ds-dock-note">Saving prepares new copies from the originals; the copies of the last preparation that are no longer used go.</p>}
+        </Dock>
+      }
+    />
   );
 }
 

@@ -16,6 +16,7 @@ import { SaveActions, useEditedBlock } from '../editing';
 import { checksOf, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, objectAt, psfEllipse, textAt } from './model';
 import { DataFields, InstrumentFields, LightFields, LikelihoodFields, LineOfSightFields, ObservableFields, OptionFields } from './Sections';
 import { Checks, Resolution, Sky, Stages, type SkyData } from './View';
+import { SheetLayout } from '../../components/ui/sheet';
 
 export function ObservationScreen({ name }: { name: string }) {
   const { project, go } = useStudio();
@@ -87,56 +88,68 @@ export function ObservationScreen({ name }: { name: string }) {
       {!options || !common ? (
         <p className="note screen-error">Reading the observation…</p>
       ) : options.type !== 'sky' || !sky ? (
-        <div className="ob-body">
-          <div className="ob-view">
-            <p className="ob-empty">An observation of {title('observation', options.type).toLowerCase()}: its options are at the right.</p>
-          </div>
-          <Dock label="The observation">
-            <DockSection id="ob-all" title="Options">
-              <div className="ob-schema">
-                <SchemaForm defs={common.defs} def="observation" project={project} value={options} onChange={edited.set} blocks={edited.blocks} openBlock={common.openBlock} />
-              </div>
-            </DockSection>
-          </Dock>
-        </div>
+        <SheetLayout
+          className="ob-body"
+          width={400}
+          picture={
+            <div className="ob-view">
+              <p className="ob-empty">An observation of {title('observation', options.type).toLowerCase()}: its options are at the right.</p>
+            </div>
+          }
+          sheet={
+            <Dock label="The observation">
+              <DockSection id="ob-all" title="Options">
+                <div className="ob-schema">
+                  <SchemaForm defs={common.defs} def="observation" project={project} value={options} onChange={edited.set} blocks={edited.blocks} openBlock={common.openBlock} />
+                </div>
+              </DockSection>
+            </Dock>
+          }
+        />
       ) : (
-        <div className="ob-body">
-          <div className="ob-view">
-            <Stages options={options} titleOf={title} withData={withData} />
-            <div className="ob-figures">
-              <Sky data={skyData} grid={grid} psf={psf} beam={beam} />
-              <div className="ob-side">
-                {isSpectral(observable.type) && <Resolution fwhm={lsfWidth} channel={channel} named={instrument.lsf != null} />}
-                <Checks checks={checks} />
+        <SheetLayout
+          className="ob-body"
+          width={400}
+          picture={
+            <div className="ob-view">
+              <Stages options={options} titleOf={title} withData={withData} />
+              <div className="ob-figures">
+                <Sky data={skyData} grid={grid} psf={psf} beam={beam} />
+                <div className="ob-side">
+                  {isSpectral(observable.type) && <Resolution fwhm={lsfWidth} channel={channel} named={instrument.lsf != null} />}
+                  <Checks checks={checks} />
+                </div>
               </div>
             </div>
-          </div>
-          <Dock label="The observation">
-            <DockSection id="ob-data" title="Data" needed={needed('ob-data')}>
-              <DataFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observable', type)} />
-            </DockSection>
-            <DockSection id="ob-observable" title="Observable" needed={needed('ob-observable')}>
-              <ObservableFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observable', type)} />
-            </DockSection>
-            <DockSection id="ob-instrument" title="Instrument">
-              <InstrumentFields {...common} beam={beam} psf={psf} titleOf={title} />
-            </DockSection>
-            <DockSection id="ob-sight" title="Line of sight" needed={needed('ob-sight')}>
-              <LineOfSightFields {...common} titleOf={title} />
-            </DockSection>
-            {withData && (
-              <DockSection id="ob-likelihood" title="Likelihood">
-                <LikelihoodFields {...common} titleOf={title} />
+          }
+          sheet={
+            <Dock label="The observation">
+              <DockSection id="ob-data" title="Data" needed={needed('ob-data')}>
+                <DataFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observable', type)} />
               </DockSection>
-            )}
-            <DockSection id="ob-light" title="Galaxies and light" note={setCount(options, LIGHT_KEYS)}>
-              <LightFields {...common} />
-            </DockSection>
-            <DockSection id="ob-more" title="More options" note={setCount(options, others)}>
-              <OptionFields {...common} member={sky} keys={others} />
-            </DockSection>
-          </Dock>
-        </div>
+              <DockSection id="ob-observable" title="Observable" needed={needed('ob-observable')}>
+                <ObservableFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observable', type)} />
+              </DockSection>
+              <DockSection id="ob-instrument" title="Instrument">
+                <InstrumentFields {...common} beam={beam} psf={psf} titleOf={title} />
+              </DockSection>
+              <DockSection id="ob-sight" title="Line of sight" needed={needed('ob-sight')}>
+                <LineOfSightFields {...common} titleOf={title} />
+              </DockSection>
+              {withData && (
+                <DockSection id="ob-likelihood" title="Likelihood">
+                  <LikelihoodFields {...common} titleOf={title} />
+                </DockSection>
+              )}
+              <DockSection id="ob-light" title="Galaxies and light" note={setCount(options, LIGHT_KEYS)}>
+                <LightFields {...common} />
+              </DockSection>
+              <DockSection id="ob-more" title="More options" note={setCount(options, others)}>
+                <OptionFields {...common} member={sky} keys={others} />
+              </DockSection>
+            </Dock>
+          }
+        />
       )}
     </section>
   );
