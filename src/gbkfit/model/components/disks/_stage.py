@@ -25,7 +25,7 @@ from .._units import mass_per_unit
 from ..base import (
     ComponentLinks, ComponentStage, ComponentState, GalaxyMass)
 from ..roles import Emission
-from ._disk import NodalDisk, DiskPlan
+from ._nodal import NodalDisk, DiskPlan
 from ._profiles import (
     NodalDiskDensity, density_waves, dispersion, jeans_dispersions,
     pressure_support, rms_heights, rotation, surface_density)

@@ -18,8 +18,8 @@ from .spheroids import (
     SchwarzschildKinematics, Spheroid, SpheroidKinematics,
     SpheroidTraitsKinematics, TraitSpheroid)
 
-from .cones._detail import CONE_TRAITS as _CONE_TRAITS
-from .disks._detail import (
+from .cones._build import CONE_TRAITS as _CONE_TRAITS
+from .disks._build import (
     THICK_DISK_TRAITS as _THICK_DISK_TRAITS,
     THIN_DISK_TRAITS as _THIN_DISK_TRAITS)
 from .spheroids._kinematics import SPHEROID_TRAITS as _SPHEROID_TRAITS

@@ -20,7 +20,7 @@ from ..traits import DHTrait, DPTrait, Trait, VHTrait, VPTrait
 from .._native import ParamBuffer
 from .._needs import Need
 from ...gravity import Capability
-from .._detail import Interp, RNodes, RStep
+from .._common import Interp, RNodes, RStep
 from .._nodal import (
     NodalTraits, TraitTable, native_traits, parse_component_rnode_args,
     subring_radii, with_default_height_traits)

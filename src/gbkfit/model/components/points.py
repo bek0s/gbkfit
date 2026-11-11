@@ -14,7 +14,7 @@ from gbkfit.config import check_options
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
-from ._detail import (
+from ._common import (
     Fluxes, dump_name, systemic_velocity)
 from ._units import DataUnit, band_factors, line_factors
 from .base import (

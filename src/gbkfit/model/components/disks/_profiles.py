@@ -18,7 +18,7 @@ import numpy as np
 from gbkfit.params import ParamValues
 from .._nodal import subring_radii, tail_end, tail_radii
 from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
-from ._disk import NodalDisk, DiskPlan
+from ._nodal import NodalDisk, DiskPlan
 
 if TYPE_CHECKING:
     from ._stage import DiskState

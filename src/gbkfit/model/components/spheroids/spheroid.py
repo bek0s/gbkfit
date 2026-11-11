@@ -33,7 +33,7 @@ from ...mass.profiles import ProfileGaussian, ProfileSersic, SpheroidProfile
 from ...mass.shapes import (
     ShapeFlattened, ShapeSphere, SpheroidShape, spheroid_shape_parser)
 from .. import traits
-from .._detail import Interp, RNodes, RStep, dump_name
+from .._common import Interp, RNodes, RStep, dump_name
 from .._needs import Need
 from .._native import (
     NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,

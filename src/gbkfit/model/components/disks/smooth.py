@@ -10,7 +10,7 @@ import numpy as np
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
 from ..base import FieldsLayout
-from . import _disk
+from . import _nodal
 
 
 __all__ = [
@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-class SmoothDisk(_disk.NodalDisk):
+class SmoothDisk(_nodal.NodalDisk):
     """A disk evaluated smoothly: on the pixels or voxels of its grid."""
 
     def plan(
@@ -28,11 +28,11 @@ class SmoothDisk(_disk.NodalDisk):
             nlines: int,
             dtype: np.dtype,
             opacity_rows: Sequence[int] | None = None
-    ) -> _disk.DiskPlan:
+    ) -> _nodal.DiskPlan:
         return SmoothDiskPlan(self, driver, nlines, dtype, opacity_rows)
 
 
-class SmoothDiskPlan(_disk.DiskPlan):
+class SmoothDiskPlan(_nodal.DiskPlan):
     """The evaluation of a SmoothDisk."""
 
     def fields_layout(self) -> FieldsLayout:

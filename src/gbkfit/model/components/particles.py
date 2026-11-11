@@ -15,7 +15,7 @@ from gbkfit.config import FilePath, check_options
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
-from ._detail import (
+from ._common import (
     Fluxes, disk_to_sky, dump_name)
 from ._units import DataUnit
 from .base import (

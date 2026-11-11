@@ -14,7 +14,7 @@ from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ModelEvaluationError, ParamValues
 from .. import traits
 from ..base import FieldsLayout
-from . import _disk
+from . import _nodal
 
 
 __all__ = [
@@ -81,7 +81,7 @@ class Clouds(Serializable):
         return self._seed
 
 
-class CloudDisk(_disk.NodalDisk):
+class CloudDisk(_nodal.NodalDisk):
     """
     A disk made of clouds (see Clouds; see NodalDisk for the other
     options).
@@ -120,11 +120,11 @@ class CloudDisk(_disk.NodalDisk):
             nlines: int,
             dtype: np.dtype,
             opacity_rows: Sequence[int] | None = None
-    ) -> _disk.DiskPlan:
+    ) -> _nodal.DiskPlan:
         return CloudDiskPlan(self, driver, nlines, dtype, opacity_rows)
 
 
-class CloudDiskPlan(_disk.DiskPlan):
+class CloudDiskPlan(_nodal.DiskPlan):
     """The evaluation of a CloudDisk."""
 
     def __init__(

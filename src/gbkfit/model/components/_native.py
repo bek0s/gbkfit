@@ -19,7 +19,7 @@ import numpy as np
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
-from ._detail import Fluxes, systemic_velocity
+from ._common import Fluxes, systemic_velocity
 from ._units import DataUnit, OpacityScales, band_factors, line_factors
 from .base import ComponentPlan, ComponentState, FieldsLayout, NativeGrid
 from .lines import Band, Bands, LinePlacement, Lines

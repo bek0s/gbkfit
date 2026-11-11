@@ -11,7 +11,7 @@ import numpy as np
 
 from gbkfit.config import Serializable, check_options
 from gbkfit.utils import iterutils
-from ._detail import RNodes, RnMax, RnSep
+from ._common import RNodes, RnMax, RnSep
 
 
 __all__ = [

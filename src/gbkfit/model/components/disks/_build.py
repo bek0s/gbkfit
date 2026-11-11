@@ -15,7 +15,7 @@ from gbkfit.grid import Grid
 from gbkfit.params import ParamValues
 from gbkfit.utils import iterutils
 from .. import traits
-from .._detail import dump_name
+from .._common import dump_name
 from .._native import EmissionSetup, NativeComponentPlan, emission_setup
 from .._nodal import (
     MAX_TRAITS, TraitTable, parse_component_rnode_args, trait_prefixes,
@@ -27,7 +27,7 @@ from ..lines import Band, Bands, Lines
 from ..nodes import Nodes
 from ..roles import (
     Emission, LineEmission, Opacity, emission_parser, opacity_parser)
-from . import _disk
+from . import _nodal
 from .clouds import CloudDisk, Clouds
 from .smooth import SmoothDisk
 from .opacity import LineOpacity
@@ -80,7 +80,7 @@ THIN_DISK_TRAITS = TraitTable('thin disk', {
 
 def dump_disk_component(
         component: Component,
-        disk: _disk.NodalDisk,
+        disk: _nodal.NodalDisk,
         rnodes: Nodes,
         kinematics: KinematicTraits | None
 ) -> dict[str, Any]:
@@ -139,7 +139,7 @@ def make_disk(
         rstep: float | None,
         interp: str,
         clouds: Clouds | None
-) -> _disk.NodalDisk:
+) -> _nodal.NodalDisk:
     """
     Return the disk of a disk component, made of its traits (see ThinDisk
     and ThickDisk for the options): smooth, or made of its clouds (a thick
@@ -276,7 +276,7 @@ def _disk_traits(
         thick: bool
 ) -> dict[str, tuple[traits.Trait, ...]]:
     """
-    Return the traits of a disk by kind (see _disk.TRAIT_KINDS): those of
+    Return the traits of a disk by kind (see _nodal.TRAIT_KINDS): those of
     its options, and of a thick one, the default height traits of its
     velocity and dispersion traits where it has none. Raise ValueError if
     the traits and roles do not go together.
@@ -321,7 +321,7 @@ def _disk_traits(
 
 
 def disk_plan(
-        disk: _disk.NodalDisk,
+        disk: _nodal.NodalDisk,
         lines: Lines | None,
         bands: Bands | None,
         unit: astropy.units.UnitBase | None,
@@ -361,8 +361,8 @@ class DiskComponentPlan(NativeComponentPlan):
     def __init__(
             self,
             driver: Driver,
-            disk: _disk.NodalDisk,
-            disk_plan_: _disk.DiskPlan,
+            disk: _nodal.NodalDisk,
+            disk_plan_: _nodal.DiskPlan,
             emission: EmissionSetup,
             opacity_ratios: np.ndarray | None = None
     ):
@@ -370,7 +370,7 @@ class DiskComponentPlan(NativeComponentPlan):
         self._disk = disk
         self._disk_plan = disk_plan_
 
-    def disk_plan(self) -> _disk.DiskPlan:
+    def disk_plan(self) -> _nodal.DiskPlan:
         """Return the plan of its disk."""
         return self._disk_plan
 
@@ -416,7 +416,7 @@ def check_traits_common(traits_: Sequence[traits.Trait]) -> None:
 
 
 def _height_cuts(
-        disk: _disk.NodalDisk, params: ParamValues
+        disk: _nodal.NodalDisk, params: ParamValues
 ) -> list[tuple[int, float, float]]:
     """
     Return, for each density height trait of a disk (with its
@@ -442,7 +442,7 @@ def _height_cuts(
 
 
 def _limited_displacements(
-        disk: _disk.NodalDisk, plan: _disk.DiskPlan, params: ParamValues
+        disk: _nodal.NodalDisk, plan: _nodal.DiskPlan, params: ParamValues
 ) -> list[tuple[int, float]]:
     """
     Return, for each vertical distortion trait of a disk (with its plan
@@ -468,7 +468,7 @@ def _limited_displacements(
 
 
 def _at_radii(
-        disk: _disk.NodalDisk, values: float | np.ndarray, radii: np.ndarray
+        disk: _nodal.NodalDisk, values: float | np.ndarray, radii: np.ndarray
 ) -> np.ndarray:
     """
     Return the values of a parameter of a trait of a disk at the given

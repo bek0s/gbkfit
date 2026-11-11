@@ -17,7 +17,7 @@ from gbkfit.utils import iterutils
 from ...mass import DiskDensity
 from .. import traits
 from .._needs import Need
-from .._detail import Interp, RNodes, RStep
+from .._common import Interp, RNodes, RStep
 from .._native import make_bands, make_lines
 from .._units import DataUnit
 from ..base import (
@@ -25,7 +25,7 @@ from ..base import (
 from ..lines import Band
 from ..nodes import Nodes, as_nodes
 from ..roles import STARS, Emission, Opacity
-from . import _detail, _disk, _stage
+from . import _build, _nodal, _stage
 from .clouds import Clouds
 from ..parts import KinematicTraits, density_traits, kinematic_traits
 
@@ -138,7 +138,7 @@ class Disk(Component, abc.ABC):
     """
 
     def dump(self) -> dict[str, Any]:
-        info = _detail.dump_disk_component(
+        info = _build.dump_disk_component(
             self, self._disk, self._rnodes, self._kinematics)
         if self._clouds is not None:
             info['clouds'] = self._clouds.dump()
@@ -180,7 +180,7 @@ class Disk(Component, abc.ABC):
         self._clouds = clouds
         # In the form it was given in, for its configuration (see dump)
         self._rnodes = rnodes = as_nodes(rnodes)
-        self._disk = _detail.make_disk(
+        self._disk = _build.make_disk(
             rptraits, rhtraits, height, kinematics, pressure_support, fluid,
             emission, opacity, zptraits, sptraits, thick=thick, loose=loose,
             tilted=tilted, rnodes=rnodes, rstep=rstep, interp=interp,
@@ -254,7 +254,7 @@ class Disk(Component, abc.ABC):
     def uses_mass(self) -> bool:
         return self._disk.uses_mass()
 
-    def density_disk(self) -> _disk.NodalDisk:
+    def density_disk(self) -> _nodal.NodalDisk:
         """
         Return its disk: the mass of its galaxy can follow the density of
         the disk (see mass.SurfaceComponent and mass.VerticalComponent).
@@ -294,7 +294,7 @@ class Disk(Component, abc.ABC):
         driver, spectral, dtype = target.driver, target.spectral, target.dtype
         lines, band, data_unit = target.lines, target.band, target.data_unit
         emission = self.emission()
-        return _detail.disk_plan(
+        return _build.disk_plan(
             self._disk, self._lines, self._bands,
             emission.unit() if emission is not None else None, driver,
             spectral, dtype, lines, band, emits, opacity_ratios, data_unit,

@@ -10,12 +10,12 @@ import numpy as np
 
 from gbkfit.config import warn
 from gbkfit.params import ParamValues
-from ._detail import disk_to_sky
-from .disks._disk import TRAIT_KINDS
+from ._common import disk_to_sky
+from .disks._nodal import TRAIT_KINDS
 from .traits import RPTraitImage, map_cell_centres
 
 if TYPE_CHECKING:
-    from .disks._disk import NodalDisk
+    from .disks._nodal import NodalDisk
 
 
 __all__ = [

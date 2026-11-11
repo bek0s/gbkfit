@@ -12,7 +12,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.utils import iterutils
 from .. import traits
-from .._detail import dump_name
+from .._common import dump_name
 from .._native import NativeComponentPlan, emission_setup
 from .._nodal import (
     MAX_TRAITS, TraitTable, parse_component_rnode_args,
@@ -26,7 +26,7 @@ from ..parts import KinematicTraits
 from ..roles import (
     DustOpacity, Emission, LineEmission, Opacity, emission_parser,
     opacity_parser)
-from . import _cone
+from . import _nodal
 
 
 __all__ = [
@@ -75,7 +75,7 @@ CONE_TRAITS = TraitTable('cone', dict(
 
 def dump_cone_component(
         component: Component,
-        cone: _cone.NodalCone,
+        cone: _nodal.NodalCone,
         rnodes: Nodes,
         kinematics: KinematicTraits | None
 ) -> dict[str, Any]:
@@ -102,7 +102,7 @@ def dump_cone_component(
 
 
 def make_cone(
-        cone_class: type[_cone.NodalCone],
+        cone_class: type[_nodal.NodalCone],
         rptraits: tuple[traits.RPTrait, ...],
         rhtraits: tuple[traits.RHTrait, ...],
         kinematics: KinematicTraits | None,
@@ -113,7 +113,7 @@ def make_cone(
         rnodes: Nodes,
         rstep: float | None,
         interp: str
-) -> _cone.NodalCone:
+) -> _nodal.NodalCone:
     """
     Return the cone of a cone component, of class cone_class, made of its
     traits (see Cone for the options). It takes the default height
@@ -153,7 +153,7 @@ def make_cone(
 
 
 def cone_plan(
-        cone: _cone.NodalCone,
+        cone: _nodal.NodalCone,
         lines: Lines | None,
         bands: Bands | None,
         unit: astropy.units.UnitBase | None,
@@ -169,7 +169,7 @@ def cone_plan(
 ) -> NativeComponentPlan:
     """
     Return the plan of a cone component made of the given cone (see
-    disks._detail.disk_plan for the arguments); a cone has no line
+    disks._build.disk_plan for the arguments); a cone has no line
     opacity.
     """
     emission = emission_setup(

@@ -13,14 +13,14 @@ from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
 from .. import traits
 from .._native import make_bands, make_lines
-from .._detail import Interp, RNodes, RStep
+from .._common import Interp, RNodes, RStep
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams, SceneTarget
 from ..lines import Band
 from ..nodes import Nodes, as_nodes
 from ..parts import KinematicTraits, density_traits, kinematic_traits
 from ..roles import STARS, Emission, Opacity
-from . import _cone, _detail
+from . import _build, _nodal
 
 
 __all__ = [
@@ -99,7 +99,7 @@ class Cone(Component):
         return 'Cone'
 
     def dump(self) -> dict[str, Any]:
-        return _detail.dump_cone_component(
+        return _build.dump_cone_component(
             self, self._cone, self._rnodes, self._kinematics)
 
     def __init__(
@@ -115,7 +115,7 @@ class Cone(Component):
             emission: Emission | None = None,
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
-            sides: Annotated[Literal[_cone.SIDES], Choices(
+            sides: Annotated[Literal[_nodal.SIDES], Choices(
                 both='Both sides', positive='Positive side',
                 negative='Negative side')] = 'both',
             rnodes: Nodes | RNodes | None = None,
@@ -130,8 +130,8 @@ class Cone(Component):
             vptraits, dptraits, vhtraits, dhtraits)
         # In the form it was given in, for its configuration (see dump)
         self._rnodes = rnodes = as_nodes(rnodes)
-        self._cone = _detail.make_cone(
-            _cone.SmoothCone, rptraits, rhtraits, kinematics, emission,
+        self._cone = _build.make_cone(
+            _nodal.SmoothCone, rptraits, rhtraits, kinematics, emission,
             opacity, sptraits, sides, rnodes=rnodes, rstep=rstep,
             interp=interp)
         self._lines = make_lines(self._cone.pdescs(), emission)
@@ -184,7 +184,7 @@ class Cone(Component):
         driver, spectral, dtype = target.driver, target.spectral, target.dtype
         lines, band, data_unit = target.lines, target.band, target.data_unit
         emission = self.emission()
-        return _detail.cone_plan(
+        return _build.cone_plan(
             self._cone, self._lines, self._bands,
             emission.unit() if emission is not None else None, driver,
             spectral, dtype, lines, band, emits, opacity_ratios, data_unit,
