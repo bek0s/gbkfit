@@ -15,8 +15,9 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    LineOfSightFlat, NoiseGauss, ObservationGroup, ObservationProfile,
-    ObservationSky, PixelBrightness, PixelSpectra, observation_parser)
+    LineOfSightFlat, MockOptions, NoiseGauss, ObservationGroup,
+    ObservationProfile, ObservationSky, PixelBrightness, PixelSpectra,
+    draw_mocks, observation_parser)
 
 
 # A galaxy of mass alone: a black hole and a halo, at 10 Mpc
@@ -182,7 +183,8 @@ def test_mock_profiles():
     galaxy = mass_galaxy()
     observation = ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc)
     group = ObservationGroup(galaxy, observation)
-    (mock,), = group.plan().mock(PARAMS, NoiseGauss(rms=5.0), seed=1)
+    [[mock]] = draw_mocks(
+        group.plan(), PARAMS, MockOptions(NoiseGauss(rms=5.0), seed=1))
     assert isinstance(mock, DatasetProfile)
     np.testing.assert_array_equal(mock['vcirc'].error(), [5, 5])
     assert np.all(np.abs(mock['vcirc'].data() - model(group, PARAMS)['vcirc'])

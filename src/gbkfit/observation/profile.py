@@ -19,10 +19,9 @@ from gbkfit.grid import make_grid
 from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from ._scene import SeenGalaxies
 from .likelihood import Likelihood, likelihood_parser
 from .observables import HostModelData, ModelData, ObservablePlan
-from .observation import Observation
+from .observation import Observation, SeenGalaxies
 
 if TYPE_CHECKING:
     from .noise import Noise

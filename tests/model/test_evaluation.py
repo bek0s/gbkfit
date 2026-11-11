@@ -307,18 +307,18 @@ def test_evaluations_skip_what_reads_no_changed_parameter(driver):
 def test_mocks_and_plans_with_other_data_evaluate_again(driver):
     # Mocks write their draws over the models; plans with other data share
     # the models (of data of the same unit), and the last evaluations
-    from gbkfit.observation import NoiseGauss
+    from gbkfit.observation import MockOptions, NoiseGauss, draw_mocks
     noise = NoiseGauss(rms=1.0)
-    first = two_observations(driver).with_data([
-        mock for mock, in two_observations(driver).mock(
-            TWO_PARAMS, noise, seed=1)])
+    [mocks] = draw_mocks(
+        two_observations(driver), TWO_PARAMS, MockOptions(noise, seed=1))
+    first = two_observations(driver).with_data(mocks)
     counts = counted(first)
     models = spectra(first.model_h(TWO_PARAMS))
-    mocks = first.mock(TWO_PARAMS, noise, seed=2)
+    [mocks] = draw_mocks(first, TWO_PARAMS, MockOptions(noise, seed=2))
     for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):
         np.testing.assert_array_equal(got, want)
     assert counts == dict(a=2, b=2)
-    second = first.with_data([mock for mock, in mocks])
+    second = first.with_data(mocks)
     assert second._plans == first._plans
     second.model_h(TWO_PARAMS | dict(vpt_vt=100))
     for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):

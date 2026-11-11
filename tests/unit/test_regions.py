@@ -173,14 +173,14 @@ def test_pixels_of_no_bin_can_be_nan():
 def test_region_sums(driver):
     # The native sums of the regions of each channel of a cube equal the
     # product of the weights and the cube
-    from gbkfit.observation.observables._region_sums import RegionSumsPlan
+    from gbkfit.observation.observables._sparse_sums import SparseSumsPlan
     grid = _grid()
     weights = RegionsApertures([
         ApertureCircle(1, -0.5, 1.5),
         ApertureRectangle(0.3, 0, 4, 0.6, posa=-25),
         ApertureField()]).weights(grid)
     cube = np.random.default_rng(1).random((7, 30, 40)).astype(np.float32)
-    plan = RegionSumsPlan(weights, driver, np.float32)
+    plan = SparseSumsPlan(weights, driver, np.float32)
     d_cube = driver.mem_copy_h2d(cube)
     d_out = driver.mem_alloc_d((7, 3), np.float32)
     plan.evaluate(d_cube, d_out)
@@ -191,7 +191,7 @@ def test_region_sums(driver):
 
 def test_region_sums_of_chunks_and_empty_regions(driver):
     # Regions of 0 to 1000 pixels (in chunks of 256), the last ones empty
-    from gbkfit.observation.observables._region_sums import RegionSumsPlan
+    from gbkfit.observation.observables._sparse_sums import SparseSumsPlan
     rng = np.random.default_rng(1)
     lengths = np.append(rng.integers(0, 1000, 50), [0, 0])
     indptr = np.concatenate(([0], np.cumsum(lengths)))
@@ -199,7 +199,7 @@ def test_region_sums_of_chunks_and_empty_regions(driver):
         (rng.random(indptr[-1]), rng.integers(0, 600, indptr[-1]), indptr),
         shape=(len(lengths), 600))
     cube = rng.random((3, 20, 30))
-    plan = RegionSumsPlan(weights, driver, np.float64)
+    plan = SparseSumsPlan(weights, driver, np.float64)
     d_out = driver.mem_alloc_d((3, len(lengths)), np.float64)
     plan.evaluate(driver.mem_copy_h2d(cube), d_out)
     np.testing.assert_allclose(

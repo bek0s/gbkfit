@@ -823,7 +823,7 @@ def _load_mock(
         return None
     with config_path('mock'):
         options = MockOptions.load(cfg['mock'])
-        options.per_observation(group.nobservations())
+        options.check(group)
     return options
 
 

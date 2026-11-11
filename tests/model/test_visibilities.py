@@ -194,9 +194,10 @@ def test_the_outputs_have_the_dirty_images(driver):
 def test_mock_visibilities_are_the_model_plus_the_noise(driver):
     # Of rms 0.1 in each part, independent: their errors are 0.1, and
     # (mock - model) / 0.1 has a mean of 0 and a dispersion of 1
-    from gbkfit.observation import NoiseGauss
+    from gbkfit.observation import MockOptions, NoiseGauss, draw_mocks
     plan, params = observation_of_data(driver, 0)
-    [[dataset]] = plan.mock(params, NoiseGauss(rms=0.1), seed=1)
+    [[dataset]] = draw_mocks(
+        plan, params, MockOptions(NoiseGauss(rms=0.1), seed=1))
     model = visibilities(driver, DISK, DISK_PROPERTIES)
     z = {}
     for key, part in (('re', model.real), ('im', model.imag)):
@@ -208,11 +209,11 @@ def test_mock_visibilities_are_the_model_plus_the_noise(driver):
 
 def test_the_noise_of_visibilities_is_not_correlated_on_the_sky(driver):
     from gbkfit.instrument import PSFGauss
-    from gbkfit.observation import NoiseGauss
+    from gbkfit.observation import MockOptions, NoiseGauss, draw_mocks
     plan, params = observation_of_data(driver, 0)
     noise = NoiseGauss(rms=0.1, spatial_correlation=PSFGauss(sigma=1))
     with pytest.raises(ValueError, match="not on the sky"):
-        plan.mock(params, noise, seed=1)
+        draw_mocks(plan, params, MockOptions(noise, seed=1))
 
 
 def test_the_default_step_samples_the_longest_baseline_five_times():

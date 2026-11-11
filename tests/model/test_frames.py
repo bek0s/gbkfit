@@ -80,7 +80,7 @@ def test_offsets_are_parameters_of_named_observations():
         offsets=dict(position=True))
     assert set(observation.pdescs()) == {'sinfoni_dx', 'sinfoni_dy'}
     loaded = observation_parser.load(observation_parser.dump(observation))
-    assert loaded.offset_params() == ('sinfoni_dx', 'sinfoni_dy', None)
+    assert loaded.sky_frame().offsets == ('sinfoni_dx', 'sinfoni_dy', None)
     with pytest.raises(ValueError, match="needs a name"):
         ObservationSky(
             observable, LineOfSightFlat(), offsets=dict(velocity=True))

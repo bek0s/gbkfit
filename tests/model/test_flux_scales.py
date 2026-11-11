@@ -305,13 +305,15 @@ def test_only_linear_parameters_of_gaussian_likelihoods_are_solved(
 
 
 def test_mocks_take_flux_scales_per_spectrum_of_1_only(driver):
+    from gbkfit.observation import MockOptions, draw_mocks
     obj, params = objective(driver, np.zeros(SIZE[::-1]), 1.0, scale=1)
-    noise = noise_parser.load(dict(type='gauss', rms=1.0))
-    obj.group_plan().mock(params.evaluate(), noise, nsamples=2, seed=1)
+    options = MockOptions(
+        noise_parser.load(dict(type='gauss', rms=1.0)), nsamples=2, seed=1)
+    draw_mocks(obj.group_plan(), params.evaluate(), options)
     values = params.evaluate() | dict(
         obs_flux_scale=np.full(SIZE[0] * SIZE[1], 2.0))
     with pytest.raises(ValueError, match="of 1 only"):
-        obj.group_plan().mock(values, noise, nsamples=2, seed=1)
+        draw_mocks(obj.group_plan(), values, options)
 
 
 def test_the_outputs_have_the_solved_scales(driver):

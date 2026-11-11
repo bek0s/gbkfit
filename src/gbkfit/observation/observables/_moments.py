@@ -10,7 +10,7 @@ import numpy as np
 from annotated_types import Ge, Lt
 
 from gbkfit.config import Choices, warn
-from gbkfit.grid import SpectralAxis, check_convention
+from gbkfit.grid import SpectralAxis, check_convention, make_cube_grid
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
@@ -239,16 +239,12 @@ def spectra_model_cube(
     spectral_axis), smoothed by the median filter of median_size (if
     given; see ModelCube).
     """
-    spectral = observable.spectral()
+    grid = observable.grid()
+    coords = grid.coords
     return _model_cube.ModelCube(
-        size=observable.size() + (spectral.size(),),
-        step=observable.step() + (spectral.step(),),
-        rpix=observable.rpix() + (spectral.rpix(),),
-        rval=observable.rval() + (spectral.rval(),),
-        rota=observable.rota(),
-        rest=spectral.rest(),
-        medium=spectral.medium(),
-        convention=spectral.convention(),
+        make_cube_grid(
+            grid.size, coords.step, coords.rpix, coords.rval, coords.rota,
+            observable.spectral()),
         oversampling=tuple(oversampling) + (1,),
         primary_beam=instrument.primary_beam(),
         psf=instrument.psf(),

@@ -118,7 +118,8 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
     # degrees, so it is oversampled
     from gbkfit.fitting import fitter_parser
     from gbkfit.objective import Objective
-    from gbkfit.observation import NoiseGauss, ObservationGroup
+    from gbkfit.observation import (
+        MockOptions, NoiseGauss, ObservationGroup, draw_mocks)
     particles = dict(components=[dict(
         type='particles', file=disk_particles(tmp_path / 'disk.npz'),
         emission=dict(type='lines'))])
@@ -128,7 +129,8 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
     values = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), GEOMETRY).evaluate()
     peak = plan.model_h(values)[0]['spectra']['d'].max()
-    mock = plan.mock(values, NoiseGauss(rms=0.01 * peak), seed=2)[0][0]
+    [[mock]] = draw_mocks(
+        plan, values, MockOptions(NoiseGauss(rms=0.01 * peak), seed=2))
     disk = observation_group([dict(
         driver=dict(type='host'), galaxy=DISK,
         line_of_sight=dict(type='flat'),

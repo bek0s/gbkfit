@@ -25,7 +25,7 @@ from gbkfit.model import (
 from gbkfit.model.components.lines import catalogue_in_use
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
-from ._scene import SeenGalaxies, check_component_names, make_scene
+from ._scene import check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
 from .likelihood import Likelihood, likelihood_parser
 from .line_of_sight import LineOfSight, line_of_sight_parser
@@ -33,7 +33,7 @@ from .noise import Noise
 from .observables import (
     FluxScale, HostModelData, ModelData, Observable, ObservablePlan,
     observable_parser)
-from .observation import Observation
+from .observation import Observation, SeenGalaxies, SkyFrame
 from .weights import Weights, weights_geometry
 
 
@@ -195,7 +195,7 @@ class ObservationSky(Observation):
         of each point of the spectral axis for a PSF that varies. Mock
         data of the model have the unit, and that beam: of a PSF that is
         not a Gaussian, the round Gaussian of its solid angle (see
-        GroupPlan.mock).
+        draw_mocks).
 
     Raises
     ------
@@ -458,15 +458,12 @@ class ObservationSky(Observation):
                 title=title, desc=f"{desc}, of observation {self._name}",
                 unit=unit, default=0)
             for param, (title, desc, unit) in zip(
-                self.offset_params(), descs)
+                self._offset_params(), descs)
             if param is not None}
         return flux_scale | offsets | self._foreground.pdescs() \
             | super().pdescs()
 
-    def centre_params(self) -> tuple[tuple[str, str], ...]:
-        return self._foreground.centre_params()
-
-    def offset_params(self) -> tuple[str | None, str | None, str | None]:
+    def _offset_params(self) -> tuple[str | None, str | None, str | None]:
         """
         Return the names of the parameters of the offsets of its frame
         (see the class): of x, y and the velocity, None for those it does
@@ -479,13 +476,21 @@ class ObservationSky(Observation):
             f'{self._name}_dy' if position else None,
             f'{self._name}_dv' if velocity else None)
 
-    def sky_origin(self) -> tuple[float, float]:
+    def sky_frame(self) -> SkyFrame:
         """
-        Return the RA and Dec (degrees) of the origin of the frame of its
-        model (see ObservationGroup): those of the reference pixel of the
-        grid of its observable (see Observable.sky_rval).
+        Return the frame of its model on the sky (see SkyFrame and
+        ObservationGroup): its origin is the reference pixel of the grid
+        of its observable (see Observable.sky_rval), its offsets those it
+        fits (see the class), the frame of rest of its velocities that of
+        its spectral axis (see SpectralAxis), if it has one that gives it,
+        and what it adds the masses of its lens (see
+        Foreground.centre_params).
         """
-        return self._observable.sky_rval()
+        spectral = self._observable.spectral()
+        return SkyFrame(
+            self._observable.sky_rval(), self._offset_params(),
+            None if spectral is None else spectral.frame(),
+            self._foreground.centre_params())
 
     def flux_scale(self) -> tuple[str, FluxScale] | None:
         """
@@ -512,14 +517,6 @@ class ObservationSky(Observation):
     def observable(self) -> Observable:
         """Return the observable."""
         return self._observable
-
-    def velocity_frame(self) -> str | None:
-        """
-        Return the frame of rest of the velocities of its spectral axis
-        (see SpectralAxis), if it has one that gives it.
-        """
-        spectral = self._observable.spectral()
-        return None if spectral is None else spectral.frame()
 
     def foreground(self) -> Foreground:
         """Return the foreground."""

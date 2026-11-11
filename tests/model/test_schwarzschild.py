@@ -23,6 +23,7 @@ from gbkfit.observation import (
     FittedNoise, LikelihoodGaussian, ObservationGroup, ObservationSky,
     PixelSpectra, RegionMoments, line_of_sight_parser)
 from gbkfit.observation._orbits import _bins_light
+from gbkfit.observation.observables._orbit_sky import bins_sky_grid
 from gbkfit.params import ParamSpace
 from gbkfit.region import RegionsBins
 from test_spheroids import hernquist_mge
@@ -107,7 +108,8 @@ def without_data(obs):
 
 def sky_grid(obs):
     """The sky grid of the bins of an observation (see SkyGrid)."""
-    return obs.observable().sky_grid(obs.instrument(), obs.oversampling())
+    return bins_sky_grid(
+        obs.observable().regions(), obs.instrument(), obs.oversampling())
 
 
 def galaxy(**changes):
@@ -444,10 +446,9 @@ def test_mock_data_of_orbits_are_the_model_plus_noise(driver):
     extras = Extras()
     model = plan.model_h(values, extras)[0]
     rms = extras.get('cube').data.max()
-    [[mock]] = draw_mocks(plan, values, MockOptions(
+    [[dataset]] = draw_mocks(plan, values, MockOptions(
         [noise_parser.load(dict(type='gauss', rms=rms))], nsamples=30,
         seed=1))
-    dataset = mock.data()
     z = np.concatenate([
         (dataset[key].data() - model[key]['d']) / dataset[key].error()
         for key in model])

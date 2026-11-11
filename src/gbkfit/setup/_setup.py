@@ -15,7 +15,7 @@ from gbkfit.fitting import (
     ProgressObserver, SubFitLog, run_bootstrap)
 from gbkfit.objective import Evaluation, Objective
 from gbkfit.observation import (
-    GroupPlan, MockOptions, Observation, ObservationGroup)
+    GroupPlan, MockOptions, Observation, ObservationGroup, draw_mocks)
 from gbkfit.outputs import Output
 from gbkfit.parallel import WorkerPool, Workers
 from gbkfit.params import ParamSpace, ParamValues
@@ -94,7 +94,7 @@ class Setup:
     ValueError
         If the parameters are not of the group, the fitter cannot fit
         them (see Fitter.check), the options of mock data are not of the
-        observations (see MockOptions.per_observation), the options of a
+        observations (see MockOptions.check), the options of a
         bootstrap do not suit the data (see BootstrapOptions.check), or
         the group cannot be planned (see ObservationGroup.plan).
 
@@ -132,7 +132,7 @@ class Setup:
         if fitter is not None:
             fitter.check(params, group)
         if mock_options is not None:
-            mock_options.per_observation(group.nobservations())
+            mock_options.check(group)
         if bootstrap_options is not None and group.has_data():
             bootstrap_options.check(group, params)
         self._group_plan = group.plan(driver, drivers)
@@ -348,7 +348,7 @@ class Setup:
         Draw mock data of its observations at values of the parameters, by
         its options (see MockOptions): their models measured from what
         their instruments record of the models plus noise, with their
-        errors (see GroupPlan.mock).
+        errors (see draw_mocks).
 
         Parameters
         ----------
@@ -365,20 +365,18 @@ class Setup:
         ------
         ValueError
             If it has no options of mock data, or the data cannot be drawn
-            (see GroupPlan.mock).
+            (see draw_mocks).
         """
         options = self.mock_options
         if options is None:
             raise ValueError("mock data need their options (section 'mock')")
         group = self.group_plan.group()
-        noises, likelihoods = options.per_observation(group.nobservations())
-        datasets = self.group_plan.mock(
-            values, noises, options.nmocks(), options.nsamples(),
-            options.seed())
+        _, likelihoods = options.per_observation(group.nobservations())
         return [
-            [observation.with_data(datasets[i][k], likelihoods[i])
-             for i, observation in enumerate(group.observations())]
-            for k in range(options.nmocks())]
+            [observation.with_data(dataset, likelihood)
+             for observation, dataset, likelihood in zip(
+                 group.observations(), datasets, likelihoods)]
+            for datasets in draw_mocks(self.group_plan, values, options)]
 
     def close(self) -> None:
         """

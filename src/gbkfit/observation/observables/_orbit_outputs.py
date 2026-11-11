@@ -1,28 +1,22 @@
 """
 The extra outputs of the moments of stars on orbits (see
-region_moments.OrbitMomentsPlan): the cube of their light in the pixels
-of the grid of the bins, and the moments of their light and velocities
-in the cells of their spheroid and of each orbit.
+_orbit_moments.OrbitMomentsPlan): the moments of their light and
+velocities in the cells of their spheroid and of each orbit (the cube of
+their light in the pixels of the grid of the bins is made by
+_orbit_sky.PixelCube).
 """
-
-from collections.abc import Sequence
 
 import astropy.units as u
 import numpy as np
-import scipy.signal
-import scipy.sparse
 from astropy.table import Table
 
-from gbkfit.grid import Grid, sky_to_pixel
-from gbkfit.instrument import Instrument
-from gbkfit.model.components.spheroids import OrbitLibraryState, SkyGrid
+from gbkfit.model.components.spheroids import OrbitLibraryState
 
 
 __all__ = [
     'CELLS_DESCRIPTION',
     'ORBITS_DESCRIPTION',
     'PROFILE_DESCRIPTION',
-    'PixelCube',
     'cell_tables',
     'orbit_table'
 ]
@@ -58,80 +52,6 @@ ORBITS_DESCRIPTION = (
     "radial or polar, negative counter-rotating), its weight (the solved "
     "factor of its share of the light) and its light (in the units of the "
     "light of the spheroid).")
-
-
-class PixelCube:
-    """
-    The pixels of the grid of the bins of an observation as a grid of the
-    sky for orbits (see SkyGrid): the cells of the pixels at the given
-    oversampling (along x and y) and around them half the size of the PSF,
-    each its own target (the spectra of the targets are convolved with
-    the PSF after, see cube).
-
-    Parameters
-    ----------
-    grid : Grid
-        The grid of the bins.
-    shape : tuple of int
-        Its shape (ny, nx).
-    instrument : Instrument
-        The instrument of the observation.
-    oversampling : Sequence of int
-        The oversampling of the model (along x and y).
-
-    Attributes
-    ----------
-    grid : SkyGrid
-        The grid of the sky.
-    shape : tuple of int
-        The shape (ny, nx) of the pixels.
-    """
-
-    def __init__(
-            self,
-            grid: Grid,
-            shape: tuple[int, int],
-            instrument: Instrument,
-            oversampling: Sequence[int]
-    ):
-        fx, fy = oversampling[:2]
-        step = grid.coords.step[:2]
-        psf = instrument.psf()
-        self._kernel = np.ones((1, 1)) if psf is None else psf.asarray(
-            (step[0] / fx, step[1] / fy), rota=grid.coords.rota)
-        self._margins = (self._kernel.shape[0] // 2,
-                         self._kernel.shape[1] // 2)
-        self.shape = shape
-        self._oversampling = (fy, fx)
-        self._area = abs(step[0] * step[1])
-        my, mx = self._margins
-        padded = (shape[0] * fy + 2 * my, shape[1] * fx + 2 * mx)
-        # (pixel p covers [p - 1/2, p + 1/2), and f cells along each axis;
-        # as RegionMoments.sky_grid)
-        matrix, offset = sky_to_pixel(grid)
-        f = np.array([fx, fy], dtype=float)
-        cells = np.column_stack(
-            (f[:, None] * matrix, f * (offset + 0.5) + (mx, my)))
-        ncells = padded[0] * padded[1]
-        self.grid = SkyGrid(
-            cells, padded, scipy.sparse.identity(ncells, format='csr'))
-
-    def cube(self, spectra: np.ndarray) -> np.ndarray:
-        """
-        Return the cube (nchannels, ny, nx) of the pixels of the spectra of
-        the targets of its grid (an array of shape (nchannels, ncells)):
-        convolved with the PSF, summed over the cells of each pixel, and
-        per arcsec^2 (as the model cubes of other stars).
-        """
-        (ny, nx), (fy, fx), (my, mx) = \
-            self.shape, self._oversampling, self._margins
-        nchannels = len(spectra)
-        cube = spectra.reshape(nchannels, *self.grid.shape)
-        cube = scipy.signal.fftconvolve(
-            cube, self._kernel[None], mode='same', axes=(1, 2))
-        cube = cube[:, my:my + ny * fy, mx:mx + nx * fx]
-        return cube.reshape(nchannels, ny, fy, nx, fx).sum(axis=(2, 4)) \
-            / self._area
 
 
 def cell_tables(

@@ -20,14 +20,17 @@ from gbkfit.config import (
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import (
-    Grid, SpectralAxis, make_convention, vacuum_wavelength)
+    Grid, SpectralAxis, make_convention, make_cube_grid, vacuum_wavelength)
 from gbkfit.instrument import (
     Instrument, SlitMask, Trace, slit_mask_parser, trace_parser)
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import iterutils
-from . import _detail, _model_cube, _moments
-from ._detail import Rota, Rpix, Rval, Size, Step
-from ._region_sums import RegionSumsPlan
+from . import _model_cube, _moments
+from ._cube_plan import CubeObservablePlan
+from ._data_units import data_unit
+from ._options import (
+    Rota, Rpix, Rval, Size, Step, dataset_grid_options, grid_options)
+from ._sparse_sums import SparseSumsPlan
 from .base import FluxScale, HostModelData, ModelData, Observable
 
 if TYPE_CHECKING:
@@ -428,13 +431,6 @@ class SlitlessSpectra(Observable):
         return 'Slitless spectra (grism)'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any],
-            dataset: DatasetSlitlessSpectra | None = None
-    ) -> 'SlitlessSpectra':
-        return _detail.load_observable(cls, info, dataset)
-
-    @classmethod
     def from_data(
             cls,
             dataset: DatasetSlitlessSpectra,
@@ -470,25 +466,15 @@ class SlitlessSpectra(Observable):
         """
         check_options(SlitlessSpectra.from_data, locals())
         return cls(
-            **_detail.grid_options(dataset.grid()), spectral=spectral,
+            **grid_options(dataset.grid()), spectral=spectral,
             trace=trace, aperture=aperture,
             exposures=exposures, sky_sampling=sky_sampling,
             resampled=resampled)
 
-    def dump(
-            self,
-            data: DatasetSlitlessSpectra | None = None,
-            prefix: str = '',
-            dump_path: bool = True,
-            overwrite: bool = False
+    def _dump_options(
+            self, prefix: str, dump_path: bool, overwrite: bool
     ) -> dict[str, Any]:
-        return _detail.without_options_from_data(self, dict(
-            type=self.type(),
-            size=self.size(),
-            step=self.step(),
-            rpix=self.rpix(),
-            rval=self.rval(),
-            rota=self.rota(),
+        return dict(
             spectral=self._spectral.dump(),
             trace=trace_parser.dump(
                 self._trace, prefix=prefix, dump_path=dump_path,
@@ -496,7 +482,7 @@ class SlitlessSpectra(Observable):
             aperture=slit_mask_parser.dump(self._aperture),
             exposures=exposure_parser.dump(list(self._exposures)),
             sky_sampling=self._sky_sampling,
-            resampled=self._resampled), data)
+            resampled=self._resampled)
 
     def __init__(
             self,
@@ -580,7 +566,7 @@ class SlitlessSpectra(Observable):
             self, items: Mapping[str, Data]
     ) -> DatasetSlitlessSpectra:
         return DatasetSlitlessSpectra(
-            items['spectra'], **_detail.dataset_grid_options(self.grid()))
+            items['spectra'], **dataset_grid_options(self.grid()))
 
     def data_unit(
             self,
@@ -588,7 +574,7 @@ class SlitlessSpectra(Observable):
             light: LightUnit | None = None
     ) -> DataUnit | None:
         # (the light of a pixel is integrated over the lines, as moment 0)
-        return _detail.data_unit(
+        return data_unit(
             dataset, 'spectra', abs(self.step()[0] * self.step()[1]), True,
             light)
 
@@ -632,18 +618,12 @@ class SlitlessSpectra(Observable):
         rpix, step, k = self.rpix(), self.step(), self._sky_sampling
         # (the centre of sub-pixel i of the sky is at offset - 1/2 + (i +
         # 1/2) / k pixels of the image)
-        spectral = self._spectral
         model_cube = _model_cube.ModelCube(
-            size=(size[0] * k, size[1] * k, spectral.size()),
-            step=(step[0] / k, step[1] / k, spectral.step()),
-            rpix=((rpix[0] - offset[0] + 0.5) * k - 0.5,
-                  (rpix[1] - offset[1] + 0.5) * k - 0.5,
-                  spectral.rpix()),
-            rval=self.rval() + (spectral.rval(),),
-            rota=self.rota(),
-            rest=spectral.rest(),
-            medium=spectral.medium(),
-            convention=spectral.convention(),
+            make_cube_grid(
+                (size[0] * k, size[1] * k), (step[0] / k, step[1] / k),
+                ((rpix[0] - offset[0] + 0.5) * k - 0.5,
+                 (rpix[1] - offset[1] + 0.5) * k - 0.5),
+                self.rval(), self.rota(), self._spectral),
             oversampling=tuple(oversampling) + (1,),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
@@ -851,12 +831,12 @@ class SlitlessSpectra(Observable):
             shape=(width * height, len(edges) * npixels))
 
 
-class SlitlessSpectraPlan(_detail.CubeObservablePlan):
+class SlitlessSpectraPlan(CubeObservablePlan):
     """
     The evaluation of SlitlessSpectra: the cube of the sky (see
     CubeObservablePlan), then its dispersion into the image of the grid of the
     detector, the sums of its voxels with the weights of a sparse matrix
-    (see RegionSumsPlan). The detector records the image, so the noise of
+    (see SparseSumsPlan). The detector records the image, so the noise of
     its mock data goes in there.
     """
 
@@ -875,7 +855,7 @@ class SlitlessSpectraPlan(_detail.CubeObservablePlan):
         super().__init__(
             model_cube, driver, scene, line_of_sight, foreground, dtype, None,
             flux_scale)
-        self._dispersion = RegionSumsPlan(dispersion, driver, dtype)
+        self._dispersion = SparseSumsPlan(dispersion, driver, dtype)
         size = grid.size
         self._image = driver.mem_alloc_d((1, size[0] * size[1]), dtype)
         self._shape = size[::-1]

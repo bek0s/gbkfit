@@ -1,7 +1,7 @@
 """
-Tests for mock data (ObservationGroup.mock): the noise of each observable
-goes in where its instrument records the data, and the errors of the
-data are those of the noise, or the scatter of the measured data.
+Tests for mock data (draw_mocks): the noise of each observable goes in
+where its instrument records the data, and the errors of the data are
+those of the noise, or the scatter of the measured data.
 """
 
 import astropy.units as u
@@ -11,7 +11,8 @@ import pytest
 
 from gbkfit.config import ConfigError
 from gbkfit.model import Extras
-from gbkfit.observation import NoiseGauss, NoisePoisson
+from gbkfit.observation import (
+    MockOptions, NoiseGauss, NoisePoisson, draw_mocks)
 from modelutils import group_plan
 
 
@@ -60,6 +61,13 @@ def evaluate(plan):
     return {k: v['d'].copy() for k, v in data.items()}, extra, params
 
 
+def mock_data(plan, params, noise, **options):
+    """The mock datasets of the observation (see draw_mocks)."""
+    return [
+        dataset for dataset, in draw_mocks(
+            plan, params, MockOptions(noise, **options))]
+
+
 @pytest.mark.parametrize('name', ['pixel_brightness', 'pixel_spectra'])
 def test_poisson_mocks_have_the_errors_of_their_signal(driver, name):
     # The errors of the mock data are the dispersion of the counts of
@@ -67,7 +75,7 @@ def test_poisson_mocks_have_the_errors_of_their_signal(driver, name):
     # are missing (an error of 0 cannot be fitted)
     plan = plan_of(driver, dict(type=name) | RECORDED[name])
     model, _, params = evaluate(plan)
-    [mock] = plan.mock(params, NoisePoisson(gain=1e4), seed=1)[0]
+    [mock] = mock_data(plan, params, NoisePoisson(gain=1e4), seed=1)
     for key, value in model.items():
         bright = value > 0
         np.testing.assert_allclose(
@@ -80,15 +88,36 @@ def test_poisson_mocks_have_the_errors_of_their_signal(driver, name):
 def test_recorded_data_have_the_noise_as_their_error(driver, name):
     plan = plan_of(driver, dict(type=name) | RECORDED[name])
     model, _, params = evaluate(plan)
-    mocks = plan.mock(params, NoiseGauss(rms=0.01), nmocks=2, seed=1)[0]
+    mocks = mock_data(plan, params, NoiseGauss(rms=0.01), nmocks=2, seed=1)
     for key, value in model.items():
         residual = mocks[0][key].data() - value
         assert residual.std() == pytest.approx(0.01, rel=0.05)
         np.testing.assert_allclose(mocks[0][key].error(), 0.01)
         assert not np.array_equal(mocks[0][key].data(), mocks[1][key].data())
-    again = plan.mock(params, NoiseGauss(rms=0.01), nmocks=1, seed=1)[0]
+    again = mock_data(plan, params, NoiseGauss(rms=0.01), nmocks=1, seed=1)
     for key in model:
         np.testing.assert_array_equal(again[0][key].data(), mocks[0][key].data())
+
+
+def test_setups_mock_observations_under_the_likelihoods_of_the_options(
+        driver):
+    from gbkfit import Setup
+    from gbkfit.observation import LikelihoodGaussian
+    plan = plan_of(
+        driver, dict(type='pixel_brightness') | RECORDED['pixel_brightness'])
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), PROPERTIES)
+    given = LikelihoodGaussian(white_floor=0.2)
+    for likelihood, want in ((None, LikelihoodGaussian()), (given, given)):
+        options = MockOptions(
+            NoiseGauss(rms=0.01), likelihood=likelihood, nmocks=2, seed=1)
+        with Setup(
+                plan.group(), params, driver=driver,
+                mock_options=options) as setup:
+            mocks = setup.mock(params.evaluate())
+        assert [len(mock) for mock in mocks] == [1, 1]
+        for [mock] in mocks:
+            assert mock.likelihood().dump() == want.dump()
 
 
 def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
@@ -106,9 +135,9 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
         model['spectra'], error=np.full_like(model['spectra'], 0.01),
         unit='Jy/beam', beam=dict(bmaj=4, bmin=3, bpa=10))})
     plan = plan.with_data([data])
-    [mock] = plan.mock(
-        params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
-        seed=1)[0]
+    [mock] = mock_data(
+        plan, params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
+        seed=1)
     assert mock['spectra'].unit() == data['spectra'].unit()
     assert mock['spectra'].beam() == data['spectra'].beam()
     assert mock['spectra'].spatial_correlation() \
@@ -137,7 +166,7 @@ def test_mocks_without_data_have_the_unit_and_beam_of_their_model(
             size=31, step=20, rest='1420.405751768 MHz')),
         unit='Jy/beam')])
     model, _, params = evaluate(plan)
-    [mock] = plan.mock(params, NoiseGauss(rms=0.01), seed=1)[0]
+    [mock] = mock_data(plan, params, NoiseGauss(rms=0.01), seed=1)
     observation = plan.group().observations()[0]
     psf = observation.instrument().psf()
     beam = mock['spectra'].beam()
@@ -164,9 +193,9 @@ def test_mocks_of_correlated_noise_have_float64_models(driver):
         | RECORDED['pixel_spectra'])
     model, _, params = evaluate(plan)
     assert model['spectra'].dtype == np.float32
-    [mock] = plan.mock(
-        params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
-        seed=1)[0]
+    [mock] = mock_data(
+        plan, params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
+        seed=1)
     mocked = evaluate(plan.with_data([mock]))[0]['spectra']
     assert mocked.dtype == np.float64
     np.testing.assert_allclose(
@@ -184,7 +213,7 @@ def test_mocks_refuse_noise_of_a_varying_correlation(driver):
         | RECORDED['pixel_spectra'])
     _, _, params = evaluate(plan)
     with pytest.raises(ValueError, match="varies along the spectral axis"):
-        plan.mock(params, NoiseGauss(
+        mock_data(plan, params, NoiseGauss(
             rms=0.01, spatial_correlation='instrument'), seed=1)
 
 
@@ -201,8 +230,8 @@ def test_the_errors_of_moments_are_their_scatter(driver, method):
         flux_floor=1e-4, method=method))
     model, extra, params = evaluate(plan)
     peak = extra.get('dcube_lo').data.max()
-    mocks = plan.mock(
-        params, NoiseGauss(rms=0.05 * peak), nmocks=100, seed=2)[0]
+    mocks = mock_data(
+        plan, params, NoiseGauss(rms=0.05 * peak), nmocks=100, seed=2)
     bright = model['moment0'] > 0.2 * model['moment0'].max()
     assert bright.sum() > 30
     for key in ('moment0', 'moment1'):
@@ -227,18 +256,24 @@ def test_the_errors_of_moments_are_their_scatter(driver, method):
 def test_mock_options_are_checked_as_they_load(options, message):
     # (they were checked only by the task eval, after it evaluated the
     # model: audit 2026-10-31 #42)
-    from gbkfit.observation import MockOptions
     with pytest.raises((ConfigError, ValueError)) as error:
         MockOptions.load(
             dict(noise=dict(type='gauss', rms=1)) | options).per_observation(3)
     assert str(error.value) == message
 
 
+def test_mock_options_are_checked_against_the_group(driver):
+    plan = plan_of(driver, dict(type='pixel_brightness', size=[16, 17]))
+    noise = NoiseGauss(rms=0.01)
+    MockOptions([noise]).check(plan.group())
+    with pytest.raises(ValueError, match="a list of 2"):
+        MockOptions([noise, noise]).check(plan.group())
+
+
 def test_mock_options_dump_the_noise_of_each_observation(tmp_path):
     # Its error map in a file of its own, named after the position of its
     # observation, which loads again (they were all noise_error.fits, in
     # the working directory, and the second was refused: audit 2026-11-11)
-    from gbkfit.observation import MockOptions
     errors = [np.ones((4, 4)), np.full((4, 4), 2.0)]
     prefix = str(tmp_path / 'mock_')
     info = MockOptions([NoiseGauss(error=error) for error in errors]).dump(

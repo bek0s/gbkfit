@@ -6,9 +6,7 @@ from typing import Any, TypeAlias
 import astropy.units as u
 import numpy as np
 
-from gbkfit.grid import (
-    Coords, Grid, GridData, VelocityConvention, make_convention, make_medium,
-    make_rest)
+from gbkfit.grid import Grid, GridData, VelocityConvention
 import gbkfit.units
 from gbkfit.driver import DeviceArray, Driver, DriverFFT
 from gbkfit.instrument import (
@@ -126,10 +124,11 @@ def _separable_padding(
     data is beyond the velocities where the PSF or the LSF is known.
     """
     psf, lsf = model_cube.psf(), model_cube.lsf()
-    convention = VelocityConvention.of(model_cube.grid().coords)
-    step_lo = model_cube.step()
-    velocities_lo = model_cube.zero()[2] \
-        + step_lo[2] * np.arange(model_cube.size()[2])
+    grid_lo = model_cube.grid()
+    convention = VelocityConvention.of(grid_lo.coords)
+    step_lo = grid_lo.coords.step
+    velocities_lo = grid_lo.zero()[2] \
+        + step_lo[2] * np.arange(grid_lo.size[2])
     for kernel, desc in ((psf, 'the PSF'), (lsf, 'the LSF')):
         if kernel is not None:
             kernel.check_covers(velocities_lo, convention, desc)
@@ -203,7 +202,7 @@ def _separable_kernels(
         psfs = psf.at(velocities * _KMS, convention) if psf.varies() \
             else [psf]
         psf_images = np.stack([
-            p.asarray(step[:2], size[:2], offset, model_cube.rota())
+            p.asarray(step[:2], size[:2], offset, grid_high_res.coords.rota)
             for p in psfs])
     lsf_kernels = None
     if lsf is not None:
@@ -256,7 +255,7 @@ def _kernel_cube(
     psf, lsf = model_cube.psf(), model_cube.axis_lsf()
     size, step = grid_high_res.size, grid_high_res.coords.step
     offset = numutils.is_odd(size) - 1
-    psf_args = (step[:2], size[:2], offset[:2], model_cube.rota())
+    psf_args = (step[:2], size[:2], offset[:2], grid_high_res.coords.rota)
     lsf_args = (step[2], size[2], offset[2])
     # (rolled before their product, which is then the only cube made)
     psf_image = DriverFFT.fft_convolution_shift(
@@ -268,11 +267,12 @@ def _kernel_cube(
 
 class ModelCube:
     """
-    A cube of the data of an observable (x, y and the spectral axis), of
-    the given grid, made from a model evaluated on a finer grid (oversampling
-    times finer along each axis): the primary beam attenuates it, the PSF
-    and the LSF convolve it, it is downscaled to the grid, smoothed by a
-    median filter of median_size pixels on the sky if given (as the data
+    A cube of the data of an observable, of the given grid (x, y and the
+    spectral axis, its third axis), made from a model evaluated on a finer
+    grid (oversampling times finer along each axis): the primary beam
+    attenuates it, the PSF and the LSF convolve it, it is downscaled to
+    the grid, smoothed by a median filter of median_size pixels on the
+    sky if given (as the data
     were: each channel takes the median of the median_size by median_size
     pixels about each, with zero beyond the edges). The weights are
     smoothed by the PSF and the LSF if smooth_weights. Its values are of
@@ -282,15 +282,8 @@ class ModelCube:
 
     def __init__(
             self,
+            grid: Grid,
             *,
-            size: tuple[int, int, int],
-            step: tuple[float, float, float],
-            rpix: tuple[float, float, float],
-            rval: tuple[float, float, float],
-            rota: float,
-            rest: u.Quantity | None,
-            medium: str | None,
-            convention: str | None = None,
             oversampling: tuple[int, int, int],
             primary_beam: PrimaryBeam | None,
             psf: PSF | None,
@@ -302,11 +295,7 @@ class ModelCube:
     ):
         # The low-resolution grid (the grid of the data); the
         # high-resolution one is made by the plan
-        rest = make_rest(rest)
-        coords = Coords(
-            step, rpix, rval, rota, rest, make_medium(medium, rest),
-            make_convention(convention, rest))
-        self._grid_lo = Grid(size, coords, 2)
+        self._grid_lo = grid
         self._oversampling = oversampling
         self._primary_beam = primary_beam
         self._psf = psf
@@ -317,10 +306,11 @@ class ModelCube:
         self._median_size = median_size
         # The LSF of all the channels of the data, if it is the same at
         # each (see axis_lsf), and the convention of their velocities
-        self._convention = VelocityConvention.of(coords)
+        self._convention = VelocityConvention.of(grid.coords)
         self._axis_lsf = None
         if lsf is not None and not lsf.varies():
-            ends = self.zero()[2] + step[2] * np.array(
+            size, step = grid.size, grid.coords.step
+            ends = grid.zero()[2] + step[2] * np.array(
                 [0, (size[2] - 1) / 2, size[2] - 1])
             first, middle, last = (lsf.on(self._channel(v)) for v in ends)
             dispersions = [
@@ -333,24 +323,6 @@ class ModelCube:
 
     def grid(self) -> Grid:
         return self._grid_lo
-
-    def size(self) -> tuple[int, int, int]:
-        return self._grid_lo.size
-
-    def step(self) -> tuple[float, float, float]:
-        return self._grid_lo.coords.step
-
-    def zero(self) -> tuple[float, float, float]:
-        return self._grid_lo.zero()
-
-    def rpix(self) -> tuple[float, float, float]:
-        return self._grid_lo.coords.rpix
-
-    def rval(self) -> tuple[float, float, float]:
-        return self._grid_lo.coords.rval
-
-    def rota(self) -> float:
-        return self._grid_lo.coords.rota
 
     def oversampling(self) -> tuple[int, int, int]:
         return self._oversampling
@@ -398,7 +370,8 @@ class ModelCube:
 
     def _channel(self, velocity: float) -> Channel:
         """The channel of the data at a velocity of the axis (km/s)."""
-        return Channel(float(velocity), self.step()[2], self._convention)
+        return Channel(
+            float(velocity), self._grid_lo.coords.step[2], self._convention)
 
     def smooth_weights(self) -> bool:
         return self._smooth_weights
@@ -420,10 +393,11 @@ class ModelCube:
         varies) and its channels (a box of their width), added in
         quadrature.
         """
-        channel = self.step()[2]
+        grid = self._grid_lo
+        channel = grid.coords.step[2]
         dispersion = 0.0
         if self._lsf is not None:
-            velocities = self.zero()[2] + channel * np.arange(self.size()[2])
+            velocities = grid.zero()[2] + channel * np.arange(grid.size[2])
             dispersion = min(
                 _equivalent_dispersion(x, channel)
                 for x in _distinct(self.axis_lsfs(velocities)))
@@ -448,9 +422,10 @@ class ModelCubePlan:
     def __init__(
             self, model_cube: ModelCube, driver: Driver, has_weights: bool
     ):
-        size_lo = model_cube.size()
-        step_lo = model_cube.step()
-        rpix_lo = model_cube.rpix()
+        grid_lo = model_cube.grid()
+        size_lo = grid_lo.size
+        step_lo = grid_lo.coords.step
+        rpix_lo = grid_lo.coords.rpix
         oversampling = model_cube.oversampling()
         psf = model_cube.psf()
         lsf = model_cube.lsf()
@@ -497,12 +472,12 @@ class ModelCubePlan:
             (rpix_lo[i] + 0.5) * oversampling[i] - 0.5 + edge_high_res[i]
             for i in range(3))
         grid_high_res = Grid(
-            tuple(size_high_res), model_cube.grid().coords._replace(
+            tuple(size_high_res), grid_lo.coords._replace(
                 step=step_high_res, rpix=rpix_high_res), 2)
         if psf is not None and not isinstance(psf, PSFPoint) \
                 and not psf.varies():
             _warn_narrow_psf(
-                psf.asarray(step_high_res[:2], rota=model_cube.rota()),
+                psf.asarray(step_high_res[:2], rota=grid_lo.coords.rota),
                 oversampling)
 
         # The shapes of the arrays are the reversed sizes
@@ -708,7 +683,9 @@ class ModelCubePlan:
     ) -> None:
         """Write the extra outputs (see evaluate and _CUBE_EXTRAS)."""
         model_cube = self._model_cube
-        step_lo = model_cube.step()
+        grid_lo = model_cube.grid()
+        step_lo = grid_lo.coords.step
+        rota = grid_lo.coords.rota
         step_high_res = self._grid_high_res.coords.step
         psf = model_cube.psf()
         lsf = model_cube.axis_lsf()
@@ -721,7 +698,7 @@ class ModelCubePlan:
         driver = self._driver
 
         def lo(data: DeviceArray) -> GridData | np.ndarray:
-            return extra_lo(driver.mem_copy_d2h(data), model_cube.grid())
+            return extra_lo(driver.mem_copy_d2h(data), grid_lo)
 
         def hi(data: DeviceArray) -> GridData | np.ndarray:
             return extra_high_res(
@@ -751,10 +728,8 @@ class ModelCubePlan:
                 add('lsf_hi', lsf_kernels)
         else:
             if psf:
-                add('psf_lo', psf.asarray(
-                    step_lo[:2], rota=model_cube.rota()))
-                add('psf_hi', psf.asarray(
-                    step_high_res[:2], rota=model_cube.rota()))
+                add('psf_lo', psf.asarray(step_lo[:2], rota=rota))
+                add('psf_hi', psf.asarray(step_high_res[:2], rota=rota))
             if lsf:
                 add('lsf_lo', lsf.asarray(step_lo[2]))
                 add('lsf_hi', lsf.asarray(step_high_res[2]))

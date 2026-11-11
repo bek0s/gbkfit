@@ -9,9 +9,15 @@ import astropy.units as u
 import numpy as np
 import pytest
 
+from gbkfit.grid import make_grid
 from gbkfit.observation.observables._model_cube import ModelCube, cube_extra
 from gbkfit.instrument import Channel, LSFGauss
 from gbkfit.instrument import PSFGauss
+
+
+def cube_grid(size, step, rpix, rval):
+    """A grid of x, y and a spectral axis of velocities without a rest."""
+    return make_grid(size, step, rpix, rval, 0, spectral_axis=2)
 
 
 @pytest.mark.parametrize('psf, lsf', [
@@ -28,9 +34,8 @@ def test_grids(driver, psf, lsf):
     rval = (1.0, 1.5, 2.0)
     oversampling = (1, 2, 3)
     model_cube = ModelCube(
-        size=size, step=step, rpix=rpix, rval=rval, rota=0, rest=None,
-        medium=None, oversampling=oversampling, primary_beam=None, psf=psf,
-        lsf=lsf, smooth_weights=False,
+        cube_grid(size, step, rpix, rval), oversampling=oversampling,
+        primary_beam=None, psf=psf, lsf=lsf, smooth_weights=False,
         dtype=np.dtype(np.float32), fft_dtype=np.dtype(np.float64))
     plan = model_cube.plan(driver, has_weights=True)
     # The spatial axes are measured from the reference pixel, and the
@@ -51,9 +56,7 @@ def test_grids(driver, psf, lsf):
             edge_high_res = tuple(edge_high_res[:2]) + (lsf_size // 2,)
     zero_high_res = zero - np.divide(step, 2) \
         - (np.array(edge_high_res) - 0.5) * step_high_res
-    assert model_cube.size() == size
-    assert model_cube.step() == step
-    np.testing.assert_allclose(model_cube.zero(), zero)
+    np.testing.assert_allclose(model_cube.grid().zero(), zero)
     grid_high_res = plan.high_res_grid()
     assert grid_high_res.size == tuple(size_high_res)
     assert plan.high_res_edge() == tuple(edge_high_res)
@@ -69,8 +72,8 @@ def test_grids(driver, psf, lsf):
 
 def test_downscaling_keeps_a_uniform_cube(driver):
     model_cube = ModelCube(
-        size=(21, 30, 41), step=(0.5, 1.5, 2.0), rpix=(5.0, 6.5, 7.5),
-        rval=(1.0, 1.5, 2.0), rota=0, rest=None, medium=None,
+        cube_grid((21, 30, 41), (0.5, 1.5, 2.0), (5.0, 6.5, 7.5),
+                  (1.0, 1.5, 2.0)),
         oversampling=(2, 3, 4),
         primary_beam=None, psf=None, lsf=None,
         smooth_weights=False,
@@ -89,8 +92,7 @@ def _evaluate_weights(driver, smooth_weights):
     resulting low-resolution weights.
     """
     model_cube = ModelCube(
-        size=(24, 20, 1), step=(1, 1, 1), rpix=(11.5, 9.5, 0),
-        rval=(0, 0, 0), rota=0, rest=None, medium=None,
+        cube_grid((24, 20, 1), (1, 1, 1), (11.5, 9.5, 0), (0, 0, 0)),
         oversampling=(1, 1, 1), primary_beam=None, psf=PSFGauss(1.5),
         lsf=None, smooth_weights=smooth_weights,
         dtype=np.float32,
@@ -105,7 +107,7 @@ def _evaluate_weights(driver, smooth_weights):
     plan.evaluate(None, cube_extra, cube_extra)
 
     edge_z, edge_y, edge_x = plan.high_res_edge()[::-1]
-    size_z, size_y, size_x = model_cube.size()[::-1]
+    size_z, size_y, size_x = model_cube.grid().size[::-1]
     expected = pattern[
         edge_z:edge_z + size_z,
         edge_y:edge_y + size_y,
@@ -134,8 +136,7 @@ def test_lsf_only_keeps_the_image_on_a_non_square_cube(driver):
     images = []
     for lsf in (None, LSFGauss(2.0 * u.km / u.s)):
         model_cube = ModelCube(
-            size=(24, 16, 40), step=(1, 1, 1), rpix=(11.5, 7.5, 19.5),
-            rval=(0, 0, 0), rota=0, rest=None, medium=None,
+            cube_grid((24, 16, 40), (1, 1, 1), (11.5, 7.5, 19.5), (0, 0, 0)),
             oversampling=(1, 1, 1),
             primary_beam=None, psf=None, lsf=lsf, smooth_weights=False,
             dtype=np.float32,

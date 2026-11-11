@@ -1,6 +1,6 @@
 """
 The noise of mock observations: what they add to the data a model gives
-where the instrument records them (see GroupPlan.mock).
+where the instrument records them (see draw_mocks).
 """
 
 import abc
@@ -73,7 +73,7 @@ class Noise(TypedSerializable, abc.ABC):
         """
         Return its correlation on the sky (a PSF, or 'instrument': the PSF
         of the instrument) and along the spectral axis, which the mock
-        data of it declare (see GroupPlan.mock); none for noise
+        data of it declare (see draw_mocks); none for noise
         independent from value to value.
         """
         return None, None

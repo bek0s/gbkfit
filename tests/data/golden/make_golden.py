@@ -234,7 +234,8 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     data of the model at its true values (see Case.mock_galaxies), and
     its parameters at its trial values.
     """
-    from gbkfit.observation import likelihood_parser, noise_parser
+    from gbkfit.observation import (
+        MockOptions, draw_mocks, likelihood_parser, noise_parser)
     from gbkfit.observation import observation_parser
     from gbkfit.config import FORMAT_VERSION
     from gbkfit.config import paths_relative_to
@@ -257,14 +258,14 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
         likelihoods = [
             None if info is None else likelihood_parser.load(info)
             for info in likelihoods]
-    datasets = group_plan.mock(
-        params.evaluate(), noises, nsamples=case.nsamples, seed=case.seed)
+    [datasets] = draw_mocks(group_plan, params.evaluate(), MockOptions(
+        noises, nsamples=case.nsamples, seed=case.seed))
     data_options = case.data_options or [{}] * len(case.observations)
     prefix = str(folder) + os.sep
     group = group_plan.group()
     observations = []
     for i, observation in enumerate(group.observations()):
-        mocked = observation.with_data(datasets[i][0], likelihoods[i])
+        mocked = observation.with_data(datasets[i], likelihoods[i])
         info = _rebased(observation_parser.dump(
             mocked, f'{prefix}{group.observation_label(i)}_',
             overwrite=True), prefix)

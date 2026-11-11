@@ -1507,7 +1507,7 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
     # average over 8 mocks, 1/2 in blocks of 2 pixels)
     from gbkfit.fitting import (
         BootstrapBlocks, BootstrapOptions, fitter_parser, run_bootstrap)
-    from gbkfit.observation import NoiseGauss
+    from gbkfit.observation import MockOptions, NoiseGauss, draw_mocks
 
     def group(dataset):
         observation = ObservationSky(
@@ -1522,7 +1522,8 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
     noise = NoiseGauss(rms=0.01 * peak, spatial_correlation='instrument')
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     fits = []
-    for mock in image.mock(values, noise, nmocks=41, seed=5)[0]:
+    for [mock] in draw_mocks(
+            image, values, MockOptions(noise, nmocks=41, seed=5)):
         # (without the correlation that mocks declare)
         dataset = DatasetPixelBrightness(Data(
             mock['brightness'].data(), error=mock['brightness'].error()))

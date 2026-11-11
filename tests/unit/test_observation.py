@@ -173,6 +173,28 @@ def test_a_group_with_other_data_has_the_units_they_give():
         == u.mJy
 
 
+def test_a_group_with_other_data_is_a_copy_of_the_same_parameters():
+    # (the group and its plan ask one question, see same_params: a copy
+    # shares what the group made of each observation; a group of other
+    # parameters is made again)
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import FittedNoise, ObservationGroup
+    galaxy = galaxy_parser.load(dict(components=[dict(
+        type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+        emission=dict(type='band'))]))
+    data = brightness('Jy')
+    plain = ObservationSky(
+        PixelBrightness.from_data(data), LineOfSightFlat(), data=data,
+        name='obs')
+    fitted = plain.with_data(data, LikelihoodGaussian(noise=dict(
+        brightness=FittedNoise(jitter=True))))
+    group = ObservationGroup([galaxy], [plain])
+    copied = group.with_data([brightness('Jy')])
+    assert copied.same_params(group)
+    assert copied.seen_by(0) is group.seen_by(0)
+    assert not ObservationGroup([galaxy], [fitted]).same_params(group)
+
+
 @pytest.mark.parametrize('options, message', [
     (dict(weights=dict(moment2=2)), r"does not have: \['moment2'\]"),
     (dict(upper_limits=dict(momnet0=UpperLimit(limit=1, error=0.1))),
