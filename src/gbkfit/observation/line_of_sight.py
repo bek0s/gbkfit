@@ -61,13 +61,14 @@ class Depth(Serializable):
         radius of the largest of the components that have one (e.g. a
         spheroid, see Component.bounding_radius), if longer; through
         radiative transfer, where each galaxy has a depth axis of its own,
-        that of each galaxy; or 'legacy': the longer of those x and y axes,
-        as the 3d models of earlier versions took it. A shorter axis than
-        that of 'galaxy' (of 'legacy' or a length) loses the density
-        beyond its ends: a warning says so (see warn).
+        that of each galaxy; or 'legacy': the longer (in arcsec) of those
+        x and y axes, as the 3d models of earlier versions took it. A
+        shorter axis than that of 'galaxy' (of 'legacy' or a length) loses
+        the density beyond its ends: a warning says so for a length (see
+        warn); 'legacy' always is (the diagonal is longer), by choice.
     step : float, optional
         The size of its voxels (arcsec); by default that of the pixels
-        along the longer of the x and y axes of that grid.
+        along the longer (in arcsec) of the x and y axes of that grid.
 
     """
 
@@ -100,23 +101,25 @@ class Depth(Serializable):
         components that have one; see Component.bounding_radius): as many
         voxels as cover the extent, centred on 0.
         """
-        longest = int(grid.size[0] < grid.size[1])
+        # (the longer axis in arcsec, which pixels that are not square can
+        # make the one of fewer pixels)
+        lengths = [n * abs(d) for n, d in zip(grid.size, grid.coords.step)]
+        longest = int(lengths[0] < lengths[1])
         step = self._step if self._step is not None \
             else grid.coords.step[longest]
-        diagonal = float(np.hypot(*(
-            n * abs(d) for n, d in zip(grid.size, grid.coords.step))))
-        galaxy = max(diagonal, 2 * bounding_radius)
+        galaxy = max(float(np.hypot(*lengths)), 2 * bounding_radius)
         if self._extent == 'legacy':
             size = grid.size[longest]
         else:
             extent = galaxy if self._extent == 'galaxy' else self._extent
             size = max(1, int(np.ceil(extent / step - 1e-9)))
-        if size * step < galaxy * (1 - 1e-9):
-            warn(
-                f"the depth axis ({size * step:g} arcsec) is shorter than "
-                f"the galaxies need ({galaxy:g} arcsec, the diagonal of the "
-                f"grid or twice their bounding radius): their density "
-                f"beyond its ends is lost; its extent 'galaxy' holds it")
+            if size * step < galaxy * (1 - 1e-9):
+                warn(
+                    f"the depth axis ({size * step:g} arcsec) is shorter "
+                    f"than the galaxies need ({galaxy:g} arcsec, the "
+                    f"diagonal of the grid or twice their bounding radius): "
+                    f"their density beyond its ends is lost; its extent "
+                    f"'galaxy' holds it")
         return DepthAxis(size, step, -(size / 2 - 0.5) * step)
 
 

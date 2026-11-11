@@ -211,15 +211,19 @@ def test_invalid_depths_are_rejected(options, message):
     (Depth(extent=20, step=1.5), (14, 1.5, -9.75)),
     # By default, the diagonal of the x and y axes (of 8 and 6 arcsec: 10),
     # or the diameter of the bounded components (radius 5: 10), if longer,
-    # in voxels of the step of the longer of the axes
-    (Depth(), (20, 0.5, -4.75)),
+    # in voxels of the step of the longer of the axes (x, in arcsec; y has
+    # more pixels)
+    (Depth(), (10, 1, -4.5)),
     # Legacy: those of the longer of the x and y axes
-    (Depth(extent='legacy'), (12, 0.5, -2.75)),
-    (Depth(extent='legacy', step=0.25), (12, 0.25, -1.375))])
-def test_depth_axis(depth, axis):
+    (Depth(extent='legacy'), (8, 1, -3.5)),
+    (Depth(extent='legacy', step=0.25), (8, 0.25, -0.875))])
+def test_depth_axis(depth, axis, caplog):
     grid = Grid(
         (8, 12), Coords((1, 0.5), (3.5, 5.5), (0, 0), 0), None)
+    caplog.set_level(logging.WARNING)
     assert depth.axis(grid, 5) == axis
+    # (legacy is shorter than the diagonal by choice: no warning)
+    assert 'shorter than the galaxies need' not in caplog.text
 
 
 @pytest.mark.parametrize('name', COMPONENTS)

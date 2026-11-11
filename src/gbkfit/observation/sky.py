@@ -176,7 +176,8 @@ class ObservationSky(Observation):
         Data): the whitening of its residuals (see LikelihoodGaussian)
         magnifies the rounding of a float32 model enough to stop least
         squares up to about 1 sigma short of the best fit (NGC 1313 of
-        LVHIS, 2026-10-20); float32 otherwise.
+        LVHIS, 2026-10-20); float32 otherwise. A copy with other data (see
+        with_data, e.g. mock data) then chooses again, by them.
     fft_dtype : str, optional
         The floating type of the FFT convolutions of the model by the PSF
         and the LSF: 'float64' (by default) or 'float32' (faster, for a
@@ -191,7 +192,10 @@ class ObservationSky(Observation):
         The unit of the light of its model without data (e.g. 'Jy/beam',
         see gbkfit.units.parse_unit): data give theirs. A unit per beam
         takes the beam of the PSF of the instrument (see PSF.beam_area),
-        of each point of the spectral axis for a PSF that varies.
+        of each point of the spectral axis for a PSF that varies. Mock
+        data of the model have the unit, and that beam: of a PSF that is
+        not a Gaussian, the round Gaussian of its solid angle (see
+        GroupPlan.mock).
 
     Raises
     ------
@@ -298,15 +302,18 @@ class ObservationSky(Observation):
         data = {} if self._data is None else dict(
             data=dataset_parser.dump(self._data, **kwargs),
             likelihood=likelihood_parser.dump(self._likelihood))
+        # (only a given dtype: one the data chose is chosen again by the
+        # data it is loaded with, e.g. mock data of correlated noise)
+        dtype = {} if self._given_dtype is None else dict(
+            dtype=self._given_dtype)
         return name | galaxies | components | lines | band | pixel_weights \
-            | flux_scale | offsets | unit | data | dict(
+            | flux_scale | offsets | unit | data | dtype | dict(
             line_of_sight=line_of_sight_parser.dump(self._line_of_sight),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
             observable=observable_parser.dump(
                 self._observable, data=self._data, **kwargs),
             oversampling=self._oversampling,
-            dtype=self._dtype.name,
             fft_dtype=self._fft_dtype.name)
 
     def __init__(
@@ -384,10 +391,15 @@ class ObservationSky(Observation):
             instrument, self._oversampling, pixel_weights)
         if pixel_weights is not None and foreground.lens() is not None:
             raise ValueError("a lens does not support pixel_weights yet")
-        self._light = None if unit is None \
+        # (the unit of the model without data, and its beam, of a unit per
+        # beam: those of data of the model, e.g. mock data)
+        self._light, self._light_beam = (None, None) if unit is None \
             else _light_unit(unit, data, observable, instrument)
         if data is not None:
             _check_beams(data, instrument, observable)
+        # (as given, for copies of other data and dumps: by default, the
+        # data choose it, see with_data)
+        self._given_dtype = dtype
         if dtype is None:
             dtype = 'float64' if data is not None \
                 and _has_correlated_noise(data) else 'float32'
@@ -494,7 +506,7 @@ class ObservationSky(Observation):
             self._components, self._lines, self._band, self._pixel_weights,
             self._flux_scale, self._offsets, data,
             likelihood if likelihood is not None else self._likelihood,
-            self._oversampling, self._dtype.name, self._fft_dtype.name,
+            self._oversampling, self._given_dtype, self._fft_dtype.name,
             self._name)
 
     def observable(self) -> Observable:
@@ -531,6 +543,22 @@ class ObservationSky(Observation):
         in the unit of the components it sees), or without data of light.
         """
         return self._observable.data_unit(self._data, self._light)
+
+    def model_unit(
+            self, key: str
+    ) -> tuple[astropy.units.UnitBase | None, Beam | None]:
+        """
+        Return the unit of the values of a data item of its model, and
+        their beam, of a unit per beam (see Observation.model_unit): those
+        of its data, if any; without data, its items of light (see
+        Observable.light_items) have its unit, if given (see the class),
+        with the beam of the PSF of its instrument for a unit per beam
+        (see _light_unit), and the others none.
+        """
+        if self._data is not None or self._light is None \
+                or key not in self._observable.light_items():
+            return super().model_unit(key)
+        return self._light.unit, self._light_beam
 
     def output(
             self,
@@ -673,12 +701,13 @@ def _light_unit(
         data: Dataset | None,
         observable: Observable,
         instrument: Instrument
-) -> LightUnit:
+) -> tuple[LightUnit, Beam | None]:
     """
     Return the unit of the light of the model of an observation without
-    data, as given (see ObservationSky: unit): with the beam of the PSF of
-    its instrument for a unit per beam, of each channel of the spectral
-    axis of its observable for a PSF that varies (see PSF.beam_area).
+    data, as given (see ObservationSky: unit), and its beam: for a unit
+    per beam, that of the PSF of its instrument (see _psf_beam), of each
+    channel of the spectral axis of its observable for a PSF that varies;
+    else None.
 
     Raises
     ------
@@ -693,14 +722,15 @@ def _light_unit(
     with config_path('unit'):
         unit = gbkfit.units.parse_unit(unit)
     if gbkfit.units.spatial_unit(unit) != astropy.units.beam:
-        return LightUnit(unit)
+        return LightUnit(unit), None
     psf = instrument.psf()
     if psf is None:
         raise ValueError(
             f"a unit per beam ({gbkfit.units.format_unit(unit)}) takes the "
             f"beam of the PSF of the instrument, which has none")
     if not psf.varies():
-        return LightUnit(unit, psf.beam_area())
+        beam = _psf_beam(psf)
+        return LightUnit(unit, beam.area()), beam
     spectral = observable.spectral()
     if spectral is None:
         raise ValueError(
@@ -712,8 +742,25 @@ def _light_unit(
         * astropy.units.km / astropy.units.s
     convention = VelocityConvention(
         spectral.rest(), spectral.medium(), spectral.convention())
-    areas = [beam.beam_area() for beam in psf.at(velocities, convention)]
-    return LightUnit(unit, np.array(areas), velocities)
+    beams = [_psf_beam(channel) for channel in psf.at(velocities, convention)]
+    beam = Beam(
+        np.array([b.bmaj for b in beams]), np.array([b.bmin for b in beams]),
+        np.array([b.bpa for b in beams]), velocities)
+    return LightUnit(unit, beam.area(), velocities), beam
+
+
+def _psf_beam(psf: PSF) -> Beam:
+    """
+    Return the beam of a PSF (of one channel), as of the unit of light
+    per beam: a Gaussian PSF is its own beam (see PSFGauss.beam); another
+    PSF is a round Gaussian beam of its solid angle (see PSF.beam_area),
+    the beam that data per beam carry (see Data).
+    """
+    if isinstance(psf, PSFGauss):
+        return psf.beam()
+    # (the solid angle of a Gaussian beam is pi / (4 ln 2) bmaj bmin)
+    fwhm = float(np.sqrt(4 * np.log(2) / np.pi * psf.beam_area()))
+    return Beam(fwhm, fwhm)
 
 
 def _check_offsets(

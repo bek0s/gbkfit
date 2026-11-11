@@ -16,6 +16,7 @@ from gbkfit.config import (
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectraData
+from gbkfit.io import Beam
 from gbkfit.model import DataUnit
 from gbkfit.params import ParamDesc, pdescs_with_units
 from ._scene import SeenGalaxies
@@ -240,6 +241,33 @@ class Observation(TypedSerializable, abc.ABC):
         Return the unit of the light of its data, which its model takes;
         None without data, or without data of light.
         """
+
+    def model_unit(
+            self, key: str
+    ) -> tuple[astropy.units.UnitBase | None, Beam | None]:
+        """
+        Return the unit of the values of a data item of its model, and
+        their beam, of a unit per beam: those that data of the model
+        have (e.g. mock data; see GroupPlan.mock).
+
+        Here, those of its data, if any (None for those they lack), and
+        none without data; kinds whose model has a unit without data add
+        it (see ObservationSky).
+
+        Parameters
+        ----------
+        key : str
+            The name of the data item (see keys).
+
+        Returns
+        -------
+        tuple
+            The unit, or None, and the beam, or None.
+        """
+        if self._data is None:
+            return None, None
+        item = self._data[key]
+        return item.unit(), item.beam()
 
     @abc.abstractmethod
     def dtype(self) -> np.dtype:

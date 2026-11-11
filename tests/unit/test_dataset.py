@@ -299,6 +299,20 @@ def test_data_mask_errors_of_0_and_reject_negative_ones():
         Data(np.ones((2, 3)), error=error)
 
 
+def test_data_take_any_error_of_the_values_left_out():
+    # An error map can mark the values left out (not finite, masked or
+    # outside the footprint) with a negative error, e.g. -1
+    values = np.ones((2, 3))
+    values[0, 0] = np.nan
+    mask, footprint = np.ones((2, 3)), np.ones((2, 3))
+    mask[0, 1] = footprint[0, 2] = 0
+    error = np.ones((2, 3))
+    error[0] = -1
+    data = Data(values, mask, error, footprint=footprint)
+    np.testing.assert_array_equal(data.mask(), [[0, 0, 0], [1, 1, 1]])
+    assert np.isnan(data.error()[0]).all()
+
+
 def test_data_keep_their_precision(tmp_path):
     # Floats keep their type, and the others become float64, in native
     # byte order (FITS files are big-endian); the mask and the error take
@@ -476,7 +490,8 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
         data=dict(type='pixel_spectra') | dict(data_info))
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_spectra')))
-    assert observation.observable().rest() == dataset.grid().coords.rest
+    assert observation.observable().spectral().rest() \
+        == dataset.grid().coords.rest
     with pytest.raises(Exception, match="give its options \\['spectral'\\]"):
         observation_parser.load(info | dict(observable=dict(
             type='pixel_spectra', spectral=dict(rest='6562.8 Angstrom'))))

@@ -41,8 +41,8 @@ _NEWTON_TOLERANCE = 1e-12
 class Trace(TypedSerializable, abc.ABC):
     """
     The trace of a disperser: the offsets (dx, dy; pixels of the detector)
-    of the light of each wavelength from the place of its undispersed
-    light.
+    of the light of each wavelength (in vacuum) from the place of its
+    undispersed light.
     """
 
     @abc.abstractmethod
@@ -53,10 +53,9 @@ class Trace(TypedSerializable, abc.ABC):
             y: npt.ArrayLike
     ) -> tuple[np.ndarray, np.ndarray]:
         """
-        Return the offsets (dx, dy; pixels) of the wavelengths (m, in the
-        medium of the spectral axis) at the places (x, y) of their
-        undispersed light (pixels of the image, from its first pixel),
-        broadcast together.
+        Return the offsets (dx, dy; pixels) of the wavelengths (m, in
+        vacuum) at the places (x, y) of their undispersed light (pixels of
+        the image, from its first pixel), broadcast together.
         """
 
 
@@ -73,7 +72,7 @@ class TracePolynomial(Trace):
     Parameters
     ----------
     wave : str or Quantity
-        The wavelength the trace is expanded about.
+        The wavelength (in vacuum) the trace is expanded about.
     dx : Sequence of float
         The coefficients along x.
     dy : Sequence of float, optional
@@ -218,9 +217,9 @@ class TraceGrismConf(Trace):
                 fields = line.split()
                 if not fields:
                     continue
-                if fields[0] == '#':
+                if fields[0].startswith('#'):
                     unit = re.match(
-                        r'#\s*wavelength unit:\s*(\S+)', line, re.I)
+                        r'\s*#\s*wavelength unit:\s*(\S+)', line, re.I)
                     if unit and unit.group(1).lower() != 'micron':
                         raise ValueError(
                             f"the GRISMCONF file {file!r} gives its "
@@ -357,8 +356,8 @@ class TraceTable(Trace):
     Parameters
     ----------
     wave : Sequence of float
-        The wavelengths of the nodes (m, in the medium of the spectral
-        axis; ascending, at least 4).
+        The wavelengths of the nodes (m, in vacuum; ascending, at least
+        4).
     x, y : Sequence of float
         The places of the nodes (pixels of the image, from its first
         pixel; ascending, at least 4 each).

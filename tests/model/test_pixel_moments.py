@@ -167,7 +167,13 @@ def test_spectral_axis_leaves_out_bad_moments(caplog):
     # The centre of the data's range (1100 to 1900) with a given size
     (dict(size=401), 401, 1500),
     # A size that covers the range around a given centre
-    (dict(rval=1450), 451, 1450)])
+    (dict(rval=1450), 451, 1450),
+    # A given channel of the axis centred on the range
+    (dict(rpix=0), 401, 1100),
+    (dict(rpix=10, size=401), 401, 1120),
+    # A size that covers the range from the first channel, of a given
+    # channel and velocity (1000 to 1900)
+    (dict(rpix=0, rval=1000), 451, 1000)])
 def test_spectral_axis_partly_from_the_data(given, size, rval):
     from gbkfit.dataset import Data
     from gbkfit.dataset import DatasetPixelMoments

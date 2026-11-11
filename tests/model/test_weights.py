@@ -75,6 +75,40 @@ def test_weights_follow_the_plane_of_the_disk(driver):
     np.testing.assert_array_equal(weights, weights[:1].repeat(21, axis=0))
 
 
+def test_weights_are_worked_out_again_only_as_the_disk_turns(
+        driver, monkeypatch):
+    # Not for each evaluation (audit 2026-11-11): only when the values of
+    # the parameters of the plane of the disk change; and smoothed with
+    # the model, they are the same at each evaluation
+    import gbkfit.params
+    from gbkfit.observation import Weights
+    calls = []
+    weight = Weights.weight
+
+    def counted(self, *args):
+        calls.append(args)
+        return weight(self, *args)
+    monkeypatch.setattr(Weights, 'weight', counted)
+    info = config(
+        driver,
+        dict(
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            smooth_weights=True,
+            spectral=dict(size=21, step=20, convention='relativistic')),
+        dict(component='gas', traits=dict(type='azimuth_power', power=1)))
+    info['observations'][0]['instrument'] = dict(
+        psf=dict(type='gauss', sigma=1.5))
+    plan = config_group_plan(info)
+    weights = []
+    for changed in (dict(), dict(gas_rpt_s=5), dict(gas_posa=50)):
+        params = gbkfit.params.ParamSpace.from_properties(
+            plan.group().pdescs(), PROPERTIES | changed).evaluate()
+        weights.append(plan.model_h(params)[0]['spectra']['w'].copy())
+    assert len(calls) == 2
+    np.testing.assert_array_equal(weights[1], weights[0])
+    assert not np.allclose(weights[2], weights[0])
+
+
 @pytest.mark.parametrize('incl', [40, 70])
 def test_weights_are_normalised_over_the_values_compared(driver, incl):
     # Data one error below the model, half of them masked: each residual

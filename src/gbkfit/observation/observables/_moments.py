@@ -87,8 +87,11 @@ def spectral_axis(
     it of the range between its percentiles; a warning tells how many
     are not (the velocities of the model there are its own, but such
     data are likely bad: mask them, e.g. by the sigma clipping of
-    gbkfit.prep). A given size or rval is kept: rval is that of the
-    centre of the range, and the size covers the range around rval.
+    gbkfit.prep). A given size, rpix or rval is kept. Without rval, the
+    axis is centred on the range (or on 0), and rval is the velocity of
+    its channel rpix: a given rpix only refers to a channel of the same
+    axis. With rval, the size covers the range around rval, at the
+    centre (or from the first channel, rval - rpix step, given rpix).
 
     Raises
     ------
@@ -98,7 +101,8 @@ def spectral_axis(
     """
     check_convention(spectral)
     step = spectral.step() or SPEC_STEP
-    size, rval = spectral.size(), spectral.rval()
+    size, rpix, rval = spectral.size(), spectral.rpix(), spectral.rval()
+    centre = 0.0
     if dataset is not None and 'moment1' in dataset:
         velocity = dataset['moment1'].data()
         dispersion = _MIN_DISPERSION
@@ -117,17 +121,24 @@ def spectral_axis(
                 f"mask them (e.g. by sigma clipping, see gbkfit.prep)")
         vmin = np.min(velocity[kept]) - margin
         vmax = np.max(velocity[kept]) + margin
-        if rval is None:
-            rval = float((vmin + vmax) / 2)
+        centre = float((vmin + vmax) / 2)
         if size is None:
-            half = max(vmax - rval, rval - vmin)
-            size = int(numutils.roundu_odd(2 * half / step))
+            if rval is None:
+                size = int(numutils.roundu_odd((vmax - vmin) / step))
+            elif rpix is None:
+                half = max(vmax - rval, rval - vmin)
+                size = int(numutils.roundu_odd(2 * half / step))
+            else:
+                size = int(np.ceil((vmax - rval) / step + rpix)) + 1
     if size is None:
         size = int(numutils.roundu_odd(SPEC_RANGE / step))
+    middle = size / 2 - 0.5
+    if rpix is None:
+        rpix = middle
+    if rval is None:
+        rval = centre + (rpix - middle) * step
     return spectral.replaced(SpectralAxis(
-        size=size, step=step,
-        rpix=size / 2 - 0.5 if spectral.rpix() is None else spectral.rpix(),
-        rval=0.0 if rval is None else rval))
+        size=size, step=step, rpix=rpix, rval=rval))
 
 
 def check_moment_orders(

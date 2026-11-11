@@ -743,6 +743,22 @@ def test_copies_with_other_data_share_the_whitening_of_their_masks(driver):
                     is whitener._spatial) == shared
 
 
+def test_copies_with_other_data_release_the_whitening_they_share(driver):
+    # (a copy kept the whitening of the original, and its memory, past
+    # its own close)
+    from gbkfit.instrument import PSFGauss
+    data = correlated_data(np.random.default_rng(11), PSFGauss(2))
+    objective, params = make_objective(driver, data)
+    objective.prepare()
+    copy = objective.with_data(objective.datasets())
+    assert copy._comparisons[0]._shared
+    copy.close()
+    assert not copy._comparisons[0]._shared
+    copy = objective.with_data(objective.datasets())
+    copy.prepare()
+    assert not copy._comparisons[0]._shared
+
+
 def test_copies_with_other_data_share_the_plans_of_the_models(driver):
     # (the models do not depend on the values of the data: a bootstrap
     # makes them once)
@@ -832,6 +848,38 @@ def test_user_likelihoods_take_parameters_of_their_observation(
         np.sum(2 * np.log1p(x[kept] ** 2)), rel=1e-5)
     with pytest.raises(ValueError, match="needs a name"):
         make_objective(driver, user_data(), cauchy)
+
+
+def test_user_likelihoods_cannot_change_the_data(driver):
+    # (a function that changed them in place, e.g. data -= 1, changed the
+    # data of every later evaluation)
+    from gbkfit.observation import LikelihoodUser
+    writeable = []
+
+    def residuals(item, data, model, error, mask, params):
+        writeable.append([a.flags.writeable for a in (data, error, mask)])
+        return (model - data) / error
+    objective, params = make_objective(
+        driver, user_data(), LikelihoodUser(residuals, 'residuals'))
+    objective.chi2(params)
+    assert writeable == [[False, False, False]]
+
+
+def test_the_pointwise_factors_are_exact_in_float64(driver):
+    # (the weights of orbits took them from the residuals of the model
+    # d + 1, in the type of the data: in float32, 0 or 2 above 2^24)
+    mask = np.ones((24, 32))
+    mask[:3] = 0
+    data = Data(np.full((24, 32), 3e7, np.float32), mask=mask,
+                error=np.full((24, 32), 2, np.float32))
+    noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1))
+    objective, params = make_objective(
+        driver, data, LikelihoodGaussian(weights=3.0, noise=noise), 'obs',
+        obs_noise_scale_brightness=1.5)
+    (factors,) = objective._comparisons[0].pointwise_factors(
+        ['brightness'], params).values()
+    assert factors.dtype == np.float64
+    np.testing.assert_array_equal(factors, mask * 3 / (1.5 * 2))
 
 
 def test_the_log_likelihood_of_a_fitted_scale_is_free_of_its_minimum(driver):

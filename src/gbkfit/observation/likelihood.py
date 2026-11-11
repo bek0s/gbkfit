@@ -294,9 +294,11 @@ class LikelihoodGaussian(Likelihood):
     of the true noise, and errors half the scatter of the fits; counting
     n_ind, f = 1.00 and errors of the scatter (2026-10-21; the user chose
     this, rather than the exact Gaussian). The mask of a cube must keep
-    whole spectra (the same pixels in every channel), so that C is that
-    product, and the pixels must be at most MAX_CORRELATED_PIXELS (C is a
-    dense matrix).
+    whole spectra (the same pixels in every channel it keeps; a channel
+    it masks everywhere, e.g. a blank plane, is left out, and C_z' is
+    that of the channels kept), so that C is that product; and the noise
+    can be correlated on the sky over at most MAX_CORRELATED_PIXELS
+    pixels (C_xy' is a dense matrix).
     Correlated noise does not go with upper limits (the probability of
     correlated non-detections has no closed form), or with solved flux
     scales of the item (see ObservationSky; the best scale of each
@@ -435,9 +437,10 @@ class LikelihoodGaussian(Likelihood):
             if noise.scale and noise.jitter:
                 _check_errors_differ(key, data)
         for key in keys:
-            if data.noise_correlation(key) is None:
+            if (correlation := data.noise_correlation(key)) is None:
                 continue
-            correlated_pixels(key, data[key].mask())
+            correlated_pixels(
+                key, data[key].mask(), correlation.spatial is not None)
             if self.upper_limit(key) is not None:
                 raise ValueError(
                     f"the noise of '{key}' is correlated, which does not go "
@@ -531,7 +534,9 @@ class Whitening:
     on channels (its first axis). The residuals of the pixels it keeps,
     as a matrix R of the channels by those pixels (one row for an image),
     are whitened into spectral R spatial^T, with the whitening of each
-    axis whose noise is correlated (None for the others). Noise of exactly
+    axis whose noise is correlated (None for the others). That of the
+    channels is of those the mask keeps, with rows and columns of 0 for
+    the others, whose residuals, 0, it leaves 0. Noise of exactly
     the correlation C of the data (without the white floor) gives them
     the chi-square tr(C C'^-1) on average, nindependent: the number of
     independent values they are worth (e.g. one in 4.5 of the pixels of
@@ -544,27 +549,59 @@ class Whitening:
     nindependent: float
 
 
-def correlated_pixels(key: str, mask: np.ndarray) -> np.ndarray:
+def correlated_pixels(
+        key: str, mask: np.ndarray, spatial: bool
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Return the flat indices of the pixels of the sky that a data item
-    whose noise is correlated keeps (see Whitening), of its mask; raise
-    ValueError unless it keeps the same pixels in every channel, and at
-    most MAX_CORRELATED_PIXELS.
+    Return the pixels of the sky and the channels that a data item whose
+    noise is correlated keeps (see Whitening), of its mask.
+
+    The mask must keep whole spectra: the same pixels in every channel
+    that it keeps (those it masks everywhere, e.g. a blank plane, are
+    left out).
+
+    Parameters
+    ----------
+    key : str
+        The name of the data item.
+    mask : np.ndarray
+        Its mask: of the pixels of an image, or of the channels by the
+        pixels of a cube.
+    spatial : bool
+        Whether its noise is correlated on the sky, whose dense matrix
+        allows at most MAX_CORRELATED_PIXELS pixels.
+
+    Returns
+    -------
+    pixels : np.ndarray
+        The flat indices of the pixels it keeps.
+    channels : np.ndarray
+        The indices of the channels it keeps (0 for an image).
+
+    Raises
+    ------
+    ValueError
+        If its mask does not keep whole spectra, or keeps too many pixels
+        of noise correlated on the sky.
     """
-    channels = mask.reshape(-1, *mask.shape[-2:])
-    if np.any(channels != channels[0]):
+    planes = mask.reshape(-1, *mask.shape[-2:]) != 0
+    pixels = np.any(planes, axis=0)
+    channels = np.any(planes, axis=(1, 2))
+    if not np.array_equal(planes, channels[:, None, None] & pixels):
         raise ValueError(
             f"the noise of '{key}' is correlated, so its mask must keep "
-            f"whole spectra (the same pixels in every channel, e.g. not a "
-            f"mask of the emission); it does not. The option "
+            f"whole spectra (the same pixels in every channel it keeps, "
+            f"e.g. not a mask of the emission); it does not. The option "
             f"mask_whole_spectra of the data masks every spectrum with a "
-            f"masked channel")
-    pixels = np.flatnonzero(channels[0])
-    if pixels.size > MAX_CORRELATED_PIXELS:
+            f"masked channel, but for the channels masked in every "
+            f"spectrum, which it leaves out")
+    pixels = np.flatnonzero(pixels)
+    if spatial and pixels.size > MAX_CORRELATED_PIXELS:
         raise ValueError(
-            f"the noise of '{key}' is correlated over {pixels.size} pixels; "
-            f"at most {MAX_CORRELATED_PIXELS} can be (mask more of them)")
-    return pixels
+            f"the noise of '{key}' is correlated on the sky over "
+            f"{pixels.size} pixels; at most {MAX_CORRELATED_PIXELS} can be "
+            f"(mask more of them)")
+    return pixels, np.flatnonzero(channels)
 
 
 def whitening(
@@ -584,7 +621,8 @@ def whitening(
         If its mask is not one of correlated noise (see correlated_pixels),
         or its correlation is not positive definite with the white floor.
     """
-    pixels = correlated_pixels(key, mask)
+    pixels, channels = correlated_pixels(
+        key, mask, correlation.spatial is not None)
     nchannels = mask.shape[0] if mask.ndim == 3 else 1
     spatial = spectral = None
     if correlation.spatial is not None:
@@ -592,11 +630,11 @@ def whitening(
         spatial = _whitening(
             key, correlation.spatial, points, white_floor)
     if correlation.spectral is not None:
-        points = np.arange(nchannels)[:, None]
-        spectral = _whitening(
-            key, correlation.spectral, points, white_floor)
+        spectral = np.zeros((nchannels, nchannels))
+        spectral[np.ix_(channels, channels)] = _whitening(
+            key, correlation.spectral, channels[:, None], white_floor)
     nindependent = _nindependent(spatial, pixels.size, white_floor) \
-        * _nindependent(spectral, nchannels, white_floor)
+        * _nindependent(spectral, channels.size, white_floor)
     return Whitening(pixels, spatial, spectral, nindependent)
 
 
@@ -686,9 +724,11 @@ class LikelihoodUser(Likelihood):
     for each data item of the observation: func(item, data, model, error,
     mask, params), with item the name of the item (e.g. 'moment1'), data
     and model arrays of its shape (the model NaN where it lacks a value),
-    error its errors and mask its mask (None without; values where it is
-    0 do not count), and params the values of the parameters of the
-    likelihood (a dict, by their names in it). It returns, by its form:
+    error its errors (None without) and mask its mask (values where it
+    is 0 do not count), and params the values of the parameters of the
+    likelihood (a dict, by their names in it). The data, errors and mask
+    are those of the dataset, read-only (copy them to change them). It
+    returns, by its form:
 
     - 'residuals': the residual r of each value (an array of the shape of
       the data), of the log-likelihood -r^2 / 2 (e.g. (model - data) /
@@ -837,7 +877,7 @@ class LikelihoodUser(Likelihood):
             data: np.ndarray,
             model: np.ndarray,
             error: np.ndarray | None,
-            mask: np.ndarray | None,
+            mask: np.ndarray,
             params: ParamValues
     ) -> np.ndarray | float:
         """

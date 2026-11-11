@@ -191,7 +191,9 @@ class ObservationGroup:
             None if depth_order is None else tuple(depth_order)
         self._depth_order = _depth_order(
             depth_order, galaxy_names, observation_names)
-        self._pdescs, self._mappings = iterutils.merge_with_prefixes(
+        # The parameters of the galaxies (and of their separations), to
+        # which those of the observations are added (see with_data)
+        self._galaxy_pdescs, self._mappings = iterutils.merge_with_prefixes(
             [galaxy.pdescs() for galaxy in self._galaxies], self._prefixes)
         # The separations of the galaxies of groups, by galaxy
         self._separations = {
@@ -199,27 +201,20 @@ class ObservationGroup:
             for name, members in self._depth_order or ()
             if name is not None for g in members[1:]}
         if taken := sorted(
-                set(self._separations.values()) & self._pdescs.keys()):
+                set(self._separations.values()) & self._galaxy_pdescs.keys()):
             raise ValueError(
                 f"the parameters of the separations of galaxies have the "
                 f"names of parameters of the galaxies: {taken}; rename their "
                 f"components")
-        self._pdescs |= {
+        self._galaxy_pdescs |= {
             separation: ParamScalarDesc(
                 title='Separation along the line of sight',
                 desc="the position of the galaxy along the line of sight "
                      "from the first of its group (away from the viewer)",
                 unit='arcsec', default=0)
             for separation in self._separations.values()}
-        # The parameters of the observations (e.g. their flux scales)
-        for observation in self._observations:
-            pdescs = observation.pdescs()
-            if repeated := sorted(pdescs.keys() & self._pdescs.keys()):
-                raise ValueError(
-                    f"the parameters of the observations have the names of "
-                    f"parameters of the galaxies: {repeated}; rename the "
-                    f"observations")
-            self._pdescs |= pdescs
+        self._pdescs = _with_observation_pdescs(
+            self._galaxy_pdescs, self._observations)
         self._constants, _ = iterutils.merge_with_prefixes(
             [galaxy.constants() for galaxy in self._galaxies], self._prefixes)
         # The ids of the galaxies and of the observations in the extra
@@ -439,6 +434,10 @@ class ObservationGroup:
                 self._cosmology)
         group = copy.copy(self)
         group._observations = tuple(observations)
+        # (of the same names, but in the units of the new data: e.g. those
+        # of a fitted noise, see Likelihood.param_units)
+        group._pdescs = _with_observation_pdescs(
+            self._galaxy_pdescs, observations)
         return group
 
     def galaxies(self) -> tuple[Galaxy, ...]:
@@ -595,6 +594,29 @@ class ObservationGroup:
 # or whose frames turn by more (deg; see _alignments)
 _ALIGNMENT_SEPARATION_WARNING = 1.0
 _ALIGNMENT_ROTATION_WARNING = 0.1
+
+
+def _with_observation_pdescs(
+        pdescs: Mapping[str, ParamDesc],
+        observations: Sequence[Observation]
+) -> dict[str, ParamDesc]:
+    """
+    Return the parameters of the galaxies of a group (and of their
+    separations) with those of its observations (e.g. their flux scales,
+    or the fitted noise of their likelihoods, in the units of their data;
+    see Observation.pdescs). Raise ValueError if those of an observation
+    have the names of others.
+    """
+    pdescs = dict(pdescs)
+    for observation in observations:
+        own = observation.pdescs()
+        if repeated := sorted(own.keys() & pdescs.keys()):
+            raise ValueError(
+                f"the parameters of the observations have the names of "
+                f"parameters of the galaxies: {repeated}; rename the "
+                f"observations")
+        pdescs |= own
+    return pdescs
 
 
 def _warn_unused_masses(

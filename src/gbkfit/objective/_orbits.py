@@ -10,7 +10,6 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.driver import DeviceArray
 from gbkfit.observation import (
     Comparison, GroupPlan, OrbitRecording, OrbitSeries)
 from gbkfit.params import (
@@ -33,11 +32,11 @@ class OrbitBlock(Block):
 
     The model of each moment of a bin is linear in the weights f (see
     OrbitSeries): base + slope (moments @ f). Its comparison gives its
-    residual c (model - data) (see Comparison.pointwise_form; c is the
-    residual of the model data + 1): the rows of the data, c slope
-    moments, and their targets, c (data - base). The constraints of the
-    light of the orbits give the rows of constraints, which count with the
-    prior of the weights (see solve_together_rows).
+    residual c (model - data) (see Comparison.pointwise_factors): the
+    rows of the data, c slope moments, and their targets, c (data -
+    base). The constraints of the light of the orbits give the rows of
+    constraints, which count with the prior of the weights (see
+    solve_together_rows).
 
     The factors c read the parameters of the likelihoods of the
     observations (e.g. a fitted noise) alone: a solve keeps its solution
@@ -82,10 +81,6 @@ class OrbitBlock(Block):
                 raise ValueError(
                     f"the weights of the orbits {recording.weights()!r} "
                     f"cannot be solved from observation {i}: {reason}")
-        self._drivers = tuple(
-            group_plan.observation_drivers()[i] for i in indices)
-        self._dtypes = tuple(
-            observation.dtype() for observation in observations)
         # (the data of each observation, 0 where missing, by key)
         self._data = tuple(
             {key: np.nan_to_num(np.asarray(dataset[key].data(), float))
@@ -94,7 +89,6 @@ class OrbitBlock(Block):
                 observation.data() for observation in observations))
         self._elements = tuple(elements)
         self._solve = solve
-        self._ones: list[dict[str, dict[str, DeviceArray | None]]] = []
         # The cache of its solutions: of the parameters of the likelihoods
         # of its observations, taking the orbits of its recording
         k = group_plan.orbit_recordings().index(recording)
@@ -116,10 +110,6 @@ class OrbitBlock(Block):
         """Return what the log-likelihood takes of their values (see Solve)."""
         return self._solve.likelihood()
 
-    def close(self) -> None:
-        """Release its memory; the next solve allocates it again."""
-        self._ones = []
-
     def solve(self, series: OrbitSeries, params: ParamValues) -> Solution:
         """
         Solve the weights at the values of the parameters, of the orbits
@@ -138,16 +128,12 @@ class OrbitBlock(Block):
         Solve the weights (see solve), at the values of the parameters of
         the likelihoods of its observations.
         """
-        if not self._ones:
-            self._prepare()
         rows, targets = [], []
-        for comparison, ones, data, driver, i in zip(
-                self._comparisons, self._ones, self._data, self._drivers,
+        for comparison, data, i in zip(
+                self._comparisons, self._data,
                 self._recording.observations()):
-            comparison.evaluate(ones, params, True, {})
-            factors = {
-                key: driver.mem_copy_d2h(residual).astype(np.float64)
-                for key, residual in comparison.residual_nddata_d().items()}
+            factors = comparison.pointwise_factors(
+                series.moments[i].keys(), params)
             for key, moment in series.moments[i].items():
                 factor = factors[key]
                 rows.append((factor * moment.slope)[:, None] * moment.moments)
@@ -162,19 +148,6 @@ class OrbitBlock(Block):
             solution.values,
             np.concatenate((residuals, solution.residuals)),
             solution.log_term, solution.m_eff)
-
-    def _prepare(self) -> None:
-        """
-        Allocate its memory: the models of the data plus 1 of each
-        observation (whose residuals are the factors of its comparison).
-        """
-        self._ones = [
-            {key: dict(
-                d=driver.mem_copy_h2d((value + 1).astype(dtype)),
-                m=None, w=None)
-             for key, value in data.items()}
-            for data, driver, dtype in zip(
-                self._data, self._drivers, self._dtypes)]
 
 
 def orbit_blocks(

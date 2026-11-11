@@ -262,17 +262,19 @@ class GroupPlan:
         ObservationGroup.with_data), on the same drivers.
 
         The plans of the observations do not depend on the values of their
-        data, only on their unit (see Observation.data_unit): the copy
-        shares the plans of those whose data keep their unit (e.g. all of
-        them, in a bootstrap), and with them the memory of their models,
-        on their devices, and its lock (see lock): evaluated at the same time
-        (e.g. in two threads), they wait for each other (plans on other
-        drivers do not, see ObservationGroup.plan). They share their last
-        evaluations too (see model_d), but those of the observations that
-        its recordings of orbits model (see orbit_series): the copy has
-        recordings of its own, in the series of its data. A copy whose
-        observations have other parameters (e.g. a likelihood of data that
-        they had none of) has plans of its own.
+        data, only on their unit (see Observation.data_unit) and on the
+        floating type of their models, which the data can choose (see
+        ObservationSky: dtype): the copy shares the plans of those whose
+        data keep both (e.g. all of them, in a bootstrap), and with them
+        the memory of their models, on their devices, and its lock (see
+        lock): evaluated at the same time (e.g. in two threads), they wait
+        for each other (plans on other drivers do not, see
+        ObservationGroup.plan). They share their last evaluations too (see
+        model_d), but those of the observations that its recordings of
+        orbits model (see orbit_series): the copy has recordings of its
+        own, in the series of its data. A copy whose observations have
+        other parameters (e.g. a likelihood of data that they had none of)
+        has plans of its own.
 
         Raises
         ------
@@ -294,7 +296,8 @@ class GroupPlan:
         for i, (plan, cache, new, old, driver) in enumerate(zip(
                 self._plans, self._model_caches, news, olds,
                 self._observation_drivers)):
-            if not _same_unit(new.data_unit(), old.data_unit()):
+            if not _same_unit(new.data_unit(), old.data_unit()) \
+                    or new.dtype() != old.dtype():
                 with config_path('observations', i):
                     plan = new.plan(driver, group.seen_by(i))
                 cache = copied._model_cache(i)
@@ -732,7 +735,9 @@ class GroupPlan:
         of their values over nsamples other draws (the standard deviation,
         of the values that are finite in at least two draws; the others
         are missing). The mock data have the unit and the beam of the
-        data of their observation, if it has data. Those of the observations
+        model of their observation (see Observation.model_unit): those of
+        its data, if it has data, or else those its options give it (e.g.
+        the unit of ObservationSky). Those of the observations
         that a recording of orbits models are of the orbits as they are, as
         without data (see OrbitMomentsPlan): their model, of the orbits in
         the series of their data (see model_d), is not of what their
@@ -897,9 +902,10 @@ def _mock_options(
 ) -> dict[str, dict[str, Any]]:
     """
     Return the options of the mock data of each data item of an
-    observation (see GroupPlan.mock): the unit, the beam and the footprint
-    of its data, if any, and the correlation of the noise of those that
-    are what the instrument records plus the noise (exact errors).
+    observation (see GroupPlan.mock): the unit and the beam of its model
+    (see Observation.model_unit), the footprint of its data, if any, and
+    the correlation of the noise of those that are what the instrument
+    records plus the noise (exact errors).
 
     Raises
     ------
@@ -921,13 +927,14 @@ def _mock_options(
             "all the channels: give the noise a correlation that does not "
             "vary")
     data = observation.data()
-    return {
-        key: dict(
+    options = {}
+    for key in observation.keys():
+        unit, beam = observation.model_unit(key)
+        options[key] = dict(
+            unit=unit, beam=beam,
+            footprint=None if data is None else data[key].footprint(),
             spatial_correlation=spatial, spectral_correlation=spectral)
-        | ({} if data is None else dict(
-            unit=data[key].unit(), beam=data[key].beam(),
-            footprint=data[key].footprint()))
-        for key in observation.keys()}
+    return options
 
 
 def _scatter(draws: Sequence[HostModelData]) -> dict[str, np.ndarray]:

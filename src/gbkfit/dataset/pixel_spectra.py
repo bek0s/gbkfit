@@ -123,8 +123,9 @@ class DatasetPixelSpectra(Dataset):
             Screen the data for outliers by the options size and nsigma
             (see screen_outliers), which are masked.
         mask_whole_spectra : bool, optional
-            Whether every spectrum with a masked value is masked whole
-            (see mask_whole_spectra), after the outliers.
+            Whether every spectrum with a masked value is masked whole,
+            but for the channels masked in every spectrum (see
+            mask_whole_spectra), after the outliers.
         error_kind : str, optional
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
@@ -212,10 +213,13 @@ class DatasetPixelSpectra(Dataset):
     def mask_whole_spectra(self) -> 'DatasetPixelSpectra':
         """
         Return a copy of it with each spectrum of its cube masked whole
-        where it masks any of its channels (see Dataset.mask_whole_spectra).
+        where it masks any of its channels, but for the channels it masks
+        in every spectrum (see Dataset.mask_whole_spectra).
         """
         cube = self['spectra']
-        whole = np.all(cube.mask() != 0, axis=0)
+        kept = cube.mask() != 0
+        channels = np.any(kept, axis=(1, 2))
+        whole = np.all(kept[channels], axis=0)
         return self.with_data(dict(
             spectra=np.where(whole, cube.data(), np.nan)))
 

@@ -207,15 +207,16 @@ class PixelSpectra(Observable):
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'PixelSpectraPlan':
+        spectral = self.spectral()
         dcube = _dcube.DCube(
             size=self.size(),
             step=self.step(),
             rpix=self.rpix(),
             rval=self.rval(),
             rota=self.rota(),
-            rest=self.rest(),
-            medium=self.medium(),
-            convention=self.convention(),
+            rest=spectral.rest(),
+            medium=spectral.medium(),
+            convention=spectral.convention(),
             oversampling=tuple(oversampling),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),

@@ -417,6 +417,20 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
     assert np.all(np.abs(orbits['circularity']) < 1.05)
 
 
+def test_the_dispersions_of_cold_cells_are_0():
+    # Of the light of a cell at one velocity (0.1 km/s along r, phi and
+    # R), rounding leaves <v^2> - <v>^2 slightly negative: the dispersions
+    # are 0, not NaN; those of a cell without light stay NaN
+    from astropy.table import Table
+    from gbkfit.observation.observables._orbit_outputs import _add_moments
+    sums = np.array([[1, 0.1, 0.1, 0.1, 0.01, 0, 0.01, 0.01, 0], [0] * 9])
+    table = Table()
+    _add_moments(table, sums, np.ones(2))
+    for name in ('sigma_r', 'sigma_phi', 'sigma_R'):
+        assert table[name][0] == 0
+        assert np.isnan(table[name][1])
+
+
 def test_mock_data_of_orbits_are_the_model_plus_noise(driver):
     # Mock moments of the bins of the noise of the cube of their pixels, as
     # for other stars (an rms of the peak: errors of 8 km/s in V, 0.04 in

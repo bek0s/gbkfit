@@ -450,7 +450,7 @@ class Visibilities(Observable):
             rpix=self.rpix(),
             rval=self.rval(),
             rota=self.rota(),
-            rest=self.rest(),
+            rest=self.spectral().rest(),
             medium=None,
             oversampling=tuple(oversampling),
             primary_beam=instrument.primary_beam(),

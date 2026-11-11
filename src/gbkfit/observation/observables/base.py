@@ -86,14 +86,9 @@ class Observable(TypedSerializable, abc.ABC):
         the centre if None.
     rota : float
         The rotation of the grid on the sky.
-    rest : str or Quantity, optional
-        The rest of the spectral axis, if any (see make_rest).
-    medium : str, optional
-        The medium of the wavelengths of a rest wavelength (see
-        make_medium).
-    convention : str, optional
-        The convention of the velocities of the rest (see
-        make_convention).
+    spectral : SpectralAxis, optional
+        The spectral axis of an observable with one (see spectral_axis
+        and spectral).
     """
 
     spectral_axis: int | None
@@ -228,24 +223,6 @@ class Observable(TypedSerializable, abc.ABC):
         if self.spectral_axis is None:
             return None
         return SpectralAxis.of(self._grid)
-
-    def rest(self) -> astropy.units.Quantity | None:
-        """Return the rest of the spectral axis, if any."""
-        return self._grid.coords.rest
-
-    def medium(self) -> str | None:
-        """
-        Return the medium of the wavelengths of the spectral axis, if it
-        has a rest wavelength.
-        """
-        return self._grid.coords.medium
-
-    def convention(self) -> str | None:
-        """
-        Return the convention of the velocities of the spectral axis, if
-        given (see make_convention).
-        """
-        return self._grid.coords.convention
 
     @abc.abstractmethod
     def keys(self) -> tuple[str, ...]:
