@@ -22,8 +22,8 @@ from ...mass import MassContext, MassModel
 from ...mass.units import G
 from .._images import ImageMaps
 from .._units import mass_per_unit
-from .._stage import GalaxyMass
-from ..base import ComponentStage, ComponentState
+from ..base import (
+    ComponentLinks, ComponentStage, ComponentState, GalaxyMass)
 from ..roles import Emission
 from ._disk import NodalDisk, DiskPlan
 from ._profiles import (
@@ -107,26 +107,24 @@ def plan_disk_stage(
         emission: Emission | None,
         driver: Driver,
         sky_origin: tuple[float, float] | None,
-        followed: bool,
-        label: str,
-        name: str | None
+        links: ComponentLinks,
+        label: str
 ) -> 'DiskStage | None':
     """
     Plan the part of a disk of the given emission in the stage of its
-    galaxy (see Component.plan_stage), if it takes anything from the
-    galaxy (the circular velocity of the mass, an equilibrium, density
-    waves, the light of image traits) or the mass follows it; None
-    otherwise. name is that of its component (None if unnamed), whose
-    fluid it takes (see MassModel.fluid).
+    galaxy (see Component.plan_stage), of its links to the mass, if it
+    takes anything from the galaxy (the circular velocity of the mass, an
+    equilibrium, density waves, the light of image traits) or the mass
+    follows it; None otherwise.
     """
     takes = disk.circular_velocity_params() \
         or disk.balance_gravity() is not None or disk.wave_params() \
         or disk.image_params()
-    if not (takes or followed):
+    if not (takes or links.followed):
         return None
     return DiskStage(
-        disk, label, name, driver, sky_origin, followed,
-        mass_per_unit(emission) if followed else None)
+        disk, label, driver, sky_origin, links,
+        mass_per_unit(emission) if links.followed else None)
 
 
 class DiskStage(ComponentStage):
@@ -161,17 +159,15 @@ class DiskStage(ComponentStage):
     label : str
         The name of its component, or its position (e.g. 'component0'),
         for the messages.
-    name : str, optional
-        The name of its component, whose fluid it takes (see
-        MassModel.fluid).
     driver : Driver
         The driver where it samples its profiles.
     sky_origin : tuple of float, optional
         The RA and Dec (degrees) of the origin of the frame of the
         parameters of the galaxy, which its image traits need (see
         ImageMaps).
-    followed : bool
-        Whether the mass of its galaxy follows its density.
+    links : ComponentLinks
+        Its links to the mass of its galaxy: whether the mass follows its
+        density, and its fluid (see MassLinks).
     mass_per_unit : float, optional
         The mass of a unit of its density (see mass_per_unit), if it has a
         unit.
@@ -186,16 +182,15 @@ class DiskStage(ComponentStage):
             self,
             disk: NodalDisk,
             label: str,
-            name: str | None,
             driver: Driver,
             sky_origin: tuple[float, float] | None,
-            followed: bool,
+            links: ComponentLinks,
             mass_per_unit: float | None
     ):
         self._disk = disk
         self._label = label
-        self._name = name
-        self._followed = followed
+        self._followed = followed = links.followed
+        self._fluid = links.fluid
         self._mass_per_unit = mass_per_unit
         self._images = None if not disk.image_params() \
             else ImageMaps(disk, label, sky_origin)
@@ -213,7 +208,7 @@ class DiskStage(ComponentStage):
         NodalDisk.height_params), in the mass of its galaxy as it is built:
         of the surface density of its fluid, which does not take them
         ('rotation' is of a galaxy without mass, and the mass does not
-        follow the layer of a disk of 'galaxy', see ComponentSet).
+        follow the layer of a disk of 'galaxy', see MassLinks).
         """
         height = self._disk.height_equilibrium()
         if not self._disk.height_params() or height.gravity() != 'sheet':
@@ -456,7 +451,7 @@ class DiskStage(ComponentStage):
             taken = {}
         else:
             surface = _fluid_surface_density(
-                mass, self._name, disk.fluid(), radii)
+                mass, self._fluid, radii)
             sigma = _sheet_dispersion(
                 radii, lit, heights * mass.kpc_per_arcsec, surface)
             taken = dict(surface_density=surface * u.solMass / u.kpc ** 2)
@@ -593,7 +588,7 @@ class DiskStage(ComponentStage):
         sigma = dispersion(disk, self._plan, values, radii, direction='ver')
         if gravity == 'sheet':
             surface = _fluid_surface_density(
-                mass, self._name, disk.fluid(), radii)
+                mass, self._fluid, radii)
             # (z0 = sigma^2 / (pi G Sigma), kpc)
             scale = np.divide(
                 sigma ** 2, np.pi * G * surface,
@@ -628,21 +623,19 @@ class DiskStage(ComponentStage):
 
 
 def _fluid_surface_density(
-        mass: GalaxyMass, name: str | None, fluid: tuple[str, ...],
-        radii: np.ndarray
+        mass: GalaxyMass, fluid: tuple[str, ...], radii: np.ndarray
 ) -> np.ndarray:
     """
     Return the surface density (Msun/kpc^2) at the radii (arcsec) of the
-    fluid of a disk (of its component of the given name, None if
-    unnamed): of the mass disks of the given names, or of those that
-    follow it (see MassModel.fluid), their sum.
+    fluid of a disk, the mass disks of the given names (see MassLinks),
+    their sum.
     """
     R = radii * mass.kpc_per_arcsec
     return sum(
-        mass.model.component(fluid_name).surface_density(
-            R, mass.model.component_params(fluid_name, mass.params),
+        mass.model.component(name).surface_density(
+            R, mass.model.component_params(name, mass.params),
             mass.context)
-        for fluid_name in mass.model.fluid(name, fluid))
+        for name in fluid)
 
 
 def _pressure_density(

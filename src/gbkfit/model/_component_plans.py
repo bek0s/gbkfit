@@ -1,6 +1,6 @@
 """
 The plans of the components of a galaxy on the grid of an observation,
-which the evaluations of the galaxy share (see ComponentSetPlan and
+which the evaluations of the galaxy share (see GalaxyPlan and
 TransferPlan): the plans of the components it evaluates, the cubes of
 opacity of its absorbers, and the parameters of each component.
 """
@@ -26,7 +26,7 @@ from .components.roles import BandEmission
 from .extras import Extras
 
 if TYPE_CHECKING:
-    from ._component_set import ComponentSet
+    from .galaxy import Galaxy
     from .components.base import Component
     from .galaxy import Galaxy
 
@@ -156,8 +156,9 @@ class ComponentPlans:
 
     Parameters
     ----------
-    component_set : ComponentSet
-        The components.
+    galaxy : Galaxy
+        The galaxy: its components, and its redshift, which places the
+        lines of the emitters (see Component.plan).
     driver : Driver
         The driver of the evaluation.
     grid : Grid
@@ -181,9 +182,6 @@ class ComponentPlans:
     data_unit : DataUnit, optional
         The unit of the data of the observation, which the light of the
         emitters takes (see Component.plan); None without data.
-    redshift : float
-        The redshift of the galaxy, which places the lines of the
-        emitters (see Component.plan).
 
     Attributes
     ----------
@@ -218,7 +216,7 @@ class ComponentPlans:
 
     def __init__(
             self,
-            component_set: 'ComponentSet',
+            galaxy: 'Galaxy',
             driver: Driver,
             grid: Grid,
             spectral: Grid,
@@ -228,15 +226,15 @@ class ComponentPlans:
             cubes: OpacityCubes,
             lines: tuple[str, ...] | None,
             band: Band | None,
-            data_unit: DataUnit | None,
-            redshift: float
+            data_unit: DataUnit | None
     ):
-        components = component_set.components()
+        components = galaxy.components()
+        redshift = galaxy.redshift()
         absorbers = tuple(cubes.deposits)
         if absorbers and depth is None:
             raise ValueError(
                 "components with opacity need a grid with a depth axis")
-        self._component_set = component_set
+        self._galaxy = galaxy
         self._grid = grid
         self._spectral = spectral
         self._depth = depth
@@ -269,10 +267,10 @@ class ComponentPlans:
         Return the values of the parameters of each component it evaluates
         (by its own names), by index, from those of the galaxy.
         """
-        components = self._component_set.components()
-        mappings = self._component_set.mappings()
+        components = self._galaxy.components()
         return {
-            i: {p: params[mappings[i][p]] for p in components[i].pdescs()}
+            i: {p: params[self._galaxy.component_param_names(i)[p]]
+                for p in components[i].pdescs()}
             for i in sorted(self.plans)}
 
     def evaluate_opacity(
@@ -307,7 +305,7 @@ class ComponentPlans:
         and where an option of a component shapes it rather than holds it
         (see ComponentPlan.warn_truncation).
         """
-        components = self._component_set.components()
+        components = self._galaxy.components()
         for i, plan in self.plans.items():
             extent = components[i].extent_cut(params[i]) \
                 if self._depth is not None else None
@@ -372,7 +370,7 @@ class ComponentPlans:
         with the given position of the first voxel of the depth axis, if
         not that of the axis (see extra).
         """
-        components = self._component_set.components()
+        components = self._galaxy.components()
         for index, extra in extras.items():
             label = _label(components, index)
             for key, value in extra.items():
@@ -641,7 +639,8 @@ def opacity_cubes(
         redshift = galaxy.redshift()
 
         def frame(i: int, moves: bool = True) -> _Frame:
-            vsys = galaxy.component_params(i).get('vsys') if moves else None
+            names = galaxy.component_param_names(i)
+            vsys = names.get('vsys') if moves else None
             return _Frame(redshift, None if vsys is None else (g, vsys))
         for i in galaxy_absorbers:
             law = components[i].opacity().law()

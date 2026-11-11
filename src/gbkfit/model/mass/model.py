@@ -11,7 +11,7 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.config import (
-    BasicParser, Serializable, TypedParser, check_options)
+    Serializable, TypedParser, check_options)
 from gbkfit.cosmology import Cosmology
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
@@ -25,8 +25,7 @@ from .user import MassUser
 
 __all__ = [
     'MassModel',
-    'mass_component_parser',
-    'mass_model_parser'
+    'mass_component_parser'
 ]
 
 
@@ -447,5 +446,3 @@ class MassModel(Serializable):
         return dataclasses.replace(
             context, vcirc2s=vcirc2s, enclosed_masses=enclosed_masses)
 
-
-mass_model_parser = BasicParser(MassModel)

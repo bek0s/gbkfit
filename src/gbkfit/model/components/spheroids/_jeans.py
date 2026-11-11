@@ -20,7 +20,7 @@ from gbkfit.params import (
     ModelEvaluationError, ParamDesc, ParamScalarDesc, ParamValues)
 from ...gravity import GravityField
 from .._native import ParamBuffer
-from .._stage import GalaxyMass
+from ..base import GalaxyMass
 from ..base import ComponentState
 from ._kinematics import SpheroidKinematics, SpheroidLight, SpheroidMotion
 

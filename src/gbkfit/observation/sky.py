@@ -591,7 +591,7 @@ class ObservationSky(Observation):
                 seen.galaxies, seen.mappings, self._scene(seen).emitters()):
             reasons = galaxy.light_amplitudes()
             for i in emitters:
-                names = galaxy.component_params(i)
+                names = galaxy.component_param_names(i)
                 for param in galaxy.components()[i].light_amplitudes():
                     reason = reasons[names[param]]
                     if reason is None and not linear:

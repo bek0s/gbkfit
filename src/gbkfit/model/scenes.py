@@ -13,14 +13,14 @@ from typing import TYPE_CHECKING, NamedTuple
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.grid import Grid
+from gbkfit.grid import Coords, Grid
 from gbkfit.params import ParamValues
 from ._component_plans import opacity_cubes
-from ._component_set import IMAGE_SPECTRAL_AXIS, ComponentSetPlan
+from ._galaxy_plan import GalaxyPlan
 from ._transfer import (
-    MAX_SUBCHANNELS, LineResolution, TransferPlan, check_emitters,
-    warn_resolution)
-from .components._stage import GalaxyState
+    MAX_SUBCHANNELS, LineResolution, TransferMember, TransferPlan,
+    check_emitters, warn_resolution)
+from ._galaxy_stage import GalaxyState
 from .components._units import DataUnit
 from .components.base import ComponentState, DepthAxis, FrameParams
 from .components.disks.disk import Disk
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    'IMAGE_SPECTRAL_AXIS',
     'MAX_SUBCHANNELS',
     'AdditiveScenePlan',
     'DepthUnit',
@@ -43,6 +44,11 @@ __all__ = [
     'TransferScenePlan',
     'named_components'
 ]
+
+
+# The spectral axis of an image: one channel, without a width
+IMAGE_SPECTRAL_AXIS = Grid(
+    (1,), Coords((0,), (0,), (0,), 0), 0)
 
 
 class DepthUnit(NamedTuple):
@@ -134,7 +140,7 @@ class Scene:
         their indices) in the group of the galaxies, by their own names.
         """
         mapping = self._mappings[galaxy]
-        names = self._galaxies[galaxy].component_params(component)
+        names = self._galaxies[galaxy].component_param_names(component)
         return {param: mapping[name] for param, name in names.items()}
 
     def orbit_emitters(self) -> tuple[tuple[int, int], ...]:
@@ -190,7 +196,7 @@ class Scene:
         """
         g, i = named_components(self._galaxies, [name])[name]
         galaxy = self._galaxies[g]
-        names = galaxy.component_params(i)
+        names = galaxy.component_param_names(i)
         return FrameParams(*(
             None if own is None else self._mappings[g][names[own]]
             for own in galaxy.components()[i].frame_params()))
@@ -285,7 +291,7 @@ class AdditiveScenePlan(ScenePlan):
             opacity_cubes(
                 [galaxy], [emitters], scene._lines, scene._band, dtype)[0]
             for galaxy, emitters in zip(scene._galaxies, scene._emitters)]
-        self._plans: tuple[ComponentSetPlan, ...] = tuple(
+        self._plans: tuple[GalaxyPlan, ...] = tuple(
             galaxy.plan(
                 driver, self._spatial, self._spectral, depth, dtype, emitters,
                 galaxy_cubes, scene._lines, scene._band, scene._data_unit,
@@ -391,7 +397,7 @@ class TransferScenePlan(ScenePlan):
         # behind it: one model, see opacity_cubes)
         self._dust = cubes[0].model
         members = [
-            galaxy.transfer_member(emitters, galaxy_cubes, depth)
+            TransferMember(galaxy, tuple(emitters), galaxy_cubes, depth)
             for galaxy, emitters, galaxy_cubes, depth in zip(
                 scene._galaxies, scene._emitters, cubes, depths)]
         self._plans: tuple[TransferPlan, ...] = tuple(

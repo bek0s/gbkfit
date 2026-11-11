@@ -536,7 +536,7 @@ def _oriented(galaxy: Galaxy, values: dict[str, Any], view: View) -> dict:
         return values
     values = dict(values)
     for index in range(len(galaxy.components())):
-        names = galaxy.component_params(index)
+        names = galaxy.component_param_names(index)
         for param, value in _ORIENTATIONS[view].items():
             if param in names:
                 name = names[param]

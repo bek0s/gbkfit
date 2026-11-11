@@ -18,7 +18,7 @@ from modelutils import split_case
 from gbkfit.grid import Coords, Grid, GridData
 from gbkfit.model import galaxy_parser
 from gbkfit.model._component_plans import opacity_cubes
-from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
+from gbkfit.model.scenes import IMAGE_SPECTRAL_AXIS
 from gbkfit.observation import Depth, LineOfSightGrid
 from gbkfit.params import ParamModeOffsets
 

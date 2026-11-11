@@ -16,18 +16,17 @@ import numpy as np
 from gbkfit.cosmology import DEFAULT, Cosmology
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues, ParamView, StageCache
-from ..extras import Extras
-from ..gravity import GravityField
-from ..mass import MassContext, MassModel
+from .components.base import GalaxyMass
+from .extras import Extras
+from .mass import MassContext, MassModel
 
 if TYPE_CHECKING:
-    from .._component_set import ComponentSet
-    from .base import ComponentStage, ComponentState
+    from .galaxy import Galaxy
+    from .components.base import ComponentStage, ComponentState
 
 
 __all__ = [
     'GalaxyEpoch',
-    'GalaxyMass',
     'GalaxyStage',
     'GalaxyState'
 ]
@@ -68,23 +67,6 @@ class GalaxyEpoch:
             cosmology.critical_density(redshift),
             cosmology.omega_m(redshift), cosmology.ricci_scalar(redshift),
             cosmology.ricci_scalar(0.0), cosmology.baryon_fraction())
-
-
-@dataclasses.dataclass(frozen=True)
-class GalaxyMass:
-    """
-    The mass of a galaxy in one evaluation: its model, the values of the
-    parameters of the mass and the gravity of the galaxy, the context of
-    the mass, the length of an arcsec in the galaxy (kpc; None without a
-    distance, which only what takes it needs, see Capability.DISTANCE),
-    and the field of the mass in the gravity of the galaxy (see Gravity;
-    None while the mass is built, see ComponentStage.thickness).
-    """
-    model: MassModel
-    params: ParamValues
-    context: MassContext
-    kpc_per_arcsec: float | None
-    field: GravityField
 
 
 @dataclasses.dataclass(frozen=True)
@@ -149,13 +131,12 @@ class GalaxyStage:
 
     Parameters
     ----------
-    component_set : ComponentSet
-        The components of the galaxy, its distance and its mass.
+    galaxy : Galaxy
+        The galaxy: its components, its distance, its mass and the links
+        of its components and its mass (see MassLinks), and its redshift
+        (its epoch, and its distance if that is cosmological).
     driver : Driver
         The driver where the components evaluate their parts.
-    redshift : float
-        The redshift of the galaxy: its epoch, and its distance if that is
-        cosmological (see Distance).
     sky_origin : tuple of float, optional
         The RA and Dec (degrees) of the origin of the frame of the
         parameters of the galaxy (that of the first observation on the
@@ -176,19 +157,19 @@ class GalaxyStage:
 
     def __init__(
             self,
-            component_set: 'ComponentSet',
+            galaxy: 'Galaxy',
             driver: Driver,
-            redshift: float,
             sky_origin: tuple[float, float] | None = None,
             cosmology: Cosmology | None = None
     ):
-        components = component_set.components()
-        mappings = component_set.mappings()
-        mass_model = component_set.mass_model()
-        followed = set() if mass_model is None else {
-            name for mass_component in mass_model.components()
-            for name in mass_component.followed_components()}
-        self._component_set = component_set
+        components = galaxy.components()
+        mappings = [
+            galaxy.component_param_names(i) for i in range(len(components))]
+        mass_model = galaxy.mass_model()
+        links = galaxy.links()
+        followed = links.followed
+        redshift = galaxy.redshift()
+        self._galaxy = galaxy
         self._redshift = redshift
         self._cosmology = DEFAULT if cosmology is None else cosmology
         self._epoch: GalaxyEpoch | None = None
@@ -202,7 +183,7 @@ class GalaxyStage:
         for i, component in enumerate(components):
             label = component.name() or f'component{i}'
             stage = component.plan_stage(
-                driver, sky_origin, component.name() in followed, label)
+                driver, sky_origin, links.of(i, component), label)
             if stage is not None:
                 self._stages[i] = stage
                 self._labels[i] = label
@@ -217,13 +198,12 @@ class GalaxyStage:
             for i, stage in self._stages.items()}
         self._scale_cache: StageCache[float] | None = None
         self._mass_cache: StageCache[GalaxyMass] | None = None
-        if component_set.distance() is not None:
-            self._scale_cache = StageCache(
-                component_set.distance().pdescs())
+        if galaxy.distance() is not None:
+            self._scale_cache = StageCache(galaxy.distance().pdescs())
         if mass_model is not None:
             scale = () if self._scale_cache is None else (self._scale_cache,)
             self._mass_cache = StageCache(
-                (*mass_model.pdescs(), *component_set.gravity().pdescs()),
+                (*mass_model.pdescs(), *galaxy.gravity().pdescs()),
                 (*scale, *(lights[i] for i in self._followed)))
         mass = () if self._mass_cache is None else (self._mass_cache,)
         self._parts: dict[int, _ComponentParts] = {}
@@ -369,7 +349,7 @@ class GalaxyStage:
         Return the length of an arcsec in the galaxy (kpc), of the values
         of the parameters of its distance.
         """
-        return self._component_set.distance().kpc_per_arcsec(
+        return self._galaxy.distance().kpc_per_arcsec(
             view, self._redshift, self._cosmology)
 
     def _light(self, view: ParamView, index: int) -> ParamValues:
@@ -393,9 +373,9 @@ class GalaxyStage:
         _scale; None without a distance), and the light of each component
         that it follows (see _light), by its index.
         """
-        component_set = self._component_set
-        components = component_set.components()
-        mass_model = component_set.mass_model()
+        galaxy = self._galaxy
+        components = galaxy.components()
+        mass_model = galaxy.mass_model()
         epoch = self._epoch
         context = MassContext(
             epoch.critical_density, epoch.omega_m, epoch.ricci_scalar,
@@ -418,7 +398,7 @@ class GalaxyStage:
                 for i in self._followed})
         return GalaxyMass(
             mass_model, view, context, scale,
-            component_set.gravity().field(mass_model, view, context))
+            galaxy.gravity().field(mass_model, view, context))
 
     def _groundwork(
             self,
@@ -461,7 +441,7 @@ class GalaxyStage:
         component of the given index (its own names), from a view of those
         of the galaxy.
         """
-        mapping = self._component_set.mappings()[index]
+        mapping = self._galaxy.component_param_names(index)
         return ParamView((name, view[mapping[name]]) for name in names)
 
     def _warn_geometry(self, params: ParamValues) -> None:
@@ -471,13 +451,13 @@ class GalaxyStage:
         of the first ring of the first by more than _MAX_OFFSET of their
         radius (on the sky), or _MAX_TILT.
         """
-        components = self._component_set.components()
-        mappings = self._component_set.mappings()
+        components = self._galaxy.components()
         rings = [
             (self._labels[i], *ring)
             for i, stage in self._stages.items()
             for ring in stage.rings({
-                p: params[mappings[i][p]] for p in components[i].pdescs()})]
+                p: params[self._galaxy.component_param_names(i)[p]]
+                for p in components[i].pdescs()})]
         # (a galaxy of mass alone has none)
         if not rings:
             return

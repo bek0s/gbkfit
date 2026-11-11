@@ -20,7 +20,7 @@ from .._needs import Need
 from .._detail import Interp, RNodes, RStep
 from .._native import make_bands, make_lines
 from .._units import DataUnit
-from ..base import Component, ComponentPlan, FrameParams
+from ..base import Component, ComponentLinks, ComponentPlan, FrameParams
 from ..lines import Band
 from ..nodes import Nodes, as_nodes
 from ..roles import STARS, Emission, Opacity
@@ -263,16 +263,25 @@ class Disk(Component, abc.ABC):
     def density_kind(self) -> 'type[DiskDensity]':
         return DiskDensity
 
+    def density_has_height(self) -> bool:
+        return self.thick(Emission)
+
+    def balance_gravity(self) -> str | None:
+        return self._disk.balance_gravity()
+
+    def thickness_in_field(self) -> bool:
+        height = self.height_equilibrium()
+        return height is not None and height.gravity() == 'galaxy'
+
     def plan_stage(
             self,
             driver: Driver,
             sky_origin: tuple[float, float] | None,
-            followed: bool,
+            links: ComponentLinks,
             label: str
     ) -> _stage.DiskStage | None:
         return _stage.plan_disk_stage(
-            self._disk, self.emission(), driver, sky_origin, followed, label,
-            self.name())
+            self._disk, self.emission(), driver, sky_origin, links, label)
 
     def plan(
             self,

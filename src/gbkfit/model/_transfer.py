@@ -23,7 +23,7 @@ from .components.lines import Band
 from .extras import Extras
 
 if TYPE_CHECKING:
-    from ._component_set import ComponentSet
+    from .galaxy import Galaxy
     from .components.base import Component, ComponentPlan
 
 
@@ -77,7 +77,7 @@ _MARCH_EXTRAS = dict(
 class LineResolution(NamedTuple):
     """
     How finely the evaluation of a galaxy on the grid of an observation
-    resolves its lines (see ComponentSetPlan.evaluate and
+    resolves its lines (see GalaxyPlan.evaluate and
     TransferPlan.evaluate). With line opacity, where the lines are not
     optically thin, the largest ratio of the width of the channels of the
     march (the sub-channels) to the dispersion of a line (spectral), and
@@ -142,16 +142,14 @@ def warn_resolution(
 
 class TransferMember(NamedTuple):
     """
-    A galaxy that a march evaluates (see TransferPlan): its components,
-    the indices of those whose light is evaluated (its emitters), how the
-    cubes of opacity hold its dust (see opacity_cubes), its redshift, and
-    its own depth axis, which holds it, centred on its plane (see
-    Depth.axis).
+    A galaxy that a march evaluates (see TransferPlan): the galaxy, the
+    indices of its components whose light is evaluated (its emitters), how
+    the cubes of opacity hold its dust (see opacity_cubes), and its own
+    depth axis, which holds it, centred on its plane (see Depth.axis).
     """
-    component_set: 'ComponentSet'
+    galaxy: 'Galaxy'
     emitters: tuple[int, ...]
     cubes: OpacityCubes
-    redshift: float
     depth: DepthAxis
 
 
@@ -231,9 +229,8 @@ class TransferPlan:
         self._depth = depth
         self._plans = tuple(
             ComponentPlans(
-                member.component_set, driver, grid, spectral, depth, dtype,
-                member.emitters, member.cubes, lines, band, data_unit,
-                member.redshift)
+                member.galaxy, driver, grid, spectral, depth, dtype,
+                member.emitters, member.cubes, lines, band, data_unit)
             for member in members)
         self._driver = driver
         self._dtype = dtype
@@ -260,7 +257,7 @@ class TransferPlan:
         # (those of its lines, or its band, at the redshift of its galaxy)
         nrows = [
             len(self._component(key).emission().wavelengths(
-                lines, band, members[key[0]].redshift))
+                lines, band, members[key[0]].galaxy.redshift()))
             for key in self._keys]
         ends = np.cumsum(nrows)
         self._rows = {
@@ -571,7 +568,7 @@ class TransferPlan:
     def _component(self, key: tuple[int, int]) -> 'Component':
         """Return the component of the given key."""
         m, i = key
-        return self._members[m].component_set.components()[i]
+        return self._members[m].galaxy.components()[i]
 
 
 def _placement(

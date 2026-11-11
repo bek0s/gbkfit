@@ -23,7 +23,7 @@ from gbkfit.params import ParamDesc, ParamValues, ParamVectorDesc
 from .._native import ParamBuffer
 from .._needs import Need
 from ...gravity import Capability
-from .._stage import GalaxyMass
+from ..base import GalaxyMass
 from ..base import ComponentState
 from ._jeans import light
 from ._kinematics import SpheroidKinematics, SpheroidLight, SpheroidMotion

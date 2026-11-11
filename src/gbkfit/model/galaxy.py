@@ -15,10 +15,11 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils
-from ._component_set import ComponentSet, ComponentSetPlan
-from ._functions import GalaxyFunctions
-from .components._stage import GalaxyStage
-from ._transfer import TransferMember
+from ._functions import (
+    GalaxyFunctions, function_names, function_radius_range)
+from ._galaxy_plan import GalaxyPlan
+from ._galaxy_stage import GalaxyStage
+from ._relations import MassLinks, link
 from .components._units import DataUnit
 from .components.base import Component, DepthAxis, OpacityCubes
 from .components.cones import Cone
@@ -30,7 +31,7 @@ from .components.roles import BandEmission
 from .components.spheroids import (
     JeansSpheroid, OrbitSpheroid, TraitSpheroid)
 from .distance import Distance, distance_parser
-from .gravity import Gravity, gravity_parser
+from .gravity import Gravity, GravityNewton, gravity_parser
 from .mass import MassComponent, MassModel, mass_component_parser
 
 
@@ -120,8 +121,9 @@ class Galaxy(Serializable):
         if self.components():
             info.update(
                 components=component_parser.dump(list(self.components())))
-        if self._mass:
-            info.update(mass=mass_component_parser.dump(list(self._mass)))
+        if self._mass_model is not None:
+            info.update(mass=mass_component_parser.dump(
+                list(self._mass_model.components())))
         if self.distance() is not None:
             info.update(distance=distance_parser.dump(self.distance()))
         if self._gravity is not None:
@@ -146,8 +148,13 @@ class Galaxy(Serializable):
                 f"the redshift must be above -1; it is {redshift}")
         self._redshift = redshift
         mass = iterutils.tuplify(mass)
-        mass_model = MassModel(mass) if mass else None
-        self._component_set = ComponentSet(
+        self._components = components = iterutils.tuplify(components)
+        self._distance = distance
+        self._mass_model = mass_model = MassModel(mass) if mass else None
+        # (as given, for its configuration; and the gravity of its mass)
+        self._gravity = gravity
+        self._field_gravity = GravityNewton() if gravity is None else gravity
+        self._params, self._links = link(
             components, distance, mass_model, gravity)
         # (a cosmological distance of a galaxy without a redshift, or
         # blueshifted, was of 0, or negative, silently)
@@ -157,10 +164,7 @@ class Galaxy(Serializable):
                 f"a cosmological distance needs the galaxy to have a "
                 f"redshift above 0; it has {redshift}")
         if redshift is None:
-            _check_redshift_not_needed(self._component_set.components())
-        self._pdescs = self._component_set.pdescs()
-        self._mass = mass
-        self._gravity = gravity
+            _check_redshift_not_needed(components)
         self._name = name
 
     def name(self) -> str | None:
@@ -169,7 +173,7 @@ class Galaxy(Serializable):
 
     def components(self) -> tuple[Component, ...]:
         """Return its components."""
-        return self._component_set.components()
+        return self._components
 
     def absorbers(self) -> tuple[int, ...]:
         """
@@ -182,12 +186,19 @@ class Galaxy(Serializable):
             if component.opacity() is not None
             and component.opacity().dims_others())
 
-    def component_params(self, index: int) -> dict[str, str]:
+    def component_param_names(self, index: int) -> dict[str, str]:
         """
         Return the names of the parameters of its component of the given
         index among its parameters, by the names of the component.
         """
-        return self._component_set.mappings()[index]
+        return self._params.mappings[index]
+
+    def links(self) -> MassLinks:
+        """
+        Return the links of its components and its mass (see MassLinks;
+        none without mass).
+        """
+        return self._links
 
     def param_owners(self) -> dict[str, tuple[str | int, ...]]:
         """
@@ -198,16 +209,16 @@ class Galaxy(Serializable):
         the parameters with the options that make them (e.g. Studio).
         """
         owners: dict[str, tuple[str | int, ...]] = dict.fromkeys(
-            self._pdescs, ())
+            self.pdescs(), ())
         for index, component in enumerate(self.components()):
-            names = self.component_params(index)
+            names = self.component_param_names(index)
             for name, option in component.param_owners().items():
                 owners[names[name]] = ('components', index, *option)
         if (mass_model := self.mass_model()) is not None:
             for index, names in enumerate(mass_model.mappings()):
                 owners.update(dict.fromkeys(names.values(), ('mass', index)))
             owners.update(dict.fromkeys(
-                self._component_set.gravity().pdescs(), ('gravity',)))
+                self.gravity().pdescs(), ('gravity',)))
         if self.distance() is not None:
             owners.update(dict.fromkeys(
                 self.distance().pdescs(), ('distance',)))
@@ -221,13 +232,10 @@ class Galaxy(Serializable):
         in it, or why not: also when a mass follows the light of their
         component (the light then moves its gravity).
         """
-        followed = set()
-        if (mass_model := self.mass_model()) is not None:
-            for mass_component in mass_model.components():
-                followed.update(mass_component.followed_components())
+        followed = self._links.followed
         amplitudes = {}
         for i, component in enumerate(self.components()):
-            names = self.component_params(i)
+            names = self.component_param_names(i)
             for param, reason in component.light_amplitudes().items():
                 if reason is None and component.name() in followed:
                     reason = (f"a mass follows the light of the component "
@@ -235,13 +243,9 @@ class Galaxy(Serializable):
                 amplitudes[names[param]] = reason
         return amplitudes
 
-    def mass(self) -> tuple[MassComponent, ...]:
-        """Return the components of its mass (none without mass)."""
-        return self._mass
-
     def mass_model(self) -> MassModel | None:
         """Return its mass, as a mass model, if any."""
-        return self._component_set.mass_model()
+        return self._mass_model
 
     def components_use_mass(self) -> bool:
         """
@@ -250,15 +254,15 @@ class Galaxy(Serializable):
         Observations of profiles of its functions and derived values can
         use it too (see ObservationProfile and ParamSpace).
         """
-        return self._component_set.components_use_mass()
+        return any(cmp.uses_mass() for cmp in self._components)
 
     def distance(self) -> Distance | None:
         """Return its distance, if given."""
-        return self._component_set.distance()
+        return self._distance
 
     def gravity(self) -> Gravity:
         """Return the gravity of its mass (Newtonian if not given)."""
-        return self._component_set.gravity()
+        return self._field_gravity
 
     def redshift(self) -> float:
         """Return its redshift (0 if not given)."""
@@ -266,7 +270,7 @@ class Galaxy(Serializable):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name (see the class)."""
-        return self._pdescs
+        return self._params.pdescs
 
     def constants(self) -> dict[str, Any]:
         """
@@ -274,8 +278,10 @@ class Galaxy(Serializable):
         redshift ('redshift'), and those of its components (e.g. the
         radial nodes of its disks, prefixed as their parameters).
         """
-        return dict(redshift=self.redshift()) \
-            | self._component_set.constants()
+        constants, _ = iterutils.merge_with_prefixes(
+            [cmp.constants() for cmp in self._components],
+            list(self._params.prefixes))
+        return dict(redshift=self.redshift()) | constants
 
     def plan_stage(
             self,
@@ -316,8 +322,7 @@ class Galaxy(Serializable):
             If it has image traits, but there is no sky origin, or its mass
             takes the cosmic baryon fraction, which the cosmology lacks.
         """
-        return self._component_set.plan_stage(
-            _or_host(driver), self.redshift(), sky_origin, cosmology)
+        return GalaxyStage(self, _or_host(driver), sky_origin, cosmology)
 
     def plan_functions(
             self,
@@ -354,15 +359,14 @@ class Galaxy(Serializable):
             If it has image traits, but there is no sky origin, or its mass
             takes the cosmic baryon fraction, which the cosmology lacks.
         """
-        return self._component_set.plan_functions(
-            _or_host(driver), self.redshift(), sky_origin, cosmology)
+        return GalaxyFunctions(self, _or_host(driver), sky_origin, cosmology)
 
     def function_names(self) -> tuple[str, ...]:
         """
         Return the names of the functions of the galaxy (see
         plan_functions), without planning them.
         """
-        return self._component_set.function_names()
+        return function_names(self)
 
     def function_radius_range(
             self, name: str
@@ -372,7 +376,7 @@ class Galaxy(Serializable):
         the name (e.g. rotation_gas), from its centre on, without planning
         it; None for its other functions, of any radius.
         """
-        return self._component_set.function_radius_range(name)
+        return function_radius_range(self, name)
 
     def plan(
             self,
@@ -387,7 +391,7 @@ class Galaxy(Serializable):
             band: Band | None,
             data_unit: DataUnit | None,
             smoothing: float | None
-    ) -> ComponentSetPlan:
+    ) -> GalaxyPlan:
         """
         Plan the evaluation of the galaxy on the grid of an observation.
 
@@ -424,27 +428,12 @@ class Galaxy(Serializable):
 
         Returns
         -------
-        ComponentSetPlan
+        GalaxyPlan
             The plan.
         """
-        return self._component_set.plan(
-            driver, grid, spectral, depth, dtype, emitters, cubes, lines,
-            band, data_unit, self.redshift(), smoothing)
-
-    def transfer_member(
-            self,
-            emitters: Sequence[int],
-            cubes: OpacityCubes,
-            depth: DepthAxis
-    ) -> TransferMember:
-        """
-        Return the galaxy as a march of radiative transfer evaluates it on
-        the grid of an observation (see TransferPlan): the given emitters,
-        cubes and its own depth axis are those of plan.
-        """
-        return TransferMember(
-            self._component_set, tuple(emitters), cubes, self.redshift(),
-            depth)
+        return GalaxyPlan(
+            self, driver, grid, spectral, depth, dtype, emitters, cubes,
+            lines, band, data_unit, smoothing)
 
 
 galaxy_parser = BasicParser(Galaxy)

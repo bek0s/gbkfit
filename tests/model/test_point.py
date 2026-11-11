@@ -173,7 +173,7 @@ def test_point_plan_takes_a_dtype_or_its_type(driver):
     # The plans of the components take the dtype as np.dtype or its type
     from gbkfit.model import galaxy_parser
     from gbkfit.model._component_plans import opacity_cubes
-    from gbkfit.model._component_set import IMAGE_SPECTRAL_AXIS
+    from gbkfit.model.scenes import IMAGE_SPECTRAL_AXIS
     from gbkfit.grid import make_grid
     galaxy = galaxy_parser.load(copy.deepcopy(BAND_POINT))
     grid = make_grid((6, 4))

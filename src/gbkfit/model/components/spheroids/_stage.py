@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from gbkfit.params import ParamValues
 from ...extras import Extras
 from ...mass import SpheroidDensity
-from .._stage import GalaxyMass
+from ..base import GalaxyMass
 from ..base import ComponentStage, ComponentState
 
 if TYPE_CHECKING:

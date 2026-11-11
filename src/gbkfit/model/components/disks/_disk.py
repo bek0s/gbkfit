@@ -275,7 +275,7 @@ class NodalDisk(abc.ABC):
         equilibrium 'galaxy'; and the densities of its fluid, for its
         pressure support, and their surface densities, for the
         equilibrium 'sheet' (those of the mass disks that follow it, if it
-        has no fluid: see ComponentSet).
+        has no fluid: see MassLinks).
         """
         label = repr(name)
         needs: list[Need] = []

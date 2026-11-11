@@ -5,6 +5,7 @@ the cubes of opacity, the fields of radiative transfer).
 """
 
 import abc
+import dataclasses
 from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
 
 import numpy as np
@@ -19,20 +20,22 @@ from .roles import (
 
 if TYPE_CHECKING:
     from ..extras import Extras
-    from ..mass import ComponentDensity
+    from ..gravity import GravityField
+    from ..mass import ComponentDensity, MassContext, MassModel
     from ._needs import Need
-    from ._stage import GalaxyMass
     from ._units import DataUnit
 
 
 __all__ = [
     'Component',
+    'ComponentLinks',
     'ComponentPlan',
     'ComponentStage',
     'ComponentState',
     'DepthAxis',
     'FieldsLayout',
     'FrameParams',
+    'GalaxyMass',
     'NativeGrid',
     'OpacityCubes'
 ]
@@ -122,6 +125,18 @@ class FrameParams(NamedTuple):
     vsys: str | None
     posa: str | None
     incl: str | None
+
+
+@dataclasses.dataclass(frozen=True)
+class ComponentLinks:
+    """
+    The links of a component to the mass of its galaxy (see
+    MassLinks): whether the mass follows its density (followed), and the
+    names of the mass disks of its fluid (fluid: those that it names, or
+    else those that follow it; none without one).
+    """
+    followed: bool = False
+    fluid: tuple[str, ...] = ()
 
 
 class Component(TypedSerializable, abc.ABC):
@@ -313,11 +328,44 @@ class Component(TypedSerializable, abc.ABC):
         """
         return None
 
+    def density_has_height(self) -> bool:
+        """
+        Check whether the density that it gives the mass of its galaxy to
+        follow has a height (that of a thick disk, see
+        mass.DiskDensity.thick); not here.
+        """
+        return False
+
+    def fluid(self) -> tuple[str, ...]:
+        """
+        Return the names of the mass disks of its fluid, if it names them
+        (the gas whose density its pressure support takes, and whose
+        surface density holds it up; see Disk); none here.
+        """
+        return ()
+
+    def balance_gravity(self) -> str | None:
+        """
+        Return the gravity that its vertical equilibrium balances, of its
+        dispersion or its thickness (see traits.BalanceGravity), if it has
+        one; none here.
+        """
+        return None
+
+    def thickness_in_field(self) -> bool:
+        """
+        Check whether its thickness is its vertical equilibrium in the
+        field of the mass of its galaxy (see traits.RHTraitEquilibrium,
+        gravity 'galaxy'), which the mass cannot follow (not yet); not
+        here.
+        """
+        return False
+
     def plan_stage(
             self,
             driver: Driver,
             sky_origin: tuple[float, float] | None,
-            followed: bool,
+            links: 'ComponentLinks',
             label: str
     ) -> 'ComponentStage | None':
         """
@@ -332,8 +380,9 @@ class Component(TypedSerializable, abc.ABC):
         sky_origin : tuple of float, optional
             The RA and Dec (degrees) of the origin of the frame of the
             parameters of the galaxy (see ObservationGroup).
-        followed : bool
-            Whether the mass of the galaxy follows its density.
+        links : ComponentLinks
+            Its links to the mass of the galaxy: e.g. whether the mass
+            follows its density.
         label : str
             Its name, or its position (e.g. 'component0'), for messages.
 
@@ -381,7 +430,7 @@ class Component(TypedSerializable, abc.ABC):
             each cube of opacity to that of the cube at the rest wavelength
             of each of its lines that it evaluates, in their order, or of
             its band (an array of shape (nrows, ncubes); see
-            ComponentSetPlan).
+            GalaxyPlan).
         data_unit : DataUnit, optional
             The unit of the data of the observation, which its light is
             turned into from the unit of its emission, if it has one (see
@@ -414,6 +463,23 @@ class ComponentState:
     from its galaxy, or the tables of the Jeans equations of a
     spheroid).
     """
+
+
+@dataclasses.dataclass(frozen=True)
+class GalaxyMass:
+    """
+    The mass of a galaxy in one evaluation: its model, the values of the
+    parameters of the mass and the gravity of the galaxy, the context of
+    the mass, the length of an arcsec in the galaxy (kpc; None without a
+    distance, which only what takes it needs, see Capability.DISTANCE),
+    and the field of the mass in the gravity of the galaxy (see Gravity;
+    None while the mass is built, see ComponentStage.thickness).
+    """
+    model: 'MassModel'
+    params: ParamValues
+    context: 'MassContext'
+    kpc_per_arcsec: float | None
+    field: 'GravityField'
 
 
 class ComponentStage(abc.ABC):

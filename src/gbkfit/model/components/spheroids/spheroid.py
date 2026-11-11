@@ -40,7 +40,8 @@ from .._native import (
     evaluate_native, make_bands)
 from .._units import DataUnit, mass_per_unit
 from ..base import (
-    Component, ComponentState, FieldsLayout, FrameParams, NativeGrid)
+    Component, ComponentLinks, ComponentState, FieldsLayout, FrameParams,
+    NativeGrid)
 from ..geometries import geometry_pdesc
 from ..lines import Band
 from ..nodes import Nodes
@@ -738,12 +739,12 @@ class Spheroid(Component, abc.ABC):
             self,
             driver: Driver,
             sky_origin: tuple[float, float] | None,
-            followed: bool,
+            links: ComponentLinks,
             label: str
     ) -> SpheroidStage | None:
         # (it has a part when the mass follows it, or for its kinematics in
         # the gravity)
-        if not followed and not self.uses_mass():
+        if not links.followed and not self.uses_mass():
             return None
         return SpheroidStage(self, mass_per_unit(self.emission()))
 

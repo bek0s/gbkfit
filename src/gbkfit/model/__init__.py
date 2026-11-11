@@ -1,4 +1,5 @@
 from ._functions import GalaxyFunctions
+from ._galaxy_stage import GalaxyStage, GalaxyState
 from .distance import *
 from .extras import *
 from .galaxy import *

@@ -1,4 +1,3 @@
-from ._stage import GalaxyMass, GalaxyStage, GalaxyState
 from ._units import DataUnit, LightUnit
 from .base import *
 from .extinction import *

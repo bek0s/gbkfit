@@ -165,10 +165,10 @@ class OrbitRecording:
         # (the names of the parameters of the spheroid that its records
         # read, its frame and its light, by its own names)
         self._names = {
-            param: mapping[galaxy_.component_params(component)[param]]
+            param: mapping[galaxy_.component_param_names(component)[param]]
             for param in _FRAME_PARAMS + spheroid.light_params()}
         self._weights = mapping[
-            galaxy_.component_params(component)[spheroid.orbit_weights()]]
+            galaxy_.component_param_names(component)[spheroid.orbit_weights()]]
         self._observations = tuple(observations)
         self._galaxy_driver = galaxy_driver
         self._observation_drivers = tuple(observation_drivers)

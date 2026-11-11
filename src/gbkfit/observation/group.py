@@ -284,7 +284,7 @@ class ObservationGroup:
         for g in seen:
             galaxy, mapping = self._galaxies[g], self._mappings[g]
             for i, component in enumerate(galaxy.components()):
-                params = galaxy.component_params(i)
+                params = galaxy.component_param_names(i)
                 frame = component.frame_params()
                 for key, own in zip('xyv', (frame.x, frame.y, frame.vsys)):
                     name = None if own is None else mapping[params[own]]

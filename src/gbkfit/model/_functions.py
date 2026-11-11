@@ -19,13 +19,14 @@ from gbkfit.cosmology import Cosmology
 from gbkfit.driver import Driver
 from gbkfit.grid import doppler
 from gbkfit.params import ParamValues
-from .components._stage import GalaxyMass, GalaxyStage, GalaxyState
+from ._galaxy_stage import GalaxyStage, GalaxyState
+from .components.base import GalaxyMass
 from .components.base import ComponentState
 from .components.disks._profiles import dispersion, rotation
 from .components.disks.disk import Disk
 
 if TYPE_CHECKING:
-    from ._component_set import ComponentSet
+    from .galaxy import Galaxy
     from .components.disks._stage import DiskState
 
 
@@ -112,12 +113,10 @@ class GalaxyFunctions:
 
     Parameters
     ----------
-    component_set : ComponentSet
-        The components of the galaxy, its distance and its mass.
+    galaxy : Galaxy
+        The galaxy.
     driver : Driver
         The driver where the disks sample their profiles.
-    redshift : float
-        The redshift of the galaxy (see GalaxyStage).
     sky_origin : tuple of float, optional
         The RA and Dec (degrees) of the origin of the frame of the
         parameters of the galaxy, which its image traits need (see
@@ -128,18 +127,16 @@ class GalaxyFunctions:
 
     def __init__(
             self,
-            component_set: 'ComponentSet',
+            galaxy: 'Galaxy',
             driver: Driver,
-            redshift: float,
             sky_origin: tuple[float, float] | None = None,
             cosmology: Cosmology | None = None
     ):
-        components = component_set.components()
-        self._component_set = component_set
-        self._redshift = redshift
-        self._stage = GalaxyStage(
-            component_set, driver, redshift, sky_origin, cosmology)
-        self._suffixes = _disk_suffixes(component_set)
+        components = galaxy.components()
+        self._galaxy = galaxy
+        self._redshift = galaxy.redshift()
+        self._stage = GalaxyStage(galaxy, driver, sky_origin, cosmology)
+        self._suffixes = _disk_suffixes(galaxy)
         # (the components of the suffixes are disks)
         self._disks = {
             i: typing.cast(Disk, components[i]).density_disk()
@@ -147,35 +144,7 @@ class GalaxyFunctions:
         self._disk_plans = {
             i: disk.plan(driver, 0, np.float64)
             for i, disk in self._disks.items()}
-        self._names = self.names_of(component_set)
-
-    @staticmethod
-    def names_of(component_set: 'ComponentSet') -> tuple[str, ...]:
-        """
-        Return the names of the functions of a galaxy of the given
-        components (see the class), without planning them.
-        """
-        mass_model = component_set.mass_model()
-        names = []
-        if mass_model is not None:
-            names += ['vcirc', 'vnewton'] + [
-                f'vcirc_{cmp.name()}' for cmp in mass_model.components()]
-            if mass_model.gives_enclosed_mass():
-                names += ['mass']
-            names += [
-                f'mass_{cmp.name()}' for cmp in mass_model.components()
-                if cmp.gives_enclosed_mass()]
-            if mass_model.gives_enclosed_mass():
-                names += ['slope']
-            names += [
-                f'slope_{cmp.name()}' for cmp in mass_model.components()
-                if cmp.gives_enclosed_mass()]
-        if component_set.distance() is not None:
-            names += ['kpc_per_arcsec']
-        names += ['redshift_at']
-        for suffix in _disk_suffixes(component_set).values():
-            names += [f'rotation{suffix}', f'dispersion{suffix}']
-        return tuple(names)
+        self._names = function_names(galaxy)
 
     @staticmethod
     def family(name: str) -> str | None:
@@ -216,20 +185,6 @@ class GalaxyFunctions:
         """Return the names of its functions (see the class)."""
         return self._names
 
-    @staticmethod
-    def radius_range_of(
-            component_set: 'ComponentSet', name: str
-    ) -> tuple[float, float] | None:
-        """
-        Return the range of the radii (arcsec) of the function of a disk
-        of the name (e.g. rotation_gas) of a galaxy of the given components,
-        without planning it: from its centre on (a disk does not end at its
-        last node); None for its other functions, of any radius.
-        """
-        for suffix in _disk_suffixes(component_set).values():
-            if name in (f'rotation{suffix}', f'dispersion{suffix}'):
-                return 0.0, math.inf
-        return None
 
     def bind(
             self,
@@ -350,8 +305,8 @@ class GalaxyFunctions:
         Return the values of the parameters of the component of the given
         index (by its own names).
         """
-        component = self._component_set.components()[index]
-        mapping = self._component_set.mappings()[index]
+        component = self._galaxy.components()[index]
+        mapping = self._galaxy.component_param_names(index)
         return {p: params[mapping[p]] for p in component.pdescs()}
 
     def _radii(self, index: int, R: npt.ArrayLike, what: str) -> np.ndarray:
@@ -370,6 +325,49 @@ class GalaxyFunctions:
             raise ValueError(
                 f"{name}: the radii must not be negative; they are {radii}")
         return radii
+
+
+def function_names(galaxy: 'Galaxy') -> tuple[str, ...]:
+    """
+    Return the names of the functions of a galaxy (see GalaxyFunctions),
+    without planning them.
+    """
+    mass_model = galaxy.mass_model()
+    names = []
+    if mass_model is not None:
+        names += ['vcirc', 'vnewton'] + [
+            f'vcirc_{cmp.name()}' for cmp in mass_model.components()]
+        if mass_model.gives_enclosed_mass():
+            names += ['mass']
+        names += [
+            f'mass_{cmp.name()}' for cmp in mass_model.components()
+            if cmp.gives_enclosed_mass()]
+        if mass_model.gives_enclosed_mass():
+            names += ['slope']
+        names += [
+            f'slope_{cmp.name()}' for cmp in mass_model.components()
+            if cmp.gives_enclosed_mass()]
+    if galaxy.distance() is not None:
+        names += ['kpc_per_arcsec']
+    names += ['redshift_at']
+    for suffix in _disk_suffixes(galaxy).values():
+        names += [f'rotation{suffix}', f'dispersion{suffix}']
+    return tuple(names)
+
+
+def function_radius_range(
+        galaxy: 'Galaxy', name: str
+) -> tuple[float, float] | None:
+    """
+    Return the range of the radii (arcsec) of the function of a disk of
+    the name (e.g. rotation_gas) of a galaxy, without planning it: from its
+    centre on (a disk does not end at its last node); None for its other
+    functions, of any radius.
+    """
+    for suffix in _disk_suffixes(galaxy).values():
+        if name in (f'rotation{suffix}', f'dispersion{suffix}'):
+            return 0.0, math.inf
+    return None
 
 
 def _redshift_at(redshift: float, v: npt.ArrayLike) -> np.ndarray:
@@ -480,7 +478,7 @@ def _density_slope(
     return slope.reshape(radii.shape)
 
 
-def _disk_suffixes(component_set: 'ComponentSet') -> dict[int, str]:
+def _disk_suffixes(galaxy: 'Galaxy') -> dict[int, str]:
     """
     Return the disks of a galaxy with velocity or dispersion traits, by
     the index of their component: the suffixes of their functions (see
@@ -488,7 +486,7 @@ def _disk_suffixes(component_set: 'ComponentSet') -> dict[int, str]:
     """
     return {
         i: '' if cmp.name() is None else f'_{cmp.name()}'
-        for i, cmp in enumerate(component_set.components())
+        for i, cmp in enumerate(galaxy.components())
         if isinstance(cmp, Disk)
         and (cmp.density_disk().traits('vpt')
              or cmp.density_disk().traits('dpt'))}

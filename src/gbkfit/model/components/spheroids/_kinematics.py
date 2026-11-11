@@ -24,7 +24,7 @@ from .._detail import Interp, RNodes, RStep
 from .._nodal import (
     NodalTraits, TraitTable, native_traits, parse_component_rnode_args,
     subring_radii, with_default_height_traits)
-from .._stage import GalaxyMass
+from ..base import GalaxyMass
 from ..base import ComponentState
 from ..nodes import Nodes, as_nodes
 from ..parts import KinematicTraits
