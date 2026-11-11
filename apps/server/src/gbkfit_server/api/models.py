@@ -40,6 +40,7 @@ __all__ = [
     'ProjectInfo',
     'ProjectRename',
     'ProjectRequest',
+    'RenderInfo',
     'RunInfo',
     'ServerInfo',
     'SessionInfo',
@@ -150,13 +151,15 @@ class GalaxyRenderRequest(BaseModel):
     options (its files relative to the project), the values of its
     parameters (numbers, or lists of them for vectors; the defaults for
     those not given), how it is seen ('sky', 'face-on' or 'edge-on'), and
-    the pixels across.
+    the pixels across; and what it is, for the pages that show the
+    renders that run long (e.g. the name of its piece).
     """
     project: str
     galaxy: dict[str, Any]
     properties: dict[str, Any] = {}
     view: Literal['sky', 'face-on', 'edge-on'] = 'sky'
     size: int = 160
+    label: str | None = None
 
 
 class ObservedRequest(BaseModel):
@@ -164,12 +167,28 @@ class ObservedRequest(BaseModel):
     A galaxy to observe (see Renders.observed): the project of its piece,
     its options and the values of its parameters (as a galaxy to render;
     the defaults for those not given, also of the observation), and the
-    observation of the project that sees it, by name.
+    observation of the project that sees it, by name; and what the galaxy
+    is, for the pages that show the renders that run long.
     """
     project: str
     galaxy: dict[str, Any]
     properties: dict[str, Any] = {}
     observation: str
+    label: str | None = None
+
+
+class RenderInfo(BaseModel):
+    """
+    A render that runs long (see RenderPool): its id, what it renders
+    (e.g. "galaxy ngc2403"), its kind ('galaxy', 'cube' or 'observed'),
+    the stage it has reached (e.g. 'evaluating') and the seconds since it
+    started.
+    """
+    id: str
+    what: str
+    kind: str
+    stage: str
+    elapsed: float
 
 
 class ObservedArrayInfo(BaseModel):
