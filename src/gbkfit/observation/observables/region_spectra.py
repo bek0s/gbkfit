@@ -15,7 +15,7 @@ from gbkfit.grid import Grid, SpectraData, SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.region import Regions, regions_parser
-from . import _dcube, _detail
+from . import _detail, _model_cube
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan, flux_weights
 from .base import FluxScale, ModelData, Observable
@@ -258,10 +258,10 @@ class RegionSpectra(Observable):
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'RegionSpectraPlan':
-        # The masking of DCube is disabled: every pixel of a region adds
+        # The masking of ModelCube is disabled: every pixel of a region adds
         # to its spectrum
         spectral = self.spectral()
-        dcube = _dcube.DCube(
+        model_cube = _model_cube.ModelCube(
             size=self.size(),
             step=self.step(),
             rpix=self.rpix(),
@@ -278,11 +278,11 @@ class RegionSpectra(Observable):
             dtype=dtype,
             fft_dtype=fft_dtype)
         return RegionSpectraPlan(
-            self._weights, self._regions.valid(), dcube, driver, scene,
+            self._weights, self._regions.valid(), model_cube, driver, scene,
             line_of_sight, foreground, dtype, flux_scale)
 
 
-class RegionSpectraPlan(_detail.DCubePlanBase):
+class RegionSpectraPlan(_detail.CubeObservablePlan):
     """
     The evaluation of a RegionSpectra: the sums of the pixels of the
     regions in each channel of the cube, of those valid there if the
@@ -293,7 +293,7 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
             self,
             weights: 'scipy.sparse.csr_array',
             valid: np.ndarray | None,
-            dcube: _dcube.DCube,
+            model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
             line_of_sight: 'LineOfSight',
@@ -302,18 +302,18 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
             flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, line_of_sight, foreground, dtype, None,
+            model_cube, driver, scene, line_of_sight, foreground, dtype, None,
             flux_scale)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         self._spectra = driver.mem_alloc_d(
-            (dcube.size()[2], self._sums.nregions()), dtype)
+            (model_cube.size()[2], self._sums.nregions()), dtype)
         self._valid = self._valid_cube = None
         if valid is not None:
             self._valid = driver.mem_copy_h2d(valid.astype(dtype))
             self._valid_cube = driver.mem_alloc_d(valid.shape, dtype)
 
     def _measure(self) -> ModelData:
-        cube = self._dcube_plan.dcube()
+        cube = self._model_cube_plan.cube()
         if self._valid is not None:
             # (on any driver: its arrays take the ufuncs of numpy)
             np.multiply(cube, self._valid, out=self._valid_cube)

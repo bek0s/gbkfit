@@ -23,9 +23,9 @@ PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=3, vsys=0,
     vpt_rt=2, vpt_vt=100, dpt_a=20)
 
-# A case of each observable with a PSF (so that the high-res grid is padded):
-# the observable, its galaxy, and the shape and spectral axis of its low-res
-# extra outputs
+# A case of each observable with a PSF (so that the high-resolution grid
+# is padded): the observable, its galaxy, and the shape and spectral axis
+# of its low-resolution extra outputs
 CASES = dict(
     pixel_brightness=(
         dict(type='pixel_brightness', size=[16, 12], rval=[150, 2],
@@ -68,7 +68,7 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_cases, name):
     assert dcube_lo.data.shape == shape
     assert dcube_lo.spectral_axis == spectral_axis
     assert len(dcube_lo.coords.step) == len(shape)
-    # The high-res grid is on the sky, except across the slit
+    # The high-resolution grid is on the sky, except across the slit
     dcube_hi = extra.get('dcube_hi')
     if name == 'slit_spectra':
         assert isinstance(dcube_hi, np.ndarray)
@@ -92,8 +92,8 @@ def test_dcube_extras_have_the_coordinates_of_the_observable(evaluate_cases):
 @pytest.mark.parametrize('name', CASES)
 def test_model_extras_are_on_the_sky(evaluate_cases, name):
     # The extra outputs of a galaxy seen through a flat line of sight are
-    # images on the high-res grid, except for a long slit, which has no
-    # position on the sky
+    # images on the high-resolution grid, except for a long slit, which has
+    # no position on the sky
     observable, galaxy, _, _ = CASES[name]
     case = flat_case(observable, galaxy)
     properties = {

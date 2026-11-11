@@ -91,7 +91,7 @@ class FFTConvolution(abc.ABC):
 class DriverFFT(abc.ABC):
     """
     The FFT of a driver, for the convolutions of the cubes of the models
-    (see DCube): the shapes of the arrays of the convolutions, and the
+    (see ModelCube): the shapes of the arrays of the convolutions, and the
     convolutions.
 
     Parameters
@@ -106,7 +106,7 @@ class DriverFFT(abc.ABC):
         Whether a PSF and an LSF that do not vary along the spectral axis
         are convolved as those that do, by 2D FFTs of each channel and
         sums along it, rather than by one 3D FFT of their product: the
-        same convolution, faster on some drivers (see DCubePlan).
+        same convolution, faster on some drivers (see ModelCubePlan).
     """
 
     separable: bool = False

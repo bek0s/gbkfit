@@ -14,7 +14,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from . import _dcube, _detail, _moments
+from . import _detail, _model_cube, _moments
 from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
 from ._moments import FluxFloor, Method
 from .base import ModelData, Observable
@@ -83,7 +83,7 @@ class PixelMoments(Observable):
         that smoothed the cube on the sky before the maps of the data were
         measured, which smooths the spectra of the model as well (e.g. 3,
         of cubes of KMOS3D): each channel takes the median of the square of
-        the size about each pixel, with zero beyond the edges (see DCube).
+        the size about each pixel, with zero beyond the edges (see ModelCube).
         The median of a sum is not the sum of the medians: the channels of
         the model (the step of spectral) are then those of that cube. None
         by default.
@@ -289,20 +289,20 @@ class PixelMoments(Observable):
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'PixelMomentsPlan':
-        dcube = _moments.spectra_dcube(
+        model_cube = _moments.spectra_model_cube(
             self, oversampling, instrument, dtype, fft_dtype,
             self._median_size)
         return PixelMomentsPlan(
-            self, dcube, driver, scene, line_of_sight, foreground, dtype,
+            self, model_cube, driver, scene, line_of_sight, foreground, dtype,
             pixel_weights, flux_scale)
 
 
-class PixelMomentsPlan(_detail.DCubePlanBase):
+class PixelMomentsPlan(_detail.CubeObservablePlan):
 
     def __init__(
             self,
             moments: PixelMoments,
-            dcube: _dcube.DCube,
+            model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
             line_of_sight: 'LineOfSight',
@@ -312,7 +312,7 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
             flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, line_of_sight, foreground, dtype,
+            model_cube, driver, scene, line_of_sight, foreground, dtype,
             pixel_weights, flux_scale)
         self._moments = _moments.MomentsPlan(
             driver, moments.size(), moments.orders(), moments.flux_floor(),
@@ -321,7 +321,7 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
     def _measure(self) -> ModelData:
         # The moment maps, one mask shared by all of them, and the weight
         # map of each moment
-        plan = self._dcube_plan
+        plan = self._model_cube_plan
         return self._moments.evaluate(
-            self._dcube.step(), self._dcube.zero(), plan.dcube(),
-            plan.wcube())
+            self._model_cube.step(), self._model_cube.zero(), plan.cube(),
+            plan.weights())

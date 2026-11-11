@@ -14,7 +14,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from . import _dcube, _detail
+from . import _detail, _model_cube
 from ._detail import Rota, Rpix, Rval, Size, Step
 from .base import FluxScale, ModelData, Observable
 
@@ -37,8 +37,9 @@ _Width: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
 
 def _slit_extra(data: np.ndarray, grid: Grid) -> GridData:
     """
-    Make an extra output on the low-res grid of DCube a slit (the position
-    along the slit and the velocity; the slit is one pixel wide).
+    Make an extra output on the low-resolution grid of ModelCube a slit
+    (the position along the slit and the velocity; the slit is one pixel
+    wide).
     """
     return GridData(data[:, 0, :], grid.coords.axes(0, 2), 1)
 
@@ -247,7 +248,7 @@ class SlitSpectra(Observable):
         rpix, rval = self.rpix(), self.rval()
         spectral = self.spectral()
         across = oversampling[0] * max(1, round(self._slit_width / step[0]))
-        dcube = _dcube.DCube(
+        model_cube = _model_cube.ModelCube(
             size=(size[0], 1, size[1]),
             step=(step[0], self._slit_width, step[1]),
             rpix=(rpix[0], 0, rpix[1]),
@@ -264,11 +265,11 @@ class SlitSpectra(Observable):
             dtype=dtype,
             fft_dtype=fft_dtype)
         return SlitSpectraPlan(
-            dcube, driver, scene, line_of_sight, foreground, dtype,
+            model_cube, driver, scene, line_of_sight, foreground, dtype,
             pixel_weights, flux_scale)
 
 
-class SlitSpectraPlan(_detail.DCubePlanBase):
+class SlitSpectraPlan(_detail.CubeObservablePlan):
 
     def _model_extra(self, value: GridData) -> np.ndarray:
         # The slit has no position on the sky, so the extra outputs of the
@@ -282,16 +283,16 @@ class SlitSpectraPlan(_detail.DCubePlanBase):
             self, noise: 'Noise', recorded: np.ndarray
     ) -> dict[str, np.ndarray]:
         return dict(
-            spectra=noise.sigma(self._dcube.grid(), recorded)[:, 0, :])
+            spectra=noise.sigma(self._model_cube.grid(), recorded)[:, 0, :])
 
     # The slit has no position on the sky, so the extra outputs of the
-    # high-res grid are plain arrays
+    # high-resolution grid are plain arrays
     _extra_lo = staticmethod(_slit_extra)
-    _extra_hi = staticmethod(_dcube.plain_extra)
+    _extra_high_res = staticmethod(_model_cube.plain_extra)
 
     def _measure(self) -> ModelData:
-        plan = self._dcube_plan
+        plan = self._model_cube_plan
         return dict(spectra=dict(
-            d=plan.dcube()[:, 0, :],
+            d=plan.cube()[:, 0, :],
             m=None,
-            w=plan.wcube()[:, 0, :] if plan.wcube() is not None else None))
+            w=plan.weights()[:, 0, :] if plan.weights() is not None else None))

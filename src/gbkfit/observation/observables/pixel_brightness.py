@@ -13,7 +13,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData
 from gbkfit.instrument import Instrument
 from gbkfit.model import BandEmission, DataUnit, LightUnit
-from . import _dcube, _detail
+from . import _detail, _model_cube
 from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
 from .base import ModelData, Observable
 
@@ -31,7 +31,10 @@ __all__ = [
 
 
 def _image_extra(data: np.ndarray, grid: Grid) -> GridData:
-    """Make an extra output on a grid of DCube an image (its one channel)."""
+    """
+    Make an extra output on a grid of ModelCube an image (its one
+    channel).
+    """
     return GridData(data[0], grid.spatial().coords, None)
 
 
@@ -57,7 +60,7 @@ class PixelBrightness(Observable):
         that smoothed the data on the sky, which smooths the model as well
         (e.g. 3, of cubes smoothed before their maps were made): each
         channel takes the median of the square of the size about each
-        pixel, with zero beyond the edges (see DCube); none by default.
+        pixel, with zero beyond the edges (see ModelCube); none by default.
 
     Raises
     ------
@@ -203,7 +206,7 @@ class PixelBrightness(Observable):
             flux_scale: str | None
     ) -> 'PixelBrightnessPlan':
         # The cube of an image has one channel
-        dcube = _dcube.DCube(
+        model_cube = _model_cube.ModelCube(
             size=self.size() + (1,),
             step=self.step() + (0,),
             rpix=self.rpix() + (0,),
@@ -220,34 +223,35 @@ class PixelBrightness(Observable):
             fft_dtype=fft_dtype,
             median_size=self._median_size)
         return PixelBrightnessPlan(
-            dcube, driver, scene, line_of_sight, foreground, dtype,
+            model_cube, driver, scene, line_of_sight, foreground, dtype,
             pixel_weights, flux_scale)
 
 
-class PixelBrightnessPlan(_detail.DCubePlanBase):
+class PixelBrightnessPlan(_detail.CubeObservablePlan):
 
     def _model_grid(self) -> Grid:
         # Image models are evaluated on the x and y axes
-        return self._dcube_plan.scratch_grid().spatial()
+        return self._model_cube_plan.high_res_grid().spatial()
 
     def has_exact_errors(self) -> bool:
         # (but through a median filter, whose noise no formula gives: then
         # the scatter of draws)
-        return self._dcube.median_size() is None
+        return self._model_cube.median_size() is None
 
     def _exact_errors(
             self, noise: 'Noise', recorded: np.ndarray
     ) -> dict[str, np.ndarray] | None:
         if not self.has_exact_errors():
             return None
-        return dict(brightness=noise.sigma(self._dcube.grid(), recorded)[0])
+        return dict(
+            brightness=noise.sigma(self._model_cube.grid(), recorded)[0])
 
     _extra_lo = staticmethod(_image_extra)
-    _extra_hi = staticmethod(_image_extra)
+    _extra_high_res = staticmethod(_image_extra)
 
     def _measure(self) -> ModelData:
-        plan = self._dcube_plan
+        plan = self._model_cube_plan
         return dict(brightness=dict(
-            d=plan.dcube()[0, :, :],
+            d=plan.cube()[0, :, :],
             m=None,
-            w=plan.wcube()[0, :, :] if plan.wcube() is not None else None))
+            w=plan.weights()[0, :, :] if plan.weights() is not None else None))
