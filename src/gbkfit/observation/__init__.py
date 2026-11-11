@@ -3,7 +3,7 @@ from ._orbits import *
 from .comparisons import *
 from .foreground import *
 from .group import *
-from .lens_masses import *
+from .lensing import *
 from .likelihood import *
 from .line_of_sight import *
 from .mocks import *
