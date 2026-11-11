@@ -62,7 +62,7 @@ export function NamingDialog({ project, folder, onDone }: AdderProps) {
   const { go } = useStudio();
   const create = useCreateBlock(project);
   const [name, setName] = useState('');
-  const kind = kindOf(folder);
+  const kind = inSentence(kindOf(folder));
   const submit = () =>
     name.trim() &&
     create.mutate(
@@ -75,14 +75,14 @@ export function NamingDialog({ project, folder, onDone }: AdderProps) {
       },
     );
   return (
-    <Dialog title={`New ${kind.toLowerCase()}`} onClose={onDone}>
+    <Dialog title={`New ${kind}`} onClose={onDone}>
       <div className="naming">
         <TextField
           autoFocus
           mono
           value={name}
           placeholder="name, e.g. ngc1313"
-          label={`The name of the new ${kind.toLowerCase()}`}
+          label={`The name of the new ${kind}`}
           onChange={setName}
           onKeyDown={(event) => {
             if (event.key === 'Enter') submit();
@@ -101,6 +101,12 @@ export function NamingDialog({ project, folder, onDone }: AdderProps) {
       </div>
     </Dialog>
   );
+}
+
+// A kind of block within a sentence: lower case, but an acronym (e.g.
+// 'PSF' stays, 'Galaxy' is 'galaxy')
+function inSentence(kind: string): string {
+  return /^[A-Z]{2}/.test(kind) ? kind : kind.charAt(0).toLowerCase() + kind.slice(1);
 }
 
 interface Found {
@@ -152,7 +158,7 @@ export function GoTo() {
         key: `new/${folder}`,
         kind: 'New',
         title: `${kindOf(folder)}…`,
-        note: `a new ${kindOf(folder).toLowerCase()}`,
+        note: `a new ${inSentence(kindOf(folder))}`,
         run: () => startAdding(folder),
       })),
     );

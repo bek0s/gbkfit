@@ -129,10 +129,12 @@ function Panel({ title, note, children, className }: { title: string; note?: str
   );
 }
 
-// The map of the project: a column of blocks of each folder, and the
-// links between them; a block shows its links as it is hovered, and opens
-// as it is clicked. A dataset in no observation, a galaxy in no fit, and
-// a block named but missing are marked.
+// The map of the project: the blocks of each folder in a column, and the
+// links between them, ordered so that the links cross little; a block
+// lights its links as it is hovered, and opens as it is clicked. The
+// blocks with no link (e.g. a dataset in no observation) are chips at the
+// foot of their column. The map scrolls inside its panel rather than
+// squeeze: across a narrow window, and down a large project.
 function ProjectMap() {
   const { project, go } = useStudio();
   const info = useProject(project);
@@ -142,12 +144,8 @@ function ProjectMap() {
   const [size, setSize] = useState<[number, number]>([0, 0]);
   const [hovered, setHovered] = useState<string | null>(null);
   const id = (folder: string, name: string) => `${folder}/${name}`;
-  const usedBy = (folder: string, name: string) => links.filter((link) => link.target.folder === folder && link.target.name === name);
-  const gap = (folder: string, name: string): string | null => {
-    if (folder === 'datasets' && usedBy(folder, name).length === 0) return 'in no observation yet';
-    if (folder === 'galaxies' && usedBy(folder, name).length === 0) return 'in no fit yet';
-    return null;
-  };
+  const order = mapOrder(info.data?.pieces ?? {}, links);
+  const linked = new Set(links.flatMap((link) => [id(link.source.folder, link.source.name), id(link.target.folder, link.target.name)]));
   // (the edges, drawn once the boxes are laid out, and again as they move)
   useLayoutEffect(() => {
     const element = map.current;
@@ -165,23 +163,21 @@ function ProjectMap() {
         }
         return { left: x, right: x + node.offsetWidth, middle: y + node.offsetHeight / 2 };
       };
-      setSize([element.clientWidth, element.clientHeight]);
+      setSize([element.scrollWidth, element.scrollHeight]);
       setPaths(
         links.flatMap((link: Link) => {
-          // (drawn from the left column to the right one)
           const source = box(id(link.source.folder, link.source.name));
           const target = box(id(link.target.folder, link.target.name));
           if (!source || !target) return [];
+          // (drawn from the left column to the right one)
           const a = where(source);
           const b = where(target);
           const [from, to] = a.left < b.left ? [a, b] : [b, a];
-          const x1 = from.right;
-          const x2 = to.left;
-          const dx = (x2 - x1) / 2;
+          const dx = (to.left - from.right) / 2;
           return [
             {
               key: `${id(link.source.folder, link.source.name)}>${id(link.target.folder, link.target.name)}`,
-              d: `M${x1} ${from.middle} C${x1 + dx} ${from.middle} ${x2 - dx} ${to.middle} ${x2} ${to.middle}`,
+              d: `M${from.right} ${from.middle} C${from.right + dx} ${from.middle} ${to.left - dx} ${to.middle} ${to.left} ${to.middle}`,
               ends: [id(link.source.folder, link.source.name), id(link.target.folder, link.target.name)] as [string, string],
             },
           ];
@@ -194,47 +190,105 @@ function ProjectMap() {
     return () => observer.disconnect();
     // (links change with the project)
   }, [info.data]); // eslint-disable-line react-hooks/exhaustive-deps
-  const linked = new Set(hovered === null ? [] : paths.filter((path) => path.ends.includes(hovered)).flatMap((path) => path.ends));
+  const lit = new Set(hovered === null ? [] : paths.filter((path) => path.ends.includes(hovered)).flatMap((path) => path.ends));
   return (
     <Panel title="How the project fits together" note="data and galaxies meet in the fits · hover a box to follow its links" className="home-map">
-      <div className="pmap" ref={map}>
-        <svg className="pmap-edges" viewBox={`0 0 ${size[0]} ${size[1]}`} aria-hidden="true">
-          {paths.map((path) => (
-            <path key={path.key} d={path.d} data-lit={(hovered !== null && path.ends.includes(hovered)) || undefined} />
-          ))}
-        </svg>
-        {COLUMNS.map((column) => (
-          <div key={column.folder} className="pmap-column">
-            <small>{column.title}</small>
-            {(info.data?.pieces[column.folder] ?? []).map((name) => {
-              const key = id(column.folder, name);
-              const note = gap(column.folder, name);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className="pmap-node"
-                  data-node={key}
-                  data-gap={note !== null || undefined}
-                  data-lit={hovered === key || undefined}
-                  data-dim={(hovered !== null && !linked.has(key) && hovered !== key) || undefined}
-                  onMouseEnter={() => setHovered(key)}
-                  onMouseLeave={() => setHovered(null)}
-                  onFocus={() => setHovered(key)}
-                  onBlur={() => setHovered(null)}
-                  onClick={() => go({ kind: 'block', folder: column.folder, name })}
-                >
-                  <b>{name}</b>
-                  <span>{note ?? describe(column.folder, name, info.data?.links ?? [])}</span>
-                </button>
-              );
-            })}
-            {(info.data?.pieces[column.folder] ?? []).length === 0 && <p className="pmap-none">None yet.</p>}
-          </div>
-        ))}
+      <div className="pmap-scroll">
+        <div className="pmap" ref={map}>
+          <svg className="pmap-edges" width={size[0]} height={size[1]} aria-hidden="true">
+            {paths.map((path) => (
+              <path key={path.key} d={path.d} data-lit={(hovered !== null && path.ends.includes(hovered)) || undefined} />
+            ))}
+          </svg>
+          {COLUMNS.map((column) => {
+            const names = order[column.folder] ?? [];
+            const boxes = names.filter((name) => linked.has(id(column.folder, name)));
+            const loose = names.filter((name) => !linked.has(id(column.folder, name)));
+            return (
+              <div key={column.folder} className="pmap-column">
+                <small>
+                  {column.title} · {names.length}
+                </small>
+                {boxes.map((name) => {
+                  const key = id(column.folder, name);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className="pmap-node"
+                      data-node={key}
+                      data-lit={hovered === key || undefined}
+                      data-dim={(hovered !== null && !lit.has(key) && hovered !== key) || undefined}
+                      onMouseEnter={() => setHovered(key)}
+                      onMouseLeave={() => setHovered(null)}
+                      onFocus={() => setHovered(key)}
+                      onBlur={() => setHovered(null)}
+                      onClick={() => go({ kind: 'block', folder: column.folder, name })}
+                    >
+                      <b>{name}</b>
+                      <span>{describe(column.folder, name, info.data?.links ?? [])}</span>
+                    </button>
+                  );
+                })}
+                {loose.length > 0 && (
+                  <div className="pmap-loose">
+                    <span>{LOOSE[column.folder]}</span>
+                    <div className="pmap-chips">
+                      {loose.map((name) => (
+                        <button key={name} type="button" className="pmap-chip" onClick={() => go({ kind: 'block', folder: column.folder, name })}>
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {names.length === 0 && <p className="pmap-none">None yet.</p>}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </Panel>
   );
+}
+
+// What the blocks with no link of each column are
+const LOOSE: Record<string, string> = {
+  datasets: 'in no observation yet',
+  observations: 'in no fit, of no data',
+  setups: 'of nothing yet',
+  galaxies: 'in no fit yet',
+};
+
+// The order of the blocks of each column of the map, so that its links
+// cross little: the observations by the place of their data, the fits by
+// that of their observations, the galaxies by that of their fits, and the
+// data again by that of their observations (each by the mean place of what
+// it links to; those that link to nothing last, in the order of their
+// names)
+function mapOrder(pieces: Record<string, string[]>, links: Link[]): Record<string, string[]> {
+  const order: Record<string, string[]> = { datasets: [...(pieces.datasets ?? [])] };
+  const place = (folder: string, name: string) => order[folder]?.indexOf(name) ?? -1;
+  const neighbours = (folder: string, name: string, other: string) =>
+    links.flatMap((link) =>
+      link.source.folder === folder && link.source.name === name && link.target.folder === other
+        ? [link.target.name]
+        : link.target.folder === folder && link.target.name === name && link.source.folder === other
+          ? [link.source.name]
+          : [],
+    );
+  const by = (folder: string, other: string, names: string[]) => {
+    const mean = (name: string) => {
+      const places = neighbours(folder, name, other).map((each) => place(other, each)).filter((at) => at >= 0);
+      return places.length ? places.reduce((a, b) => a + b, 0) / places.length : Infinity;
+    };
+    return [...names].sort((a, b) => mean(a) - mean(b));
+  };
+  order.observations = by('observations', 'datasets', pieces.observations ?? []);
+  order.setups = by('setups', 'observations', pieces.setups ?? []);
+  order.galaxies = by('galaxies', 'setups', pieces.galaxies ?? []);
+  order.datasets = by('datasets', 'observations', order.datasets);
+  return order;
 }
 
 // A word on a block of the map: what it uses or how many use it
