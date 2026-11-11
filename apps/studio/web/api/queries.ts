@@ -402,6 +402,40 @@ export function useComponentTraits() {
   return useQuery({ queryKey: ['components'], staleTime: Infinity, queryFn: () => data(api.GET('/api/v1/components')) });
 }
 
+// The notes of a project: the text of its README.md ('' if it has none)
+export function useNotes(project: string | null) {
+  return useQuery({
+    queryKey: ['notes', project ?? ''],
+    enabled: project !== null,
+    queryFn: async () => {
+      const { data: text, error, response } = await api.GET('/api/v1/files/{path}', {
+        params: { path: { path: `${project}/README.md` } },
+        parseAs: 'text',
+      });
+      if (response.status === 404) return '';
+      if (!response.ok || text === undefined) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+      return text;
+    },
+  });
+}
+
+// Write the notes of a project (its README.md)
+export function useSaveNotes(project: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (text: string) => {
+      const { error, response } = await api.PUT('/api/v1/files/{path}', {
+        params: { path: { path: `${project}/README.md` } },
+        body: text,
+        bodySerializer: (body: string) => body,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey: ['notes', project] }),
+  });
+}
+
 // Write the options of a block of a project (by its path)
 export function useUpdateBlock() {
   const client = useQueryClient();
