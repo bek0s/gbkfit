@@ -183,7 +183,7 @@ def test_grismconf_traces_follow_their_parameter():
     # polynomials of the place on the detector (from the origin of the
     # image): here w(t) = 4 + 0.1 t + 0.01 t^2 + 1e-5 x0 (um), dx(t) = 3 +
     # 0.01 x0 - 0.02 y0 + 50 t and dy(t) = 1e-3 x0 y0 t
-    from gbkfit.observation.observables.traces import TraceGrismConf
+    from gbkfit.instrument.traces import TraceGrismConf
     trace = TraceGrismConf(
         displ=[[4, 1e-5, 0], [0.1], [0.01]],
         dispx=[[3, 0.01, -0.02], [50]],
@@ -201,7 +201,7 @@ def test_grismconf_traces_follow_their_parameter():
 def test_grismconf_traces_from_files(tmp_path):
     # A GRISMCONF file (of two orders, with comments and other keys) gives
     # the trace of its coefficients, of the order asked
-    from gbkfit.observation.observables.traces import (
+    from gbkfit.instrument.traces import (
         TraceGrismConf, trace_parser)
     path = tmp_path / 'grism.conf'
     path.write_text(
@@ -249,7 +249,7 @@ def test_traces_that_vary_across_the_detector_move_each_pixel():
     # Of a trace whose dx grows with the place, dx(t) = 0.05 x0 + 4 t, the
     # light of each pixel and channel lands about the middle of its
     # segment, at its own offset
-    from gbkfit.observation.observables import traces
+    from gbkfit.instrument import traces
     from gbkfit.observation.observables.slitless_spectra import (
         SlitlessSpectra)
     trace = traces.TraceGrismConf(
@@ -459,7 +459,7 @@ def test_apertures_and_exposures_from_configurations():
 def polynomial_table(wave, x, y, dy=0.0):
     # The trace of SLITLESS (dx = c / (4 STEP) per um about 4 um), sampled
     # at nodes, with a dy of dy x y
-    from gbkfit.observation.observables.traces import TraceTable
+    from gbkfit.instrument.traces import TraceTable
     w, yy, xx = np.meshgrid(wave, y, x, indexing='ij')
     dx = 2.99792458e5 / (4 * STEP) * (w - 4e-6) / 1e-6
     return TraceTable(wave, x, y, dx, dy * xx * yy)

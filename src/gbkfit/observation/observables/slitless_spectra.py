@@ -21,15 +21,14 @@ from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import (
     Grid, SpectralAxis, make_convention, vacuum_wavelength)
-from gbkfit.instrument import Instrument
+from gbkfit.instrument import (
+    Instrument, SlitMask, Trace, slit_mask_parser, trace_parser)
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import iterutils
 from . import _dcube, _detail, _moments
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan
-from .apertures import SlitlessAperture, slitless_aperture_parser
 from .base import FluxScale, HostModelData, ModelData, Observable
-from .traces import Trace, trace_parser
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -350,7 +349,7 @@ class SlitlessSpectra(Observable):
     continuum is not modelled.
 
     An aperture in front of the disperser (e.g. the shutters of JWST
-    NIRSpec; see SlitlessAperture) lets only the light of its open parts
+    NIRSpec; see SlitMask) lets only the light of its open parts
     through: the light of each pixel of the sky, seen through the PSF, is
     clipped to them, and the open parts are dispersed by the trace where
     they are. The light from across a shutter thus lands on the detector
@@ -393,7 +392,7 @@ class SlitlessSpectra(Observable):
         is the centre by default.
     rota : float, optional
         The rotation of the image on the sky.
-    aperture : SlitlessAperture, optional
+    aperture : SlitMask, optional
         The aperture in front of the disperser, if any.
     exposures : Exposure or Sequence of Exposure, optional
         The exposures combined into the image; one, of the sky as it is,
@@ -440,7 +439,7 @@ class SlitlessSpectra(Observable):
             dataset: DatasetSlitlessSpectra,
             spectral: SpectralAxis,
             trace: Trace,
-            aperture: SlitlessAperture | None = None,
+            aperture: SlitMask | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: Annotated[int, Ge(1)] = 1,
             resampled: bool = False
@@ -493,7 +492,7 @@ class SlitlessSpectra(Observable):
             trace=trace_parser.dump(
                 self._trace, prefix=prefix, dump_path=dump_path,
                 overwrite=overwrite),
-            aperture=slitless_aperture_parser.dump(self._aperture),
+            aperture=slit_mask_parser.dump(self._aperture),
             exposures=exposure_parser.dump(list(self._exposures)),
             sky_sampling=self._sky_sampling,
             resampled=self._resampled), data)
@@ -507,7 +506,7 @@ class SlitlessSpectra(Observable):
             rpix: Rpix | None = None,
             rval: Rval = (0, 0),
             rota: Rota = 0,
-            aperture: SlitlessAperture | None = None,
+            aperture: SlitMask | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: Annotated[int, Ge(1)] = 1,
             resampled: bool = False
@@ -541,7 +540,7 @@ class SlitlessSpectra(Observable):
         """Return the trace of the disperser."""
         return self._trace
 
-    def aperture(self) -> SlitlessAperture | None:
+    def aperture(self) -> SlitMask | None:
         """Return the aperture in front of the disperser, if any."""
         return self._aperture
 

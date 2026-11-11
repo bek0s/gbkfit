@@ -1,10 +1,10 @@
 """
-The apertures of slitless spectra (see SlitlessSpectra): a mask in the
+The slit masks of slitless spectra (see SlitlessSpectra): a mask in the
 focal plane in front of the disperser (e.g. the shutters of a
 multi-object spectrograph, or a long slit), whose open parts let the
 light of the sky through.
 
-An aperture is placed along the axes of the image, x along the
+A slit mask is placed along the axes of the image, x along the
 dispersion, in arcsec from its reference pixel (see Coords).
 """
 
@@ -20,15 +20,15 @@ from gbkfit.config import (
 
 
 __all__ = [
-    'SlitlessAperture',
-    'SlitlessApertureShutters',
-    'slitless_aperture_parser'
+    'SlitMask',
+    'SlitMaskShutters',
+    'slit_mask_parser'
 ]
 
 
-class SlitlessAperture(TypedSerializable, abc.ABC):
+class SlitMask(TypedSerializable, abc.ABC):
     """
-    An aperture in front of a disperser: open rectangles along the axes
+    A slit mask in front of a disperser: open rectangles along the axes
     of the image (see the module).
     """
 
@@ -84,7 +84,7 @@ class SlitlessAperture(TypedSerializable, abc.ABC):
         return index, ((lo + hi) / 2)[open_], widths[open_]
 
 
-class SlitlessApertureShutters(SlitlessAperture):
+class SlitMaskShutters(SlitMask):
     """
     A column of shutters along y (along the slit, across the dispersion),
     each open over a rectangle of a size, one pitch from the next. The
@@ -134,7 +134,7 @@ class SlitlessApertureShutters(SlitlessAperture):
             count: Annotated[int, Ge(1)] = 1,
             centre: Annotated[Sequence[float], Unit('arcsec')] = (0, 0)
     ):
-        check_options(SlitlessApertureShutters.__init__, locals())
+        check_options(SlitMaskShutters.__init__, locals())
         size = tuple(float(value) for value in size)
         if len(size) != 2 or not min(size) > 0:
             raise ValueError(
@@ -160,5 +160,5 @@ class SlitlessApertureShutters(SlitlessAperture):
             y + offsets - length / 2, y + offsets + length / 2])
 
 
-slitless_aperture_parser = TypedParser(
-    SlitlessAperture, [SlitlessApertureShutters], family='slitless_aperture')
+slit_mask_parser = TypedParser(
+    SlitMask, [SlitMaskShutters], family='slit_mask')
