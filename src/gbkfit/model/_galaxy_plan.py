@@ -5,7 +5,6 @@ The evaluation of a galaxy on the grid of an observation (GalaxyPlan).
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-import numpy as np
 
 from gbkfit.driver import DeviceArray
 from gbkfit.params import ParamValues

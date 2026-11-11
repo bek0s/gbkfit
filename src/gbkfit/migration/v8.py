@@ -4,7 +4,7 @@ configurations of version 7.
 """
 
 import re
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Callable, Mapping, MutableMapping
 from typing import Any
 
 from ruamel.yaml.comments import CommentedMap
@@ -289,7 +289,11 @@ def _renamed_prefixes(
     return changes
 
 
-def _replaced(value: Any, pattern: re.Pattern, new) -> tuple[Any, bool]:
+def _replaced(
+        value: Any,
+        pattern: re.Pattern,
+        new: str | Callable[[re.Match], str]
+) -> tuple[Any, bool]:
     """
     Return a value with the matches of a pattern replaced in its strings
     and those of its items (in place for lists and dictionaries), and

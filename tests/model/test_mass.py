@@ -2336,7 +2336,7 @@ def test_pressure_density_is_a_mass_component_that_gives_it():
         return disk_galaxy(
             'smooth', dict(type='mass'), MASS, DISTANCE, thick=True,
             pressure_support=dict(type='jeans'), fluid=fluid)
-    with pytest.raises(ValueError, match="which its galaxy does not have"):
+    with pytest.raises(ValueError, match="'dust' is no mass component"):
         galaxy('dust')
     # (a thin mass disk has no density at its midplane, which the pressure
     # of a thick disk takes: refused at load, not at the first evaluation

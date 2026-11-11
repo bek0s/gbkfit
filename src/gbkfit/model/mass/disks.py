@@ -4,7 +4,7 @@ vertical structure (see vertical), each chosen on its own (MassDisk), or
 the density that a disk component traces (TracedDisk).
 """
 
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from typing import Annotated, Any
 
 import numpy as np
@@ -443,7 +443,7 @@ def _linear_between(
         R: np.ndarray,
         points: np.ndarray,
         knots: np.ndarray,
-        at
+        at: Callable[[int, np.ndarray], np.ndarray]
 ) -> np.ndarray:
     """
     Return a quantity at the radii R, linear in R between the knots and 0

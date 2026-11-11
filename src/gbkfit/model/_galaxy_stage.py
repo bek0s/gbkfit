@@ -18,7 +18,7 @@ from gbkfit.driver import Driver
 from gbkfit.params import ParamValues, ParamView, StageCache
 from .components.base import GalaxyMass
 from .extras import Extras
-from .mass import MassContext, MassModel
+from .mass import MassContext
 
 if TYPE_CHECKING:
     from .galaxy import Galaxy

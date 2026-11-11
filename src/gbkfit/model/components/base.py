@@ -274,11 +274,14 @@ class Component(TypedSerializable, abc.ABC):
             return (STARS,)
         return ()
 
-    def needs(self) -> tuple['Need', ...]:
+    def needs(
+            self, links: ComponentLinks = ComponentLinks()
+    ) -> tuple['Need', ...]:
         """
-        Return what it needs from its galaxy (e.g. its mass), each of which
-        checks itself against the galaxy when the galaxy is made (see
-        Need); nothing here.
+        Return what it needs from its galaxy (e.g. its mass), of its links
+        to the mass of the galaxy (e.g. its fluid; none before the galaxy
+        links it), each of which checks itself against the galaxy when the
+        galaxy is made (see Need); nothing here.
         """
         return ()
 

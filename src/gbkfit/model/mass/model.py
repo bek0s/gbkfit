@@ -170,13 +170,14 @@ class MassModel(Serializable):
             If a given name is not that of one of its mass disks.
         """
         names = {mass.name(): mass for mass in self._components}
+        label = f" {component!r}" if component is not None else ''
         for name in given:
             if not isinstance(names.get(name), MassDisk):
                 what = 'no mass component' if name not in names \
                     else f'a {names[name].type()}'
                 raise ValueError(
-                    f"the fluid of the component {component!r} names mass "
-                    f"disks; {name!r} is {what}")
+                    f"the fluid of the component{label} names mass disks; "
+                    f"{name!r} is {what}")
         if given or component is None:
             return tuple(given)
         return tuple(

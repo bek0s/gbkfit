@@ -285,7 +285,7 @@ POINT = dict(
     (balanced_by(DISK, 'sheet'), {}, "needs the mass of its galaxy"),
     (balanced_by(DISK, 'galaxy'), {}, "needs the mass of its galaxy"),
     (balanced_by(DISK, 'sheet') | dict(fluid='dust'), POINT,
-     "which its galaxy does not have"),
+     "'dust' is no mass component"),
     (balanced_by(DISK, 'sheet') | dict(fluid='gas'), POINT,
      "names mass disks; 'gas' is a point"),
     (balanced_by(DISK, 'sheet'), POINT,

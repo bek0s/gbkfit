@@ -134,10 +134,8 @@ def _with_mass(
             "the gravity of a galaxy is that of its mass; give the galaxy "
             "mass, or no gravity")
     gravity = GravityNewton() if gravity is None else gravity
-    check_needs(
-        [need for cmp in components for need in cmp.needs()], mass_model,
-        gravity)
     if mass_model is None:
+        _check_needs(components, MassLinks(), mass_model, gravity)
         # (a distance without mass gives the length of an arcsec to the
         # derived values, e.g. radii in kpc of a disk of an arctan curve)
         return (params if distance is None
@@ -168,9 +166,7 @@ def _with_mass(
         thick=tuple(thick))
     links = dataclasses.replace(
         links, fluids=_check_fluids(components, mass_model, links))
-    check_densities(
-        [need for cmp in components for need in cmp.needs()], mass_model,
-        thick)
+    _check_needs(components, links, mass_model, gravity)
     check_needs([
         Need(Capability.SHARES,
              f"the mass component {mass_component.name()!r} takes the "
@@ -232,18 +228,37 @@ def _check_fluids(
             fluid = mass_model.fluid(cmp.name(), cmp.fluid())
             if fluid and (cmp.fluid() or gravity == 'sheet'):
                 fluids[index] = fluid
-            if gravity != 'sheet' or cmp.fluid():
-                continue
-            what = (f"the vertical equilibrium 'sheet' of the component "
-                    f"{label}")
-            if not fluid:
+            if gravity == 'sheet' and not fluid:
                 raise ValueError(
-                    f"{what} takes the surface density of its fluid: give "
+                    f"the vertical equilibrium 'sheet' of the component "
+                    f"{label} takes the surface density of its fluid: give "
                     f"it a fluid, or a mass disk that follows it")
-            check_densities(
-                [Need(Capability.MASS, f"{what} takes the surface density",
-                      fluid, True)], mass_model, links.thick)
     return fluids
+
+
+def _check_needs(
+        components: Sequence[Component],
+        links: MassLinks,
+        mass_model: MassModel | None,
+        gravity: Gravity
+) -> None:
+    """
+    Check what the components of a galaxy need from it, of their links
+    (see Component.needs): that the galaxy gives it (see check_needs),
+    and with mass, that the mass components give the densities that they
+    take (see check_densities).
+
+    Raises
+    ------
+    ValueError
+        If one does not hold, of the path of the component.
+    """
+    for index, cmp in enumerate(components):
+        needs = cmp.needs(links.of(index, cmp))
+        with config_path('components', index):
+            check_needs(needs, mass_model, gravity)
+            if mass_model is not None:
+                check_densities(needs, mass_model, links.thick)
 
 
 def _distance_needs(

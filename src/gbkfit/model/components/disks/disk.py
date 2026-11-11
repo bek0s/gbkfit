@@ -11,7 +11,6 @@ import numpy as np
 
 from gbkfit.config import check_name, check_options, report_unknown
 from gbkfit.driver import Driver
-from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils
 from ...mass import DiskDensity
@@ -19,10 +18,8 @@ from .. import traits
 from .._needs import Need
 from .._common import Interp, RNodes, RStep
 from .._native import make_bands, make_lines
-from .._units import DataUnit
 from ..base import (
     Component, ComponentLinks, ComponentPlan, FrameParams, SceneTarget)
-from ..lines import Band
 from ..nodes import Nodes, as_nodes
 from ..roles import STARS, Emission, Opacity
 from . import _build, _nodal, _stage
@@ -248,8 +245,10 @@ class Disk(Component, abc.ABC):
         return dict(
             rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
 
-    def needs(self) -> tuple[Need, ...]:
-        return self._disk.needs(self.name())
+    def needs(
+            self, links: ComponentLinks = ComponentLinks()
+    ) -> tuple[Need, ...]:
+        return self._disk.needs(self.name(), links.fluid)
 
     def uses_mass(self) -> bool:
         return self._disk.uses_mass()

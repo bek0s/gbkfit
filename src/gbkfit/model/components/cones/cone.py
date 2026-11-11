@@ -8,15 +8,11 @@ from typing import Annotated, Any, Literal
 import numpy as np
 
 from gbkfit.config import Choices, check_options
-from gbkfit.driver import Driver
-from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
 from .. import traits
 from .._native import make_bands, make_lines
 from .._common import Interp, RNodes, RStep
-from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams, SceneTarget
-from ..lines import Band
 from ..nodes import Nodes, as_nodes
 from ..parts import KinematicTraits, density_traits, kinematic_traits
 from ..roles import STARS, Emission, Opacity

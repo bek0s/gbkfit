@@ -13,16 +13,14 @@ import scipy.special
 
 from gbkfit.config import FilePath, check_options
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
 from ._common import (
     Fluxes, disk_to_sky, dump_name)
-from ._units import DataUnit
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid, SceneTarget)
 from .geometries import geometry_pdesc
-from .lines import Band, LinePlacement
+from .lines import LinePlacement
 from .points import band_light, line_light
 from .roles import (
     STARS, Emission, LineEmission, emission_parser)

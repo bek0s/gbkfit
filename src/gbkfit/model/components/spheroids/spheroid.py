@@ -22,7 +22,6 @@ import scipy.special
 from gbkfit.config import (
     TypedParser, TypedSerializable, check_options)
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.grid import Grid
 from gbkfit.params import (
     ModelEvaluationError, ParamDesc, ParamScalarDesc, ParamValues,
     ParamVectorDesc, pdescs_with_units)
@@ -38,12 +37,11 @@ from .._needs import Need
 from .._native import (
     NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
     evaluate_native, make_bands)
-from .._units import DataUnit, mass_per_unit
+from .._units import mass_per_unit
 from ..base import (
     Component, ComponentLinks, ComponentState, FieldsLayout, FrameParams,
     NativeGrid, SceneTarget)
 from ..geometries import geometry_pdesc
-from ..lines import Band
 from ..nodes import Nodes
 from ..parts import kinematic_traits
 from ..roles import (
@@ -702,7 +700,9 @@ class Spheroid(Component, abc.ABC):
     def uses_mass(self) -> bool:
         return self._kinematics is not None and self._kinematics.uses_mass()
 
-    def needs(self) -> tuple[Need, ...]:
+    def needs(
+            self, links: ComponentLinks = ComponentLinks()
+    ) -> tuple[Need, ...]:
         if self._kinematics is None:
             return ()
         return self._kinematics.needs(

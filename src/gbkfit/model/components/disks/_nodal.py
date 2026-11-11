@@ -265,17 +265,20 @@ class NodalDisk(abc.ABC):
         return bool(self.circular_velocity_params()) \
             or self.balance_gravity() not in (None, 'rotation')
 
-    def needs(self, name: str | None) -> tuple[Need, ...]:
+    def needs(
+            self, name: str | None, fluid: tuple[str, ...]
+    ) -> tuple[Need, ...]:
         """
         Return what it needs from its galaxy (see Need), as the disk of the
-        component of the given name: the mass, for its velocity traits
-        'mass' and its vertical equilibrium (but 'rotation', which takes
-        the rotation of its traits); the forces of the mass, for its
-        rotation at each height (see rotation_factor_params) and the
-        equilibrium 'galaxy'; and the densities of its fluid, for its
-        pressure support, and their surface densities, for the
-        equilibrium 'sheet' (those of the mass disks that follow it, if it
-        has no fluid: see MassLinks).
+        component of the given name and fluid in its galaxy (see
+        ComponentLinks): the mass, for its velocity traits 'mass' and its
+        vertical equilibrium (but 'rotation', which takes the rotation of
+        its traits); the forces of the mass, for its rotation at each
+        height (see rotation_factor_params) and the equilibrium 'galaxy';
+        and the densities of the fluid that it names, for its pressure
+        support, and the surface densities of its fluid in its galaxy
+        (those that it names, or the mass disks that follow it), for the
+        equilibrium 'sheet'.
         """
         label = repr(name)
         needs: list[Need] = []
@@ -312,7 +315,7 @@ class NodalDisk(abc.ABC):
                 f"{what} takes the vertical force of the gravity of its "
                 f"galaxy"))
         else:
-            needs += density_needs(self._fluid, True, what)
+            needs += density_needs(fluid, True, what)
         return tuple(needs)
 
     def pressure_supported_params(self) -> dict[str, PressureSupport]:
