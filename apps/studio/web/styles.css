@@ -25,11 +25,12 @@ h2 { margin: 0; font: var(--text-heading); }
    hidden and opened over the stage) and the stage */
 .app { --rail: 76px; --list: 248px; height: 100%; display: grid; grid-template-columns: var(--rail) var(--list) minmax(0, 1fr); grid-template-rows: 48px minmax(0, 1fr); }
 .app:not([data-list="pinned"]) { grid-template-columns: var(--rail) minmax(0, 1fr); }
-.bar { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; padding-right: 14px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; }
+.bar { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding-right: 14px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0; }
 .bar-start { display: flex; align-items: center; gap: 12px; align-self: stretch; min-width: 0; }
 .bar-end { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
 .logo { flex: none; align-self: stretch; display: flex; align-items: center; gap: 9px; padding: 0 16px 0 22px; border-right: 1px solid var(--line); font: var(--text-subtitle); letter-spacing: var(--caps); white-space: nowrap; }
 .logo-text span { color: var(--muted); font-weight: 400; }
+@media (max-width: 1100px) { .logo-text { display: none; } .logo { padding: 0 14px 0 26px; } }
 .logo-mark { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.6; }
 .bar-project { flex: none; width: clamp(150px, 15vw, 240px); }
 .ui-settings-button { flex: none; color: var(--muted); }
@@ -74,7 +75,7 @@ h2 { margin: 0; font: var(--text-heading); }
 .naming { display: grid; gap: 10px; }
 .naming-note { margin: 0; color: var(--faint); font: var(--text-caption); }
 .naming-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.goto { flex: none; width: clamp(200px, 30vw, 460px); display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--line2); border-radius: 6px; background: var(--field); color: var(--faint); font: var(--text-label); cursor: pointer; }
+.goto { justify-self: center; width: min(460px, 100%); min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 10px; border: 1px solid var(--line2); border-radius: 6px; background: var(--field); color: var(--faint); font: var(--text-label); cursor: pointer; }
 .goto kbd { margin-left: auto; padding: 1px 5px; border: 1px solid var(--line2); border-radius: 4px; font: var(--text-data-small); }
 .goto-scrim { position: fixed; inset: 0; z-index: 200; background: var(--dim); }
 .goto-box { position: absolute; left: 50%; top: 12vh; width: min(640px, 92vw); transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line2); border-radius: 10px; box-shadow: 0 24px 60px -18px var(--shadow); overflow: hidden; }
@@ -342,9 +343,19 @@ h2 { margin: 0; font: var(--text-heading); }
 /* home: the project's map, what runs, the next steps, runs, recent and
    notes; or the four steps of a new project */
 .home-counts { padding-bottom: 3px; color: var(--faint); font: var(--text-data-small); }
-.home-grid { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: minmax(0, 1fr) 420px; grid-auto-rows: min-content; gap: 14px; padding: 14px 18px 18px; align-items: start; }
+.home-screen { container-type: inline-size; }
+.home-grid { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-auto-rows: min-content; gap: 14px; padding: 14px 18px 18px; align-items: start; }
 .home-side { grid-row: span 2; display: grid; gap: 14px; }
-.home-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.home-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; }
+/* (narrower: the side panels go under the map, side by side as they fit) */
+@container (max-width: 1250px) {
+  .home-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-side { grid-row: auto; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
+}
+@container (max-width: 700px) {
+  .home-grid { padding: 10px; }
+  .home-steps { grid-template-columns: minmax(0, 1fr); }
+}
 .home-panel { display: grid; }
 .home-panel-head { display: flex; align-items: baseline; gap: 10px; padding: 11px 14px 8px; border-bottom: 1px solid var(--line); }
 .home-panel-head b { font: var(--text-subtitle); }
@@ -367,7 +378,7 @@ h2 { margin: 0; font: var(--text-heading); }
 .home-notes { width: 100%; min-height: 120px; resize: vertical; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 6px; background: var(--field); color: var(--fg); font: var(--text-body); }
 .home-notes-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .pmap-scroll { max-height: 560px; overflow: auto; }
-.pmap { position: relative; display: grid; grid-template-columns: repeat(4, minmax(170px, 1fr)); gap: 0 48px; min-height: 160px; padding: 4px 6px 8px; }
+.pmap { position: relative; display: grid; grid-template-columns: repeat(3, minmax(120px, 1fr)); gap: 0 clamp(18px, 3cqi, 48px); min-height: 160px; padding: 4px 6px 8px; }
 .pmap-edges { position: absolute; left: 0; top: 0; pointer-events: none; }
 .pmap-edges path { fill: none; stroke: var(--line2); stroke-width: 1.5; }
 .pmap-edges path[data-lit] { stroke: var(--accent); stroke-width: 2; }
@@ -387,7 +398,7 @@ h2 { margin: 0; font: var(--text-heading); }
 .home-start { padding: 34px 48px; display: grid; gap: 18px; align-content: start; overflow: auto; }
 .home-start h2 { font: var(--text-title); }
 .home-start p { margin: 0; max-width: 72ch; color: var(--muted); }
-.home-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.home-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; }
 .home-step { display: grid; gap: 10px; align-content: start; justify-items: start; min-height: 240px; padding: 20px; border: 1px solid var(--line2); border-radius: 10px; background: var(--panel); }
 .home-step b { font: var(--text-subtitle); }
 .home-step span { color: var(--fg2); font: var(--text-body); }

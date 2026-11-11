@@ -13,13 +13,14 @@ import { useStudio } from '../studio';
 
 type Link = components['schemas']['PieceLink'];
 
-// The columns of the map: the blocks of each folder, the data and the
-// galaxies at the edges and the fits between them, where they meet
+// The columns of the map, as the work is said: a model is fitted to data
+// (with a fitter). The data are the observations (a dataset as an
+// instrument sees it, each naming its dataset), the models the galaxies,
+// and the fits between them, where they meet.
 const COLUMNS = [
-  { folder: 'datasets', title: 'Data' },
-  { folder: 'observations', title: 'Observations' },
+  { folder: 'observations', title: 'Data' },
   { folder: 'setups', title: 'Fits' },
-  { folder: 'galaxies', title: 'Galaxies' },
+  { folder: 'galaxies', title: 'Models' },
 ];
 
 // What the head of Home makes, in the order of the work (PSFs, LSFs and
@@ -31,8 +32,9 @@ const MAKE = [
 ];
 
 // The links the map draws (of a source folder to a target folder); the
-// others (e.g. of a fit to its fitter) are not drawn
-const DRAWN = new Set(['observations>datasets', 'setups>observations', 'setups>galaxies']);
+// others (e.g. of an observation to its dataset, or of a fit to its
+// fitter) are said on the boxes
+const DRAWN = new Set(['setups>observations', 'setups>galaxies']);
 
 export function Home() {
   const { project, startAdding } = useStudio();
@@ -146,6 +148,9 @@ function ProjectMap() {
   const id = (folder: string, name: string) => `${folder}/${name}`;
   const order = mapOrder(info.data?.pieces ?? {}, links);
   const linked = new Set(links.flatMap((link) => [id(link.source.folder, link.source.name), id(link.target.folder, link.target.name)]));
+  const unobserved = (info.data?.pieces.datasets ?? []).filter(
+    (name) => !(info.data?.links ?? []).some((link) => link.source.folder === 'observations' && link.target.folder === 'datasets' && link.target.name === name),
+  );
   // (the edges, drawn once the boxes are laid out, and again as they move)
   useLayoutEffect(() => {
     const element = map.current;
@@ -192,7 +197,7 @@ function ProjectMap() {
   }, [info.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const lit = new Set(hovered === null ? [] : paths.filter((path) => path.ends.includes(hovered)).flatMap((path) => path.ends));
   return (
-    <Panel title="How the project fits together" note="data and galaxies meet in the fits · hover a box to follow its links" className="home-map">
+    <Panel title="How the project fits together" note="models are fitted to data · hover a box to follow its links" className="home-map">
       <div className="pmap-scroll">
         <div className="pmap" ref={map}>
           <svg className="pmap-edges" width={size[0]} height={size[1]} aria-hidden="true">
@@ -242,6 +247,18 @@ function ProjectMap() {
                     </div>
                   </div>
                 )}
+                {column.folder === 'observations' && unobserved.length > 0 && (
+                  <div className="pmap-loose">
+                    <span>datasets not observed yet</span>
+                    <div className="pmap-chips">
+                      {unobserved.map((name) => (
+                        <button key={name} type="button" className="pmap-chip" onClick={() => go({ kind: 'block', folder: 'datasets', name })}>
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {names.length === 0 && <p className="pmap-none">None yet.</p>}
               </div>
             );
@@ -254,20 +271,18 @@ function ProjectMap() {
 
 // What the blocks with no link of each column are
 const LOOSE: Record<string, string> = {
-  datasets: 'in no observation yet',
-  observations: 'in no fit, of no data',
+  observations: 'in no fit yet',
   setups: 'of nothing yet',
   galaxies: 'in no fit yet',
 };
 
 // The order of the blocks of each column of the map, so that its links
-// cross little: the observations by the place of their data, the fits by
-// that of their observations, the galaxies by that of their fits, and the
-// data again by that of their observations (each by the mean place of what
-// it links to; those that link to nothing last, in the order of their
-// names)
+// cross little: the fits by the place of their data, the galaxies by that
+// of their fits, and the data again by that of their fits (each by the
+// mean place of what it links to; those that link to nothing last, in the
+// order of their names)
 function mapOrder(pieces: Record<string, string[]>, links: Link[]): Record<string, string[]> {
-  const order: Record<string, string[]> = { datasets: [...(pieces.datasets ?? [])] };
+  const order: Record<string, string[]> = { observations: [...(pieces.observations ?? [])] };
   const place = (folder: string, name: string) => order[folder]?.indexOf(name) ?? -1;
   const neighbours = (folder: string, name: string, other: string) =>
     links.flatMap((link) =>
@@ -284,26 +299,26 @@ function mapOrder(pieces: Record<string, string[]>, links: Link[]): Record<strin
     };
     return [...names].sort((a, b) => mean(a) - mean(b));
   };
-  order.observations = by('observations', 'datasets', pieces.observations ?? []);
   order.setups = by('setups', 'observations', pieces.setups ?? []);
   order.galaxies = by('galaxies', 'setups', pieces.galaxies ?? []);
-  order.datasets = by('datasets', 'observations', order.datasets);
+  order.observations = by('observations', 'setups', order.observations);
   return order;
 }
 
-// A word on a block of the map: what it uses or how many use it
+// A word on a block of the map: the dataset of an observation, the fitter
+// of a fit, how many fits a galaxy is in
 function describe(folder: string, name: string, links: Link[]): string {
   const uses = links.filter((link) => link.source.folder === folder && link.source.name === name);
   const used = links.filter((link) => link.target.folder === folder && link.target.name === name);
   if (folder === 'observations') {
     const data = uses.find((link) => link.target.folder === 'datasets');
-    return data ? `of ${data.target.name}` : 'a model of no data';
+    return data ? `the dataset ${data.target.name}` : 'no data: a mock';
   }
   if (folder === 'setups') {
-    const galaxies = uses.filter((link) => link.target.folder === 'galaxies').length;
-    return `${galaxies} ${galaxies === 1 ? 'galaxy' : 'galaxies'}`;
+    const fitter = uses.find((link) => link.target.folder === 'fitters');
+    return fitter ? `with ${fitter.target.name}` : 'no fitter yet';
   }
-  return `used by ${used.length}`;
+  return `in ${used.length} ${used.length === 1 ? 'fit' : 'fits'}`;
 }
 
 // What runs, in brief (the Activity drawer of the bar has it all)
