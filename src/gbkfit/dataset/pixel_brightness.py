@@ -5,14 +5,11 @@ The dataset of brightness on a grid of pixels: an image.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import numpy as np
-
 from gbkfit.config import DataFile, check_options
-from gbkfit.grid import Grid
 from gbkfit.instrument import PSF
 from gbkfit.io import ErrorKind, MaskKind
-from . import _detail, _outliers, _resampling
-from .base import Dataset, NoiseCorrelation
+from . import _grids
+from .base import DatasetGrid, NoiseCorrelation, cleaned
 from .data import Data
 
 
@@ -21,12 +18,7 @@ __all__ = [
 ]
 
 
-# The axes of its blocks and windows (see resample_blocks and
-# screen_outliers)
-_AXES = ('x', 'y')
-
-
-class DatasetPixelBrightness(Dataset):
+class DatasetPixelBrightness(DatasetGrid):
     """
     Brightness on a grid of pixels: an image.
 
@@ -47,6 +39,10 @@ class DatasetPixelBrightness(Dataset):
     # An image has no spectral axis
     ndim = 2
     spectral_axis = None
+
+    # The axes of its blocks and windows (see resample_blocks and
+    # screen_outliers)
+    block_axes = ('x', 'y')
 
     config_constructors = ('from_files',)
 
@@ -126,15 +122,15 @@ class DatasetPixelBrightness(Dataset):
             data, mask, error, rpix, rval, unit=unit, beam=beam,
             spatial_correlation=spatial_correlation, error_kind=error_kind,
             mask_kind=mask_kind, footprint=footprint)
-        dataset = cls(item, **_detail.grid_coords(coords, step, rota))
-        return _detail.cleaned(dataset, outliers)
+        dataset = cls(item, **_grids.grid_coords(coords, step, rota))
+        return cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        return _detail.flatten_single_item(
-            _detail.dump_grid_dataset(self, prefix, dump_path, overwrite),
+        return _grids.flatten_single_item(
+            _grids.dump_grid_dataset(self, prefix, dump_path, overwrite),
             'brightness')
 
     def __init__(
@@ -146,46 +142,11 @@ class DatasetPixelBrightness(Dataset):
             rota: float | None = None
     ):
         check_options(DatasetPixelBrightness.__init__, locals())
-        super().__init__(dict(brightness=brightness))
-        self._grid = _detail.dataset_grid(self, step, rpix, rval, rota)
-
-    def grid(self) -> Grid:
-        """Return the grid of the pixels."""
-        return self._grid
-
-    def check_blocks(self, size: Sequence[float]) -> None:
-        """
-        Raise ValueError unless the size is of blocks of pixels: a positive
-        integer for each of x and y (see resample_blocks).
-        """
-        _resampling.block_size(size, _AXES)
-
-    def resample_blocks(
-            self,
-            residuals: Mapping[str, np.ndarray],
-            size: Sequence[float],
-            rng: np.random.Generator
-    ) -> dict[str, np.ndarray]:
-        """
-        Return residuals of its image redrawn in blocks of pixels (see
-        Dataset.resample_blocks), of the size (x, y).
-        """
-        return _resampling.resample_blocks(
-            residuals, size, _AXES, rng)
-
-    def screen_outliers(
-            self, size: Sequence[float], nsigma: float
-    ) -> 'DatasetPixelBrightness':
-        """
-        Return a copy of it with the outliers of its image masked (see
-        Dataset.screen_outliers): of the other pixels of a window of the size
-        (x, y) about each.
-        """
-        return _outliers.screen_grid(self, size, _AXES, nsigma)
+        super().__init__(dict(brightness=brightness), step, rpix, rval, rota)
 
     def noise_correlation(self, key: str) -> NoiseCorrelation | None:
         """
         Return the correlation of the noise of a data item on the
         separations of its pixels (see Dataset.noise_correlation).
         """
-        return _detail.grid_noise_correlation(self, key)
+        return _grids.grid_noise_correlation(self, key)

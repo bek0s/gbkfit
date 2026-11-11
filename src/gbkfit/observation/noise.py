@@ -24,6 +24,7 @@ from gbkfit.math.correlation import periodic_correlation
 __all__ = [
     'Noise',
     'NoiseGauss',
+    'NoiseOfDispersion',
     'NoisePoisson',
     'NoiseStudentT',
     'noise_parser'
@@ -138,7 +139,88 @@ class Noise(TypedSerializable, abc.ABC):
         """
 
 
-class NoiseGauss(Noise):
+class NoiseOfDispersion(Noise):
+    """
+    Noise of a given dispersion: rms at every value, or an error map of
+    the dispersion of each value. Its kinds draw it from their
+    distributions (e.g. Gaussian, Student-t).
+
+    Parameters
+    ----------
+    rms : float, optional
+        The dispersion of every value.
+    error : array_like, optional
+        The dispersion of each value: an array that broadcasts to the
+        shape of the data (e.g. one value per pixel, ny by nx, for all the
+        channels of a cube); values whose error is not finite are
+        missing (NaN).
+
+    Raises
+    ------
+    ValueError
+        If not exactly one of rms and error is given, or the error map has
+        negative values.
+    """
+
+    def __init__(
+            self,
+            rms: float | None = None,
+            error: npt.ArrayLike | None = None
+    ):
+        if (rms is None) == (error is None):
+            raise ValueError("give one of rms and error")
+        if error is not None:
+            error = np.asarray(error, dtype=float)
+            if np.any(error < 0):
+                raise ValueError("the error map has negative values")
+        self._rms = rms
+        self._error = error
+
+    def rms(self) -> float | None:
+        """Return the dispersion of every value, if it has one."""
+        return self._rms
+
+    def error(self) -> np.ndarray | None:
+        """Return the error map, if it has one."""
+        return self._error
+
+    def sigma(self, grid: Grid, signal: np.ndarray) -> np.ndarray:
+        """
+        Return the dispersion of each value of data on a grid, of rms or of
+        the error map (see Noise.sigma); raise ValueError if the error map
+        does not broadcast to the data.
+        """
+        shape = grid.size[::-1]
+        if self._rms is not None:
+            return np.full(shape, self._rms)
+        try:
+            return np.broadcast_to(self._error, shape).copy()
+        except ValueError:
+            raise ValueError(
+                f"the error map, of shape {self._error.shape}, does not "
+                f"broadcast to the data, of shape {shape}") from None
+
+    def _dump_dispersion(
+            self, prefix: str, dump_path: bool, overwrite: bool
+    ) -> dict[str, Any]:
+        """
+        Return the options of its dispersion: rms, or its error map
+        written to a file.
+        """
+        if self._rms is not None:
+            return dict(rms=self._rms)
+        filename = f'{prefix}noise_error.fits'
+        write_image(filename, self._error, overwrite=overwrite)
+        return dict(
+            error=filename if dump_path else os.path.basename(filename))
+
+    @staticmethod
+    def _read_error(file: DataFile) -> np.ndarray:
+        """Return the error map of a noise, read from its FITS file."""
+        return read_data(file)[0]
+
+
+class NoiseGauss(NoiseOfDispersion):
     """
     Gaussian noise of mean 0, of the dispersion rms at every value or of
     an error map. It is independent from value to value, unless
@@ -196,8 +278,8 @@ class NoiseGauss(Noise):
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        info = dict(type=self.type()) | _dump_dispersion(
-            self._rms, self._error, prefix, dump_path, overwrite)
+        info = dict(type=self.type()) | self._dump_dispersion(
+            prefix, dump_path, overwrite)
         kwargs = dict(prefix=prefix, dump_path=dump_path, overwrite=overwrite)
         spatial = self._spatial_correlation
         if spatial is not None:
@@ -236,7 +318,8 @@ class NoiseGauss(Noise):
         """
         check_options(NoiseGauss.from_file, locals())
         return cls(
-            error=_read_error(error), spatial_correlation=spatial_correlation,
+            error=cls._read_error(error),
+            spatial_correlation=spatial_correlation,
             spectral_correlation=spectral_correlation)
 
     def __init__(
@@ -247,21 +330,11 @@ class NoiseGauss(Noise):
             spectral_correlation: LSF | None = None
     ):
         check_options(NoiseGauss.__init__, locals())
-        error = _check_dispersion(rms, error)
+        super().__init__(rms, error)
         if spectral_correlation is not None and spectral_correlation.varies():
             raise ValueError("the spectral correlation must not vary")
-        self._rms = rms
-        self._error = error
         self._spatial_correlation = spatial_correlation
         self._spectral_correlation = spectral_correlation
-
-    def rms(self) -> float | None:
-        """Return the dispersion of every value, if it has one."""
-        return self._rms
-
-    def error(self) -> np.ndarray | None:
-        """Return the error map, if it has one."""
-        return self._error
 
     def spatial_correlation(self) -> PSF | str | None:
         """Return the correlation on the sky, if any."""
@@ -273,9 +346,6 @@ class NoiseGauss(Noise):
 
     def correlations(self) -> tuple[PSF | str | None, LSF | None]:
         return self._spatial_correlation, self._spectral_correlation
-
-    def sigma(self, grid: Grid, signal: np.ndarray) -> np.ndarray:
-        return _dispersion(self._rms, self._error, grid)
 
     def draw(
             self,
@@ -360,7 +430,7 @@ class NoiseGauss(Noise):
                 f"channels of the data, as they are: {e}") from None
 
 
-class NoiseStudentT(Noise):
+class NoiseStudentT(NoiseOfDispersion):
     """
     Student-t noise: heavier tails than Gaussian noise (outliers), e.g.
     to test how fits take them. It is of mean 0 and of dof degrees of
@@ -378,7 +448,7 @@ class NoiseStudentT(Noise):
     rms : float, optional
         The dispersion of every value.
     error : ndarray, optional
-        The dispersion of each value (see NoiseGauss).
+        The dispersion of each value (see NoiseOfDispersion).
 
     Raises
     ------
@@ -401,8 +471,8 @@ class NoiseStudentT(Noise):
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        return dict(type=self.type(), dof=self._dof) | _dump_dispersion(
-            self._rms, self._error, prefix, dump_path, overwrite)
+        return dict(type=self.type(), dof=self._dof) \
+            | self._dump_dispersion(prefix, dump_path, overwrite)
 
     @classmethod
     def from_file(
@@ -427,7 +497,7 @@ class NoiseStudentT(Noise):
             The noise.
         """
         check_options(NoiseStudentT.from_file, locals())
-        return cls(dof, error=_read_error(error))
+        return cls(dof, error=cls._read_error(error))
 
     def __init__(
             self,
@@ -436,16 +506,12 @@ class NoiseStudentT(Noise):
             error: npt.ArrayLike | None = None
     ):
         check_options(NoiseStudentT.__init__, locals())
+        super().__init__(rms, error)
         self._dof = dof
-        self._rms = rms
-        self._error = _check_dispersion(rms, error)
 
     def dof(self) -> float:
         """Return the degrees of freedom."""
         return self._dof
-
-    def sigma(self, grid: Grid, signal: np.ndarray) -> np.ndarray:
-        return _dispersion(self._rms, self._error, grid)
 
     def draw(
             self,
@@ -509,74 +575,6 @@ class NoisePoisson(Noise):
     ) -> np.ndarray:
         counts = rng.poisson(np.maximum(signal, 0) * self._gain)
         return counts / self._gain - signal
-
-
-def _read_error(file: DataFile) -> np.ndarray:
-    """Return the error map of a noise, read from its FITS file."""
-    return read_data(file)[0]
-
-
-def _dump_dispersion(
-        rms: float | None,
-        error: np.ndarray | None,
-        prefix: str,
-        dump_path: bool,
-        overwrite: bool
-) -> dict[str, Any]:
-    """
-    Return the options of the dispersion of a noise: rms, or its error map
-    written to a file.
-    """
-    if rms is not None:
-        return dict(rms=rms)
-    filename = f'{prefix}noise_error.fits'
-    write_image(filename, error, overwrite=overwrite)
-    return dict(error=filename if dump_path else os.path.basename(filename))
-
-
-def _check_dispersion(
-        rms: float | None, error: np.ndarray | None) -> np.ndarray | None:
-    """
-    Return the error map (as an array, if any) of a noise of one of rms
-    and error.
-
-    Raises
-    ------
-    ValueError
-        If not exactly one is given, or the error map has negative values.
-    """
-    if (rms is None) == (error is None):
-        raise ValueError("give one of rms and error")
-    if error is not None:
-        error = np.asarray(error, dtype=float)
-        if np.any(error < 0):
-            raise ValueError("the error map has negative values")
-    return error
-
-
-def _dispersion(
-        rms: float | None,
-        error: np.ndarray | None,
-        grid: Grid
-) -> np.ndarray:
-    """
-    Return the dispersion of each value of data on a grid, of rms or of
-    the error map.
-
-    Raises
-    ------
-    ValueError
-        If the error map does not broadcast to the data.
-    """
-    shape = grid.size[::-1]
-    if rms is not None:
-        return np.full(shape, rms)
-    try:
-        return np.broadcast_to(error, shape).copy()
-    except ValueError:
-        raise ValueError(
-            f"the error map, of shape {error.shape}, does not broadcast to "
-            f"the data, of shape {shape}") from None
 
 
 def _velocities(grid: Grid) -> np.ndarray:

@@ -11,18 +11,14 @@ import numpy as np
 from gbkfit.config import FilePath, check_options, config_path
 from gbkfit.io import read_table, write_image
 from gbkfit.region import Regions, regions_parser
-from . import _detail, _outliers, _resampling
-from .base import Dataset
-from .data import Data, DataColumns, DataFiles, dump_data
+from . import _detail, _outliers, _tables
+from .base import Dataset, cleaned
+from .data import Data, DataColumns, DataFiles, dump_data, item_filenames
 
 
 __all__ = [
     'DatasetRegionMoments'
 ]
-
-
-# The axes of its blocks of residuals (see resample_blocks)
-_BLOCK_AXES = ('the regions',)
 
 
 class DatasetRegionMoments(Dataset):
@@ -55,6 +51,13 @@ class DatasetRegionMoments(Dataset):
     """
 
     ndim = 1
+
+    # The axes of its blocks of residuals (see resample_blocks): runs of
+    # consecutive regions, in their order, so of 1 region unless their
+    # order follows the sky (e.g. fibres in a row). The noise that
+    # neighbouring regions share (e.g. bins smaller than the beam) is then
+    # not kept.
+    block_axes = ('the regions',)
 
     config_constructors = ('from_files', 'from_table')
 
@@ -107,7 +110,7 @@ class DatasetRegionMoments(Dataset):
         items, _ = _detail.read_moments(_detail.moment_options(locals()))
         moments, hermite = _detail.split_moments(items)
         dataset = cls(moments, regions, hermite)
-        return _detail.cleaned(dataset, outliers)
+        return cleaned(dataset, outliers)
 
     @classmethod
     def from_table(
@@ -157,12 +160,12 @@ class DatasetRegionMoments(Dataset):
         items = {}
         for name, columns in _detail.moment_options(locals()).items():
             with config_path(name):
-                items[name] = _detail.table_item(table, columns)
+                items[name] = _tables.table_item(table, columns)
         if not items:
             raise ValueError("a dataset needs at least one moment")
         moments, hermite = _detail.split_moments(items)
         dataset = cls(moments, regions, hermite)
-        return _detail.cleaned(dataset, outliers)
+        return cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -177,7 +180,7 @@ class DatasetRegionMoments(Dataset):
                 overwrite=overwrite))
         for key, item in self.items():
             info[key] = dump_data(
-                item, _detail.item_filenames(prefix, key), write, dump_path,
+                item, item_filenames(prefix, key), write, dump_path,
                 f'{prefix}{key}_', overwrite)
         return info
 
@@ -202,29 +205,6 @@ class DatasetRegionMoments(Dataset):
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments."""
         return _detail.moment_orders(self)
-
-    def check_blocks(self, size: Sequence[float]) -> None:
-        """
-        Raise ValueError unless the size is of blocks of regions: a positive
-        integer for each of the regions (see resample_blocks).
-        """
-        _resampling.block_size(size, _BLOCK_AXES)
-
-    def resample_blocks(
-            self,
-            residuals: Mapping[str, np.ndarray],
-            size: Sequence[float],
-            rng: np.random.Generator
-    ) -> dict[str, np.ndarray]:
-        """
-        Return residuals of its moments redrawn in blocks of regions (see
-        Dataset.resample_blocks), of the size (regions): runs of consecutive
-        regions, in their order, so of 1 region unless their order follows the
-        sky (e.g. fibres in a row). The noise that neighbouring regions share
-        (e.g. bins smaller than the beam) is then not kept.
-        """
-        return _resampling.resample_blocks(
-            residuals, size, _BLOCK_AXES, rng)
 
     def screen_outliers(
             self, size: Sequence[float], nsigma: float
