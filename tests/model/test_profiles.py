@@ -191,6 +191,16 @@ def test_mock_profiles():
                   < 5 * 5)
 
 
+def test_mock_profiles_refuse_noise_correlated_by_an_instrument():
+    # A profile has no instrument, and its data are not on the sky
+    group = ObservationGroup(
+        mass_galaxy(), ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc))
+    with pytest.raises(
+            ValueError, match="profile observations have no instrument"):
+        draw_mocks(group.plan(), PARAMS, MockOptions(NoiseGauss(
+            rms=5.0, spatial_correlation='instrument'), seed=1))
+
+
 def test_profiles_refuse_what_they_cannot_measure():
     galaxy = mass_galaxy(components=[copy.deepcopy(GAS)])
     radii = [1.0, 3.0] * u.kpc
@@ -217,6 +227,21 @@ def test_profiles_refuse_what_they_cannot_measure():
                         ObservationProfile(['vcirc'], radii, 20)):
         with pytest.raises(ValueError, match="needs a distance"):
             ObservationGroup(alone, observation).plan()
+
+
+def test_groups_with_other_data_check_what_their_profiles_see():
+    # The functions and the radii of a profile are those of its data: a
+    # group with other data of the same parameters (a copy, see
+    # ObservationGroup.with_data) checks them as a new group would
+    def dataset(keys, radii):
+        return DatasetProfile({key: Data(np.ones(2)) for key in keys}, radii)
+    alone = galaxy_parser.load(dict(mass=copy.deepcopy(MASS)))
+    group = ObservationGroup(alone, ObservationProfile(
+        data=dataset(['vcirc'], [1.0, 3.0] * u.kpc)))
+    with pytest.raises(ValueError, match="needs a distance"):
+        group.with_data([dataset(['vcirc'], [1.0, 3.0] * u.arcsec)])
+    with pytest.raises(ValueError, match="has no functions"):
+        group.with_data([dataset(['vcirc_disk'], [1.0, 3.0] * u.kpc)])
 
 
 def test_profile_data_in_another_unit_are_converted():

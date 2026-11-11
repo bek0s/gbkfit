@@ -208,7 +208,7 @@ class SlitSpectra(Observable):
         # (its spectra of the light, through its instrument: linear)
         return True
 
-    def model_can_lack_values(self) -> bool:
+    def model_can_have_missing_values(self) -> bool:
         return False
 
     def check_observation(

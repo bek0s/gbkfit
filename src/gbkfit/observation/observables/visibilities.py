@@ -310,7 +310,7 @@ class Visibilities(Observable):
         # instrument: linear)
         return True
 
-    def model_can_lack_values(self) -> bool:
+    def model_can_have_missing_values(self) -> bool:
         return False
 
     def check_observation(
@@ -336,7 +336,7 @@ class Visibilities(Observable):
                 "pixel_weights do not apply to visibilities, which are not "
                 "on pixels")
 
-    def _require_matching_coordinates(
+    def _check_dataset_coordinates(
             self, dataset: DatasetVisibilities
     ) -> None:
         if dataset.coverage() != self._coverage:

@@ -86,7 +86,7 @@ class Solve(TypedSerializable, abc.ABC):
     for a value that the data decide, 0 for one that its prior decides, or
     that is at its minimum. The residuals of its prior are not of the
     data: they count in the chi-square, but not in the degrees of freedom
-    (see Evaluation.nnuisance).
+    (see ObjectiveEvaluation.nnuisance).
 
     Solves of the same options are equal (e.g. those of copies of the
     parameters; see ParamSpace.with_values).

@@ -163,10 +163,10 @@ class Likelihood(TypedSerializable, abc.ABC):
         return np.ones(()) if error is None else error
 
     @abc.abstractmethod
-    def takes_lacking_values(self) -> bool:
+    def takes_missing_values(self) -> bool:
         """
-        Check whether it takes the values that the model lacks where the
-        data have some (e.g. the velocity of a spectrum below the
+        Check whether it takes the values missing from the model where
+        the data have some (e.g. the velocity of a spectrum below the
         flux_floor of a moment map; see LikelihoodGaussian).
         """
         pass
@@ -203,15 +203,16 @@ class LikelihoodGaussian(Likelihood):
     a spectrum whose flux is below the flux_floor of a moment map), there
     is no residual to compute: the residual is then missing_residual.
     Counting such values as 0 would let a fit lower its chi-square by
-    making its model lack values where it fits the data badly (e.g. by
-    making the model too faint there); a fixed residual stops that.
+    leaving values missing from its model where it fits the data badly
+    (e.g. by making the model too faint there); a fixed residual stops
+    that.
 
     The value is a choice, with no right answer, so it has no default: an
-    observation whose model can lack values needs it (see
-    Observable.model_can_lack_values; e.g. moment maps of order 1 and
-    above). It is in errors, or in the units of the data where the data
-    have no errors (e.g. km/s for velocities). A larger value guards
-    better against a model that lacks values, but weighs more where the
+    observation whose model can have missing values needs it (see
+    Observable.model_can_have_missing_values; e.g. moment maps of order 1
+    and above). It is in errors, or in the units of the data where the
+    data have no errors (e.g. km/s for velocities). A larger value guards
+    better against a model with missing values, but weighs more where the
     data are odd; a missed value costs as much as a miss of
     missing_residual errors (e.g. 3). A better guard is to fit moment 0
     (the flux, which the model always has) with the higher moments: where
@@ -256,10 +257,10 @@ class LikelihoodGaussian(Likelihood):
     Least squares then fit the noise too, and exactly, as do the other
     fitters. Masked values with an upper limit take the fitted noise of
     their error, but add nothing (a probability has no normalisation).
-    Values the model lacks cost missing_residual, which does not take the
-    noise, and add a term that the noise does not change. The chi-square
-    has the noise residuals; the reduced chi-square of a fit does not (see
-    Evaluation.noise_chi2).
+    Values missing from the model cost missing_residual, which does not
+    take the noise, and add a term that the noise does not change. The
+    chi-square has the noise residuals; the reduced chi-square of a fit
+    does not (see ObjectiveEvaluation.noise_chi2).
 
     The residuals of a data item whose noise is correlated (see Data:
     e.g. by the beam of a radio image) are whitened. The noise of its
@@ -269,7 +270,8 @@ class LikelihoodGaussian(Likelihood):
     chi-square is r^T C^-1 r, of its residuals r (as above), the sum of
     the squares of the whitened residuals L^-1 r, L the Cholesky factor
     of C (C = L L^T). They are those of the values that the data do not
-    mask, the values the model lacks among them (with missing_residual).
+    mask, the values missing from the model among them (with
+    missing_residual).
     C has a white floor f, (1 - f) C + f I, a share f of the variance
     without correlation, which keeps it positive definite where the
     shape of the correlation alone makes it singular (e.g. a Gaussian
@@ -477,7 +479,7 @@ class LikelihoodGaussian(Likelihood):
         """
         return self._missing_residual
 
-    def takes_lacking_values(self) -> bool:
+    def takes_missing_values(self) -> bool:
         return self._missing_residual is not None
 
     def comparison(
@@ -706,7 +708,8 @@ class LikelihoodUser(Likelihood):
     log_like). The objective calls it on the host at each evaluation,
     for each data item of the observation: func(item, data, model, error,
     mask, params), with item the name of the item (e.g. 'moment1'), data
-    and model arrays of its shape (the model NaN where it lacks a value),
+    and model arrays of its shape (the model NaN where a value is
+    missing),
     error its errors (None without) and mask its mask (values where it
     is 0 do not count), and params the values of the parameters of the
     likelihood (a dict, by their names in it). The data, errors and mask
@@ -726,7 +729,7 @@ class LikelihoodUser(Likelihood):
     It has none of the options of LikelihoodGaussian (fitted noise, upper
     limits, missing_residual; correlated noise is not whitened), and
     solves no flux scales (see ObservationSky): its function does what it
-    needs, and takes the values that the model lacks.
+    needs, and takes the values missing from the model.
 
     Configurations give the function by a Python file and its name (see
     from_file); one made from a function in Python has no configuration
@@ -844,7 +847,7 @@ class LikelihoodUser(Likelihood):
                     desc="a parameter of the function of the likelihood")
                 for name in self._params}
 
-    def takes_lacking_values(self) -> bool:
+    def takes_missing_values(self) -> bool:
         return True
 
     def comparison(

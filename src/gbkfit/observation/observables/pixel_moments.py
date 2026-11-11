@@ -218,7 +218,7 @@ class PixelMoments(Observable):
     def light_items(self) -> tuple[str, ...]:
         return ('moment0',) if 0 in self._orders else ()
 
-    def model_can_lack_values(self) -> bool:
+    def model_can_have_missing_values(self) -> bool:
         # (moment 0, the flux, always has a value)
         return any(order >= 1 for order in self._orders)
 
@@ -259,9 +259,9 @@ class PixelMoments(Observable):
         _moments.check_one_line(scene)
         super().check_scene(scene, foreground, instrument, flux_scale)
 
-    def require_matching(self, dataset: Dataset) -> None:
+    def check_dataset(self, dataset: Dataset) -> None:
         _moments.check_moment_items(dataset, self._method)
-        super().require_matching(dataset)
+        super().check_dataset(dataset)
 
     def plan(
             self,

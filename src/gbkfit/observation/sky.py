@@ -27,7 +27,7 @@ from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from ._scene import check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
-from .likelihood import Likelihood, likelihood_parser
+from .likelihoods import Likelihood, likelihood_parser
 from .line_of_sight import LineOfSight, line_of_sight_parser
 from .noise import Noise
 from .observables import (
@@ -206,16 +206,17 @@ class ObservationSky(Observation):
         observable, the offsets are not position and velocity, true or
         false, the oversampling is not one integer of at least 1 for each
         axis, there is a likelihood without data, the data are not those of
-        the observable, its model can lack values but its likelihood has no
-        residual for them (see LikelihoodGaussian), its likelihood fits a
-        noise but it has no name, the noise of an item is correlated where
-        its kind of data cannot have it, its likelihood does not suit it
-        (see Likelihood.check), the observable cannot be seen through the
-        instrument (see Observable.check_observation), the dtype or the
-        fft_dtype is not one of the native modules (see Driver.dtypes), or
-        the fft_dtype is less precise than the dtype, it has pixel weights
-        and a lens (not supported yet), or the unit is given with data, is
-        not a unit, or is per beam without a beam (see _light_unit).
+        the observable, its model can have missing values but its
+        likelihood has no residual for them (see LikelihoodGaussian), its
+        likelihood fits a noise but it has no name, the noise of an item
+        is correlated where its kind of data cannot have it, its
+        likelihood does not suit it (see Likelihood.check), the observable
+        cannot be seen through the instrument (see
+        Observable.check_observation), the dtype or the fft_dtype is not one
+        of the native modules (see Driver.dtypes), or the fft_dtype is less
+        precise than the dtype, it has pixel weights and a lens (not
+        supported yet), or the unit is given with data, is not a unit, or is
+        per beam without a beam (see _light_unit).
     """
 
     @staticmethod
@@ -372,7 +373,7 @@ class ObservationSky(Observation):
                 f"oversampling must have {ndim} values, each at least 1; it "
                 f"is {oversampling}")
         if data is not None:
-            observable.require_matching(data)
+            observable.check_dataset(data)
         self._observable = observable
         self._foreground = foreground
         self._instrument = instrument
@@ -386,7 +387,7 @@ class ObservationSky(Observation):
         self._oversampling = oversampling
         super().__init__(
             observable.keys(), galaxies, data, likelihood, name,
-            observable.model_can_lack_values())
+            observable.model_can_have_missing_values())
         observable.check_observation(
             instrument, self._oversampling, pixel_weights)
         if pixel_weights is not None and foreground.lens() is not None:

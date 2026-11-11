@@ -19,7 +19,7 @@ from gbkfit.grid import make_grid
 from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from .likelihood import Likelihood, likelihood_parser
+from .likelihoods import Likelihood, likelihood_parser
 from .observables import HostModelData, ModelData, ObservablePlan
 from .observation import Observation, SeenGalaxies
 
@@ -225,7 +225,7 @@ class ObservationProfile(Observation):
         # (slopes have no values where the galaxy has no density)
         super().__init__(
             keys, galaxies, data, likelihood, name,
-            model_can_lack_values=any(
+            model_can_have_missing_values=any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys))
 
     def radii(self) -> u.Quantity:

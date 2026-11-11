@@ -15,13 +15,14 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.model import GalaxyState
 from gbkfit.params import ParamValues
 from gbkfit.utils import iterutils
-from .likelihood import Likelihood, likelihood_parser
+from .likelihoods import Likelihood, likelihood_parser
 from .noise import INSTRUMENT, Noise, noise_parser
 from .observables import HostModelData, ObservablePlan
 from .observation import Observation
+from .sky import ObservationSky
 
 if TYPE_CHECKING:
-    from ._group_plan import GroupPlan
+    from .group_plan import GroupPlan
     from .group import ObservationGroup
 
 
@@ -291,14 +292,21 @@ def _data_options(
     Raises
     ------
     ValueError
-        If the spatial correlation of their noise varies along the
-        spectral axis (e.g. the PSF of the instrument), which their errors
-        cannot take (see Data).
+        If their noise is correlated by the instrument of an observation
+        that has none (whose data are not on the sky, e.g. a profile), or
+        the spatial correlation of their noise varies along the spectral
+        axis (e.g. the PSF of the instrument), which their errors cannot
+        take (see Data).
     """
     spatial, spectral = noise.correlations() if exact else (None, None)
     if spatial == INSTRUMENT:
-        # (only observations on the sky draw noise correlated by their
-        # instrument; see Noise.draw)
+        # (only observations on the sky have an instrument, and draw noise
+        # correlated by it; see Noise.draw)
+        if not isinstance(observation, ObservationSky):
+            raise ValueError(
+                f"the spatial correlation of the noise is '{INSTRUMENT}', "
+                f"but {observation.type()} observations have no "
+                f"instrument: their data are not on the sky")
         spatial = observation.instrument().psf()
     if spatial is not None and spatial.varies():
         raise ValueError(

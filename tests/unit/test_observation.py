@@ -49,7 +49,7 @@ def test_spectra_keep_the_convention_of_their_data(
     assert observable.grid().coords.convention == 'log'
 
 
-def test_a_model_that_can_lack_values_needs_their_residual():
+def test_a_model_that_can_have_missing_values_needs_their_residual():
     # A velocity map: the model has no velocity where its flux is below
     # the mask cutoff, and the residual there is the user's choice
     data = DatasetPixelMoments(

@@ -22,7 +22,7 @@ from gbkfit.grid import GridData, SpectraData
 from gbkfit.io import Beam
 from gbkfit.model import DataUnit, DepthUnit, Galaxy
 from gbkfit.params import ParamDesc, pdescs_with_units
-from .likelihood import Likelihood, LikelihoodGaussian
+from .likelihoods import Likelihood, LikelihoodGaussian
 from .observables import FluxScale, ObservablePlan
 
 
@@ -114,22 +114,22 @@ class Observation(TypedSerializable, abc.ABC):
         Its name, which is the id of its extra outputs instead of its
         position (see ObservationGroup.observation_label), and starts the
         names of its parameters.
-    model_can_lack_values : bool, optional
-        Whether its model can lack values (NaN) where the data have some
-        (e.g. the velocity of a spectrum below its flux_floor): the
-        likelihood then needs a residual for them (see
+    model_can_have_missing_values : bool, optional
+        Whether its model can have missing values (NaN) where the data
+        have some (e.g. the velocity of a spectrum below its flux_floor):
+        the likelihood then needs a residual for them (see
         LikelihoodGaussian). False by default.
 
     Raises
     ------
     ValueError
         If a name is invalid, there are no galaxies or they repeat, there
-        is a likelihood without data, its model can lack values but its
-        likelihood has no residual for them (see LikelihoodGaussian), its
-        likelihood fits a noise but it has no name, the noise of an item
-        is correlated where its kind of data cannot have it (see
-        Dataset.noise_correlation), or its likelihood does not suit it
-        (see Likelihood.check).
+        is a likelihood without data, its model can have missing values
+        but its likelihood has no residual for them (see
+        LikelihoodGaussian), its likelihood fits a noise but it has no
+        name, the noise of an item is correlated where its kind of data
+        cannot have it (see Dataset.noise_correlation), or its likelihood
+        does not suit it (see Likelihood.check).
     """
 
     def __init__(
@@ -139,7 +139,7 @@ class Observation(TypedSerializable, abc.ABC):
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             name: str | None = None,
-            model_can_lack_values: bool = False
+            model_can_have_missing_values: bool = False
     ):
         keys = tuple(keys)
         check_name(name)
@@ -168,20 +168,20 @@ class Observation(TypedSerializable, abc.ABC):
                     "'{name}_noise_scale_moment1')")
             likelihood = likelihood.with_prefix(
                 '' if name is None else f'{name}_')
-            if model_can_lack_values \
-                    and not likelihood.takes_lacking_values():
+            if model_can_have_missing_values \
+                    and not likelihood.takes_missing_values():
                 raise ValueError(
-                    "the model of the observation can lack values where the "
-                    "data have some (e.g. the velocity of a spectrum below "
-                    "its flux_floor): its likelihood needs the residual of "
-                    "such a value, the option missing_residual (e.g. 3; see "
-                    "LikelihoodGaussian)")
+                    "the model of the observation can have missing values "
+                    "where the data have some (e.g. the velocity of a "
+                    "spectrum below its flux_floor): its likelihood needs "
+                    "the residual of such a value, the option "
+                    "missing_residual (e.g. 3; see LikelihoodGaussian)")
         self._keys = keys
         self._galaxies = galaxies
         self._data = data
         self._likelihood = likelihood
         self._name = name
-        self._model_can_lack_values = model_can_lack_values
+        self._model_can_have_missing_values = model_can_have_missing_values
 
     def name(self) -> str | None:
         """Return its name, if any."""
@@ -232,13 +232,13 @@ class Observation(TypedSerializable, abc.ABC):
         """Return the names of its data items (e.g. 'spectra')."""
         return self._keys
 
-    def model_can_lack_values(self) -> bool:
+    def model_can_have_missing_values(self) -> bool:
         """
-        Check whether its model can lack values (NaN) where the data have
-        some: the likelihood then needs a residual for them (see
+        Check whether its model can have missing values (NaN) where the
+        data have some: the likelihood then needs a residual for them (see
         LikelihoodGaussian).
         """
-        return self._model_can_lack_values
+        return self._model_can_have_missing_values
 
     def flux_scale(self) -> tuple[str, FluxScale] | None:
         """

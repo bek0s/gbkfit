@@ -122,10 +122,11 @@ objective_amplitude_terms(
 // normalisation of the Gaussian, c^2 log(noise^2), less a part that the
 // noise does not change, so that it is never negative (the scale is at
 // least scale_minimum). The values the data mask have none (an upper
-// limit is a probability, which has no normalisation). A value the model
-// lacks has that of the noise of its error, c^2 log(1 / reference^2),
-// which the noise does not change (its residual, 'missing', does not take
-// the noise): without it, lacking a value would save its share.
+// limit is a probability, which has no normalisation). A value missing
+// from the model has that of the noise of its error, c^2 log(1 /
+// reference^2), which the noise does not change (its residual, 'missing',
+// does not take the noise): without it, a missing value would save its
+// share.
 template<typename T> constexpr double
 objective_noise_term(
         long long i,

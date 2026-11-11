@@ -24,7 +24,7 @@ from gbkfit.model import (
     DataUnit, Emission, Extras, GalaxyState, LightUnit)
 from gbkfit.params import ParamValues
 from ._options import (
-    GRID_OPTIONS, dump_grid, require_no_options_from_data,
+    GRID_OPTIONS, check_no_options_from_data, dump_grid,
     without_options_from_data)
 
 if TYPE_CHECKING:
@@ -190,7 +190,7 @@ class Observable(TypedSerializable, abc.ABC):
         """
         if dataset is None:
             return cls(**parse_options_for_callable(info, cls.__init__))
-        require_no_options_from_data(cls, info, dataset)
+        check_no_options_from_data(cls, info, dataset)
         return cls.from_data(dataset, **parse_options_for_callable(
             info, cls.from_data, ignore_params=['dataset']))
 
@@ -317,18 +317,19 @@ class Observable(TypedSerializable, abc.ABC):
         Check whether its model is linear in the light of what it sees:
         the sum of the models of parts of the light, each times its
         amplitude (e.g. images and spectra, but not moments, which are
-        ratios of sums of the light, nor a model that can lack values, see
-        model_can_lack_values), so that amplitudes of the light can be
-        solved (see params.Solve); False here.
+        ratios of sums of the light, nor a model that can have missing
+        values, see model_can_have_missing_values), so that amplitudes of
+        the light can be solved (see params.Solve); False here.
         """
         return False
 
     @abc.abstractmethod
-    def model_can_lack_values(self) -> bool:
+    def model_can_have_missing_values(self) -> bool:
         """
-        Check whether its model can lack values (NaN) where the data have
-        some (e.g. the velocity of a spectrum below its flux_floor): the
-        likelihood then needs a residual for them (see LikelihoodGaussian).
+        Check whether its model can have missing values (NaN) where the
+        data have some (e.g. the velocity of a spectrum below its
+        flux_floor): the likelihood then needs a residual for them (see
+        LikelihoodGaussian).
         """
         pass
 
@@ -459,7 +460,7 @@ class Observable(TypedSerializable, abc.ABC):
                 f"(e.g. of Schwarzschild kinematics) are seen by "
                 f"{', '.join(seeing)}; {self.type()} does not see them")
 
-    def require_matching(self, dataset: Dataset) -> None:
+    def check_dataset(self, dataset: Dataset) -> None:
         """
         Check that a dataset holds the data of this observable.
 
@@ -477,16 +478,16 @@ class Observable(TypedSerializable, abc.ABC):
         ValueError
             If the dataset does not hold the data of this observable.
         """
-        self._require_dataset_class(dataset)
+        self._check_dataset_class(dataset)
         if set(dataset.keys()) != set(self.keys()):
             desc = make_typed_desc(self.__class__, 'observable')
             raise ValueError(
                 f"{desc} has the data items {sorted(self.keys())}, but the "
                 f"data have {sorted(dataset.keys())}")
-        self._require_matching_coordinates(dataset)
+        self._check_dataset_coordinates(dataset)
 
     @classmethod
-    def _require_dataset_class(cls, dataset: Dataset) -> None:
+    def _check_dataset_class(cls, dataset: Dataset) -> None:
         """Raise ValueError unless the dataset is of the dataset class."""
         if not isinstance(dataset, cls.dataset_class):
             desc = make_typed_desc(cls, 'observable')
@@ -494,7 +495,7 @@ class Observable(TypedSerializable, abc.ABC):
                 dataset.__class__, 'dataset')
             raise ValueError(f"{desc} cannot be compared with {dataset_desc}")
 
-    def _require_matching_coordinates(self, dataset: Dataset) -> None:
+    def _check_dataset_coordinates(self, dataset: Dataset) -> None:
         """
         Raise ValueError unless the data were measured on the grid of this
         observable. Observables of other data override this.

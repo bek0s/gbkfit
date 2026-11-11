@@ -178,7 +178,7 @@ class RegionsObservable(Observable):
             raise ValueError(
                 f"{self.type()} does not support pixel_weights yet")
 
-    def _require_matching_coordinates(self, dataset: Dataset) -> None:
+    def _check_dataset_coordinates(self, dataset: Dataset) -> None:
         if dataset.regions() != self._regions:
             raise ValueError(
                 "the data and the observable have different regions")

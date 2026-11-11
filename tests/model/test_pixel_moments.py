@@ -198,8 +198,9 @@ def test_at_least_one_moment_order():
 
 
 def test_a_cube_without_flux_somewhere_is_a_failed_model(driver):
-    # A spectrum below the flux floor has no moments (a value the model
-    # lacks); one whose flux is not a number is a model that failed
+    # A spectrum below the flux floor has no moments (a value missing
+    # from the model); one whose flux is not a number is a model that
+    # failed
     from gbkfit.observation.observables._moments import MomentsPlan
     from gbkfit.params import ModelEvaluationError
     plan = MomentsPlan(driver, (3, 2), (0, 1), 0.01, 'moments', np.float64)
