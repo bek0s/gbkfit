@@ -68,11 +68,20 @@ THICK_DISK_TRAITS = TraitTable('thick disk', {
     tuple(traits.DPT_DIRECTIONS))
 
 # The traits that the thin disks take: those of the thick ones, but the
-# height traits and the vertical distortions (their kinds are there,
-# empty), and velocity traits along every direction but away from the
-# plane, whose faces only a thick disk has
+# height traits, the vertical distortions and the dispersion of a vertical
+# equilibrium (their kinds are there, empty), and velocity traits along
+# every direction but away from the plane, whose faces only a thick disk
+# has; of the density height traits, only the vertical equilibrium, which
+# it does not draw (it gives its pressure support the density at its
+# midplane; it is not among the traits that the disk evaluates, see
+# NodalDisk.height_equilibrium)
+_THIN_ONLY = dict(
+    rht=(traits.RHTraitEquilibrium,), vht=(), dht=(), zpt=(),
+    dpt=tuple(
+        cls for cls in THICK_DISK_TRAITS.classes['dpt']
+        if cls is not traits.DPTraitEquilibrium))
 THIN_DISK_TRAITS = TraitTable('thin disk', {
-    kind: () if kind in ('rht', 'vht', 'dht', 'zpt') else classes
+    kind: _THIN_ONLY.get(kind, classes)
     for kind, classes in THICK_DISK_TRAITS.classes.items()},
     tuple(d for d in THICK_DISK_TRAITS.directions if d != 'away'),
     THICK_DISK_TRAITS.dispersion_directions)

@@ -294,9 +294,14 @@ def test_the_traits_each_type_of_component_takes_are_given(client):
     # (a cone takes only some density traits, and flows out or around)
     assert 'spiral' in takes['thin_disk']['traits']['rpt']
     assert 'spiral' not in takes['cone']['traits']['rpt']
-    # (a thin disk has no heights, warps out of its plane, or speeds away
-    # from it; a thick one has them)
-    for kind in ('rht', 'vht', 'dht', 'zpt'):
+    # (a thin disk has no heights but the vertical equilibrium that it does
+    # not draw, no dispersion of an equilibrium, warps out of its plane, or
+    # speeds away from it; a thick one has them)
+    assert takes['thin_disk']['traits']['rht'] == ['equilibrium']
+    assert 'equilibrium' in takes['thick_disk']['traits']['rht']
+    assert 'equilibrium' not in takes['thin_disk']['traits']['dpt']
+    assert 'equilibrium' in takes['thick_disk']['traits']['dpt']
+    for kind in ('vht', 'dht', 'zpt'):
         assert takes['thin_disk']['traits'][kind] == []
         assert takes['thick_disk']['traits'][kind]
     assert 'away' not in takes['thin_disk']['directions']
