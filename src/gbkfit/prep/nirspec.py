@@ -13,13 +13,11 @@ import astropy.units
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.instrument import SlitMaskShutters, TraceTable
 
 if TYPE_CHECKING:
     from gbkfit.dataset import DatasetSlitlessSpectra
-    from gbkfit.observation.observables.apertures import (
-        SlitlessApertureShutters)
     from gbkfit.observation.observables.slitless_spectra import Exposure
-    from gbkfit.observation.observables.traces import TraceTable
 
 
 __all__ = [
@@ -44,7 +42,7 @@ class SlitletSpectra:
         undispersed light.
     trace : TraceTable
         The trace, of the model of the instrument.
-    aperture : SlitlessApertureShutters
+    aperture : SlitMaskShutters
         The open shutters of the slitlet.
     exposures : tuple of Exposure
         The exposures combined into the spectra: the exposure, and those
@@ -53,8 +51,8 @@ class SlitletSpectra:
         Whether the spectra were resampled from the detector (rectified).
     """
     dataset: 'DatasetSlitlessSpectra'
-    trace: 'TraceTable'
-    aperture: 'SlitlessApertureShutters'
+    trace: TraceTable
+    aperture: SlitMaskShutters
     exposures: tuple['Exposure', ...]
     resampled: bool = False
 
@@ -444,12 +442,12 @@ def _along_image(sky: np.ndarray, rota: float) -> np.ndarray:
 def _nirspec_trace(
         slitlet: _NirspecSlitlet,
         shape: tuple[int, int],
-        aperture: 'SlitlessApertureShutters',
+        aperture: SlitMaskShutters,
         rpix: np.ndarray,
         step: tuple[float, float],
         rota: float,
         to_image: Callable[..., tuple[np.ndarray, np.ndarray]]
-) -> 'TraceTable':
+) -> TraceTable:
     """
     Return the trace of a slitlet of NIRSpec on an image of its spectra
     (of the given shape and world coordinates of the undispersed light),
@@ -458,7 +456,6 @@ def _nirspec_trace(
     to the slit frame, and from there to the image by to_image (x, y,
     wavelength).
     """
-    from gbkfit.observation.observables.traces import TraceTable
     nx = shape[1]
     wave = np.linspace(
         *slitlet.wave, max(4, nx // _NIRSPEC_WAVE_NODE_PIXELS))
@@ -485,15 +482,13 @@ def _nirspec_trace(
     return TraceTable(wave, x, y, dx, dy)
 
 
-def _nirspec_shutters(slitlet: _NirspecSlitlet) -> 'SlitlessApertureShutters':
+def _nirspec_shutters(slitlet: _NirspecSlitlet) -> SlitMaskShutters:
     """
     Return the open shutters of a slitlet of NIRSpec, along the axes of
     its image, from the centre of the shutter of the source: of the open
     size and the pitch of its shutters along the slit (y, against that of
     the slit frame).
     """
-    from gbkfit.observation.observables.apertures import (
-        SlitlessApertureShutters)
     state = slitlet.state
     if 'x' not in state or set(state) - {'1', 'x'}:
         raise ValueError(
@@ -502,7 +497,7 @@ def _nirspec_shutters(slitlet: _NirspecSlitlet) -> 'SlitlessApertureShutters':
     width, length = np.hypot(*slitlet.axes)
     pitch = slitlet.yscale * length
     middle = (len(state) - 1) / 2 - state.index('x')
-    return SlitlessApertureShutters(
+    return SlitMaskShutters(
         size=(width, length), pitch=pitch, count=len(state),
         centre=(0.0, -middle * pitch))
 
