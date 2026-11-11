@@ -51,6 +51,10 @@ RHT_UID_GGAUSS = 4
 RHT_UID_LORENTZ = 5
 RHT_UID_MOFFAT = 6
 RHT_UID_SECH2 = 7
+# The uid of a tabulated height (see RHTraitEquilibrium), and its heights:
+# this many, from 0 to its zmax
+RHT_UID_TABLE = 8
+RHT_TABLE_NHEIGHTS = 65
 
 # The uid of the velocity height trait 'mass' (of the velocity alone,
 # from 201; the factors that the velocity and the dispersion share are in

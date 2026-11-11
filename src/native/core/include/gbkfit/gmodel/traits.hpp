@@ -4,6 +4,17 @@
 
 #include "gbkfit/math/math.hpp"
 
+// Out of line on a GPU: the code of a rare trait, whose registers would
+// otherwise slow the kernels of every component that could take it (e.g.
+// the tabulated heights, see rh_trait_table_pdf: inlined in the switch of
+// the heights, 22-37% for thick disks of none). The host inlines it at no
+// cost, and out of line there, the switch of the heights is slower.
+#if defined(__CUDACC__)
+#define GBKFIT_NOINLINE __noinline__
+#else
+#define GBKFIT_NOINLINE
+#endif
+
 namespace gbkfit {
 
 // The uids of the traits. The shapes that the polar traits of several
@@ -87,6 +98,7 @@ constexpr int RHT_UID_GGAUSS = 4;
 constexpr int RHT_UID_LORENTZ = 5;
 constexpr int RHT_UID_MOFFAT = 6;
 constexpr int RHT_UID_SECH2 = 7;
+constexpr int RHT_UID_TABLE = 8;
 constexpr int SPT_UID_AZRANGE = 1;
 constexpr int SPT_UID_RRANGE = 2;
 constexpr int SPT_UID_NW_AZRANGE = 101;
@@ -1132,6 +1144,126 @@ rh_trait_sech2_rnd(
             out, rng, rnidx, rnodes, nrnodes, r, consts, params);
 }
 
+// A tabulated density height trait (the vertical equilibrium in the
+// gravity of the galaxy, see traits.RHTraitEquilibrium): its pdf at the
+// n = consts[1] heights z_k = k zmax / (n - 1) from 0 to zmax = consts[0],
+// linear between them, even in z and 0 beyond zmax, and its cumulative
+// half H_k = int_0^z_k pdf (H_(n-1) = 1/2): 2 n node-wise parameters, the
+// pdf at each height, then H, one after the other, linear between the
+// nodes (its galaxy normalises them over [-zmax, zmax]).
+
+// The interval k and the fraction t in it of the height a (0 <= a <=
+// zmax) on the heights of a table of n of them from 0 to zmax
+template<typename T> constexpr void
+rh_table_interval(int& k, T& t, T a, T zmax, int n)
+{
+    const T u = std::min(a / zmax, T{1}) * (n - 1);
+    k = std::min(static_cast<int>(u), n - 2);
+    t = u - k;
+}
+
+template<typename T> GBKFIT_NOINLINE constexpr void
+rh_trait_table_pdf(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    const T zmax = consts[0];
+    const int n = static_cast<int>(consts[1]);
+    // (a height that is not a number gives NaN, so that it is seen: its
+    // conversion to int would be undefined)
+    if (std::isnan(z) || std::abs(z) > zmax) {
+        out = std::isnan(z) ? z : T{0};
+        return;
+    }
+    int k = 0;
+    T t = 0;
+    rh_table_interval(k, t, std::abs(z), zmax, n);
+    const T lo = nodewise(r, rnidx, rnodes, params, k * nrnodes, 1);
+    const T hi = nodewise(r, rnidx, rnodes, params, (k + 1) * nrnodes, 1);
+    out = lo + t * (hi - lo);
+}
+
+// The cumulative distribution of a tabulated height trait from -zmax to
+// z: 1/2 + sign(z) H(|z|), of H between the heights of its pdf, linear
+// there; 0 and 1 beyond zmax
+template<typename T> constexpr T
+rh_trait_table_cdf(
+        int rnidx, const T* rnodes, int nrnodes, T r, T z,
+        const T* consts, const T* params)
+{
+    const T zmax = consts[0];
+    const int n = static_cast<int>(consts[1]);
+    if (!(std::abs(z) < zmax))
+        return z < 0 ? T{0} : T{1};
+    int k = 0;
+    T t = 0;
+    rh_table_interval(k, t, std::abs(z), zmax, n);
+    const T dz = zmax / (n - 1);
+    const T lo = nodewise(r, rnidx, rnodes, params, k * nrnodes, 1);
+    const T hi = nodewise(r, rnidx, rnodes, params, (k + 1) * nrnodes, 1);
+    const T half = nodewise(r, rnidx, rnodes, params, (n + k) * nrnodes, 1)
+            + dz * t * (lo + t * (hi - lo) / 2);
+    return z < 0 ? T{0.5} - half : T{0.5} + half;
+}
+
+// The mean of a tabulated height trait over the heights [z - w, z + w],
+// from its cumulative distribution; its pdf at z for w under 1% of the
+// spacing of its heights (see rh_trait_mean_width)
+template<typename T> GBKFIT_NOINLINE constexpr void
+rh_trait_table_mean(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z, T w,
+        const T* consts, const T* params)
+{
+    const T dz = consts[0] / (consts[1] - 1);
+    if (rh_trait_mean_width(w, dz) == 0) {
+        rh_trait_table_pdf(out, rnidx, rnodes, nrnodes, r, z, consts, params);
+        return;
+    }
+    out = (rh_trait_table_cdf(rnidx, rnodes, nrnodes, r, z + w, consts, params)
+           - rh_trait_table_cdf(rnidx, rnodes, nrnodes, r, z - w, consts, params))
+            / (2 * w);
+}
+
+// A random height of a tabulated height trait: the side of the midplane,
+// then the height a of the half H(a) = |u - 1/2| of a uniform draw u: its
+// interval (by bisection on H), and its fraction t there, of the quadratic
+// H_k + dz t (p_k + t (p_(k+1) - p_k) / 2)
+template<typename T> GBKFIT_NOINLINE constexpr void
+rh_trait_table_rnd(
+        T& out, RNG<T>& rng,
+        int rnidx, const T* rnodes, int nrnodes, T r,
+        const T* consts, const T* params)
+{
+    const T zmax = consts[0];
+    const int n = static_cast<int>(consts[1]);
+    const T u = rng();
+    const T h = std::abs(u - T{0.5});
+    auto half = [&](int k) {
+        return nodewise(r, rnidx, rnodes, params, (n + k) * nrnodes, 1);
+    };
+    int lo = 0, hi = n - 1;
+    while (hi - lo > 1) {
+        const int mid = (lo + hi) / 2;
+        (half(mid) <= h ? lo : hi) = mid;
+    }
+    const T dz = zmax / (n - 1);
+    const T p0 = nodewise(r, rnidx, rnodes, params, lo * nrnodes, 1);
+    const T p1 = nodewise(r, rnidx, rnodes, params, (lo + 1) * nrnodes, 1);
+    // (dz (p0 t + (p1 - p0) t^2 / 2) = h - H_lo, for t in [0, 1]: the
+    // root of a = (p1 - p0) / 2, b = p0, c = -(h - H_lo) / dz, stable
+    // where a is 0)
+    const T c = (h - half(lo)) / dz;
+    const T a = (p1 - p0) / 2;
+    const T disc = std::sqrt(std::max(p0 * p0 + 4 * a * c, T{0}));
+    const T denom = p0 + disc;
+    const T t = denom > 0 ? std::min(std::max(2 * c / denom, T{0}), T{1})
+                          : T{0};
+    const T a_height = (lo + t) * dz;
+    out = u < T{0.5} ? -a_height : a_height;
+}
+
 // The speeds of the velocity polar traits along their directions (see
 // vp_disk_project): v, the speed parameter of each, is its asymptotic or
 // maximum speed
@@ -1793,6 +1925,10 @@ rh_trait(
         rh_trait_sech2_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
         break;
+    case RHT_UID_TABLE:
+        rh_trait_table_pdf(
+                out, rnidx, rnodes, nrnodes, r, z, consts, params);
+        break;
     default:
         out = NAN;
         assert(false);
@@ -1841,6 +1977,10 @@ rh_trait_mean(
         rh_trait_mean_1p<sech2_1d_pdf<T>, sech2_1d_cdf<T>>(
                 out, rnidx, rnodes, r, z, w, consts, params);
         break;
+    case RHT_UID_TABLE:
+        rh_trait_table_mean(
+                out, rnidx, rnodes, nrnodes, r, z, w, consts, params);
+        break;
     default:
         out = NAN;
         assert(false);
@@ -1883,6 +2023,10 @@ rh_trait_rnd(
         break;
     case RHT_UID_SECH2:
         rh_trait_sech2_rnd(
+                out, rng, rnidx, rnodes, nrnodes, r, consts, params);
+        break;
+    case RHT_UID_TABLE:
+        rh_trait_table_rnd(
                 out, rng, rnidx, rnodes, nrnodes, r, consts, params);
         break;
     default:

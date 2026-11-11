@@ -479,8 +479,6 @@ def test_the_mass_in_the_layer_of_a_thick_disk_takes_its_sheet():
         type='equilibrium', gravity='rotation', zmax=10)), {}, "not both"),
     (unbalanced(DISK, dict(type='uniform')) | dict(rhtraits=dict(
         type='equilibrium', gravity='rotation')), {}, "give it zmax"),
-    (unbalanced(DISK, dict(type='uniform')) | dict(rhtraits=dict(
-        type='equilibrium', gravity='galaxy', zmax=10)), {}, "'galaxy'"),
     (unbalanced(DISK, dict(type='uniform')) | dict(
         rhtraits=dict(type='equilibrium', gravity='rotation', zmax=10),
         dhtraits=dict(type='exponential')), {}, "must be 'one'"),
@@ -503,5 +501,75 @@ def test_the_mass_in_the_layer_of_a_thick_disk_takes_its_sheet():
          type='equilibrium', gravity='rotation', zmax=10)), {},
      "equilibrium")])
 def test_the_balance_of_the_thickness_is_checked(disk, info, message):
+    with pytest.raises((ConfigError, ValueError), match=message):
+        galaxy(disk, **info)
+
+
+@pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])
+def test_a_thick_disk_draws_its_profile_in_the_force_of_the_mass(
+        driver, disk_type):
+    # Far from a point mass, its force is nearly harmonic, F_z = -nu^2 z,
+    # nu^2 = G M / R^3: the profile exp(-(Phi(z) - Phi(0)) / sigma^2) is
+    # nearly the Gaussian of h = sigma / nu, which the disk draws at its
+    # rings far from it (here R > 10 arcsec: h / R < 0.04)
+    info = dict(mass=[dict(type='point', name='bh')],
+                distance=dict(type='parameter'))
+    # (of no light within 8 arcsec)
+    disk = unbalanced(DISK, dict(type='uniform')) | dict(
+        rnodes=list(range(0, 31, 2)), rptraits=dict(type='nw_uniform'))
+    if disk_type == 'clouds':
+        disk |= dict(clouds=dict(cflux=1e-3))
+    balanced = galaxy(disk | dict(rhtraits=dict(
+        type='equilibrium', gravity='galaxy', zmax=4)), **info)
+    given = galaxy(disk | dict(rhtraits=dict(
+        type='gauss', zmax=4, nodewise=True, sampling='subrings')), **info)
+    properties = {key: value for key, value in PROPERTIES.items()
+                  if key not in ('rht_s', 'rpt_s')} | dict(
+        rpt_a=[0] * 5 + [1] * 11, dpt_a=10, distance=10, mass_bh_log_m=11,
+        vpt_vt=200)
+    radii = np.array(given.constants()['subrnodes'])
+    nu = np.zeros_like(radii)
+    nu[1:] = np.sqrt(G * 1e11 / (radii[1:] * KPC_PER_ARCSEC) ** 3)
+    nu[0] = nu[1]
+    extra = Extras()
+    balanced.plan_stage().evaluate(properties, extra)
+    table = extra.get('equilibrium', component='component0')
+    far = radii > 8
+    np.testing.assert_allclose(
+        np.asarray(table['height'])[far],
+        (10 / nu / KPC_PER_ARCSEC)[far], rtol=2e-2)
+    assert np.max(table['edge']) < 1e-6
+    drawn = evaluate(driver, balanced, properties)
+    gaussian = evaluate(
+        driver, given, properties | dict(rht_s=10 / nu / KPC_PER_ARCSEC))
+    np.testing.assert_allclose(drawn.sum(), gaussian.sum(), rtol=1e-3)
+    if disk_type == 'smooth':
+        np.testing.assert_allclose(
+            drawn, gaussian, atol=3e-2 * gaussian.max())
+    else:
+        # (clouds drawn by other draws: within the noise of the sampling
+        # of the Gaussian clouds, about their smooth disk, in their maps of
+        # the sum over the channels)
+        smooth = {key: value for key, value in given.dump().items()}
+        smooth['components'][0].pop('clouds')
+        mean = evaluate(
+            driver, galaxy_parser.load(smooth),
+            properties | dict(rht_s=10 / nu / KPC_PER_ARCSEC)).sum(axis=0)
+        noise = np.abs(gaussian.sum(axis=0) - mean).max()
+        assert np.abs(drawn.sum(axis=0) - gaussian.sum(axis=0)).max() \
+            < 1.5 * noise
+
+
+@pytest.mark.parametrize('disk, info, message', [
+    (THIN | dict(rhtraits=dict(type='equilibrium', gravity='galaxy')),
+     FOLLOWED, "a thin disk takes 'sheet' or 'rotation'"),
+    (unbalanced(DISK, dict(type='uniform')) | dict(name='gas', rhtraits=dict(
+        type='equilibrium', gravity='galaxy', zmax=4)), FOLLOWED,
+     "not supported yet"),
+    (unbalanced(DISK, dict(type='uniform')) | dict(rhtraits=dict(
+        type='equilibrium', gravity='galaxy', zmax=4)), {},
+     "needs the mass of its galaxy")])
+def test_the_galaxy_equilibrium_of_the_thickness_is_checked(
+        disk, info, message):
     with pytest.raises((ConfigError, ValueError), match=message):
         galaxy(disk, **info)

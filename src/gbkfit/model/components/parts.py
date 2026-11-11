@@ -153,6 +153,12 @@ def density_traits(
             "a thin disk takes one density height trait, its vertical "
             "equilibrium, which it does not draw (a disk whose density has "
             "a height is a thick disk)")
+    if equilibrium is not None and not thick \
+            and equilibrium.gravity() == 'galaxy':
+        raise ValueError(
+            "the vertical equilibrium 'galaxy' of a disk is its profile in "
+            "the force of the mass, which a thick disk draws: a thin disk "
+            "takes 'sheet' or 'rotation'")
     if equilibrium is not None and equilibrium.drawn() != thick:
         raise ValueError(
             "a thick disk draws its vertical equilibrium within its zmax: "

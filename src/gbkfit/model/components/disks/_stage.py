@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 
 import astropy.units as u
 import numpy as np
+import scipy.integrate
 from astropy.table import Table
 
 from gbkfit.driver import Driver
@@ -52,6 +53,13 @@ _EQUILIBRIUM_DESCRIPTION = (
     "equilibrium takes there (the circular velocity, vcirc, km/s, or the "
     "surface density, surface_density, Msun/kpc^2), and the velocity "
     "dispersion that holds it up (sigma, km/s).")
+_GALAXY_HEIGHT_DESCRIPTION = (
+    "The vertical equilibrium of the thickness of the disk of the "
+    "component in the force of the mass of the galaxy, at its subnodes "
+    "(radius, arcsec): the rms height of its profile (height, arcsec), the "
+    "share of its column within a height step of its zmax (edge: what "
+    "zmax cuts, if not small), and the vertical dispersion that holds it "
+    "up (sigma, km/s).")
 _HEIGHT_DESCRIPTION = (
     "The vertical equilibrium of the thickness of the disk of the "
     "component at its subnodes (radius, arcsec): the scale height of its "
@@ -199,18 +207,18 @@ class DiskStage(ComponentStage):
             self, values: ParamValues, mass: GalaxyMass
     ) -> ParamValues:
         """
-        Return the scale heights of the vertical equilibrium of the
+        Return the scale heights of the vertical equilibrium 'sheet' of the
         thickness of its disk at its subnodes, if it draws one (see
         _height_scales; by the names of their parameters, see
         NodalDisk.height_params), in the mass of its galaxy as it is built:
         of the surface density of its fluid, which does not take them
-        (the equilibrium 'sheet'; 'rotation' is of a galaxy without mass).
+        ('rotation' is of a galaxy without mass, and the mass does not
+        follow the layer of a disk of 'galaxy', see ComponentSet).
         """
-        if not self._disk.height_params():
+        height = self._disk.height_equilibrium()
+        if not self._disk.height_params() or height.gravity() != 'sheet':
             return {}
-        return dict.fromkeys(
-            self._disk.height_params(),
-            self._height_scales(values, mass, None))
+        return self._heights(values, mass, None)
 
     def light_params(self) -> tuple[str, ...]:
         """
@@ -276,9 +284,7 @@ class DiskStage(ComponentStage):
         # at the subnodes, or of a thin disk, at the radii of the pressure)
         heights = {}
         if disk.height_params():
-            heights = dict.fromkeys(
-                disk.height_params(),
-                self._height_scales(values, mass, out_extra))
+            heights = self._heights(values, mass, out_extra)
             values = values | heights
         elif disk.height_equilibrium() is not None and out_extra is not None:
             self._height_scales(values, mass, out_extra)
@@ -460,6 +466,107 @@ class DiskStage(ComponentStage):
                     radii, heights, taken, sigma),
                 "Vertical equilibrium", _EQUILIBRIUM_DESCRIPTION)
         return sigma
+
+    def _heights(
+            self,
+            values: ParamValues,
+            mass: GalaxyMass | None,
+            out_extra: Extras | None
+    ) -> ParamValues:
+        """
+        Return the values of the parameters of the vertical equilibrium of
+        the thickness of its disk at its subnodes (by their names, see
+        NodalDisk.height_params), from the values of its parameters and
+        the mass of the galaxy (None without mass): its table of 'galaxy'
+        (see _height_tables), or its scales of 'sheet' and 'rotation' (see
+        _height_scales). With extra outputs, its table (see state).
+        """
+        disk = self._disk
+        if disk.height_equilibrium().gravity() != 'galaxy':
+            return dict.fromkeys(
+                disk.height_params(),
+                self._height_scales(values, mass, out_extra))
+        tables = self._height_tables(values, mass)
+        if out_extra is not None:
+            out_extra.add(
+                'equilibrium', self._height_table(values, tables),
+                "Vertical equilibrium", _GALAXY_HEIGHT_DESCRIPTION)
+        return tables
+
+    def _height_tables(
+            self, values: ParamValues, mass: GalaxyMass
+    ) -> ParamValues:
+        """
+        Return the table of the vertical equilibrium 'galaxy' of the
+        thickness of its disk at its subnodes (see
+        traits.RHTraitEquilibrium): its pdf and its cumulative half at its
+        heights, normalised over [-zmax, zmax] as the kernels take them
+        (linear between the heights), by the names of their parameters,
+        from the values of its parameters and the mass of the galaxy: of
+        its vertical dispersion at its midplane sigma_z and the vertical
+        force F_z of the mass, exp(-(Phi(z) - Phi(0)) / sigma_z^2), Phi(z)
+        - Phi(0) = -int_0^z F_z (on heights four times finer). At the
+        centre, where a point mass makes the force infinite, the table of
+        the next subnode.
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the dispersion is not positive, or the force or the surface
+            density gives no table, at a radius where the disk has light.
+        """
+        disk = self._disk
+        trait = disk.height_equilibrium()
+        radii = np.asarray(disk.subrnodes())
+        z = trait.heights()
+        kpc = mass.kpc_per_arcsec
+        sigma = dispersion(disk, self._plan, values, radii, direction='ver')
+        with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
+            fine = np.linspace(0, trait.zmax(), 4 * (len(z) - 1) + 1)
+            R, h = np.broadcast_arrays(radii[:, None], fine)
+            # ((km/s)^2 per arcsec)
+            force = mass.field.vertical_force(R * kpc, h * kpc) * kpc
+            potential = -scipy.integrate.cumulative_trapezoid(
+                force, fine, initial=0, axis=1)
+            pdf = np.exp(-potential / sigma[:, None] ** 2)[:, ::4]
+            if radii[0] == 0:
+                pdf[0] = pdf[1]
+            pdf = pdf / (2 * scipy.integrate.trapezoid(pdf, z, axis=1))[
+                :, None]
+        solved = np.isfinite(pdf).all(axis=1) & (sigma > 0)
+        _check_solved(
+            solved, self._lit(values, radii),
+            radii, "the vertical equilibrium 'galaxy' of the thickness",
+            "its vertical dispersion is not positive, or the force of the "
+            "mass gives no profile")
+        # (no light there: any table the kernels can draw, a uniform one)
+        pdf[~solved] = 1 / (2 * trait.zmax())
+        half = scipy.integrate.cumulative_trapezoid(pdf, z, initial=0, axis=1)
+        return dict(zip(disk.height_params(), [*pdf.T, *half.T]))
+
+    def _height_table(
+            self, values: ParamValues, tables: ParamValues
+    ) -> Table:
+        """
+        Return the table of the vertical equilibrium 'galaxy' of its disk
+        at its subnodes (see state): their radii, the rms height of the
+        profile, the share of its column within a height step of its zmax
+        (an estimate of what zmax cuts), and its vertical dispersion.
+        """
+        disk = self._disk
+        trait = disk.height_equilibrium()
+        radii = np.asarray(disk.subrnodes())
+        z = trait.heights()
+        n = len(z)
+        pdf = np.stack([tables[name] for name in disk.height_params()[:n]], 1)
+        table = Table()
+        table['radius'] = radii * u.arcsec
+        table['height'] = np.sqrt(2 * scipy.integrate.trapezoid(
+            z ** 2 * pdf, z, axis=1)) * u.arcsec
+        table['edge'] = pdf[:, -1] * (z[1] - z[0]) * 2
+        table['sigma'] = dispersion(
+            disk, self._plan, values, radii, direction='ver') * u.km / u.s
+        return table
 
     def _height_scales(
             self,

@@ -28,8 +28,8 @@ from .distance import Distance
 from .extras import Extras
 from .gravity import Capability, Gravity, GravityNewton
 from .mass import (
-    ComponentDensity, DiskDensity, MassComponent, MassModel, SpheroidDensity,
-    mass_component_parser)
+    ComponentDensity, DiskDensity, MassComponent, MassDisk, MassModel,
+    SpheroidDensity, mass_component_parser)
 
 
 __all__ = [
@@ -122,14 +122,20 @@ def _check_fluids(
     mass disks that follow each disk, whose surface density its
     equilibrium 'sheet' takes; that no disk balances its rotation (the
     equilibrium 'rotation') next to a mass model, where the vertical
-    frequency of a disk is 2.5-3 times its angular speed. The galaxy has
-    thick components of the given names.
+    frequency of a disk is 2.5-3 times its angular speed; and that no mass
+    disk follows the layer of a disk of the equilibrium 'galaxy' of its
+    thickness (the mass would take the thickness that its own force sets:
+    not yet). The galaxy has thick components of the given names.
 
     Raises
     ------
     ValueError
         If one of these does not hold.
     """
+    layers = {
+        mass.vertical().followed_component()
+        for mass in mass_model.components() if isinstance(mass, MassDisk)
+    } - {None}
     for cmp in components:
         if not isinstance(cmp, Disk):
             continue
@@ -144,6 +150,14 @@ def _check_fluids(
                 f"rotation, which is not that of a galaxy of mass (a disk "
                 f"pulls 2.5-3 times harder where it dominates): give it the "
                 f"equilibrium 'galaxy' or 'sheet'")
+        if gravity == 'galaxy' and cmp.height_equilibrium() is not None \
+                and cmp.name() in layers:
+            raise ValueError(
+                f"a mass disk follows the layer of the component {label}, "
+                f"whose thickness is its equilibrium in the force of the "
+                f"mass: a mass that takes the thickness that its own force "
+                f"sets is not supported yet; give the mass disk a vertical "
+                f"structure of its own, or the disk the equilibrium 'sheet'")
         fluid = mass_model.fluid(cmp.name(), cmp.fluid())
         if gravity != 'sheet' or cmp.fluid():
             continue
