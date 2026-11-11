@@ -470,7 +470,8 @@ class LensMultipole(LensMass):
     of the lens it deviates (tied by expressions).
 
     Its parameters (see pdescs): theta_e (arcsec; the scale of a), a (the
-    strength), pa (degrees), x and y (see the module).
+    strength), pa (degrees, of a period of 360 / m: the convergence
+    repeats every 360 / m degrees), x and y (see the module).
 
     Parameters
     ----------
@@ -517,7 +518,7 @@ class LensMultipole(LensMass):
                 "the strength", title='Strength', unit='', default=0),
             pa=ParamScalarDesc(
                 "the position angle", title='Position angle', unit='deg',
-                default=0, period=360),
+                default=0, period=360 / self._order),
         ) | _centre_pdescs()
 
     def deflection(

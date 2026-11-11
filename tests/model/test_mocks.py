@@ -4,6 +4,7 @@ goes in where its instrument records the data, and the errors of the
 data are those of the noise, or the scatter of the measured data.
 """
 
+import astropy.units as u
 import gbkfit.params
 import numpy as np
 import pytest
@@ -116,6 +117,63 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
         assert objective.nindependent() < objective.nresiduals()
 
 
+@pytest.mark.parametrize('psf', [
+    dict(type='gauss', sigma=1.5), dict(type='moffat', alpha=2, beta=3)])
+def test_mocks_without_data_have_the_unit_and_beam_of_their_model(
+        driver, psf):
+    # Without data, the model of an observation in Jy/beam (its option
+    # unit) is per the beam of its PSF: its mocks have that unit and beam
+    # (of a PSF that is not a Gaussian, the round Gaussian of its solid
+    # angle), and the observation of them has the model they were drawn
+    # from (they had neither, and could not be fitted: audit 2026-11-11)
+    from gbkfit.observation import ObservationGroup
+    hi = disk('lines') | dict(emission=dict(
+        type='lines', lines=['hi21'], unit='Msun/pc2'))
+    plan = group_plan([dict(
+        driver=dict(type=driver.type()), galaxy=dict(components=[hi]),
+        line_of_sight=dict(type='flat'), observable=dict(
+            type='pixel_spectra', psf=psf) | RECORDED['pixel_spectra']
+        | dict(spectral=dict(
+            size=31, step=20, rest='1420.405751768 MHz')),
+        unit='Jy/beam')])
+    model, _, params = evaluate(plan)
+    [mock] = plan.mock(params, NoiseGauss(rms=0.01), seed=1)[0]
+    observation = plan.group().observations()[0]
+    psf = observation.instrument().psf()
+    beam = mock['spectra'].beam()
+    assert mock['spectra'].unit() == u.Jy / u.beam
+    assert beam.area() == pytest.approx(psf.beam_area(), rel=1e-12)
+    if psf.type() == 'gauss':
+        assert beam == psf.beam()
+    else:
+        assert beam.bmaj == beam.bmin
+    mocked = ObservationGroup(
+        plan.group().galaxies(), [observation.with_data(mock)])
+    np.testing.assert_allclose(
+        evaluate(mocked.plan(driver))[0]['spectra'], model['spectra'],
+        rtol=1e-6)
+
+
+def test_mocks_of_correlated_noise_have_float64_models(driver):
+    # As other data of correlated noise (see ObservationSky: dtype): an
+    # observation without data, of a float32 model, has a float64 model of
+    # such mocks, with a plan of its own (it kept float32: audit
+    # 2026-11-11)
+    plan = plan_of(driver, dict(
+        type='pixel_spectra', psf=dict(type='gauss', sigma=1.5))
+        | RECORDED['pixel_spectra'])
+    model, _, params = evaluate(plan)
+    assert model['spectra'].dtype == np.float32
+    [mock] = plan.mock(
+        params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
+        seed=1)[0]
+    mocked = evaluate(plan.with_data([mock]))[0]['spectra']
+    assert mocked.dtype == np.float64
+    np.testing.assert_allclose(
+        mocked, model['spectra'], rtol=1e-5,
+        atol=1e-6 * model['spectra'].max())
+
+
 def test_mocks_refuse_noise_of_a_varying_correlation(driver):
     # Noise correlated by a PSF that varies along the spectral axis can be
     # drawn, but the errors of data take one correlation for all the
@@ -174,3 +232,19 @@ def test_mock_options_are_checked_as_they_load(options, message):
         MockOptions.load(
             dict(noise=dict(type='gauss', rms=1)) | options).per_observation(3)
     assert str(error.value) == message
+
+
+def test_mock_options_dump_the_noise_of_each_observation(tmp_path):
+    # Its error map in a file of its own, named after the position of its
+    # observation, which loads again (they were all noise_error.fits, in
+    # the working directory, and the second was refused: audit 2026-11-11)
+    from gbkfit.observation import MockOptions
+    errors = [np.ones((4, 4)), np.full((4, 4), 2.0)]
+    prefix = str(tmp_path / 'mock_')
+    info = MockOptions([NoiseGauss(error=error) for error in errors]).dump(
+        prefix)
+    assert [noise['error'] for noise in info['noise']] == [
+        f'{prefix}observation{i}_noise_error.fits' for i in range(2)]
+    noises, _ = MockOptions.load(info).per_observation(2)
+    for noise, error in zip(noises, errors):
+        np.testing.assert_array_equal(noise.error(), error)

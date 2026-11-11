@@ -92,11 +92,12 @@ def _unit(
         observation: Observation, key: str
 ) -> astropy.units.UnitBase | None:
     """
-    Return the unit of a data item of an observation (which its model
-    takes too), if it has data with one; None otherwise.
+    Return the unit of the values of a data item of the model of an
+    observation: that of its data, or without data, the unit its model
+    has (e.g. the option unit on the sky; see Observation.model_unit);
+    None otherwise.
     """
-    data = observation.data()
-    return None if data is None else data[key].unit()
+    return observation.model_unit(key)[0]
 
 
 def evaluation_outputs(

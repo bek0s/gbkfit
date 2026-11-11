@@ -268,6 +268,18 @@ def test_the_deflection_of_a_multipole_is_that_of_its_convergence(order):
         rtol=1e-5, atol=1e-6)
 
 
+@pytest.mark.parametrize('order', [1, 3, 4])
+def test_the_position_angle_of_a_multipole_repeats_every_360_over_m(order):
+    # (its period was 360, which gave samplers m modes of one deflection:
+    # audit 2026-11-11)
+    mass = LensMultipole(order)
+    assert mass.pdescs()['pa'].period() == 360 / order
+    params = dict(theta_e=1.3, a=0.05, pa=30, x=0.2, y=-0.1)
+    np.testing.assert_allclose(
+        mass.deflection(GRID, params | dict(pa=30 + 360 / order)),
+        mass.deflection(GRID, params), atol=1e-12)
+
+
 def test_a_shear_stretches_along_its_position_angle():
     # alpha = gamma r along the position angle, and -gamma r across it
     pa = np.radians(30)
@@ -353,6 +365,58 @@ def test_the_frame_of_an_observation_moves_its_lens(driver):
         images.append(plan.model_h(params.evaluate())[1]['brightness'][
             'd'].copy())
     np.testing.assert_allclose(images[1], images[0], rtol=1e-5, atol=1e-6)
+
+
+def test_a_lens_is_placed_again_only_for_other_values(driver, monkeypatch):
+    # Its deflection, costly (seconds for an elliptical NFW halo on
+    # 400x400 pixels), is worked out again only when the values of its
+    # parameters change, not those of the galaxies alone (it was at every
+    # evaluation: audit 2026-11-11)
+    from gbkfit.observation import ObservationGroup, ObservationSky
+    calls = []
+    deflection = LensSIE.deflection
+
+    def counted(self, grid, params):
+        calls.append(params)
+        return deflection(self, grid, params)
+    monkeypatch.setattr(LensSIE, 'deflection', counted)
+    group = observation_group([dict(
+        driver=dict(type=driver.type()), galaxy=GALAXY,
+        line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))])
+    plain = group.observations()[0]
+    foreground = Foreground(Lens((40, 40), (0.5, 0.5), LensSIE()))
+    observation = ObservationSky(
+        plain.observable(), plain.line_of_sight(), foreground=foreground,
+        name='obs')
+    plan = ObservationGroup(group.galaxies(), [observation]).plan(driver)
+    cases = [
+        PROPERTIES | lens_params(theta_e=theta_e, q=0.8, pa=20, x=0, y=0)
+        | dict(rpt_s=rpt_s)
+        for rpt_s, theta_e in ((2, 3.0), (3, 3.0), (3, 4.0))]
+    images = []
+    for properties in cases:
+        params = gbkfit.params.ParamSpace.from_properties(
+            plan.group().pdescs(), properties)
+        images.append(plan.model_h(params.evaluate())[0]['brightness'][
+            'd'].copy())
+    assert len(calls) == 2
+    for image, properties in zip(images, cases):
+        np.testing.assert_allclose(
+            image, evaluate(driver, foreground, properties), rtol=1e-6,
+            atol=1e-7)
+
+
+def test_the_source_plane_is_where_the_image_is_on_the_sky():
+    # Its centre, the origin of the frame of the model, is at the RA and
+    # Dec of the reference pixel of the image, as the extra outputs of the
+    # model on it say (it was at 0, 0: audit 2026-11-11)
+    from gbkfit.driver.drivers.host import DriverHost
+    lens = Lens((10, 10), (0.5, 0.5), LensSIE())
+    image = make_grid((8, 8), 1.0, rval=(150.0, 2.0))
+    plan = lens.plan(
+        DriverHost(), image, np.dtype(np.float32),
+        {name: name for name in lens.pdescs()})
+    assert plan.source_grid(image).coords.rval == image.coords.rval
 
 
 def test_a_lens_refuses_pixel_weights_as_the_observation_is_made():

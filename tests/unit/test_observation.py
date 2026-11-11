@@ -128,6 +128,51 @@ def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
                 ), dtype='float64', fft_dtype='float32')
 
 
+def brightness(unit=None, spatial_correlation=None):
+    """An image of 8 x 8 pixels of 1 and errors 1, in the given unit."""
+    from gbkfit.dataset import DatasetPixelBrightness
+    return DatasetPixelBrightness(Data(
+        np.ones((8, 8)), error=np.ones((8, 8)), unit=unit,
+        spatial_correlation=spatial_correlation))
+
+
+def test_the_data_choose_the_dtype_unless_it_is_given():
+    # float64 for data of correlated noise, float32 otherwise: a copy of
+    # other data chooses again, and dumps keep only a given dtype (the
+    # copy kept the first choice, and dumps fixed it: audit 2026-11-11)
+    from gbkfit.instrument import PSFGauss
+    correlated = brightness(spatial_correlation=PSFGauss(1.0))
+    observable = PixelBrightness.from_data(correlated)
+    chosen = ObservationSky(observable, LineOfSightFlat())
+    assert chosen.dtype() == np.float32
+    assert 'dtype' not in chosen.dump()
+    assert chosen.with_data(correlated).dtype() == np.float64
+    given = ObservationSky(observable, LineOfSightFlat(), dtype='float32')
+    assert given.with_data(correlated).dtype() == np.float32
+    assert given.dump()['dtype'] == 'float32'
+
+
+def test_a_group_with_other_data_has_the_units_they_give():
+    # The parameters of a fitted noise are in the units of the data (see
+    # Likelihood.param_units): a group with data of another unit has its
+    # parameters in it (it kept the old: audit 2026-11-11)
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import FittedNoise, ObservationGroup
+    galaxy = galaxy_parser.load(dict(components=[dict(
+        type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+        emission=dict(type='band'))]))
+    data = brightness('Jy')
+    observation = ObservationSky(
+        PixelBrightness.from_data(data), LineOfSightFlat(), data=data,
+        likelihood=LikelihoodGaussian(noise=dict(
+            brightness=FittedNoise(jitter=True))), name='obs')
+    group = ObservationGroup([galaxy], [observation])
+    jitter = 'obs_noise_jitter_brightness'
+    assert group.pdescs()[jitter].unit() == u.Jy
+    assert group.with_data([brightness('mJy')]).pdescs()[jitter].unit() \
+        == u.mJy
+
+
 @pytest.mark.parametrize('options, message', [
     (dict(weights=dict(moment2=2)), r"does not have: \['moment2'\]"),
     (dict(upper_limits=dict(momnet0=UpperLimit(limit=1, error=0.1))),

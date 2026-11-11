@@ -18,7 +18,7 @@ from gbkfit.config import (
     Unit, check_options)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid, sky_positions
-from gbkfit.params import ParamValues
+from gbkfit.params import ParamValues, StageCache
 from gbkfit.utils import iterutils
 
 if TYPE_CHECKING:
@@ -227,7 +227,9 @@ class WeightsPlan:
     The evaluation of the weights of an observation on the spatial grid of
     its model: into a weight cube, the same in every channel, with the
     parameters of the geometry of the disk (their names in the parameters
-    of the observation group, by their names in the disk).
+    of the observation group, by their names in the disk). The weights are
+    worked out again only for evaluations at which the values of those
+    parameters change (e.g. not in a fit of a rotation curve alone).
     """
 
     def __init__(
@@ -244,16 +246,26 @@ class WeightsPlan:
         self._driver = driver
         self._dtype = dtype
         self._weight_d = driver.mem_alloc_d(self._x.shape, dtype)
+        self._weight_cache = StageCache(geometry.values())
 
     def evaluate(self, params: ParamValues, wcube: DeviceArray) -> None:
         """Write the weights of the pixels to every channel of wcube."""
+        self._weight_cache.evaluate(params, self._weigh)
+        # (wcube is written each time: an evaluation can smooth it in
+        # place, see DCube: smooth_weights)
+        self._driver.mem_fill(wcube, 1)
+        self._driver.math_mul(wcube, self._weight_d[None], out=wcube)
+
+    def _weigh(self, params: ParamValues) -> None:
+        """
+        Work out the weights of the pixels with the values of the
+        parameters of the geometry, and copy them to the device.
+        """
         geometry = {
             name: float(np.mean(params[full]))
             for name, full in self._geometry.items()}
         weight = self._weights.weight(geometry, self._x, self._y)
         self._driver.mem_copy_h2d(weight.astype(self._dtype), self._weight_d)
-        self._driver.mem_fill(wcube, 1)
-        self._driver.math_mul(wcube, self._weight_d[None], out=wcube)
 
 
 def plan_weights(

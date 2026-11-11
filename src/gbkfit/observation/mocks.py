@@ -62,8 +62,42 @@ class MockOptions(Serializable):
         self._nsamples = nsamples
         self._seed = seed
 
-    def dump(self) -> dict[str, Any]:
-        info: dict[str, Any] = dict(noise=noise_parser.dump(self._noise))
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        """
+        Dump the options to their configuration.
+
+        Parameters
+        ----------
+        prefix : str, optional
+            The start of the names of the files of the data of the noises
+            (e.g. an error map; see Noise.dump), followed by
+            'observation{i}_' for the noise of each observation i, when
+            there is one for each.
+        dump_path : bool, optional
+            Whether the configuration has the paths of the files, or only
+            their names.
+        overwrite : bool, optional
+            Whether to overwrite existing files.
+
+        Returns
+        -------
+        dict
+            The options.
+        """
+        if iterutils.is_sequence(self._noise):
+            count = len(self._noise)
+            noise = noise_parser.dump(
+                list(self._noise),
+                prefix=[f'{prefix}observation{i}_' for i in range(count)],
+                dump_path=[dump_path] * count, overwrite=[overwrite] * count)
+        else:
+            noise = noise_parser.dump(
+                self._noise, prefix=prefix, dump_path=dump_path,
+                overwrite=overwrite)
+        info: dict[str, Any] = dict(noise=noise)
         if self._likelihood is not None:
             info['likelihood'] = likelihood_parser.dump(self._likelihood)
         info.update(nmocks=self._nmocks, nsamples=self._nsamples)

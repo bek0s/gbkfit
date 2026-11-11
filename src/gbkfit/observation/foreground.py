@@ -14,7 +14,7 @@ from gbkfit.config import (
     BasicParser, Serializable, Unit, check_options, item_prefixes)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid, make_grid, sky_positions, sky_to_pixel
-from gbkfit.params import ParamScalarDesc, ParamValues
+from gbkfit.params import ParamScalarDesc, ParamValues, StageCache
 from gbkfit.utils import iterutils
 
 from .lens_masses import LensMass, lens_mass_parser
@@ -184,7 +184,8 @@ class LensPlan:
     The lensing of the cubes of the source plane of a lens to a grid of
     the image plane, on a driver: the position on the source plane of
     each pixel of the image (in pixels of the source), worked out once,
-    or for each evaluation if the lens has parameters.
+    or if the lens has parameters, again for each evaluation at which
+    their values change.
     """
 
     def __init__(
@@ -209,17 +210,24 @@ class LensPlan:
             lens.source_grid())
         self._source_x = driver.mem_alloc_d(self._sky[0].shape, dtype)
         self._source_y = driver.mem_alloc_d(self._sky[0].shape, dtype)
+        # (the deflection is costly, e.g. seconds for an elliptical NFW halo
+        # on 400x400 pixels: it is worked out again only when the values of
+        # the parameters of the lens change, e.g. not in a fit of the
+        # galaxies alone; without parameters, here)
+        self._placement = StageCache(self._names.values())
         if not self._names:
-            self._place({})
+            self._placement.evaluate({}, self._place)
         self._backend = driver.native_class('DModel', dtype)()
 
     def _place(self, params: ParamValues) -> None:
         """
         Work out the position on the source plane of each pixel of the
-        image, with the parameters of the lens, and copy it to the device.
+        image, with the values of the parameters of the lens (by the names
+        of the plan), and copy it to the device.
         """
         x, y = self._sky
-        deflection_x, deflection_y = self._lens.deflection(self._grid, params)
+        deflection_x, deflection_y = self._lens.deflection(self._grid, {
+            name: params[full] for name, full in self._names.items()})
         source_x = x - deflection_x
         source_y = y - deflection_y
         matrix, offset = self._matrix, self._offset
@@ -231,8 +239,10 @@ class LensPlan:
     def source_grid(self, grid: Grid) -> Grid:
         """
         Return the grid of the source plane for a model evaluated on the
-        given grid of the image plane: the x and y of the source plane, and
-        the other axes of the grid (e.g. the spectral axis).
+        given grid of the image plane: the x and y of the source plane,
+        whose centre, the origin of the frame of the model, is at the RA
+        and Dec of the reference pixel of the grid (see sky_positions),
+        and the other axes of the grid (e.g. the spectral axis).
         """
         source = self._lens.source_grid()
         return Grid(
@@ -240,9 +250,8 @@ class LensPlan:
             Coords(
                 source.coords.step + grid.coords.step[2:],
                 source.coords.rpix + grid.coords.rpix[2:],
-                source.coords.rval + grid.coords.rval[2:],
-                source.coords.rota, grid.coords.rest, grid.coords.medium,
-                grid.coords.convention),
+                grid.coords.rval, source.coords.rota, grid.coords.rest,
+                grid.coords.medium, grid.coords.convention),
             grid.spectral_axis)
 
     def evaluate(
@@ -256,13 +265,9 @@ class LensPlan:
         values of the parameters of the evaluation (those of the lens, if
         any, by the names of the plan).
         """
-        if self._names:
-            self._place({
-                name: params[full] for name, full in self._names.items()})
+        self._placement.evaluate(params, self._place)
         self._backend.lens_resample(
             self._source_x, self._source_y, source, image)
-
-
 
 
 lens_parser = BasicParser(Lens)
