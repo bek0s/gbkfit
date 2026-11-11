@@ -13,7 +13,7 @@ from gbkfit.driver import Driver
 from gbkfit.fitting import (
     Bootstrap, BootstrapOptions, EvaluationLog, Fitter, FitResult,
     ProgressObserver, SubFitLog, run_bootstrap)
-from gbkfit.objective import Evaluation, Objective
+from gbkfit.objective import Objective, ObjectiveEvaluation
 from gbkfit.observation import (
     GroupPlan, MockOptions, Observation, ObservationGroup, draw_mocks)
 from gbkfit.outputs import Output
@@ -43,13 +43,13 @@ class SetupEvaluation:
         The values of all parameters, with those of the solved elements
         that the objective solves there (without an objective, their
         values without data; see Solve.default).
-    objective : Evaluation or None
+    objective : ObjectiveEvaluation or None
         The evaluation of the objective there (its merits, the parts of
         its chi-square, and the solved values), or None without an
         objective.
     """
     values: ParamValues
-    objective: Evaluation | None
+    objective: ObjectiveEvaluation | None
 
 
 class Setup:

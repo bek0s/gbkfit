@@ -23,9 +23,9 @@ from ._scale_blocks import scale_blocks
 
 
 __all__ = [
-    'Evaluation',
     'Merits',
-    'Objective'
+    'Objective',
+    'ObjectiveEvaluation'
 ]
 
 
@@ -56,7 +56,7 @@ class Merits(NamedTuple):
 
 
 @dataclasses.dataclass(frozen=True)
-class Evaluation:
+class ObjectiveEvaluation:
     """
     An evaluation of an objective at the values of its parameters (see
     Objective.evaluate): its merits, the parts of its chi-square, and the
@@ -132,7 +132,7 @@ class Objective:
     values. The priors of the solved values add residuals after those of
     the data; the log-likelihood has the values integrated out, or at
     their best values (see Solve). They are nuisance parameters (see
-    Evaluation.nnuisance); an evaluation gives their values (see
+    ObjectiveEvaluation.nnuisance); an evaluation gives their values (see
     evaluate).
 
     Its memory on the devices (and the host) is allocated on the first
@@ -361,13 +361,13 @@ class Objective:
         """
         Return the AICp of all observations (Lipka & Thomas 2021): the
         chi-square of the data plus twice the effective number of the
-        solved values (see Evaluation.nnuisance), without the residuals of
-        their priors, which are not of the data (with the noise residuals
-        of a fitted noise, which are). Of models whose solved values are
-        regularised by their priors (e.g. the weights of orbits), the
-        lower, the better: the chi-square alone prefers the weakest
-        regularisation, which fits the noise. Without solved values, it is
-        the chi-square.
+        solved values (see ObjectiveEvaluation.nnuisance), without the
+        residuals of their priors, which are not of the data (with the
+        noise residuals of a fitted noise, which are). Of models whose
+        solved values are regularised by their priors (e.g. the weights of
+        orbits), the lower, the better: the chi-square alone prefers the
+        weakest regularisation, which fits the noise. Without solved
+        values, it is the chi-square.
 
         Parameters
         ----------
@@ -398,7 +398,7 @@ class Objective:
             self,
             params: ParamValues,
             out_extra: Extras | None = None
-    ) -> Evaluation:
+    ) -> ObjectiveEvaluation:
         """
         Evaluate the models and compare them with the data: return the
         merits (see chi2, log_likelihood and aicp), the parts of the
@@ -413,13 +413,13 @@ class Objective:
 
         Returns
         -------
-        Evaluation
+        ObjectiveEvaluation
             The evaluation.
         """
         self._update_residual_d(params, True, out_extra)
         return self._evaluation()
 
-    def _evaluation(self) -> Evaluation:
+    def _evaluation(self) -> ObjectiveEvaluation:
         """
         Return the evaluation of the residuals last evaluated (see
         evaluate).
@@ -439,7 +439,7 @@ class Objective:
         profiled = [
             self._solutions[block] for block in self._blocks
             if block.likelihood() == 'profiled']
-        return Evaluation(
+        return ObjectiveEvaluation(
             Merits(chi2, log_likelihood,
                    data_chi2 + constant + 2 * nnuisance),
             data_chi2=data_chi2, noise_chi2=self._noise_chi2(),
@@ -569,7 +569,7 @@ class Objective:
     def _nnuisance(self) -> float:
         """
         Return the effective number of the solved values of the last
-        evaluation (see Evaluation.nnuisance).
+        evaluation (see ObjectiveEvaluation.nnuisance).
         """
         # Each solved value counts by how much its data decide it (its
         # m_eff: 1 decided by the data, 0 by its prior or at its minimum),
@@ -585,8 +585,9 @@ class Objective:
         """
         Return the number of residuals of the data that count: those of the
         comparisons (see Comparison.nresiduals); not the residuals of the
-        priors of solved values (see Evaluation.nnuisance), nor the noise
-        residuals (see LikelihoodGaussian), which are not of the data.
+        priors of solved values (see ObjectiveEvaluation.nnuisance), nor
+        the noise residuals (see LikelihoodGaussian), which are not of the
+        data.
         """
         return sum(c.nresiduals() for c in self._comparisons)
 

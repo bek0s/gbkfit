@@ -389,12 +389,12 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     assert objective.chi2(compact) > objective.chi2(truth)
 
 
-def test_values_the_model_lacks_take_the_noise_of_their_error(driver):
+def test_missing_values_take_the_noise_of_their_error(driver):
     # Their residual, missing_residual, does not take the fitted noise:
     # they add to its normalisation (the noise residual, sum log((f e)^2 /
     # (f_min e)^2) over the values the model has) that of their error,
     # log(1 / f_min^2), which the scale does not change; the chi-square
-    # and -2 log L differ by one constant, however many it lacks
+    # and -2 log L differ by one constant, however many are missing
     def group(observable, dataset=None):
         likelihood = None if dataset is None else LikelihoodGaussian(
             missing_residual=3, noise=dict(
@@ -420,12 +420,12 @@ def test_values_the_model_lacks_take_the_noise_of_their_error(driver):
     moment1 = objective.group_plan().model_h(compact)[0]['moment1']['d']
     unmasked = dataset['moment1'].mask() != 0
     has = ~np.isnan(moment1) & unmasked
-    lacks = np.isnan(moment1) & unmasked
-    assert np.any(lacks)
+    missing = np.isnan(moment1) & unmasked
+    assert np.any(missing)
     evaluation = objective.evaluate(compact)
     assert evaluation.noise_chi2 == pytest.approx(
         np.count_nonzero(has) * np.log((2 / 0.1) ** 2)
-        + np.count_nonzero(lacks) * np.log(1 / 0.1 ** 2), rel=1e-6)
+        + np.count_nonzero(missing) * np.log(1 / 0.1 ** 2), rel=1e-6)
     full = objective.evaluate(ParamSpace.from_properties(
         objective.pdescs(), DISK | dict(
             obs_noise_scale_moment1=2.0)).evaluate())

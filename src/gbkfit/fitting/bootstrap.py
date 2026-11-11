@@ -335,8 +335,8 @@ def run_bootstrap(
     sigma, redrawn by the scheme of each observation (see
     BootstrapScheme): a residual moved from a noisy value to a quiet one
     takes the noise of the latter. The values without a residual keep
-    their data (the masked values stay masked, and those the model lacks
-    keep theirs). Each refit starts at the best fit (see
+    their data (the masked values stay masked, and those missing from
+    the model keep theirs). Each refit starts at the best fit (see
     ParamSpace.with_values), with the fitter of the options, or else that
     of the fit, which works out no uncertainty. The refits that fail (the
     fitter finds no point, or the parameters cannot be evaluated) are

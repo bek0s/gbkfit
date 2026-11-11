@@ -19,7 +19,7 @@ from gbkfit.driver import Driver
 from gbkfit.model import DepthUnit, Galaxy
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import iterutils
-from ._group_plan import GroupPlan
+from .group_plan import GroupPlan
 from .observation import Observation, SeenGalaxies, SkyFrame
 
 
@@ -257,8 +257,14 @@ class ObservationGroup:
         _check_offsets(self._galaxies, frames, seen)
         _warn_frames(self._galaxies, frames, seen)
         _warn_unused_masses(self._galaxies, observations, seen)
-        # (every rule about what each sees, here, without devices: the
-        # plans fail only for resources)
+        self._check_observations()
+
+    def _check_observations(self) -> None:
+        """
+        Check that each observation can see the galaxies it sees (see
+        Observation.check): every rule about what each sees, here, without
+        devices, so that the plans fail only for resources.
+        """
         for i, member in enumerate(self._members):
             with config_path('observations', i):
                 member.observation.check(member.galaxies)
@@ -446,8 +452,9 @@ class ObservationGroup:
         Raises
         ------
         ValueError
-            If there is not one dataset per observation, or a dataset does
-            not suit its observation.
+            If there is not one dataset per observation, a dataset does
+            not suit its observation, or an observation with its new data
+            cannot see its galaxies (see Observation.check).
         """
         if len(datasets) != len(self._members):
             raise ValueError(
@@ -464,6 +471,10 @@ class ObservationGroup:
         group._members = tuple(
             member._replace(observation=observation)
             for member, observation in zip(self._members, observations))
+        # (what an observation can see may depend on its data: e.g. the
+        # radii of a profile are those of its data, and radii in angles
+        # need a galaxy with a distance)
+        group._check_observations()
         # (of the same names, but in the units of the new data: e.g. those
         # of a fitted noise, see Likelihood.param_units)
         group._pdescs = _with_observation_pdescs(

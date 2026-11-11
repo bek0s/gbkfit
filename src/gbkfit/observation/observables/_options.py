@@ -73,7 +73,7 @@ def dataset_grid_options(grid: Grid) -> dict[str, Any]:
     return options
 
 
-def require_no_options_from_data(
+def check_no_options_from_data(
         cls: type['Observable'], info: dict[str, Any], dataset: Dataset
 ) -> None:
     """

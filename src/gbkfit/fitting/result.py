@@ -408,7 +408,7 @@ class FitSolution:
     nfitted : float
         The number of fitted quantities: the free elements and the
         effective number of the nuisance parameters that the objective
-        solves (see Evaluation.nnuisance).
+        solves (see ObjectiveEvaluation.nnuisance).
     dof : float
         The degrees of freedom: the number of independent residuals (see
         Objective.nindependent; nresiduals, but fewer for correlated

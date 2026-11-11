@@ -174,7 +174,7 @@ class PixelSpectra(Observable):
         # through a median filter, which does not add)
         return self._median_size is None
 
-    def model_can_lack_values(self) -> bool:
+    def model_can_have_missing_values(self) -> bool:
         return False
 
     def check_observation(

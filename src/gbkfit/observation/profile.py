@@ -19,7 +19,7 @@ from gbkfit.grid import make_grid
 from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from .likelihood import Likelihood, likelihood_parser
+from .likelihoods import Likelihood, likelihood_parser
 from .observables import HostModelData, ModelData, ObservablePlan
 from .observation import Observation, SeenGalaxies
 
@@ -225,7 +225,7 @@ class ObservationProfile(Observation):
         # (slopes have no values where the galaxy has no density)
         super().__init__(
             keys, galaxies, data, likelihood, name,
-            model_can_lack_values=any(
+            model_can_have_missing_values=any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys))
 
     def radii(self) -> u.Quantity:
@@ -293,6 +293,21 @@ class ObservationProfile(Observation):
             inclination=self._inclination, galaxies=self._galaxies, data=data,
             likelihood=likelihood if likelihood is not None
             else self._likelihood, name=self._name)
+
+    def same_plan(self, other: Observation) -> bool:
+        """
+        Check whether its plan is also that of another observation (see
+        Observation.same_plan): its plan takes the functions, the radii
+        and their assumed distance of its data, and the inclination.
+        """
+        if not isinstance(other, ObservationProfile) \
+                or not super().same_plan(other):
+            return False
+        # (the radii as the plan takes them: in arcsec, or in kpc)
+        return self.keys() == other.keys() \
+            and all(_same_radii(a, b) for a, b in zip(
+                self._radii_of(), other._radii_of())) \
+            and self._inclination == other._inclination
 
     def output(
             self,
@@ -397,6 +412,13 @@ class ObservationProfile(Observation):
                       if GalaxyFunctions.family(k) in _ROTATIONS))
         return _ProfilePlan(
             functions, mapping, self.keys(), arcsec, kpc, inclination, driver)
+
+
+def _same_radii(a: np.ndarray | None, b: np.ndarray | None) -> bool:
+    """Return whether two arrays of radii, or None, are the same."""
+    if a is None or b is None:
+        return a is b
+    return np.array_equal(a, b)
 
 
 def _checked_data(

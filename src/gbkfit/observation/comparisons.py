@@ -13,8 +13,8 @@ import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
-from ._group_plan import LinearPieces
-from .likelihood import LikelihoodUser, UpperLimit, Whitening, whitening
+from .group_plan import LinearPieces
+from .likelihoods import LikelihoodUser, UpperLimit, Whitening, whitening
 from .observables import ModelData
 from .observation import Observation
 
@@ -499,10 +499,10 @@ class ComparisonGaussian(Comparison):
         likelihood = observation.likelihood()
         keys = observation.keys()
         # The weight of each data item, and the residual of the values the
-        # model does not have: NaN where the model cannot lack values, so
-        # that one it lacks makes a chi-square that is not a number, of a
-        # point fitters cannot evaluate (a model that failed), even with a
-        # missing_residual
+        # model does not have: NaN where the model cannot have missing
+        # values, so that a missing one makes a chi-square that is not a
+        # number, of a point fitters cannot evaluate (a model that
+        # failed), even with a missing_residual
         self._weights = {key: likelihood.weight(key) for key in keys}
         # The number of values of each data item that the data do not mask
         # (over which the weights of the model are normalised)
@@ -511,7 +511,8 @@ class ComparisonGaussian(Comparison):
             for key in keys}
         missing = likelihood.missing_residual()
         self._missing_residual = missing \
-            if missing is not None and observation.model_can_lack_values() \
+            if missing is not None \
+            and observation.model_can_have_missing_values() \
             else np.nan
         # The upper limit of the data items that have one, where they are
         # masked, by name, and the footprints of those that have both
@@ -746,9 +747,9 @@ class ComparisonGaussian(Comparison):
         Return why its weighted residuals of the given data items are not
         linear in the model (see Comparison.linear_form), or None if they
         are: a data item with an upper limit, whose residuals of the
-        values below it are not. (The residual of a value the model lacks
-        is a constant: the models of observables linear in the light have
-        every value, see Observable.linear_in_light.)
+        values below it are not. (The residual of a value missing from
+        the model is a constant: the models of observables linear in the
+        light have every value, see Observable.linear_in_light.)
         """
         for key in keys:
             if key in self._upper_limits:
@@ -804,7 +805,8 @@ class ComparisonGaussian(Comparison):
             out: DeviceArray
     ) -> None:
         # (W p is the residual of p of data 0, without upper limits or a
-        # residual of values the model lacks, which W leaves out)
+        # residual of values missing from the model, which W leaves
+        # out)
         driver = self._driver
         keys = self._observation.keys()
         if not self._d_zeros:
@@ -902,11 +904,12 @@ class ComparisonGaussian(Comparison):
     def noise_constant(self) -> float:
         # (the noise residual of a fitted scale is sum c^2 ln(sigma^2 /
         # (f_ref e)^2), f_ref = min(f_min, 1), for least squares never
-        # negative, and those of the values the model lacks c^2 ln(1 /
-        # f_ref^2): its part sum c^2 ln(f_ref^2), with sum c^2 over the
-        # values compared (the pixel weights normalised to their number;
-        # fewer independent values of correlated noise), is a constant of
-        # scale_min alone, which -2 ln L and the AICp must not hold)
+        # negative, and those of the values missing from the model c^2
+        # ln(1 / f_ref^2): its part sum c^2 ln(f_ref^2), with sum c^2 over
+        # the values compared (the pixel weights normalised to their
+        # number; fewer independent values of correlated noise), is a
+        # constant of scale_min alone, which -2 ln L and the AICp must not
+        # hold)
         return float(sum(
             self._weights[key] ** 2 * self._nunmasked[key] * share
             * 2 * np.log(min(noise.scale_min, 1.0))
@@ -953,12 +956,12 @@ class ComparisonGaussian(Comparison):
         # sigma^2, less sum c^2 log (f_ref e)^2, which does not depend on
         # the noise, so that the sum is never negative, as a residual
         # needs (the scale is at least its minimum, the jitter at least 0;
-        # see noise_constant). A value the model lacks costs
+        # see noise_constant). A value missing from the model costs
         # missing_residual, which does not take the noise, and adds the
         # term of the noise of its error, c^2 log(1 / f_ref^2), which the
         # noise does not change: taking its noise would bias the scale low
         # (by about half the share of such values), and adding nothing
-        # would make lacking a value cheaper by the term (9.2 at a minimum
+        # would make a missing value cheaper by the term (9.2 at a minimum
         # scale of 0.01, against a missing_residual of 3 costing 9).
         driver = self._driver
         for j, (key, noise) in enumerate(self._noise_params.items()):

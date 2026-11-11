@@ -258,7 +258,8 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         ----------
         residuals : Mapping
             The residuals of each data item, of its shape: NaN where there
-            are none (e.g. masked values, or values the model lacks).
+            are none (e.g. masked values, or values missing from the
+            model).
         size : Sequence of float
             The size of the blocks (e.g. in pixels, along each axis of an
             image).

@@ -57,8 +57,8 @@ def _moments(
         instrument=_INSTRUMENT) | options
 
 
-# The likelihood of moment maps (whose model can lack values that the
-# data have)
+# The likelihood of moment maps (whose model can have missing values
+# where the data have some)
 _MOMENTS_LIKELIHOOD = dict(type='gaussian', missing_residual=3)
 
 

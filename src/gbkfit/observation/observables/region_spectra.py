@@ -189,13 +189,13 @@ class RegionSpectra(RegionsObservable):
         # linear)
         return True
 
-    def model_can_lack_values(self) -> bool:
+    def model_can_have_missing_values(self) -> bool:
         return False
 
-    def _require_matching_coordinates(
+    def _check_dataset_coordinates(
             self, dataset: DatasetRegionSpectra
     ) -> None:
-        super()._require_matching_coordinates(dataset)
+        super()._check_dataset_coordinates(dataset)
         if dataset.spectral_grid() != self.spectral_grid():
             raise ValueError(
                 f"the spectra have the spectral axis "

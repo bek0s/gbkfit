@@ -19,7 +19,7 @@ import numpy as np
 from gbkfit.config import config_path
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.model import DataUnit, Extras, GalaxyFunctions, GalaxyState
+from gbkfit.model import Extras, GalaxyFunctions, GalaxyState
 from gbkfit.model.mass.units import G
 from gbkfit.params import (
     ParamFunctions, ParamValues, ParamView, StageCache, with_elements)
@@ -261,11 +261,11 @@ class GroupPlan:
         Return a plan of the group with other data (see
         ObservationGroup.with_data), on the same drivers.
 
-        The plans of the observations do not depend on the values of their
-        data, only on their unit (see Observation.data_unit) and on the
-        floating type of their models, which the data can choose (see
-        ObservationSky: dtype): the copy shares the plans of those whose
-        data keep both (e.g. all of them, in a bootstrap), and with them
+        The plans of the observations take little from their data (their
+        unit and the floating type of their models, which the data can
+        choose, or e.g. the radii of a profile; see Observation.same_plan):
+        the copy shares the plans that are also those of its observations
+        (e.g. all of them, in a bootstrap), and with them
         the memory of their models, on their devices, and its lock (see
         lock): evaluated at the same time (e.g. in two threads), they wait
         for each other (plans on other drivers do not, see
@@ -295,8 +295,7 @@ class GroupPlan:
         for i, (plan, cache, new, old, driver) in enumerate(zip(
                 self._plans, self._model_caches, news, olds,
                 self._observation_drivers)):
-            if not _same_unit(new.data_unit(), old.data_unit()) \
-                    or new.dtype() != old.dtype():
+            if not old.same_plan(new):
                 with config_path('observations', i):
                     plan = new.plan(driver, group.seen_by(i))
                 cache = copied._model_cache(i)
@@ -793,14 +792,3 @@ class _GroupFunctions(ParamFunctions):
                 {name: values[full] for name, full in mapping.items()})
             bound |= {f'{prefix}{name}': value for name, value in own.items()}
         return bound
-
-
-def _same_unit(a: DataUnit | None, b: DataUnit | None) -> bool:
-    """
-    Return whether two units of the light of data are the same (see
-    DataUnit, whose beams can be arrays, one for each spectral point).
-    """
-    if a is None or b is None:
-        return a is b
-    return all(np.array_equal(x, y) if isinstance(x, np.ndarray)
-               else x == y for x, y in zip(a, b))
