@@ -63,7 +63,7 @@ def lens_params(**params):
 
 def on_axes(grid, params):
     # The positions of the pixels of a grid along the major and minor axes
-    # of a mass (see lens_masses)
+    # of a mass (see gbkfit.observation.lensing.masses)
     x, y = sky_positions(grid)
     x = x - params['x']
     y = y - params['y']
