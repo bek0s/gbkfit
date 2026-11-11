@@ -18,7 +18,7 @@ from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.params import ParamValues
-from . import _dcube, _detail
+from . import _detail, _model_cube
 from ._detail import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
 from .base import HostModelData, ModelData, Observable
@@ -390,7 +390,8 @@ class Visibilities(Observable):
         frequencies = self._coverage.frequencies()
         if frequencies[1] > frequencies[0]:
             # (the channels of the grid are from the highest frequency)
-            frequencies, weighted, w = frequencies[::-1], weighted[::-1], w[::-1]
+            frequencies, weighted, w = \
+                frequencies[::-1], weighted[::-1], w[::-1]
         transform = uv_transforms[self._transform](
             driver, self.grid().spatial(), self._coverage.uvw(), frequencies,
             self._coverage.phase_centre(),
@@ -444,7 +445,7 @@ class Visibilities(Observable):
         Return its plan (see plan), with the plan of it at half its step
         that checks its first evaluation (refinement, made then), if any.
         """
-        dcube = _dcube.DCube(
+        model_cube = _model_cube.ModelCube(
             size=self.size(),
             step=self.step(),
             rpix=self.rpix(),
@@ -469,16 +470,16 @@ class Visibilities(Observable):
             self._coverage.phase_centre(),
             _EPS[np.dtype(dtype)] if self._eps is None else self._eps)
         return VisibilitiesPlan(
-            transform, abs(self.step()[0] * self.step()[1]), reversed_, dcube,
-            driver, scene, line_of_sight, foreground, dtype, flux_scale,
-            refinement)
+            transform, abs(self.step()[0] * self.step()[1]), reversed_,
+            model_cube, driver, scene, line_of_sight, foreground, dtype,
+            flux_scale, refinement)
 
 
-class VisibilitiesPlan(_detail.DCubePlanBase):
+class VisibilitiesPlan(_detail.CubeObservablePlan):
     """
     The evaluation of visibilities: the transform of the flux of the
     pixels of the cube of the model, recorded as the instrument records it
-    (see DCubePlanBase): of its surface brightness (per arcsec^2, see
+    (see CubeObservablePlan): of its surface brightness (per arcsec^2, see
     Visibilities.data_unit) times the area of its pixels; split into their
     real and imaginary parts. With the channels of the data in the order
     of increasing frequency, the transform of the cube (from the highest
@@ -499,7 +500,7 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
             transform: UVTransform,
             area: float,
             reversed_: bool,
-            dcube: _dcube.DCube,
+            model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
             line_of_sight: 'LineOfSight',
@@ -509,14 +510,14 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
             refinement: Callable[[], 'VisibilitiesPlan'] | None = None
     ):
         super().__init__(
-            dcube, driver, scene, line_of_sight, foreground, dtype, None,
+            model_cube, driver, scene, line_of_sight, foreground, dtype, None,
             flux_scale)
         self._refinement = refinement
         self._transform = transform
         self._area = area
         self._reversed = reversed_
-        shape = (dcube.size()[2], transform.nrows())
-        spectral = dcube.grid().spectral().coords
+        shape = (model_cube.size()[2], transform.nrows())
+        spectral = model_cube.grid().spectral().coords
         self._noise_grid = make_grid(
             shape[::-1], (1, spectral.step[0]), (0, 0), (0, spectral.rval[0]),
             spectral_axis=1, rest=spectral.rest)
@@ -556,7 +557,7 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
                 f"the visibilities of the model change by {change:.2%} of "
                 f"the largest at half the step of its pixels, which then do "
                 f"not sample it: give a smaller step (e.g. half)")
-        flux = np.abs(self._driver.mem_copy_d2h(self._dcube_plan.dcube()))
+        flux = np.abs(self._driver.mem_copy_d2h(self._model_cube_plan.cube()))
         edges = flux.copy()
         edges[:, 1:-1, 1:-1] = 0
         total = flux.sum(axis=(1, 2)).max(initial=0)
@@ -577,7 +578,7 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
             ndraws: int
     ) -> list[HostModelData]:
         self._evaluate_model(params, galaxies, None)
-        self._dcube_plan.record(self._flux_scale(params))
+        self._model_cube_plan.record(self._flux_scale(params))
         recorded = self._to_host(self._measure())
         draws = [{
             key: dict(d=(item['d'] + noise.draw(
@@ -602,7 +603,7 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
     def _measure(self) -> ModelData:
         visibilities = self._visibilities
         self._transform(
-            self._dcube_plan.dcube(),
+            self._model_cube_plan.cube(),
             visibilities[::-1] if self._reversed else visibilities)
         self._driver.math_mul(visibilities, self._area, out=visibilities)
         self._driver.mem_copy_d2d(visibilities.real, self._re)

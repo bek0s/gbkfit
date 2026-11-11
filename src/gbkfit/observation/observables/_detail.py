@@ -21,7 +21,7 @@ from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
 from ..weights import plan_weights
-from ._dcube import DCube, cube_extra
+from ._model_cube import ModelCube, cube_extra
 from .base import HostModelData, ModelData, Observable, ObservablePlan
 
 if TYPE_CHECKING:
@@ -140,7 +140,7 @@ def without_options_from_data(
 def check_median_size(median_size: int | None) -> None:
     """
     Raise ValueError unless the size of a median filter (see
-    DCube.median_size) is an odd number of pixels (a window centred on
+    ModelCube.median_size) is an odd number of pixels (a window centred on
     each pixel), or None.
     """
     if median_size is not None and median_size % 2 != 1:
@@ -282,19 +282,21 @@ def flux_per_area(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
     return unit / astropy.units.arcsec ** 2
 
 
-class DCubePlanBase(ObservablePlan):
+class CubeObservablePlan(ObservablePlan):
     """
-    The evaluation of an observable made from a DCube: the plan of the cube,
-    the plan of the scene (what an observation sees) along its line of
-    sight on its high-res grid (see _model_grid), that of the pixel
-    weights of the data, if any, which fill the weight cube of the DCube,
-    and the name of the parameter of the flux scale of the observation, if
-    one value (see ObservationSky), which scales the flux of the cube.
+    The evaluation of an observable made from a ModelCube: the plan of the
+    cube, the plan of the scene (what an observation sees) along its line
+    of sight on its high-resolution grid (see _model_grid), that of the
+    pixel weights of the data, if any, which fill the weight cube of the
+    ModelCube, and the name of the parameter of the flux scale of the
+    observation, if one value (see ObservationSky), which scales the flux
+    of the cube.
 
     It evaluates the model on the cube, records and masks it (see
-    DCubePlan.evaluate), and measures the data items from its low-res
-    cube (_measure, of each observable). Its mock data are measured from
-    the recorded low-res cube plus noise, masked as the model.
+    ModelCubePlan.evaluate), and measures the data items from its
+    low-resolution cube (_measure, of each observable). Its mock data are
+    measured from the recorded low-resolution cube plus noise, masked as
+    the model.
 
     Raises
     ------
@@ -305,7 +307,7 @@ class DCubePlanBase(ObservablePlan):
 
     def __init__(
             self,
-            dcube: DCube,
+            model_cube: ModelCube,
             driver: Driver,
             scene: 'Scene',
             line_of_sight: 'LineOfSight',
@@ -316,41 +318,45 @@ class DCubePlanBase(ObservablePlan):
     ):
         self._driver = driver
         self._dtype = dtype
-        self._dcube = dcube
+        self._model_cube = model_cube
         self._flux_param = flux_scale
         # (the unit of the light of the model, if known)
         data_unit = scene.data_unit()
         self._light_unit = None if data_unit is None \
             else data_unit.cube_unit()
-        self._dcube_plan = dcube.plan(
+        self._model_cube_plan = model_cube.plan(
             driver, has_weights=pixel_weights is not None)
         grid = self._model_grid()
         self._weights_plan = None
         if pixel_weights is not None:
             self._weights_plan = plan_weights(
                 pixel_weights, scene,
-                self._dcube_plan.scratch_grid().spatial(), driver, dtype)
+                self._model_cube_plan.high_res_grid().spatial(), driver,
+                dtype)
         # With a lens, the model is evaluated on the source plane, into a
-        # cube of its own, which is lensed into the high-res cube
+        # cube of its own, which is lensed into the high-resolution cube
         self._lens_plan = None
         self._source_cube = None
         if foreground.lens() is not None:
             self._lens_plan = foreground.plan_lens(
-                driver, self._dcube_plan.scratch_grid(), dtype)
+                driver, self._model_cube_plan.high_res_grid(), dtype)
             grid = self._lens_plan.source_grid(grid)
-            nz = self._dcube_plan.scratch_dcube().shape[0]
+            nz = self._model_cube_plan.high_res_cube().shape[0]
             self._source_cube = driver.mem_alloc_d(
                 (nz,) + grid.size[:2][::-1], dtype)
         # (the smoothing of the spectra checks the resolution of the light;
         # an image has none)
         smoothing = None if grid.spectral_axis is None \
-            else dcube.spectral_smoothing()
+            else model_cube.spectral_smoothing()
         self._model_plan = line_of_sight.plan_scene(
             scene, driver, grid, dtype, smoothing)
 
     def _model_grid(self) -> Grid:
-        """Return the grid the model is evaluated on: the high-res grid."""
-        return self._dcube_plan.scratch_grid()
+        """
+        Return the grid the model is evaluated on: the high-resolution
+        grid.
+        """
+        return self._model_cube_plan.high_res_grid()
 
     def _model_extra(
             self, value: GridData
@@ -366,8 +372,8 @@ class DCubePlanBase(ObservablePlan):
     ) -> ModelData:
         model_extra = None if out_extra is None else Extras()
         self._evaluate_model(params, galaxies, model_extra)
-        self._dcube_plan.evaluate(
-            out_extra, self._extra_lo, self._extra_hi,
+        self._model_cube_plan.evaluate(
+            out_extra, self._extra_lo, self._extra_high_res,
             self._flux_scale(params), self._light_unit)
         if model_extra:
             for extra in model_extra:
@@ -386,9 +392,9 @@ class DCubePlanBase(ObservablePlan):
     ) -> list[HostModelData]:
         # The recorded data, without noise, are kept on the host
         self._evaluate_model(params, galaxies, None)
-        dcube_plan = self._dcube_plan
-        dcube_plan.record(self._flux_scale(params))
-        recorded = self._driver.mem_copy_d2h(dcube_plan.dcube())
+        model_cube_plan = self._model_cube_plan
+        model_cube_plan.record(self._flux_scale(params))
+        recorded = self._driver.mem_copy_d2h(model_cube_plan.cube())
         draws = [self._mock_once(recorded, noise, rng) for _ in range(ndraws)]
         return draws, self._exact_errors(noise, recorded)
 
@@ -399,37 +405,40 @@ class DCubePlanBase(ObservablePlan):
             self, noise: 'Noise', recorded: np.ndarray
     ) -> dict[str, np.ndarray] | None:
         """
-        Return the exact errors of mock data of the recorded low-res cube
-        without noise (on the host), if known (see has_exact_errors);
-        None here.
+        Return the exact errors of mock data of the recorded
+        low-resolution cube without noise (on the host), if known (see
+        has_exact_errors); None here.
         """
         return None
 
-    # How the extra outputs of the low- and high-res cubes are made from
-    # their data and grids (see DCubePlan.evaluate)
+    # How the extra outputs of the low- and high-resolution cubes are made
+    # from their data and grids (see ModelCubePlan.evaluate)
     _extra_lo = staticmethod(cube_extra)
-    _extra_hi = staticmethod(cube_extra)
+    _extra_high_res = staticmethod(cube_extra)
 
     @abc.abstractmethod
     def _measure(self) -> ModelData:
-        """Return the model data measured from the low-res cube."""
+        """Return the model data measured from the low-resolution cube."""
 
     def _mock_once(
-            self, recorded: np.ndarray, noise: 'Noise', rng: np.random.Generator
+            self,
+            recorded: np.ndarray,
+            noise: 'Noise',
+            rng: np.random.Generator
     ) -> HostModelData:
         """
-        Return the model data measured from the recorded low-res cube (on
-        the host) plus a draw of the noise, masked as the model, on the
-        host (see mock). Observables whose noise goes in elsewhere (e.g.
+        Return the model data measured from the recorded low-resolution
+        cube (on the host) plus a draw of the noise, masked as the model,
+        on the host (see mock). Observables whose noise goes in elsewhere (e.g.
         slitless spectra, in the image) override this.
         """
-        dcube = self._dcube
+        model_cube = self._model_cube
         noisy = recorded + noise.draw(
-            rng, dcube.grid(), dcube.psf(), recorded)
+            rng, model_cube.grid(), model_cube.psf(), recorded)
         self._driver.mem_copy_h2d(
-            noisy.astype(self._dtype), self._dcube_plan.dcube())
+            noisy.astype(self._dtype), self._model_cube_plan.cube())
         # (the data are smoothed with their noise)
-        self._dcube_plan.smooth()
+        self._model_cube_plan.smooth()
         return self._to_host(self._measure())
 
     def _to_host(self, data: ModelData) -> HostModelData:
@@ -453,17 +462,19 @@ class DCubePlanBase(ObservablePlan):
             model_extra: Extras | None
     ) -> None:
         """
-        Evaluate the model on the high-res cube (or on the source plane of
-        a lens, lensed into it), and the weights of the data, if any.
+        Evaluate the model on the high-resolution cube (or on the source
+        plane of a lens, lensed into it), and the weights of the data, if
+        any.
         """
-        dcube_plan = self._dcube_plan
+        model_cube_plan = self._model_cube_plan
         if self._weights_plan is not None:
-            self._weights_plan.evaluate(params, dcube_plan.scratch_wcube())
+            self._weights_plan.evaluate(
+                params, model_cube_plan.high_res_weights())
         # The model adds to its cube, so clear it
-        cube = dcube_plan.scratch_dcube() if self._lens_plan is None \
+        cube = model_cube_plan.high_res_cube() if self._lens_plan is None \
             else self._source_cube
         self._driver.mem_fill(cube, 0)
         self._model_plan.evaluate(params, galaxies, cube, model_extra)
         if self._lens_plan is not None:
             self._lens_plan.evaluate(
-                params, cube, dcube_plan.scratch_dcube())
+                params, cube, model_cube_plan.high_res_cube())

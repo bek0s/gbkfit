@@ -13,7 +13,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from . import _dcube, _detail
+from . import _detail, _model_cube
 from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
 from .base import FluxScale, ModelData, Observable
 
@@ -58,7 +58,7 @@ class PixelSpectra(Observable):
         that smoothed the data on the sky, which smooths the model as well
         (e.g. 3, of cubes smoothed before their maps were made): each
         channel takes the median of the square of the size about each
-        pixel, with zero beyond the edges (see DCube); none by default.
+        pixel, with zero beyond the edges (see ModelCube); none by default.
 
     Raises
     ------
@@ -208,7 +208,7 @@ class PixelSpectra(Observable):
             flux_scale: str | None
     ) -> 'PixelSpectraPlan':
         spectral = self.spectral()
-        dcube = _dcube.DCube(
+        model_cube = _model_cube.ModelCube(
             size=self.size(),
             step=self.step(),
             rpix=self.rpix(),
@@ -226,25 +226,25 @@ class PixelSpectra(Observable):
             fft_dtype=fft_dtype,
             median_size=self._median_size)
         return PixelSpectraPlan(
-            dcube, driver, scene, line_of_sight, foreground, dtype,
+            model_cube, driver, scene, line_of_sight, foreground, dtype,
             pixel_weights, flux_scale)
 
 
-class PixelSpectraPlan(_detail.DCubePlanBase):
+class PixelSpectraPlan(_detail.CubeObservablePlan):
 
     def has_exact_errors(self) -> bool:
         # (but through a median filter, whose noise no formula gives: then
         # the scatter of draws)
-        return self._dcube.median_size() is None
+        return self._model_cube.median_size() is None
 
     def _exact_errors(
             self, noise: 'Noise', recorded: np.ndarray
     ) -> dict[str, np.ndarray] | None:
         if not self.has_exact_errors():
             return None
-        return dict(spectra=noise.sigma(self._dcube.grid(), recorded))
+        return dict(spectra=noise.sigma(self._model_cube.grid(), recorded))
 
     def _measure(self) -> ModelData:
-        plan = self._dcube_plan
+        plan = self._model_cube_plan
         return dict(spectra=dict(
-            d=plan.dcube(), m=None, w=plan.wcube()))
+            d=plan.cube(), m=None, w=plan.weights()))

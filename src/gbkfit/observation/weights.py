@@ -252,7 +252,7 @@ class WeightsPlan:
         """Write the weights of the pixels to every channel of wcube."""
         self._weight_cache.evaluate(params, self._weigh)
         # (wcube is written each time: an evaluation can smooth it in
-        # place, see DCube: smooth_weights)
+        # place, see ModelCube: smooth_weights)
         self._driver.mem_fill(wcube, 1)
         self._driver.math_mul(wcube, self._weight_d[None], out=wcube)
 

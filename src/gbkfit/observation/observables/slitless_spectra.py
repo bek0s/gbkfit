@@ -25,7 +25,7 @@ from gbkfit.instrument import (
     Instrument, SlitMask, Trace, slit_mask_parser, trace_parser)
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import iterutils
-from . import _dcube, _detail, _moments
+from . import _detail, _model_cube, _moments
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan
 from .base import FluxScale, HostModelData, ModelData, Observable
@@ -363,13 +363,14 @@ class SlitlessSpectra(Observable):
     shutters of a few pixels). Where the trace moves the light by about a
     pixel or more across a line, this matters: of a disk of a few pixels
     moved a pixel by each 30 km/s, the image of whole pixels errs by 6% of
-    its peak, of 3 pixels each way by 0.7%. The image can combine several exposures,
-    of the sky at offsets (e.g. nods), with weights (e.g. to subtract the
-    background as the reduction did; see Exposure). An image resampled
-    from the detector by drizzle, of a square kernel of a pixel (e.g.
-    rectified spectra), takes the light of each pixel of the detector by
-    overlap: its light lands spread by a pixel more (see pixel_footprint),
-    of the pixels of the detector taken of the size of its own.
+    its peak, of 3 pixels each way by 0.7%. The image can combine several
+    exposures, of the sky at offsets (e.g. nods), with weights (e.g. to
+    subtract the background as the reduction did; see Exposure). An image
+    resampled from the detector by drizzle, of a square kernel of a pixel
+    (e.g. rectified spectra), takes the light of each pixel of the
+    detector by overlap: its light lands spread by a pixel more (see
+    pixel_footprint), of the pixels of the detector taken of the size of
+    its own.
 
     Its configuration has the options below, but those of the grid when
     it has data, which give them (see from_data).
@@ -632,7 +633,7 @@ class SlitlessSpectra(Observable):
         # (the centre of sub-pixel i of the sky is at offset - 1/2 + (i +
         # 1/2) / k pixels of the image)
         spectral = self._spectral
-        dcube = _dcube.DCube(
+        model_cube = _model_cube.ModelCube(
             size=(size[0] * k, size[1] * k, spectral.size()),
             step=(step[0] / k, step[1] / k, spectral.step()),
             rpix=((rpix[0] - offset[0] + 0.5) * k - 0.5,
@@ -652,7 +653,7 @@ class SlitlessSpectra(Observable):
             fft_dtype=fft_dtype)
         dispersion = self._dispersion(edges, size, offset)
         return SlitlessSpectraPlan(
-            dcube, dispersion, self.grid(), driver, scene, line_of_sight,
+            model_cube, dispersion, self.grid(), driver, scene, line_of_sight,
             foreground, dtype, flux_scale)
 
     def _channel_edges(self) -> np.ndarray:
@@ -850,10 +851,10 @@ class SlitlessSpectra(Observable):
             shape=(width * height, len(edges) * npixels))
 
 
-class SlitlessSpectraPlan(_detail.DCubePlanBase):
+class SlitlessSpectraPlan(_detail.CubeObservablePlan):
     """
     The evaluation of SlitlessSpectra: the cube of the sky (see
-    DCubePlanBase), then its dispersion into the image of the grid of the
+    CubeObservablePlan), then its dispersion into the image of the grid of the
     detector, the sums of its voxels with the weights of a sparse matrix
     (see RegionSumsPlan). The detector records the image, so the noise of
     its mock data goes in there.
@@ -861,7 +862,7 @@ class SlitlessSpectraPlan(_detail.DCubePlanBase):
 
     def __init__(
             self,
-            dcube: _dcube.DCube,
+            model_cube: _model_cube.ModelCube,
             dispersion: scipy.sparse.csr_array,
             grid: Grid,
             driver: Driver,
@@ -872,7 +873,7 @@ class SlitlessSpectraPlan(_detail.DCubePlanBase):
             flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, line_of_sight, foreground, dtype, None,
+            model_cube, driver, scene, line_of_sight, foreground, dtype, None,
             flux_scale)
         self._dispersion = RegionSumsPlan(dispersion, driver, dtype)
         size = grid.size
@@ -890,20 +891,24 @@ class SlitlessSpectraPlan(_detail.DCubePlanBase):
         return dict(spectra=noise.sigma(self._grid, self._image_of(recorded)))
 
     def _measure(self) -> ModelData:
-        cube = self._dcube_plan.dcube()
+        cube = self._model_cube_plan.cube()
         self._dispersion.evaluate(cube.reshape(1, 1, cube.size), self._image)
         return dict(spectra=dict(
             d=self._image.reshape(self._shape), m=None, w=None))
 
     def _mock_once(
-            self, recorded: np.ndarray, noise: 'Noise', rng: np.random.Generator
+            self,
+            recorded: np.ndarray,
+            noise: 'Noise',
+            rng: np.random.Generator
     ) -> HostModelData:
         data = dict(spectra=dict(d=self._image_of(recorded), m=None))
         data['spectra']['d'] += noise.draw(
-            rng, self._grid, self._dcube.psf(), data['spectra']['d'].copy())
+            rng, self._grid, self._model_cube.psf(),
+            data['spectra']['d'].copy())
         return data
 
     def _image_of(self, recorded: np.ndarray) -> np.ndarray:
         """Return the image (on the host) of the recorded cube."""
-        self._driver.mem_copy_h2d(recorded, self._dcube_plan.dcube())
+        self._driver.mem_copy_h2d(recorded, self._model_cube_plan.cube())
         return self._to_host(self._measure())['spectra']['d']

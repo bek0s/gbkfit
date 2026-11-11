@@ -561,7 +561,7 @@ class Observable(TypedSerializable, abc.ABC):
         ------
         ValueError
             If it does not support pixel weights, or with the foreground (see
-            DCubePlanBase).
+            CubeObservablePlan).
         """
         pass
 

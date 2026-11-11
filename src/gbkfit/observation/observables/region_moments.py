@@ -20,7 +20,7 @@ from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.model.components.spheroids import OrbitIntegrator, SkyGrid
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
-from . import _dcube, _detail, _moments, _orbit_outputs
+from . import _detail, _model_cube, _moments, _orbit_outputs
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._moments import FluxFloor, Method
 from ._region_sums import RegionSumsPlan, flux_weights
@@ -340,10 +340,10 @@ class RegionMoments(Observable):
         if scene.orbit_emitters():
             return OrbitMomentsPlan(
                 self, scene, instrument, oversampling, driver, dtype)
-        dcube = _moments.spectra_dcube(
+        model_cube = _moments.spectra_model_cube(
             self, oversampling, instrument, dtype, fft_dtype)
         return RegionMomentsPlan(
-            self, self._weights, dcube, driver, scene, line_of_sight,
+            self, self._weights, model_cube, driver, scene, line_of_sight,
             foreground, dtype, flux_scale)
 
 
@@ -730,13 +730,13 @@ class OrbitMomentsPlan(ObservablePlan):
         return False
 
 
-class RegionMomentsPlan(_detail.DCubePlanBase):
+class RegionMomentsPlan(_detail.CubeObservablePlan):
 
     def __init__(
             self,
             moments: RegionMoments,
             weights: 'scipy.sparse.csr_array',
-            dcube: _dcube.DCube,
+            model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
             line_of_sight: 'LineOfSight',
@@ -745,22 +745,23 @@ class RegionMomentsPlan(_detail.DCubePlanBase):
             flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, line_of_sight, foreground, dtype, None,
+            model_cube, driver, scene, line_of_sight, foreground, dtype, None,
             flux_scale)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         nregions = self._sums.nregions()
         # The spectra of the regions, as a cube of one row of regions
         self._spectra = driver.mem_alloc_d(
-            (dcube.size()[2], 1, nregions), dtype)
+            (model_cube.size()[2], 1, nregions), dtype)
         self._moments = _moments.MomentsPlan(
             driver, (nregions, 1), moments.orders(), moments.flux_floor(),
             moments.method(), dtype)
 
     def _measure(self) -> ModelData:
         self._sums.evaluate(
-            self._dcube_plan.dcube(), self._spectra[:, 0, :])
+            self._model_cube_plan.cube(), self._spectra[:, 0, :])
         moments = self._moments.evaluate(
-            self._dcube.step(), self._dcube.zero(), self._spectra, None)
+            self._model_cube.step(), self._model_cube.zero(), self._spectra,
+            None)
         # The moments of the regions are vectors
         return {
             key: dict(d=value['d'][0], m=value['m'][0], w=value['w'][0])

@@ -17,7 +17,7 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import STARS, LineEmission, StarsEmission
 from gbkfit.params import ModelEvaluationError
 from gbkfit.utils import numutils
-from . import _dcube
+from . import _model_cube
 from .base import ModelData
 
 if TYPE_CHECKING:
@@ -225,22 +225,22 @@ def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
             "greater than 0 is highly recommended")
 
 
-def spectra_dcube(
+def spectra_model_cube(
         observable: 'PixelMoments | RegionMoments',
         oversampling: Sequence[int],
         instrument: Instrument,
         dtype: np.dtype,
         fft_dtype: np.dtype,
         median_size: int | None = None
-) -> _dcube.DCube:
+) -> _model_cube.ModelCube:
     """
-    Return the DCube of the spectra that the moments of an observable are
+    Return the ModelCube of the spectra that the moments of an observable are
     measured from: on its spatial grid and its spectral axis (see
     spectral_axis), smoothed by the median filter of median_size (if
-    given; see DCube).
+    given; see ModelCube).
     """
     spectral = observable.spectral()
-    return _dcube.DCube(
+    return _model_cube.ModelCube(
         size=observable.size() + (spectral.size(),),
         step=observable.step() + (spectral.step(),),
         rpix=observable.rpix() + (spectral.rpix(),),
