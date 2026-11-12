@@ -86,9 +86,9 @@ def _evaluate(plan: GroupPlan, values: ParamValues) -> list:
 @pytest.mark.parametrize('case', CASES)
 def test_a_step_evaluates_again_the_stages_that_read_it(case):
     setup = _setup(case)
-    plan = setup.group_plan
+    plan = setup.group_plan()
     group = plan.group()
-    values = setup.params.evaluate()
+    values = setup.params().evaluate()
     caches = plan.stage_caches()
     with setup:
         plan.model_h(values)

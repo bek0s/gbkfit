@@ -7,11 +7,9 @@ of the user.
 
 import abc
 import copy
-import dataclasses
 from collections.abc import Callable, Mapping, Sequence
 from numbers import Real
-from typing import (
-    TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self, TypeAlias)
+from typing import Annotated, Any, Literal, NamedTuple, Self, TypeAlias
 
 import astropy.units
 import numpy as np
@@ -21,16 +19,9 @@ from pydantic import FiniteFloat
 from gbkfit.config import (
     Choices, FilePath, TypedParser, TypedSerializable, check_name,
     check_options)
-from gbkfit.dataset import Dataset, NoiseCorrelation
-from gbkfit.math.correlation import (
-    correlation_matrix, periodic_correlation, whitening_matrix)
+from gbkfit.dataset import Dataset
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import funcutils
-
-if TYPE_CHECKING:
-    from gbkfit.driver import Driver
-    from .comparisons import Comparison
-    from .observation import Observation
 
 
 __all__ = [
@@ -40,10 +31,9 @@ __all__ = [
     'LikelihoodGauss',
     'LikelihoodUser',
     'UpperLimit',
-    'Whitening',
+    'channel_mask',
     'correlated_pixels',
-    'likelihood_parser',
-    'whitening'
+    'likelihood_parser'
 ]
 
 
@@ -190,28 +180,6 @@ class Likelihood(TypedSerializable, abc.ABC):
         flux_floor of a moment map; see LikelihoodGauss).
         """
 
-    @abc.abstractmethod
-    def comparison(
-            self, observation: 'Observation', driver: 'Driver'
-    ) -> 'Comparison':
-        """
-        Return the comparison of an observation of it with its data, on
-        the driver of its model: its residuals and chi-square (see
-        Comparison).
-
-        Parameters
-        ----------
-        observation : Observation
-            The observation, with data, of this likelihood.
-        driver : Driver
-            The driver of its model.
-
-        Returns
-        -------
-        Comparison
-            The comparison.
-        """
-
 
 class LikelihoodGauss(Likelihood):
     """
@@ -303,12 +271,14 @@ class LikelihoodGauss(Likelihood):
     fit too small a scale where the noise of the data has less variance
     than the floor gives C (e.g. beam noise alone).
 
-    The mask of a cube of correlated noise must keep whole spectra (the
-    same pixels in every channel it keeps; a channel it masks everywhere,
-    e.g. a blank plane, is left out, and C_z' is that of the channels
-    kept), so that C is that product; and the noise can be correlated on
-    the sky over at most MAX_CORRELATED_PIXELS pixels (C_xy' is a dense
-    matrix). Correlated noise does not go with upper limits (the
+    The mask of spectra of correlated noise (a cube, or the spectra of a
+    slit or of regions, whose noise can be correlated along their
+    spectral axis alone) must keep whole spectra (the same positions in
+    every channel it keeps; a channel it masks everywhere, e.g. a blank
+    plane, is left out, and C_z' is that of the channels kept), so that
+    C is that product; and the noise can be correlated on the sky over at
+    most MAX_CORRELATED_PIXELS pixels (C_xy' is a dense matrix).
+    Correlated noise does not go with upper limits (the
     probability of correlated non-detections has no closed form), or with
     solved flux scales of the item (see ObservationSky; the best scale of
     each spectrum would depend on the others). Observations of correlated
@@ -456,7 +426,7 @@ class LikelihoodGauss(Likelihood):
             if (correlation := data.noise_correlation(key)) is None:
                 continue
             correlated_pixels(
-                key, data[key].mask(), correlation.spatial is not None)
+                key, channel_mask(data, key), correlation.spatial is not None)
             if self.upper_limit(key) is not None:
                 raise ValueError(
                     f"the noise of '{key}' is correlated, which does not go "
@@ -509,13 +479,6 @@ class LikelihoodGauss(Likelihood):
     def takes_missing_values(self) -> bool:
         return self._missing_residual is not None
 
-    def comparison(
-            self, observation: 'Observation', driver: 'Driver'
-    ) -> 'Comparison':
-        # (the comparisons import the likelihoods)
-        from .comparisons import ComparisonGauss
-        return ComparisonGauss(observation, driver)
-
     def upper_limit(self, key: str) -> UpperLimit | None:
         """
         Return the detection limit below which the data item of the given
@@ -538,50 +501,28 @@ class LikelihoodGauss(Likelihood):
         return self._white_floor
 
 
-@dataclasses.dataclass(frozen=True)
-class Whitening:
+def channel_mask(dataset: Dataset, key: str) -> np.ndarray:
     """
-    The whitening of the residuals of a data item whose noise is
-    correlated (see LikelihoodGauss and whitening). Its values are on
-    pixels of the sky (the last two axes of its arrays) and, for a cube,
-    on channels (its first axis). The residuals of the pixels it keeps,
-    as a matrix R of the channels by those pixels (one row for an image),
-    are whitened into spectral R spatial^T, with the whitening of each
-    axis whose noise is correlated (None for the others). That of the
-    channels is of those the mask keeps, with rows and columns of 0 for
-    the others, whose residuals, 0, it leaves 0. Noise of exactly
-    the correlation C of the data (without the white floor) gives them
-    the chi-square tr(C C'^-1) on average, nindependent: the number of
-    independent values they are worth (e.g. one in 4.5 of the pixels of
-    moment maps of a beam of 6.6 by 5.4 pixels, with a floor of 0.01).
-
-    Attributes
-    ----------
-    pixels : np.ndarray
-        The flat indices of the pixels of the sky it keeps.
-    spatial : np.ndarray or None
-        The whitening of the pixels it keeps, if their noise is correlated
-        on the sky.
-    spectral : np.ndarray or None
-        The whitening of the channels, if their noise is correlated along
-        the spectral axis.
-    nindependent : float
-        The number of independent values they are worth.
+    Return the mask of a data item of a dataset by its channels, as the
+    whitening of correlated noise takes it (see Whitening): of shape
+    (nchannels, ...), of its channels (the spectral axis, the first of
+    data in numpy order; one for data without a spectral axis, e.g. an
+    image) by its positions (the others: the pixels of the sky, the
+    positions along a slit, or the regions).
     """
-    pixels: np.ndarray
-    spatial: np.ndarray | None
-    spectral: np.ndarray | None
-    nindependent: float
+    mask = dataset[key].mask()
+    return mask if dataset.spectral_axis is not None else mask[None]
 
 
 def correlated_pixels(
         key: str, mask: np.ndarray, spatial: bool
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Return the pixels of the sky and the channels that a data item whose
-    noise is correlated keeps (see Whitening), of its mask.
+    Return the positions (e.g. the pixels of the sky) and the channels
+    that a data item whose noise is correlated keeps (see Whitening), of
+    its mask.
 
-    The mask must keep whole spectra: the same pixels in every channel
+    The mask must keep whole spectra: the same positions in every channel
     that it keeps (those it masks everywhere, e.g. a blank plane, are
     left out).
 
@@ -590,8 +531,7 @@ def correlated_pixels(
     key : str
         The name of the data item.
     mask : np.ndarray
-        Its mask: of the pixels of an image, or of the channels by the
-        pixels of a cube.
+        Its mask, of its channels by its positions (see channel_mask).
     spatial : bool
         Whether its noise is correlated on the sky, whose dense matrix
         allows at most MAX_CORRELATED_PIXELS pixels.
@@ -599,9 +539,9 @@ def correlated_pixels(
     Returns
     -------
     pixels : np.ndarray
-        The flat indices of the pixels it keeps.
+        The flat indices of the positions it keeps.
     channels : np.ndarray
-        The indices of the channels it keeps (0 for an image).
+        The indices of the channels it keeps (0 without a spectral axis).
 
     Raises
     ------
@@ -609,13 +549,13 @@ def correlated_pixels(
         If its mask does not keep whole spectra, or keeps too many pixels
         of noise correlated on the sky.
     """
-    planes = mask.reshape(-1, *mask.shape[-2:]) != 0
+    planes = mask.reshape(mask.shape[0], -1) != 0
     pixels = np.any(planes, axis=0)
-    channels = np.any(planes, axis=(1, 2))
-    if not np.array_equal(planes, channels[:, None, None] & pixels):
+    channels = np.any(planes, axis=1)
+    if not np.array_equal(planes, channels[:, None] & pixels):
         raise ValueError(
             f"the noise of '{key}' is correlated, so its mask must keep "
-            f"whole spectra (the same pixels in every channel it keeps, "
+            f"whole spectra (the same positions in every channel it keeps, "
             f"e.g. not a mask of the emission); it does not. The option "
             f"mask_whole_spectra of the data masks every spectrum with a "
             f"masked channel, but for the channels masked in every "
@@ -627,95 +567,6 @@ def correlated_pixels(
             f"{pixels.size} pixels; at most {MAX_CORRELATED_PIXELS} can be "
             f"(mask more of them)")
     return pixels, np.flatnonzero(channels)
-
-
-def whitening(
-        key: str,
-        mask: np.ndarray,
-        correlation: NoiseCorrelation,
-        white_floor: float
-) -> Whitening:
-    """
-    Return the whitening of the residuals of a data item whose noise is
-    correlated (see LikelihoodGauss), of its mask and of the
-    correlation of its noise, with a white floor.
-
-    Parameters
-    ----------
-    key : str
-        The name of the data item.
-    mask : np.ndarray
-        Its mask (see correlated_pixels).
-    correlation : NoiseCorrelation
-        The correlation of its noise.
-    white_floor : float
-        The share of the variance of the noise taken as white (see
-        LikelihoodGauss).
-
-    Returns
-    -------
-    Whitening
-        The whitening.
-
-    Raises
-    ------
-    ValueError
-        If its mask is not one of correlated noise (see correlated_pixels),
-        or its correlation is not positive definite with the white floor.
-    """
-    pixels, channels = correlated_pixels(
-        key, mask, correlation.spatial is not None)
-    nchannels = mask.shape[0] if mask.ndim == 3 else 1
-    spatial = spectral = None
-    if correlation.spatial is not None:
-        points = np.column_stack(np.unravel_index(pixels, mask.shape[-2:]))
-        spatial = _whitening(
-            key, correlation.spatial, points, white_floor)
-    if correlation.spectral is not None:
-        spectral = np.zeros((nchannels, nchannels))
-        spectral[np.ix_(channels, channels)] = _whitening(
-            key, correlation.spectral, channels[:, None], white_floor)
-    nindependent = _nindependent(spatial, pixels.size, white_floor) \
-        * _nindependent(spectral, channels.size, white_floor)
-    return Whitening(pixels, spatial, spectral, nindependent)
-
-
-def _nindependent(
-        whitening: np.ndarray | None, size: int, white_floor: float
-) -> float:
-    """
-    Return the number of independent values that the values of an axis
-    of a size are worth, of their whitening (see Whitening; all of them
-    without one): tr(C C'^-1) of their correlation C, with C' = (1 - f) C
-    + f I, which is (size - f tr(C'^-1)) / (1 - f), and tr(C'^-1) the sum
-    of the squares of the whitening W (C'^-1 = W^T W).
-    """
-    if whitening is None:
-        return size
-    return (size - white_floor * np.sum(whitening ** 2)) / (1 - white_floor)
-
-
-def _whitening(
-        key: str,
-        shape: np.ndarray,
-        points: np.ndarray,
-        white_floor: float
-) -> np.ndarray:
-    """
-    Return the whitening of the values at points of a grid (see
-    whitening_matrix), of the shape of the correlation of the noise of
-    data item key on the separations of the grid (see NoiseCorrelation),
-    with a white floor; raise ValueError if it is not positive definite.
-    """
-    matrix = correlation_matrix(
-        periodic_correlation(shape, shape.shape), points)
-    try:
-        return whitening_matrix(matrix, white_floor)
-    except np.linalg.LinAlgError:
-        raise ValueError(
-            f"the correlation of the noise of '{key}' is singular with the "
-            f"white floor {white_floor} (see LikelihoodGauss): raise it"
-        ) from None
 
 
 def _check_errors_differ(key: str, data: Dataset) -> None:
@@ -905,13 +756,6 @@ class LikelihoodUser(Likelihood):
 
     def takes_missing_values(self) -> bool:
         return True
-
-    def comparison(
-            self, observation: 'Observation', driver: 'Driver'
-    ) -> 'Comparison':
-        # (the comparisons import the likelihoods)
-        from .comparisons import ComparisonUser
-        return ComparisonUser(observation, driver)
 
     def evaluate(
             self,

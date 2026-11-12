@@ -32,6 +32,7 @@ import astropy.wcs
 import numpy as np
 import scipy.special
 from annotated_types import Gt
+from astropy.stats import gaussian_fwhm_to_sigma
 
 import gbkfit.units
 from gbkfit.config import (
@@ -436,8 +437,7 @@ class LSFGauss(_AnalyticLSF):
             The LSF.
         """
         check_options(LSFGauss.from_fwhm, locals())
-        return cls(_profiles.gauss_fwhm_to_sigma(fwhm))._given_as(
-            fwhm=fwhm)
+        return cls(fwhm * gaussian_fwhm_to_sigma)._given_as(fwhm=fwhm)
 
     def _wings(self) -> float:
         # (the flux of a Gaussian within |v| < w is erf(w / sqrt(2) sigma))

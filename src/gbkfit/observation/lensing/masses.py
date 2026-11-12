@@ -9,7 +9,8 @@ moves them too, see ObservationGroup) and oriented by the position angle
 (u, from +y towards -x; the minor axis v is 90 degrees clockwise of it).
 Their convergence is elliptical in xi = sqrt(q u^2 + v^2 / q), so the
 mass within the ellipse xi of an axis ratio q is that of the circle of
-radius xi of the round mass.
+radius xi of the round mass. Deflection maps are placed by their RA and
+Dec instead, and can be shifted from there (see LensDeflectionMap).
 """
 
 import abc
@@ -25,10 +26,11 @@ from annotated_types import Ge
 
 from gbkfit.config import (
     DataFile, TypedParser, TypedSerializable, Unit, check_name,
-    check_options)
+    check_options, split_data_file)
 from gbkfit.grid import (
-    Grid, check_overlap, make_grid, pixels_on, sky_positions)
-from gbkfit.io import read_data, write_data
+    Coords, Grid, check_overlap, frame_to_pixels, make_grid, sky_positions)
+from gbkfit.io import (
+    Orientation, coords_from_header, model_header, read_image, write_data)
 from gbkfit.params import ParamScalarDesc, ParamValues
 
 from ._deflections import (
@@ -91,7 +93,18 @@ class LensMass(TypedSerializable, abc.ABC):
     def centred(self) -> bool:
         """
         Check whether it is placed by its centre, its parameters xpos and
-        ypos (in the frame of the model, as those of disks); not here.
+        ypos (in the frame of the model, as those of disks, which the
+        frame of each observation moves; see ObservationGroup); not here.
+        """
+        return False
+
+    def shifted(self) -> bool:
+        """
+        Check whether it is placed by its RA and Dec and shifted from
+        there by its parameters xpos and ypos (in the frame of the model),
+        which only the offsets of the frame of its observation move (its
+        RA and Dec place it in each frame; see ObservationGroup); not
+        here.
         """
         return False
 
@@ -126,11 +139,24 @@ class LensDeflectionMap(LensMass):
     (bilinearly), and beyond them it is that of their nearest edge (e.g.
     in the padding of the convolution).
 
+    Shifted, the maps are moved from where their RA and Dec put them by
+    parameters, xpos and ypos (arcsec, along x and y of the frame of the
+    model; fixed or fitted, see pdescs), and by the offsets of the frame
+    of their observation (see ObservationSky), as the analytic masses
+    are: maps in other coordinates than those of the observation (e.g. a
+    lens model made on an image of HST, for a cube of MUSE whose offsets
+    are fitted), or of a lens model whose misalignment is fitted. Not
+    shifted, they stay where their RA and Dec put them in the coordinates
+    of their observation, whatever its offsets (e.g. maps made on its own
+    data).
+
     Parameters
     ----------
     alpha_x, alpha_y : np.ndarray
         The deflection (arcsec) along x and y of the frame of the model
-        (like xpos and ypos), each of shape (ny, nx).
+        (like xpos and ypos), each of shape (ny, nx), whatever the
+        rotation of the maps (files give it along their own axes, see
+        from_files).
     step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the maps (see make_grid).
     rota : float, optional
@@ -139,6 +165,8 @@ class LensDeflectionMap(LensMass):
         Whether the deflection is scaled by a parameter, 'scale' (fixed
         or fitted; see pdescs): e.g. D_LS / D_S of the source over that
         of the maps, when they are of a source at another redshift.
+    shifted : bool, optional
+        Whether the maps are shifted (see above).
     name : str, optional
         Its name (see LensMass).
 
@@ -168,11 +196,23 @@ class LensDeflectionMap(LensMass):
             rval: float | Sequence[float] | None = None,
             rota: _Angle | None = None,
             scaled: bool = False,
+            shifted: bool = False,
             name: str | None = None
     ) -> 'LensDeflectionMap':
         """
         Read a mass from FITS files of its deflection maps, with the world
         coordinates of the files unless given; they must agree.
+
+        Each file gives the deflection (arcsec) along one of its own
+        pixel axes, towards higher pixels, as lens models write it (e.g.
+        those of the Hubble Frontier Fields): alpha_x along the first
+        axis of its file (that of NAXIS1), and alpha_y along the second
+        axis of its file. The maps are read in the orientation of the
+        model (see read_data), and their vectors with them: a component
+        along an axis that is reversed (east to the right of north) is
+        negated, the components are swapped with the axes (Dec first),
+        and the vectors are rotated by the rotation of the maps on the sky
+        (rota) into x and y of the frame of the model.
 
         Parameters
         ----------
@@ -185,11 +225,11 @@ class LensDeflectionMap(LensMass):
             given, and the other comes from the headers (see
             read_data).
         rota : float, optional
-            The rotation of the maps on the sky; by default, that of the
-            headers.
-        scaled : bool, optional
-            Whether the deflection is scaled by a parameter (see the
-            class).
+            The rotation of the maps on the sky, which turns their
+            vectors with them; by default, that of the headers.
+        scaled, shifted : bool, optional
+            Whether the deflection is scaled by a parameter, and whether
+            the maps are shifted (see the class).
         name : str, optional
             Its name (see LensMass).
 
@@ -204,31 +244,36 @@ class LensDeflectionMap(LensMass):
             If the maps have different world coordinates.
         """
         check_options(LensDeflectionMap.from_files, locals())
-        maps = [
-            read_data(file, rpix=rpix, rval=rval)
-            for file in (alpha_x, alpha_y)]
-        (data_x, coords), (data_y, coords_y) = maps
+        (data_x, coords, orientation_x), (data_y, coords_y, orientation_y) = (
+            _read_map(file, rpix, rval) for file in (alpha_x, alpha_y))
         if coords_y != coords:
             raise ValueError(
                 "the deflection maps have different world coordinates")
+        along = _along_model_axes(
+            (data_x, data_y), (orientation_x, orientation_y))
+        rota = coords.rota if rota is None else rota
         return cls(
-            data_x, data_y, coords.step if step is None else step,
-            coords.rpix, coords.rval, coords.rota if rota is None else rota,
-            scaled, name)
+            *_rotated(*along, rota), coords.step if step is None else step,
+            coords.rpix, coords.rval, rota, scaled, shifted, name)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
         info = super().dump()
-        for key, data in (
-                ('alpha_x', self._alpha_x), ('alpha_y', self._alpha_y)):
+        # (the files give the deflection along their pixel axes, which are
+        # those of the maps, turned by their rotation; see from_files)
+        along = _rotated(
+            self._alpha_x, self._alpha_y, -self._grid.coords.rota)
+        for key, data in zip(('alpha_x', 'alpha_y'), along):
             filename = f'{prefix}{key}.fits'
             write_data(
                 filename, data, self._grid.coords, overwrite=overwrite)
             info[key] = filename if dump_path else os.path.basename(filename)
         if self._scaled:
             info['scaled'] = True
+        if self._shifted:
+            info['shifted'] = True
         return info
 
     def __init__(
@@ -240,6 +285,7 @@ class LensDeflectionMap(LensMass):
             rval: float | Sequence[float] | None = None,
             rota: _Angle | None = None,
             scaled: bool = False,
+            shifted: bool = False,
             name: str | None = None
     ):
         check_options(LensDeflectionMap.__init__, locals())
@@ -257,19 +303,44 @@ class LensDeflectionMap(LensMass):
         self._grid = make_grid(
             alpha_x.shape[::-1], step, rpix, rval, rota)
         self._scaled = scaled
+        self._shifted = shifted
+
+    def grid(self) -> Grid:
+        """Return the grid of the maps."""
+        return self._grid
+
+    def shifted(self) -> bool:
+        return self._shifted
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
-        if not self._scaled:
-            return {}
-        return dict(scale=ParamScalarDesc(
-            "the scale of the deflection (e.g. D_LS / D_S)",
-            title='Deflection scale', min=0, unit='', default=0.5))
+        pdescs = {}
+        if self._scaled:
+            pdescs['scale'] = ParamScalarDesc(
+                "the scale of the deflection (e.g. D_LS / D_S)",
+                title='Deflection scale', min=0, unit='', default=0.5)
+        if self._shifted:
+            pdescs |= dict(
+                xpos=ParamScalarDesc(
+                    "the shift of the maps along x", title='Shift (x)',
+                    unit='arcsec', default=0),
+                ypos=ParamScalarDesc(
+                    "the shift of the maps along y", title='Shift (y)',
+                    unit='arcsec', default=0))
+        return pdescs
 
     def deflection(
             self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
+        # (of the world coordinates of the maps, whatever their shift)
         check_overlap(grid, self._grid, "the deflection maps")
-        pixel_x, pixel_y = pixels_on(grid, self._grid)
+        x, y = sky_positions(grid)
+        if self._shifted:
+            # The deflection of shifted maps at a point is theirs at the
+            # point less the shift
+            x = x - params['xpos']
+            y = y - params['ypos']
+        pixel_x, pixel_y = frame_to_pixels(
+            x, y, grid.coords.rval, self._grid)
         scale = params['scale'] if self._scaled else 1.0
 
         def sample(data: np.ndarray) -> np.ndarray:
@@ -658,3 +729,55 @@ def _from_axes(
     sin_pa, cos_pa = math.sin(posa), math.cos(posa)
     return (-sin_pa * alpha_u + cos_pa * alpha_v,
             cos_pa * alpha_u + sin_pa * alpha_v)
+
+
+def _read_map(
+        file: DataFile,
+        rpix: float | Sequence[float] | None,
+        rval: float | Sequence[float] | None
+) -> tuple[np.ndarray, Coords, Orientation]:
+    """
+    Return the data of a file in the orientation of the model with their
+    world coordinates (as read_data), and how the data were put in it,
+    which the vectors of deflection maps follow (see
+    LensDeflectionMap.from_files).
+    """
+    filename = split_data_file(file)[0]
+    data, header = read_image(file)
+    header, orientation = model_header(filename, header, data.shape)
+    coords = coords_from_header(filename, header, rpix=rpix, rval=rval)
+    return orientation.apply(data), coords, orientation
+
+
+def _along_model_axes(
+        maps: Sequence[np.ndarray],
+        orientations: Sequence[Orientation]
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the deflection along the pixel axes of maps put in the
+    orientation of the model (x then y), of the maps of it along the
+    pixel axes of their files (that of x along the first axis of its
+    file, that of y along the second; see LensDeflectionMap.from_files)
+    and how each was put in it: each goes along the axis of the model
+    that the axis of its file became, negated if that axis was reversed.
+    """
+    along = {}
+    for file_axis, (data, orientation) in enumerate(zip(maps, orientations)):
+        sky = orientation.sky()
+        axis = sky.order.index(file_axis)
+        along[axis] = -data if axis in sky.flips else data
+    return along[0], along[1]
+
+
+def _rotated(
+        along_x: np.ndarray, along_y: np.ndarray, rota: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return vectors along the pixel axes of a grid of the rotation rota
+    (degrees; see Coords) along x and y of the frame of the model (see
+    sky_positions); for -rota, vectors along x and y along the pixel
+    axes.
+    """
+    rota = math.radians(rota)
+    cos, sin = math.cos(rota), math.sin(rota)
+    return cos * along_x - sin * along_y, sin * along_x + cos * along_y

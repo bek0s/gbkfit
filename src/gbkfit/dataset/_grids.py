@@ -1,8 +1,8 @@
 """
 Helpers of the datasets on grids (see DatasetGrid): the world
 coordinates of their files and their grids (and of the spectral axis of
-the spectra of regions), their dumps, and the correlations of their
-noise.
+the spectra of regions), their dumps, the correlations of their noise,
+and their spectra masked whole.
 """
 
 from collections.abc import Sequence
@@ -14,12 +14,13 @@ from gbkfit.config import warn
 from gbkfit.grid import (
     Coords, Grid, SpectralAxis, grid_options, make_cube_grid, make_grid,
     per_axis, rest_of_convention)
-from gbkfit.instrument import Channel
+from gbkfit.instrument import LSF, Channel
 from gbkfit.io import write_data
 from .data import dump_data, item_filenames
 
 if TYPE_CHECKING:
     from .base import Dataset, DatasetGrid, NoiseCorrelation
+    from .data import Data
 
 
 def grid_coords(
@@ -224,11 +225,12 @@ def grid_noise_correlation(
 ) -> 'NoiseCorrelation | None':
     """
     Return the correlation of the noise of a data item of a dataset on a
-    grid (see Dataset.noise_correlation): the shapes of its correlations
-    on the pixels and the channels of the grid, out to the largest
-    separations of the data, divided by their values at their centres.
-    Raise ValueError if it has a spectral correlation but the grid no
-    spectral axis, or a shape is not largest at its centre.
+    grid of the sky (see Dataset.noise_correlation): the shapes of its
+    correlations on the pixels and the channels of the grid, out to the
+    largest separations of the data, divided by their values at their
+    centres (the data have a spectral axis if they have a spectral
+    correlation, see Dataset). Raise ValueError if a shape is not largest
+    at its centre.
     """
     from .base import NoiseCorrelation
     item = dataset[key]
@@ -236,27 +238,69 @@ def grid_noise_correlation(
     if spatial is None and spectral is None:
         return None
     grid = dataset.grid()
-    if spectral is not None and grid.spectral_axis is None:
-        raise ValueError(
-            f"the noise of '{key}' has a spectral correlation, but the "
-            f"data have no spectral axis")
     if spatial is not None:
         nx, ny = grid.size[:2]
         spatial = _centred(spatial.asarray(
             grid.coords.step[:2], (2 * nx - 1, 2 * ny - 1),
             rota=grid.coords.rota), key)
     if spectral is not None:
-        # (drawn at the middle channel, of the widths of the light there)
-        channel = Channel.middle(grid)
-        try:
-            spectral = spectral.asarray(
-                channel.width, channel, 2 * grid.size[grid.spectral_axis] - 1)
-        except RuntimeError as e:
-            raise RuntimeError(
-                f"the spectral correlation of the noise of '{key}' is drawn "
-                f"on the channels of the data, as they are: {e}") from None
-        spectral = _centred(spectral, key)
+        spectral = _spectral_shape(key, spectral, grid)
     return NoiseCorrelation(spatial, spectral)
+
+
+def spectra_noise_correlation(
+        dataset: 'Dataset', key: str, grid: Grid
+) -> 'NoiseCorrelation | None':
+    """
+    Return the correlation of the noise of a data item of spectra at
+    positions that are not pixels of the sky (along a slit, or regions;
+    see Dataset.noise_correlation), on the channels of the spectral axis
+    of a grid: along it alone. Raise ValueError if the item has a spatial
+    correlation, which the positions cannot have (a slit has no pixels
+    across it, and regions are of any shape), or the shape is not
+    largest at its centre.
+    """
+    from .base import NoiseCorrelation
+    item = dataset[key]
+    if item.spatial_correlation() is not None:
+        raise ValueError(
+            f"the noise of {dataset.type()} data can be correlated along "
+            f"their spectral axis alone (spectral_correlation), not on the "
+            f"sky")
+    if (spectral := item.spectral_correlation()) is None:
+        return None
+    return NoiseCorrelation(None, _spectral_shape(key, spectral, grid))
+
+
+def _spectral_shape(key: str, spectral: LSF, grid: Grid) -> np.ndarray:
+    """
+    Return the shape of the spectral correlation of the noise of data
+    item key on the channels of the spectral axis of a grid (see
+    grid_noise_correlation).
+    """
+    # (drawn at the middle channel, of the widths of the light there)
+    channel = Channel.middle(grid)
+    try:
+        shape = spectral.asarray(
+            channel.width, channel, 2 * grid.size[grid.spectral_axis] - 1)
+    except RuntimeError as e:
+        raise RuntimeError(
+            f"the spectral correlation of the noise of '{key}' is drawn "
+            f"on the channels of the data, as they are: {e}") from None
+    return _centred(shape, key)
+
+
+def whole_spectra(item: 'Data') -> np.ndarray:
+    """
+    Return the values of a data item of spectra (its channels the first
+    axis) with each spectrum masked whole (NaN) where it masks any of its
+    channels, but for the channels it masks in every spectrum (see
+    Dataset.mask_whole_spectra).
+    """
+    kept = item.mask() != 0
+    channels = np.any(kept.reshape(kept.shape[0], -1), axis=1)
+    whole = np.all(kept[channels], axis=0)
+    return np.where(whole, item.data(), np.nan)
 
 
 def _centred(shape: np.ndarray, key: str) -> np.ndarray:

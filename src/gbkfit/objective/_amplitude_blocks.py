@@ -11,11 +11,12 @@ from typing import NamedTuple
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.observation import Comparison, LinearPieces, ObservationGroup
+from gbkfit.observation import LinearPieces, ObservationGroup
 from gbkfit.params import (
     ParamValues, Solution, Solve, check_together, element_name,
     element_names, solve_together)
 from ._block import Block
+from ._comparisons import Comparison
 
 
 __all__ = [
@@ -132,7 +133,7 @@ class AmplitudeBlock(Block):
                 self._observations, self._comparisons, self._drivers,
                 self._sums):
             comparison.weighted_pieces(pieces[i], params, sums.rows)
-            comparison.evaluate(pieces[i].base, params, True, {})
+            comparison.evaluate(pieces[i].base, params, {})
             driver.mem_copy_d2d(comparison.residual_vector_d(), sums.residuals)
             driver.math_matmul(sums.rows, sums.rows.T, out=sums.d_normal)
             driver.math_matmul(sums.rows, sums.residuals, out=sums.d_rhs)

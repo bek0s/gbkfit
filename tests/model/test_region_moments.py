@@ -227,7 +227,7 @@ def test_region_moments_objective_residual(driver):
             observable, LineOfSightFlat(), instrument=instrument,
             data=dataset, likelihood=LikelihoodGauss(missing_residual=3))])
     residual = Objective(group.plan(driver)).residual_nddata_h(
-        params.evaluate(), False)
+        params.evaluate())
     for key in ('moment1', 'moment2'):
         np.testing.assert_allclose(residual[0][key], -0.5, rtol=1e-4)
 

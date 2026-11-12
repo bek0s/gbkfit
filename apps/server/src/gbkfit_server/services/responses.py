@@ -15,6 +15,7 @@ from typing import Any
 import astropy.units as u
 import numpy as np
 
+import gbkfit.io
 import gbkfit.units
 from gbkfit.config import ConfigError, TypedParser, paths_relative_to
 from gbkfit.grid.spectral import VelocityConvention, make_rest
@@ -140,8 +141,9 @@ class Responses:
         # A point has none
         except ValueError:
             beam_area = None
+        # (that of the round Gaussian beam of the solid angle)
         fwhm = None if beam_area is None \
-            else float(np.sqrt(4 * np.log(2) * beam_area / np.pi))
+            else float(np.sqrt(beam_area / gbkfit.io.beam_area(1, 1)))
         return PSFView(
             np.asarray(values, dtype=np.float32), tuple(step), beam_area,
             fwhm, None if beam_area is None else _axes(psf, own))

@@ -1,12 +1,13 @@
 """
 The dataset of interferometric visibilities, and where they are
-measured (see UVCoverage).
+measured (see UVCoverage); of files of their arrays, or of measurement
+sets (read by gbkfit.io.read_measurement_set).
 """
 
 import numbers
 import os.path
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal
 
 import astropy.units
 import numpy as np
@@ -15,10 +16,9 @@ import scipy.spatial
 from annotated_types import Ge
 
 import gbkfit.units
-from gbkfit.config import (
-    Choices, FilePath, Serializable, Unit, check_options)
+from gbkfit.config import FilePath, Serializable, Unit, check_options
 from gbkfit.grid import RestValue, make_rest
-from gbkfit.utils.numutils import MAD_TO_STD
+from gbkfit.io import MSErrorSource, read_measurement_set
 from .base import Dataset
 from .data import Data
 
@@ -33,22 +33,6 @@ __all__ = [
 # galaxy; topocentric ones move with the Earth (by up to 30 km/s in a
 # year, and 0.5 km/s in a day)
 _FRAMES = ('LSRK', 'BARY')
-
-# The frames of the measurement sets, by their codes (MEAS_FREQ_REF)
-_MS_FRAMES = {
-    0: 'REST', 1: 'LSRK', 2: 'LSRD', 3: 'BARY', 4: 'GEO', 5: 'TOPO',
-    6: 'GALACTO', 7: 'LGROUP', 8: 'CMB'}
-
-# Where the errors of the visibilities of a measurement set come from
-# (see DatasetVisibilities.from_ms)
-_ErrorSource: TypeAlias = Annotated[
-    Literal['weights', 'scatter'],
-    Choices(weights='From the weights', scatter='From the scatter')]
-
-# The codes of the Stokes I and of the pairs of parallel hands (I = (a +
-# b) / 2) of the measurement sets (CORR_TYPE)
-_MS_STOKES_I = 1
-_MS_PARALLEL_HANDS = ((5, 8), (9, 12))
 
 
 class UVCoverage(Serializable):
@@ -353,19 +337,19 @@ class DatasetVisibilities(Dataset):
             spw: Annotated[int, Ge(0)] = 0,
             column: str = 'DATA',
             rest: str | astropy.units.Quantity | None = None,
-            error: _ErrorSource = 'weights'
+            error: MSErrorSource = 'weights'
     ) -> 'DatasetVisibilities':
         """
-        Read the dataset from a measurement set (python-casacore): the
-        cross-correlations of a field in a spectral window, as Stokes I:
-        its own visibilities, or the mean of those of the parallel hands
-        (RR and LL, or XX and YY), left out where either is flagged. The
-        errors of each part are 1 / sqrt(weight), of WEIGHT_SPECTRUM if
-        given, else of WEIGHT, or estimated from the data (see error). The
-        visibilities of a measurement set are
-        sums of exp(+2 pi i UVW . (s - p)), so their baselines b (see
-        UVCoverage) are -UVW (checked against those that CASA predicts;
-        see tests/data/visibilities).
+        Read the dataset from a measurement set (python-casacore; see
+        gbkfit.io.read_measurement_set): the cross-correlations of a field
+        in a spectral window, as Stokes I: its own visibilities, or the
+        mean of those of the parallel hands (RR and LL, or XX and YY), left
+        out where either is flagged. The errors of each part are 1 /
+        sqrt(weight), of WEIGHT_SPECTRUM if given, else of WEIGHT, or
+        estimated from the data (see error). The visibilities of a
+        measurement set are sums of exp(+2 pi i UVW . (s - p)), so their
+        baselines b (see UVCoverage) are -UVW (checked against those that
+        CASA predicts; see tests/data/visibilities).
 
         Not supported yet: several fields or spectral windows in one
         dataset (one dataset each).
@@ -417,73 +401,16 @@ class DatasetVisibilities(Dataset):
             If python-casacore is not installed.
         """
         check_options(DatasetVisibilities.from_ms, locals())
-        try:
-            from casacore import tables
-        except ModuleNotFoundError as e:
-            raise ModuleNotFoundError(
-                "reading measurement sets needs python-casacore: pip "
-                "install 'gbkfit[casacore]'") from e
-
-        # TODO: several fields or spectral windows in one dataset (for
-        # now, one dataset, and one observation, each)
-        def subtable(name: str) -> Any:
-            return tables.table(os.path.join(ms, name), ack=False)
-        with subtable('FIELD') as fields:
-            names = list(fields.getcol('NAME'))
-            index = _ms_field(field, names)
-            phase_centre = np.degrees(fields.getcol('PHASE_DIR')[index, 0])
-            source = fields.getcol('SOURCE_ID')[index]
-        with subtable('SPECTRAL_WINDOW') as windows:
-            if not 0 <= spw < windows.nrows():
-                raise ValueError(
-                    f"the measurement set has {windows.nrows()} spectral "
-                    f"windows; spw {spw} is not one")
-            frequencies = windows.getcell('CHAN_FREQ', spw)
-            frame = _MS_FRAMES.get(
-                int(windows.getcell('MEAS_FREQ_REF', spw)), 'unknown')
         # TODO: TOPO frequencies, with the Doppler shift of the time of
         # each row (for now, regridded to LSRK by CASA mstransform)
-        if frame not in _FRAMES:
-            raise ValueError(
-                f"the frequencies must be in the rest frame "
-                f"{' or '.join(_FRAMES)}; they are in {frame} (regrid them, "
-                f"e.g. by CASA mstransform with outframe='LSRK')")
-        with subtable('DATA_DESCRIPTION') as descriptions:
-            description = list(descriptions.getcol('SPECTRAL_WINDOW_ID')) \
-                .index(spw)
-            polarization = descriptions.getcell('POLARIZATION_ID', description)
-        with subtable('POLARIZATION') as polarizations:
-            products = list(polarizations.getcell('CORR_TYPE', polarization))
-        if rest is None:
-            rest = _ms_rest(subtable, source)
-        with tables.table(ms, ack=False) as main:
-            if column not in main.colnames():
-                raise ValueError(
-                    f"the measurement set has no column {column}")
-            rows = main.query(
-                f'FIELD_ID == {index} && DATA_DESC_ID == {description} '
-                f'&& ANTENNA1 != ANTENNA2')
-            uvw = -rows.getcol('UVW')
-            visibilities = rows.getcol(column)
-            flags = rows.getcol('FLAG') \
-                | rows.getcol('FLAG_ROW')[:, None, None]
-            weights = rows.getcol('WEIGHT_SPECTRUM') \
-                if 'WEIGHT_SPECTRUM' in rows.colnames() \
-                and rows.iscelldefined('WEIGHT_SPECTRUM', 0) \
-                else rows.getcol('WEIGHT')[:, None, :]
-            baselines = rows.getcol('ANTENNA1'), rows.getcol('ANTENNA2')
-            times = rows.getcol('TIME'), rows.getcol('INTERVAL')
-            rows.close()
-        stokes, sigma, mask = _ms_stokes_i(
-            visibilities, flags, weights, products)
-        sigma_re = sigma_im = sigma
-        if error == 'scatter':
-            sigma_re, sigma_im = _scatter_errors(
-                np.where(mask, stokes, np.nan), *baselines, *times)
+        read = read_measurement_set(
+            ms, field, spw, column, rest, error, _FRAMES)
         return cls(
-            Data(stokes.real.T, mask.T, sigma_re.T, 'Jy'),
-            Data(stokes.imag.T, mask.T, sigma_im.T, 'Jy'),
-            UVCoverage(uvw, frequencies, phase_centre, frame, rest))
+            Data(read.data.real, read.mask, read.error_re, 'Jy'),
+            Data(read.data.imag, read.mask, read.error_im, 'Jy'),
+            UVCoverage(
+                read.uvw, read.frequencies, read.phase_centre, read.frame,
+                read.rest))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -616,105 +543,3 @@ def _savez(
         raise FileExistsError(f"{filename} exists")
     with open(filename, 'wb') as file:
         np.savez(file, **arrays)
-
-
-def _ms_field(field: int | str | None, names: list[str]) -> int:
-    """Return the index of a field of a measurement set of the names."""
-    if field is None:
-        if len(names) != 1:
-            raise ValueError(
-                f"the measurement set has the fields {names}; give one")
-        return 0
-    if isinstance(field, str):
-        if field not in names:
-            raise ValueError(
-                f"the measurement set has the fields {names}, not {field!r}")
-        return names.index(field)
-    if not 0 <= field < len(names):
-        raise ValueError(
-            f"the measurement set has {len(names)} fields; field {field} is "
-            f"not one")
-    return field
-
-
-def _ms_rest(subtable: Any, source: int) -> astropy.units.Quantity:
-    """
-    Return the rest frequency of a source of a measurement set (the first
-    of the table SOURCE, if it has one).
-    """
-    error = ValueError(
-        "the measurement set has no rest frequency for the field; give it "
-        "(option rest)")
-    try:
-        with subtable('SOURCE') as sources:
-            rows = [i for i, x in enumerate(sources.getcol('SOURCE_ID'))
-                    if x == source]
-            if not rows or 'REST_FREQUENCY' not in sources.colnames() \
-                    or not sources.iscelldefined('REST_FREQUENCY', rows[0]):
-                raise error
-            values = sources.getcell('REST_FREQUENCY', rows[0])
-    except RuntimeError as e:
-        raise error from e
-    if len(values) == 0:
-        raise error
-    return float(values[0]) * astropy.units.Hz
-
-
-def _scatter_errors(
-        visibilities: np.ndarray,
-        antenna1: np.ndarray,
-        antenna2: np.ndarray,
-        time: np.ndarray,
-        interval: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Return the errors of the real and the imaginary parts of visibilities
-    of shape (nrows, nchannels) (NaN where flagged), estimated from the
-    second differences of those of each baseline at consecutive times
-    (see DatasetVisibilities.from_ms).
-    """
-    errors = np.full((2,) + visibilities.shape, np.nan)
-    baselines = antenna1 * (antenna2.max() + 1) + antenna2
-    for baseline in np.unique(baselines):
-        rows = np.flatnonzero(baselines == baseline)
-        rows = rows[np.argsort(time[rows])]
-        # The triples of consecutive times in one scan
-        apart = np.diff(time[rows]) <= 1.5 * np.maximum(
-            interval[rows[1:]], interval[rows[:-1]])
-        middle = np.flatnonzero(apart[:-1] & apart[1:]) + 1
-        differences = visibilities[rows[middle - 1]] \
-            - 2 * visibilities[rows[middle]] + visibilities[rows[middle + 1]]
-        for part, values in enumerate((differences.real, differences.imag)):
-            values = values[np.isfinite(values)]
-            if values.size >= 5:
-                deviation = np.median(np.abs(values - np.median(values)))
-                errors[part][rows] = MAD_TO_STD * deviation / np.sqrt(6)
-    return errors[0], errors[1]
-
-
-def _ms_stokes_i(
-        visibilities: np.ndarray,
-        flags: np.ndarray,
-        weights: np.ndarray,
-        products: list[int]
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Return the Stokes I of the visibilities of a measurement set, of shape
-    (nrows, nchannels, nproducts), its errors (of each part), and its
-    mask, of shape (nrows, nchannels).
-    """
-    with np.errstate(divide='ignore'):
-        sigmas = np.where(weights > 0, 1 / np.sqrt(weights), np.inf)
-    sigmas = np.broadcast_to(sigmas, visibilities.shape)
-    if _MS_STOKES_I in products:
-        i = products.index(_MS_STOKES_I)
-        return visibilities[..., i], sigmas[..., i], ~flags[..., i]
-    for a, b in _MS_PARALLEL_HANDS:
-        if a in products and b in products:
-            a, b = products.index(a), products.index(b)
-            stokes = (visibilities[..., a] + visibilities[..., b]) / 2
-            error = np.sqrt(sigmas[..., a] ** 2 + sigmas[..., b] ** 2) / 2
-            return stokes, error, ~(flags[..., a] | flags[..., b])
-    raise ValueError(
-        f"the measurement set has neither Stokes I nor a pair of parallel "
-        f"hands; its products are {products} (CASA codes)")

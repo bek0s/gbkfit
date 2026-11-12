@@ -52,7 +52,7 @@ def main() -> None:
     # their traceback
     try:
         setup = load(sys.argv[1])
-        params, objective = setup.params, setup.objective
+        params, objective = setup.params(), setup.objective()
         free = params.free_properties()
         values = _start_values(params)
         outputs = setup.outputs(setup.evaluate(values), data=True)

@@ -344,8 +344,8 @@ def test_the_scales_of_slitless_rows_scale_their_rows():
     # row in the model of the outputs
     import gbkfit
     setup = gbkfit.load(str(GOLDEN / 'slitless_rows' / 'config.yaml'))
-    unscaled = setup.group_plan.model_h(
-        setup.params.evaluate())[0]['spectra'].data.copy()
+    unscaled = setup.group_plan().model_h(
+        setup.params().evaluate())[0]['spectra'].data.copy()
     outputs = {
         x.kind: x.value for x in setup.outputs(setup.evaluate()).values()}
     scales = outputs['flux_scale']

@@ -52,10 +52,12 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
     A dataset is a read-only mapping of the names of its items to the
     items. A subclass declares the number of axes of its items (ndim),
-    the index of their spectral axis, if any (spectral_axis, FITS
-    order), and the axes along which their residuals are cut into blocks
-    for bootstraps, if they are (block_axes, FITS order; their names, for
-    messages, e.g. ('x', 'y'); see resample_blocks).
+    the index of their spectral axis, if any (spectral_axis, FITS order:
+    the last, the first in numpy order), and the axes along which their
+    residuals are cut into blocks for bootstraps, if they are
+    (block_axes, FITS order; their names, for messages, e.g. ('x', 'y');
+    see resample_blocks). Only data with a spectral axis can have noise
+    correlated along it (see Data and noise_correlation).
 
     Parameters
     ----------
@@ -65,7 +67,9 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
     Raises
     ------
     ValueError
-        If there are no items, or they are not of one shape with ndim axes.
+        If there are no items, they are not of one shape with ndim axes,
+        or the data have no spectral axis and an item has a spectral
+        correlation of its noise.
     """
 
     ndim: int
@@ -92,6 +96,12 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
             raise ValueError(
                 f"the data items must have one shape; their shapes are "
                 f"{shapes}")
+        if self.spectral_axis is None and (correlated := [
+                key for key, item in items.items()
+                if item.spectral_correlation() is not None]):
+            raise ValueError(
+                f"the noise of the data items {correlated} has a spectral "
+                f"correlation, but {self.type()} data have no spectral axis")
         self._items = dict(items)
 
     @abc.abstractmethod
@@ -328,8 +338,9 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         of the channels), as correlated noise needs (see
         LikelihoodGauss). The channels they mask in every spectrum
         (e.g. a plane blank everywhere) are left out of the union: they
-        stay masked, and mask no spectrum. The kinds of data with spectra
-        on the sky offer it; the others raise ValueError.
+        stay masked, and mask no spectrum. The kinds of data of spectra
+        offer it (of pixels, along a slit, or of regions); the others
+        raise ValueError.
 
         Returns
         -------

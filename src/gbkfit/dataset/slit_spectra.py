@@ -7,9 +7,10 @@ from typing import Any
 
 from gbkfit.config import DataFile, check_options
 from gbkfit.grid import SpectralAxis, x_axis_pa, x_axis_rota
+from gbkfit.instrument import LSF
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids
-from .base import DatasetGrid, cleaned
+from .base import DatasetGrid, NoiseCorrelation, cleaned
 from .data import Data
 
 
@@ -29,6 +30,10 @@ class DatasetSlitSpectra(DatasetGrid):
     of its +x axis, the way the positions along it increase, as the PA of
     a slit is quoted (the rotation of its grid, the position angle of +y,
     across the slit, is 90 degrees more; see x_axis_rota).
+
+    Its noise can be correlated along the spectral axis (e.g. by the
+    resampling of the spectra), not along the slit (see
+    noise_correlation).
 
     Parameters
     ----------
@@ -81,7 +86,9 @@ class DatasetSlitSpectra(DatasetGrid):
             rval: float | Sequence[float] | None = None,
             slit_pa: float | None = None,
             spectral: SpectralAxis | None = None,
+            spectral_correlation: LSF | None = None,
             outliers: Mapping[str, Any] | None = None,
+            mask_whole_spectra: bool = False,
             error_kind: ErrorKind = 'sigma',
             mask_kind: MaskKind = 'valid',
             footprint: DataFile | None = None
@@ -120,9 +127,16 @@ class DatasetSlitSpectra(DatasetGrid):
             those of the header (as those of the axes on the sky; the
             medium of the header, see coords_from_header); not its size,
             which the data give.
+        spectral_correlation : LSF, optional
+            The correlation of the noise along the spectral axis (see
+            Data).
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma
             (see screen_outliers), which are masked.
+        mask_whole_spectra : bool, optional
+            Whether every spectrum with a masked value is masked whole,
+            but for the channels masked in every spectrum (see
+            mask_whole_spectra), after the outliers.
         error_kind : str, optional
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
@@ -143,8 +157,9 @@ class DatasetSlitSpectra(DatasetGrid):
         item, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
-            unit, beam, velocity=references['velocity'],
-            error_kind=error_kind, mask_kind=mask_kind, footprint=footprint,
+            unit, beam, spectral_correlation=spectral_correlation,
+            velocity=references['velocity'], error_kind=error_kind,
+            mask_kind=mask_kind, footprint=footprint,
             spectral_type=references['spectral_type'])
         options = _grids.cube_coords(coords, step, None, spectral)
         # (the slit along the x axis of the files, unless its angle is given)
@@ -152,7 +167,7 @@ class DatasetSlitSpectra(DatasetGrid):
         dataset = cls(
             item, **options,
             slit_pa=x_axis_pa(rota) if slit_pa is None else slit_pa)
-        return cleaned(dataset, outliers)
+        return cleaned(dataset, outliers, mask_whole_spectra)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -185,3 +200,22 @@ class DatasetSlitSpectra(DatasetGrid):
     def slit_pa(self) -> float:
         """Return the position angle of the slit (see the class)."""
         return self._slit_pa
+
+    def mask_whole_spectra(self) -> 'DatasetSlitSpectra':
+        """
+        Return a copy of it with the spectrum of each position along the
+        slit masked whole where it masks any of its channels, but for the
+        channels it masks at every position (see
+        Dataset.mask_whole_spectra).
+        """
+        return self.with_data(dict(
+            spectra=_grids.whole_spectra(self['spectra'])))
+
+    def noise_correlation(self, key: str) -> NoiseCorrelation | None:
+        """
+        Return the correlation of the noise of a data item on the
+        separations of its channels (see Dataset.noise_correlation): its
+        positions along the slit, which have no pixels across it, have
+        none.
+        """
+        return _grids.spectra_noise_correlation(self, key, self.grid())

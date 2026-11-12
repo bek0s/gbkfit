@@ -109,6 +109,32 @@ def test_weights_are_worked_out_again_only_as_the_disk_turns(
     assert not np.allclose(weights[2], weights[0])
 
 
+def test_a_warp_across_north_is_weighted_at_the_mean_direction():
+    # Of nodes at 350 to 20 degrees: in the plane of a flat disk at their
+    # circular mean, about 5 (it was at their arithmetic mean, 95, which
+    # swaps the major and the minor axis: audit 2026-11-11 d)
+    from gbkfit.driver.drivers.host import DriverHost
+    from gbkfit.grid import make_grid
+    from gbkfit.observation import Weights
+    from gbkfit.observation.weights import WeightsPlan
+    driver = DriverHost()
+    plan = WeightsPlan(
+        Weights('gas', WeightAzimuthPower(2)),
+        dict(xpos='x', ypos='y', posa='pa', incl='i'),
+        make_grid((16, 16), 1), driver, np.dtype(np.float64))
+
+    def weights(posa):
+        wcube = driver.mem_alloc_d((1, 16, 16), np.float64)
+        plan.evaluate(dict(x=0.5, y=-1.0, pa=posa, i=60.0), wcube)
+        return wcube.copy()
+    nodes = np.array([350.0, 0, 10, 20])
+    mean = np.degrees(np.arctan2(
+        np.sin(np.radians(nodes)).sum(), np.cos(np.radians(nodes)).sum()))
+    assert mean == pytest.approx(5, abs=0.1)
+    np.testing.assert_allclose(weights(nodes), weights(mean), atol=1e-12)
+    assert not np.allclose(weights(nodes), weights(95.0), atol=0.1)
+
+
 @pytest.mark.parametrize('incl', [40, 70])
 def test_weights_are_normalised_over_the_values_compared(driver, incl):
     # Data one error below the model, half of them masked: each residual

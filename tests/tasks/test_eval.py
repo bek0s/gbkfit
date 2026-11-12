@@ -90,8 +90,10 @@ def mock_data(run, k):
 
 def test_objective_residuals(tmp_path):
     # Evaluate a model, and use it plus 1 as the data, with errors of 2.
-    # Then the residual (model - data) / error is -0.5 everywhere, and
-    # the weighted residual (weight 0.5) is -0.25. The data file has no
+    # Then the residual data - model is 1 everywhere, and the residual in
+    # errors 0.5, whatever the weight of the item (0.5); the residuals of
+    # the fit are those in errors times it, and not written apart (no
+    # correlated noise or pixel weights). The data file has no
     # WCS, so its reference pixel is its centre, as in the model.
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     model = array(run_eval('model', config, tmp_path / 'model'), 'model')
@@ -104,8 +106,9 @@ def test_objective_residuals(tmp_path):
     # (a configuration of a fit evaluates too: its fitter is left)
     config['fitter'] = dict(type='scipy.least_squares')
     run = run_eval('objective', config, tmp_path / 'objective')
-    np.testing.assert_allclose(array(run, 'residual'), -0.5, rtol=1e-5)
-    np.testing.assert_allclose(array(run, 'wresidual'), -0.25, rtol=1e-5)
+    np.testing.assert_allclose(array(run, 'residual'), 1, rtol=1e-5)
+    np.testing.assert_allclose(array(run, 'wresidual'), 0.5, rtol=1e-5)
+    assert not run.products('chi2_residual')
     np.testing.assert_allclose(
         array(run, 'data', observation='observation0', item='spectra'),
         model + 1)
@@ -157,7 +160,7 @@ def test_mock_data_and_their_configuration(tmp_path):
     assert not np.array_equal(data0, data1)
     assert len(run.products('mock_data', mock='0')) == 3
     fit = run_eval('objective', filename, tmp_path / 'fit')
-    assert array(fit, 'residual').std() == pytest.approx(1, rel=0.01)
+    assert array(fit, 'wresidual').std() == pytest.approx(1, rel=0.01)
 
 
 def test_rotation_curve_from_radial_nodes(tmp_path):
@@ -185,13 +188,13 @@ def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     # (at the values of its parameters here, as the task does)
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     setup = gbkfit.load(str(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml'))
-    assert setup.objective is None
-    values = setup.params.evaluate()
-    model = setup.group_plan.model_h(values)[0]['spectra'].data
+    assert setup.objective() is None
+    values = setup.params().evaluate()
+    model = setup.group_plan().model_h(values)[0]['spectra'].data
     expected = array(run_eval('model', config, tmp_path / 'model'), 'model')
     np.testing.assert_array_equal(model, expected)
     # With data (the model plus 1, with errors of 2), its outputs have the
-    # data and the residuals, -0.5, as those the task writes
+    # data and the residuals, 1, as those the task writes
     fits.writeto(tmp_path / 'data.fits', expected + 1)
     observation = config['observations'][0]
     observation['data'] = dict(
@@ -204,7 +207,7 @@ def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     assert {'model', 'data', 'error', 'residual', 'wresidual'} <= kinds
     assert 'extra' not in kinds
     residual = outputs['observations/observation0/residual/spectra.fits']
-    np.testing.assert_allclose(residual.value.data, -0.5, rtol=1e-5)
+    np.testing.assert_allclose(residual.value.data, 1, rtol=1e-5)
 
 
 def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
@@ -234,7 +237,7 @@ def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
     result = run_task(tmp_path, 'eval', options | dict(output_dir=None))
     assert result.returncode == 0, result.stderr
     run = outputs.open(study / 'runs/disk/cube')
-    np.testing.assert_allclose(array(run, 'residual'), -0.5, rtol=1e-5)
+    np.testing.assert_allclose(array(run, 'residual'), 1, rtol=1e-5)
     setup = run.read(run.product('setup'))
     assert setup['project'] == '../../..'
     assert setup['file'] == 'setups/disk/cube.yaml'
@@ -280,7 +283,7 @@ def test_outputs_have_the_world_coordinates_of_the_model(tmp_path):
 def test_region_spectra_outputs_and_residuals(tmp_path):
     # Spectra in apertures are written with the regions along x and the
     # velocity along y. As data plus 1, with errors of 2, every residual
-    # is -0.5.
+    # is 1 (0.5 in errors).
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     observation = config['observations'][0]
     scube = observation['observable']
@@ -304,7 +307,8 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
         type='region_spectra', regions=regions,
         data=str(tmp_path / 'data.fits'), error=2.0)
     run = run_eval('objective', config, tmp_path / 'objective')
-    np.testing.assert_allclose(array(run, 'residual'), -0.5, rtol=1e-5)
+    np.testing.assert_allclose(array(run, 'residual'), 1, rtol=1e-5)
+    np.testing.assert_allclose(array(run, 'wresidual'), 0.5, rtol=1e-5)
 
 
 def test_one_galaxy_seen_by_two_observations(tmp_path):

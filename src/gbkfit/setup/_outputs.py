@@ -5,7 +5,7 @@ runs (see gbkfit.outputs): the models and residuals of the observations
 """
 
 import copy
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import astropy.units
@@ -14,7 +14,8 @@ import numpy as np
 from gbkfit.driver import Driver
 from gbkfit.model import Extra, Extras
 from gbkfit.objective import Objective
-from gbkfit.observation import GroupPlan, HostModelData, Observation
+from gbkfit.observation import (
+    GroupPlan, HostModelData, ModelItem, Observation, ObservationGroup)
 from gbkfit.outputs import Output, product_extension
 from gbkfit.params import ParamValues
 
@@ -113,13 +114,15 @@ def evaluation_outputs(
     the form the observations give them (their images made on their
     drivers), in observations/<observation>/<kind>/<item> of each data
     item: the models (kind 'model'; 'model_mask' and 'model_weight'), and
-    the residuals ((model - data) / error) without and with the weights
-    of the data items ('residual' and 'wresidual'; these need the
-    objective; the values of the parameters must have those of the solved
-    elements that it solves, see Setup.evaluate). With the models, a flux
-    scale of several values of an observation (see ObservationSky) is
-    'flux_scale' (observations/<observation>/flux_scale), of the shape of
-    its spectra but their axis. With the models, the images that the
+    the residuals: data - model ('residual', in the unit of the data),
+    over the noise of the data ('wresidual'), and the residuals of the
+    fit, where they differ ('chi2_residual'; see _residual_outputs).
+    These need the objective; the values of the parameters must have
+    those of the solved elements that it solves (see Setup.evaluate),
+    which the models take. With the models, a flux scale of several
+    values of an observation (see ObservationSky) is 'flux_scale'
+    (observations/<observation>/flux_scale), of the shape of its spectra
+    but their axis. With the models, the images that the
     observations make of them ('model_image', in place of the item: the
     name of the image; see Observation.images), and of the data minus
     them ('residual_image'), with the weights of the data. Unless left out
@@ -152,12 +155,15 @@ def evaluation_outputs(
         If the residuals are wanted without an objective.
     """
     group = group_plan.group()
+    if residuals and objective is None:
+        raise ValueError("the residuals need an objective")
     outputs = []
     extras = Extras() if extra else None
+    # (the plan reuses its arrays of the models, so copy them: the next
+    # evaluation would overwrite the outputs)
+    models = copy.deepcopy(group_plan.model_h(values, extras)) \
+        if model or residuals else []
     if model:
-        # (the plan reuses its arrays of the models, so copy them: the next
-        # evaluation would overwrite the outputs)
-        models = copy.deepcopy(group_plan.model_h(values, extras))
         for i, data_i in enumerate(models):
             observation = group.observations()[i]
             name = group.observation_label(i)
@@ -181,23 +187,73 @@ def evaluation_outputs(
                     f'observations/{name}/flux_scale.fits', 'flux_scale',
                     scale, dict(observation=name)))
     if residuals:
-        if objective is None:
-            raise ValueError("the residuals need an objective")
-        for kind, weighted in (('residual', False), ('wresidual', True)):
-            # (the objective reuses its residual arrays, so copy them;
-            # without the models, the extra outputs are those of the
-            # first residual evaluation, which evaluates the models)
-            data = copy.deepcopy(objective.residual_nddata_h(
-                values, weighted, None if model or weighted else extras))
-            for i, data_i in enumerate(data):
-                name = group.observation_label(i)
-                observation = group.observations()[i]
-                outputs += [
-                    _observation_output(
-                        name, kind, key, observation.output(value))
-                    for key, value in data_i.items()]
+        outputs += _residual_outputs(group, objective, values, models)
     outputs += [_extra_output(x) for x in extras or ()]
     return {output.path: output for output in outputs}
+
+
+def _residual_outputs(
+        group: ObservationGroup,
+        objective: Objective,
+        values: ParamValues,
+        models: Sequence[HostModelData]
+) -> list[Output]:
+    """
+    Return the residuals of the data items of the observations of a group
+    (see evaluation_outputs), of their models at the values of the
+    parameters: data - model ('residual', in the unit of the data); over
+    the noise of the data ('wresidual': the errors, with the fitted noise
+    of the likelihood, if any, see Likelihood.noise; NaN where masked);
+    and, of the items whose fit takes other residuals (see
+    _fit_residual_differs), those of the fit, whose squares sum to its
+    chi-square ('chi2_residual': whitened where the noise is correlated,
+    times the weights; see Objective.residual_nddata_h), as data - model
+    (0 where nothing counts).
+    """
+    outputs = []
+    # (the residuals of the fit, of one evaluation of the objective, if an
+    # item needs them; each is read once, into an output of its own)
+    fit = None
+    for i, (observation, model) in enumerate(
+            zip(group.observations(), models)):
+        name = group.observation_label(i)
+        dataset = observation.data()
+        likelihood = observation.likelihood()
+        for key, item in model.items():
+            data = dataset[key]
+            residual = data.data() - item.data
+            noise = likelihood.noise(key, data.error(), values)
+            outputs += [
+                _observation_output(
+                    name, 'residual', key,
+                    observation.output(residual, data.unit())),
+                _observation_output(
+                    name, 'wresidual', key,
+                    observation.output(residual / noise))]
+            if _fit_residual_differs(observation, key, item):
+                if fit is None:
+                    fit = objective.residual_nddata_h(values)
+                # (the fit takes model - data)
+                outputs.append(_observation_output(
+                    name, 'chi2_residual', key,
+                    observation.output(-fit[i][key])))
+    return outputs
+
+
+def _fit_residual_differs(
+        observation: Observation, key: str, model: ModelItem[np.ndarray]
+) -> bool:
+    """
+    Return whether the fit of a data item of an observation takes
+    residuals of its own (see Likelihood.gives_residuals), other than its
+    wresidual (see _residual_outputs): those of noise correlated in the
+    data, whitened, or of a model with pixel weights, times them.
+    """
+    item = observation.data()[key]
+    correlated = item.spatial_correlation() is not None \
+        or item.spectral_correlation() is not None
+    return observation.likelihood().gives_residuals() \
+        and (correlated or model.weights is not None)
 
 
 def _flux_scale_map(

@@ -23,6 +23,7 @@ from .orientation import Orientation
 
 __all__ = [
     'Beam',
+    'beam_area',
     'casa_beam_table',
     'header_beam'
 ]
@@ -50,8 +51,19 @@ class Beam(NamedTuple):
     spectral: astropy.units.Quantity | None = None
 
     def area(self) -> float | np.ndarray:
-        """Return its solid angle (arcsec^2): pi / (4 ln 2) bmaj bmin."""
-        return np.pi / (4 * np.log(2)) * np.multiply(self.bmaj, self.bmin)
+        """Return its solid angle (arcsec^2; see beam_area)."""
+        return beam_area(self.bmaj, self.bmin)
+
+
+def beam_area(
+        bmaj: float | np.ndarray, bmin: float | np.ndarray
+) -> float | np.ndarray:
+    """
+    Return the solid angle of a Gaussian beam of the full widths at half
+    maximum bmaj and bmin: pi / (4 ln 2) bmaj bmin, in the square of
+    their unit.
+    """
+    return np.pi / (4 * np.log(2)) * np.multiply(bmaj, bmin)
 
 
 def header_beam(

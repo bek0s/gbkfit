@@ -13,10 +13,12 @@ import astropy.units
 
 import gbkfit.units
 from gbkfit.grid import Coords
-from gbkfit.io import (
-    Beam, coords_from_header, header_beam, header_shape, header_unit,
-    ignoring_wcs_fixes, model_axis_order, model_header,
-    nonstandard_spectral_axis, parse_wcs, velocity_is_ambiguous)
+from .beams import Beam, header_beam
+from .coords import coords_from_header
+from .headers import (
+    header_shape, header_unit, ignoring_wcs_fixes, parse_wcs)
+from .orientation import model_axis_order, model_header
+from .spectral import nonstandard_spectral_axis, velocity_is_ambiguous
 
 
 __all__ = [
@@ -31,7 +33,7 @@ _RMS_KEYS = ('RMS', 'NOISE')
 
 # What an HDU of errors holds, as its header states it in the classes of
 # HDUs of ESO's science data products (e.g. MUSE, and MaNGA): HDUCLAS2 =
-# 'ERROR', and HDUCLAS3 one of these (see HDUDescription.holds)
+# 'ERROR', and HDUCLAS3 one of these (see HDUDescription.error_kind)
 _ERROR_CLASSES = dict(
     RMSE='sigma', MSE='variance', INVMSE='inverse_variance')
 
@@ -77,7 +79,7 @@ class HDUDescription:
         What a dataset of it refuses or needs given (e.g. the convention
         of velocities that the header does not state, or the beam of a
         unit per beam).
-    holds : str or None
+    error_kind : str or None
         What its values are, as errors, if its header states it (HDUCLAS2
         = 'ERROR', and HDUCLAS3 'RMSE', 'MSE' or 'INVMSE'): 'sigma'
         (standard deviations), 'variance' or 'inverse_variance' (the
@@ -99,7 +101,7 @@ class HDUDescription:
     rms: float | None
     ambiguous_velocity: bool
     problems: tuple[str, ...]
-    holds: str | None = None
+    error_kind: str | None = None
     nonstandard_type: str | None = None
 
 
@@ -209,16 +211,16 @@ def _describe(
         (float(header[key]) for key in _RMS_KEYS
          if isinstance(header.get(key), (int, float))
          and not isinstance(header.get(key), bool)), None)
-    holds = None
+    error_kind = None
     if str(header.get('HDUCLAS2', '')).strip().upper() == 'ERROR':
-        holds = _ERROR_CLASSES.get(
+        error_kind = _ERROR_CLASSES.get(
             str(header.get('HDUCLAS3', '')).strip().upper())
     nonstandard = nonstandard_spectral_axis(header, header_shape(header))
     return HDUDescription(
         index=index, name=name, shape=shape, axes=axes, unit=unit,
         beam=beam, coords=coords, rms=rms,
         ambiguous_velocity=ambiguous,
-        problems=tuple(problems), holds=holds,
+        problems=tuple(problems), error_kind=error_kind,
         nonstandard_type=None if nonstandard is None else nonstandard[1])
 
 

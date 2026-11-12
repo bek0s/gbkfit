@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
+import scipy.stats
 from annotated_types import Ge, Gt, Le
 
 from gbkfit.config import (
@@ -238,7 +239,9 @@ class WeightsPlan:
     The evaluation of the weights of an observation on the spatial grid of
     its model: into a weight cube, the same in every channel, with the
     parameters of the geometry of the disk (their names in the parameters
-    of the observation group, by their names in the disk). The weights are
+    of the observation group, by their names in the disk). The plane of a
+    disk whose geometry varies with radius (a warp) is that of the mean of
+    its nodes: the circular mean of their position angles. The weights are
     worked out again only for evaluations at which the values of those
     parameters change (e.g. not in a fit of a rotation curve alone).
     """
@@ -272,9 +275,14 @@ class WeightsPlan:
         Work out the weights of the pixels with the values of the
         parameters of the geometry, and copy them to the device.
         """
+        values = {
+            name: params[full] for name, full in self._geometry.items()}
         geometry = {
-            name: float(np.mean(params[full]))
-            for name, full in self._geometry.items()}
+            name: float(np.mean(value)) for name, value in values.items()}
+        # (the mean of the position angles of the nodes of a warp is that
+        # of their directions: 0 of 350 and 10 degrees, not 180)
+        geometry['posa'] = float(
+            scipy.stats.circmean(values['posa'], high=360))
         weight = self._weights.weight(geometry, self._x, self._y)
         self._driver.mem_copy_h2d(weight.astype(self._dtype), self._weight_d)
 

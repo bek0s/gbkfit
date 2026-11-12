@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from typing import Literal, NamedTuple
 
 import numpy as np
+from astropy.stats import gaussian_sigma_to_fwhm
 from astropy.table import Table
 
 try:
@@ -39,11 +40,12 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-# The width of a Gaussian at half its maximum, in standard deviations
-_FWHM = 2 * np.sqrt(2 * np.log(2))
-
 # An ellipse: its width, height and angle (degrees), in pixels
 _EllipseShape = tuple[float, float, float]
+
+# The label of the residuals in the noise of the data (the product
+# 'wresidual'; see gbkfit.setup.evaluation_outputs)
+_WRESIDUAL_LABEL = '(data - model) / noise'
 
 
 class _Figure(NamedTuple):
@@ -188,7 +190,8 @@ def _fit_figures(source: Run) -> list[_Figure]:
         if (data := _find(source, 'data', **ids)) is None:
             continue
         error = _find(source, 'error', **ids)
-        residual = _find(source, 'residual', **ids)
+        # (in the noise of the data, of which a residual is a deviation)
+        residual = _find(source, 'wresidual', **ids)
         psf = _find(source, 'extra', observation=observation, name='psf_lo')
         figure = _fit_figure(
             key, _read(source, data), _read(source, error),
@@ -217,7 +220,8 @@ def _psf_shape(image: np.ndarray | None) -> _EllipseShape | None:
         [np.sum(weights * dx * dy), np.sum(weights * dy * dy)]])
     variances, vectors = np.linalg.eigh(cov)
     angle = np.degrees(np.arctan2(vectors[1, 1], vectors[0, 1]))
-    major, minor = _FWHM * np.sqrt(np.maximum(variances[::-1], 0))
+    major, minor = gaussian_sigma_to_fwhm * np.sqrt(
+        np.maximum(variances[::-1], 0))
     return major, minor, angle
 
 
@@ -244,21 +248,21 @@ def _fit_figure(
         sums = [np.nansum(a, axis=0) for a in (data, model)]
         _map_panels(
             figure, axes[0], 'moment 0', sums[0], sums[1],
-            sums[1] - sums[0], 'model - data', psf, 'equal')
+            sums[0] - sums[1], 'data - model', psf, 'equal')
         row = data.shape[1] // 2
-        pv_residual = (model - data if residual is None else residual)
+        pv_residual = (data - model if residual is None else residual)
         _map_panels(
             figure, axes[1], f'row {row}', data[:, row, :], model[:, row, :],
             pv_residual[:, row, :],
-            'model - data' if residual is None else 'residual (errors)',
+            'data - model' if residual is None else _WRESIDUAL_LABEL,
             None, 'auto')
         return figure
     figure = Figure(figsize=(13, 4.2), layout='constrained')
     axes = figure.subplots(1, 3, squeeze=False)
     _map_panels(
         figure, axes[0], key, data, model,
-        model - data if residual is None else residual,
-        'model - data' if residual is None else 'residual (errors)', psf,
+        data - model if residual is None else residual,
+        'data - model' if residual is None else _WRESIDUAL_LABEL, psf,
         'auto' if 'spectra' in key else 'equal')
     return figure
 
@@ -332,11 +336,11 @@ def _profile_figure(
     top.legend()
     bottom.axhline(0, color='0.5', lw=0.8)
     if error is None:
-        bottom.plot(regions, model - data, 'o')
-        bottom.set_ylabel('model - data')
+        bottom.plot(regions, data - model, 'o')
+        bottom.set_ylabel('data - model')
     else:
-        bottom.plot(regions, (model - data) / error, 'o')
-        bottom.set_ylabel('residual (errors)')
+        bottom.plot(regions, (data - model) / error, 'o')
+        bottom.set_ylabel('(data - model) / error')
     bottom.set_xlabel(label)
     return figure
 

@@ -18,6 +18,7 @@ from gbkfit.params import (
 from gbkfit.utils import threadutils
 from ._amplitude_blocks import amplitude_blocks
 from ._block import Block
+from ._comparisons import comparison_of
 from ._orbit_blocks import orbit_blocks
 from ._scale_blocks import scale_blocks
 
@@ -106,9 +107,10 @@ class Objective:
     group (see ObservationGroup.plan).
 
     Each observation has a comparison of its kind of likelihood (see
-    Comparison): its residuals, of each value of its data, and the terms
-    of the chi-square beyond them (e.g. the noise residuals of a fitted
-    noise; see LikelihoodGauss). The objective sums them.
+    Comparison and comparison_of): its residuals, of each value of its
+    data, and the terms of the chi-square beyond them (e.g. the noise
+    residuals of a fitted noise; see LikelihoodGauss). The objective sums
+    them.
 
     The elements of parameters can be solved at each evaluation, rather
     than fitted (see Solve and ParamSpace): those that the models are
@@ -181,7 +183,7 @@ class Objective:
         self._group = group
         self._datasets = tuple(obs.data() for obs in observations)
         self._comparisons = tuple(
-            obs.likelihood().comparison(obs, driver) for obs, driver in zip(
+            comparison_of(obs, driver) for obs, driver in zip(
                 observations, group_plan.observation_drivers()))
         self._solves = dict(solves or {})
         # The blocks of each kind, each of the solves left by the others
@@ -416,7 +418,7 @@ class Objective:
         ObjectiveEvaluation
             The evaluation.
         """
-        self._update_residual_d(params, True, out_extra)
+        self._update_residual_d(params, out_extra)
         return self._evaluation()
 
     def _evaluation(self) -> ObjectiveEvaluation:
@@ -482,7 +484,7 @@ class Objective:
             If an observation gives no residuals (see require_residuals).
         """
         self.require_residuals()
-        vectors = self.residual_vector_h(params, True, out_extra)
+        vectors = self.residual_vector_h(params, out_extra)
         noise = [c.noise_residuals() for c in self._comparisons]
         return np.concatenate(
             [*vectors, *self._solve_residuals(), *noise], dtype=np.float64)
@@ -661,21 +663,20 @@ class Objective:
     def residual_vector_h(
             self,
             params: ParamValues,
-            weighted: bool,
             out_extra: Extras | None = None
     ) -> list[np.ndarray]:
         """
         Return the residuals of each observation, on the host: its data
         items one after the other, in one array that the next evaluation
-        overwrites (without its noise residuals; see residuals).
+        overwrites (without its noise residuals; see residuals). They are
+        the residuals of its comparison, whose squares sum to its
+        chi-square (see Comparison): weighted, and whitened where the
+        noise is correlated.
 
         Parameters
         ----------
         params : ParamValues
             The parameters of the models, prefixed (see pdescs).
-        weighted : bool
-            Whether to apply the weights of the data items (from the
-            likelihoods).
         out_extra : Extras, optional
             Where the extra outputs of the models go, if wanted.
 
@@ -684,26 +685,24 @@ class Objective:
         list of np.ndarray
             The residuals of each observation.
         """
-        self._update_residual_h(params, weighted, out_extra)
+        self._update_residual_h(params, out_extra)
         return [c.residual_vector_h() for c in self._comparisons]
 
     def residual_vector_d(
             self,
             params: ParamValues,
-            weighted: bool,
             out_extra: Extras | None = None
     ) -> list[DeviceArray]:
         """
         Return the residuals of each observation, on its device (see
         residual_vector_h).
         """
-        self._update_residual_d(params, weighted, out_extra)
+        self._update_residual_d(params, out_extra)
         return [c.residual_vector_d() for c in self._comparisons]
 
     def residual_nddata_h(
             self,
             params: ParamValues,
-            weighted: bool,
             out_extra: Extras | None = None
     ) -> list[dict[str, np.ndarray]]:
         """
@@ -711,30 +710,28 @@ class Objective:
         host, as arrays of the shape of the data, which the next
         evaluation overwrites (see residual_vector_h).
         """
-        self._update_residual_h(params, weighted, out_extra)
+        self._update_residual_h(params, out_extra)
         return [c.residual_nddata_h() for c in self._comparisons]
 
     def residual_nddata_d(
             self,
             params: ParamValues,
-            weighted: bool,
             out_extra: Extras | None = None
     ) -> list[dict[str, DeviceArray]]:
         """
         Return the residuals of each data item of each observation, on its
         device (see residual_nddata_h).
         """
-        self._update_residual_d(params, weighted, out_extra)
+        self._update_residual_d(params, out_extra)
         return [c.residual_nddata_d() for c in self._comparisons]
 
     def _update_residual_h(
             self,
             params: ParamValues,
-            weighted: bool,
             out_extra: Extras | None = None
     ) -> None:
         """Evaluate the residuals, and copy them to the host."""
-        self._update_residual_d(params, weighted, out_extra)
+        self._update_residual_d(params, out_extra)
         with self._group_plan.timers().measure('objective_residual_d2h'):
             for comparison_ in self._comparisons:
                 comparison_.copy_to_host()
@@ -742,7 +739,6 @@ class Objective:
     def _update_residual_d(
             self,
             params: ParamValues,
-            weighted: bool,
             out_extra: Extras | None = None
     ) -> None:
         """
@@ -771,7 +767,7 @@ class Objective:
                 scales = self._solve_scales(models, values, solutions)
                 for comparison_, model, scales_ in zip(
                         self._comparisons, models, scales):
-                    comparison_.evaluate(model, values, weighted, scales_)
+                    comparison_.evaluate(model, values, scales_)
         self._solutions = solutions
 
     def _solve_orbits(

@@ -5,19 +5,22 @@ where the instrument records them (see draw_mocks).
 
 import abc
 import os
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, Self, TypeAlias
 
 import astropy.units as u
 import numpy as np
 import numpy.typing as npt
 import scipy.fft
-from annotated_types import Gt
+from annotated_types import Ge, Gt
 
 from gbkfit.config import (
-    Choices, DataFile, TypedParser, TypedSerializable, check_options)
-from gbkfit.grid import Grid, VelocityConvention
+    Choices, DataFile, TypedParser, TypedSerializable, check_options,
+    split_data_file)
+from gbkfit.grid import (
+    Grid, VelocityConvention, frame_to_pixels, sky_positions)
 from gbkfit.instrument import LSF, PSF, Channel, lsf_parser, psf_parser
-from gbkfit.io import read_data, write_image
+from gbkfit.io import (
+    has_wcs, parse_wcs, read_data, read_header, write_data, write_image)
 from gbkfit.math.correlation import periodic_correlation
 
 
@@ -36,6 +39,10 @@ __all__ = [
 INSTRUMENT = 'instrument'
 _Instrument: TypeAlias = Annotated[
     Literal[INSTRUMENT], Choices({INSTRUMENT: 'PSF of the instrument'})]
+
+# How far (in pixels) the world coordinates of an error map may put its
+# pixels from those of the data it is drawn on
+_GRID_TOLERANCE = 1e-3
 
 
 class Noise(TypedSerializable, abc.ABC):
@@ -145,6 +152,11 @@ class NoiseOfDispersion(Noise):
     the dispersion of each value. Its kinds draw it from their
     distributions (e.g. Gaussian, Student-t).
 
+    An error map read from a file (see from_file of its kinds) keeps the
+    world coordinates of its file, if they place it on the sky, and is
+    drawn only on data whose pixels are its own there (see sigma); an
+    error map given as an array, on any data that it broadcasts to.
+
     Parameters
     ----------
     rms : float, optional
@@ -175,6 +187,8 @@ class NoiseOfDispersion(Noise):
                 raise ValueError("the error map has negative values")
         self._rms = rms
         self._error = error
+        # (of an error map read from a file; see _of_error_file)
+        self._error_grid: Grid | None = None
 
     def rms(self) -> float | None:
         """Return the dispersion of every value, if it has one."""
@@ -188,17 +202,21 @@ class NoiseOfDispersion(Noise):
         """
         Return the dispersion of each value of data on a grid, of rms or of
         the error map (see Noise.sigma); raise ValueError if the error map
-        does not broadcast to the data.
+        does not broadcast to the data, or the world coordinates of its
+        file do not put its pixels on those of the data (see the class).
         """
         shape = grid.size[::-1]
         if self._rms is not None:
             return np.full(shape, self._rms)
         try:
-            return np.broadcast_to(self._error, shape).copy()
+            sigma = np.broadcast_to(self._error, shape).copy()
         except ValueError:
             raise ValueError(
                 f"the error map, of shape {self._error.shape}, does not "
                 f"broadcast to the data, of shape {shape}") from None
+        if self._error_grid is not None:
+            _check_same_sky(self._error_grid, grid)
+        return sigma
 
     def _dump_dispersion(
             self, prefix: str, dump_path: bool, overwrite: bool
@@ -210,14 +228,32 @@ class NoiseOfDispersion(Noise):
         if self._rms is not None:
             return dict(rms=self._rms)
         filename = f'{prefix}noise_error.fits'
-        write_image(filename, self._error, overwrite=overwrite)
+        grid = self._error_grid
+        if grid is None:
+            write_image(filename, self._error, overwrite=overwrite)
+        else:
+            # (with the world coordinates of its file, which loading it
+            # checks again)
+            write_data(
+                filename, self._error, grid.coords, grid.spectral_axis,
+                overwrite=overwrite)
         return dict(
             error=filename if dump_path else os.path.basename(filename))
 
-    @staticmethod
-    def _read_error(file: DataFile) -> np.ndarray:
-        """Return the error map of a noise, read from its FITS file."""
-        return read_data(file)[0]
+    @classmethod
+    def _of_error_file(
+            cls, file: DataFile, *args: Any, **options: Any
+    ) -> Self:
+        """
+        Return a noise of the error map of a file (see _read_error) and of
+        the other options given (see from_file of its kinds), which keeps
+        the grid of the map on the sky, if its file gives one (see the
+        class).
+        """
+        error, grid = _read_error(file)
+        noise = cls(*args, error=error, **options)
+        noise._error_grid = grid
+        return noise
 
 
 class NoiseGauss(NoiseOfDispersion):
@@ -301,7 +337,9 @@ class NoiseGauss(NoiseOfDispersion):
         Make a noise of an error map read from a FITS file, in the
         orientation of the model (see read_data): by its world
         coordinates, or without them as the file has it, which must then
-        be that of the model (e.g. as gbkfit.prep writes data).
+        be that of the model (e.g. as gbkfit.prep writes data). World
+        coordinates of the sky must put its pixels on those of the data
+        it is drawn on (see NoiseOfDispersion).
 
         Parameters
         ----------
@@ -317,9 +355,8 @@ class NoiseGauss(NoiseOfDispersion):
             The noise.
         """
         check_options(NoiseGauss.from_file, locals())
-        return cls(
-            error=cls._read_error(error),
-            spatial_correlation=spatial_correlation,
+        return cls._of_error_file(
+            error, spatial_correlation=spatial_correlation,
             spectral_correlation=spectral_correlation)
 
     def __init__(
@@ -481,7 +518,8 @@ class NoiseStudentT(NoiseOfDispersion):
             error: DataFile
     ) -> 'NoiseStudentT':
         """
-        Make a noise of an error map read from a FITS file.
+        Make a noise of an error map read from a FITS file (as
+        NoiseGauss.from_file).
 
         Parameters
         ----------
@@ -497,7 +535,7 @@ class NoiseStudentT(NoiseOfDispersion):
             The noise.
         """
         check_options(NoiseStudentT.from_file, locals())
-        return cls(dof, error=cls._read_error(error))
+        return cls._of_error_file(error, dof)
 
     def __init__(
             self,
@@ -527,17 +565,26 @@ class NoiseStudentT(NoiseOfDispersion):
 
 class NoisePoisson(Noise):
     """
-    Poisson noise of data of counts, independent from value to value.
-    The data become counts / gain, the counts Poisson draws of the signal
-    (the data without noise) times the gain, of the dispersion
-    sqrt(signal gain) / gain (a signal below 0, e.g. of the ringing of a
-    convolution, counts as 0).
+    Poisson noise of data of counts, independent from value to value, of
+    the signal (the data without noise) over a background: the light that
+    was taken out of the data (e.g. that of the sky), whose counts are
+    noisy too.
+
+    The data become counts / gain - background, the counts Poisson draws
+    of (signal + background) gain, of the dispersion sqrt((signal +
+    background) gain) / gain (a signal below -background, e.g. of the
+    ringing of a convolution, counts as none). Without a background, the
+    data without signal have no noise, and so errors of 0, which leave
+    them out of fits (see Data).
 
     Parameters
     ----------
     gain : float, optional
         The counts per unit of the data (e.g. of the photons per unit of
         flux).
+    background : float, optional
+        The level of the background, in the unit of the data; 0 by
+        default.
     """
 
     @staticmethod
@@ -552,18 +599,30 @@ class NoisePoisson(Noise):
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        return dict(type=self.type(), gain=self._gain)
+        info = dict(type=self.type(), gain=self._gain)
+        if self._background:
+            info['background'] = self._background
+        return info
 
-    def __init__(self, gain: Annotated[float, Gt(0)] = 1.0):
+    def __init__(
+            self,
+            gain: Annotated[float, Gt(0)] = 1.0,
+            background: Annotated[float, Ge(0)] = 0.0
+    ):
         check_options(NoisePoisson.__init__, locals())
         self._gain = gain
+        self._background = background
 
     def gain(self) -> float:
         """Return the counts per unit of the data."""
         return self._gain
 
+    def background(self) -> float:
+        """Return the level of the background, in the unit of the data."""
+        return self._background
+
     def sigma(self, grid: Grid, signal: np.ndarray) -> np.ndarray:
-        return np.sqrt(np.maximum(signal, 0) * self._gain) / self._gain
+        return np.sqrt(self._expected_counts(signal)) / self._gain
 
     def draw(
             self,
@@ -572,8 +631,69 @@ class NoisePoisson(Noise):
             psf: PSF | None,
             signal: np.ndarray
     ) -> np.ndarray:
-        counts = rng.poisson(np.maximum(signal, 0) * self._gain)
-        return counts / self._gain - signal
+        counts = rng.poisson(self._expected_counts(signal))
+        return counts / self._gain - self._background - signal
+
+    def _expected_counts(self, signal: np.ndarray) -> np.ndarray:
+        """
+        Return the expected counts of each value of data without noise:
+        those of the signal and the background, none below 0.
+        """
+        return np.maximum(signal + self._background, 0) * self._gain
+
+
+def _read_error(file: DataFile) -> tuple[np.ndarray, Grid | None]:
+    """
+    Return the error map of a noise, read from its FITS file in the
+    orientation of the model (see read_data), and its grid if the world
+    coordinates of the file place it on the sky (of celestial axes), or
+    else None.
+    """
+    error, coords = read_data(file)
+    header = read_header(file)
+    if error.ndim < 2 or not has_wcs(header):
+        return error, None
+    wcs = parse_wcs(split_data_file(file)[0], header)
+    if not wcs.has_celestial:
+        return error, None
+    # (the orientation of the model puts a spectral axis last, and drops
+    # it if it is of one pixel)
+    spectral_axis = 2 if error.ndim == 3 and wcs.wcs.spec >= 0 else None
+    return error, Grid(error.shape[::-1], coords, spectral_axis)
+
+
+def _check_same_sky(error_grid: Grid, grid: Grid) -> None:
+    """
+    Raise ValueError unless the grid of an error map on the sky (see
+    _read_error) puts its pixels on those of the data of a grid, by their
+    world coordinates (the step, rpix, rval and rota of x and y): the
+    first and the last pixels of the data at those of the map, within
+    _GRID_TOLERANCE.
+    """
+    if len(grid.size) - (grid.spectral_axis is not None) < 2:
+        raise ValueError(
+            "the error map is an image of the sky, by the world "
+            "coordinates of its file, but the data are not on the sky "
+            "(e.g. visibilities)")
+    sky = grid.spatial()
+    x, y = sky_positions(sky)
+    ends = np.ix_([0, -1], [0, -1])
+    pixel_x, pixel_y = frame_to_pixels(
+        x[ends], y[ends], sky.coords.rval, error_grid.spatial())
+    size_x, size_y = sky.size
+    expected = np.meshgrid([0, size_x - 1], [0, size_y - 1])
+    if not np.allclose(
+            [pixel_x, pixel_y], expected, rtol=0, atol=_GRID_TOLERANCE):
+        first = (float(pixel_x[0, 0]), float(pixel_y[0, 0]))
+        last = (float(pixel_x[-1, -1]), float(pixel_y[-1, -1]))
+        raise ValueError(
+            f"the error map is not on the pixels of the data: by their world "
+            f"coordinates, the first and the last pixels of the data are at "
+            f"the pixels ({first[0]:.6g}, {first[1]:.6g}) and "
+            f"({last[0]:.6g}, {last[1]:.6g}) of the map, not (0, 0) and "
+            f"({size_x - 1}, {size_y - 1}); check the world coordinates "
+            f"(step, rpix, rval and rota) of the file of the map against "
+            f"those of the data")
 
 
 def _velocities(grid: Grid) -> np.ndarray:

@@ -1,28 +1,29 @@
 """
 The comparisons of the models of observations with their data, each of
-the kind of its likelihood (see Likelihood.comparison): their residuals
-and chi-square.
+the kind of its likelihood (see comparison_of): their residuals and
+chi-square.
 """
 
 import abc
 import math
 from collections.abc import Collection, Mapping, Sequence
-from typing import NamedTuple, Self
+from typing import NamedTuple
 
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.observation import (
+    Likelihood, LikelihoodGauss, LikelihoodUser, LinearPieces, ModelData,
+    Observation, UpperLimit, channel_mask)
 from gbkfit.params import ParamValues
-from .group_plan import LinearPieces
-from .likelihoods import LikelihoodUser, UpperLimit, Whitening, whitening
-from .observables import ModelData
-from .observation import Observation
+from ._whitening import Whitener, whitening
 
 
 __all__ = [
     'Comparison',
     'ComparisonGauss',
-    'ComparisonUser'
+    'ComparisonUser',
+    'comparison_of'
 ]
 
 
@@ -66,6 +67,12 @@ class Comparison(abc.ABC):
         self._observation = observation
         self._driver = driver
         self._dataset = observation.data()
+        # The number of values of each data item that the data do not mask
+        # (over which the pixel weights of the model are normalised; see
+        # _pixel_weight)
+        self._nunmasked = {
+            key: int(np.count_nonzero(self._dataset[key].mask()))
+            for key in observation.keys()}
         self._reset_memory()
 
     def _reset_memory(self) -> None:
@@ -77,6 +84,8 @@ class Comparison(abc.ABC):
         self._d_residual_vector: DeviceArray | None = None
         self._h_residual_nddata: dict[str, np.ndarray] = {}
         self._d_residual_nddata: dict[str, DeviceArray] = {}
+        # The masks of the data items on the device, by name
+        self._d_mask: dict[str, DeviceArray] = {}
         # The sum of the squared residuals (1d, size 1; in double
         # precision, of millions of terms)
         self._h_residual_sum: np.ndarray | None = None
@@ -164,6 +173,9 @@ class Comparison(abc.ABC):
             self._h_residual_vector, keys, shape)
         self._d_residual_nddata = _item_views(
             self._d_residual_vector, keys, shape)
+        for key in keys:
+            self._d_mask[key] = driver.mem_copy_h2d(
+                np.asarray(self._dataset[key].mask(), dtype))
         self._backend = driver.native_class('Objective', dtype)()
         self._prepare(driver, shape, dtype)
         self._prepared = True
@@ -182,7 +194,6 @@ class Comparison(abc.ABC):
             self,
             model: ModelData,
             params: ParamValues,
-            weighted: bool,
             scales: Mapping[str, DeviceArray]
     ) -> None:
         """
@@ -195,9 +206,6 @@ class Comparison(abc.ABC):
             The model of the observation (see GroupPlan.model_d).
         params : ParamValues
             The parameters, prefixed (see Objective.pdescs).
-        weighted : bool
-            Whether to apply the weights of the data items (from the
-            likelihood).
         scales : Mapping
             The scales of data items, by name (none for the others): arrays
             on the device that broadcast to the item.
@@ -289,7 +297,7 @@ class Comparison(abc.ABC):
         A = sum w m^2 and B = sum w m d of the values along it, m the
         model, d the data and w the weight of the value in the chi-square.
         Only comparisons whose weighted residuals are pointwise give them
-        (see pointwise_form).
+        (see pointwise_form). It overwrites the residuals of the item.
 
         Parameters
         ----------
@@ -396,6 +404,38 @@ class Comparison(abc.ABC):
         return driver.math_mul(
             model[key].data, scales[key], out=self._d_scaled_models[key])
 
+    def _pixel_weight(self, model: ModelData, key: str) -> float:
+        """
+        Return the factor of the weights of the model of data item key (its
+        pixel weights, see Weights) that makes their mean square over the
+        values the data do not mask 1; 1 without weights. It overwrites
+        the residuals of the item (its scratch), so its callers write them
+        after it.
+        """
+        # Pixel weights follow the free geometry of their disk, and the
+        # chi-square expected at the truth is the sum of the squares of the
+        # weights of the values compared. Unnormalised, a fit lowers it by
+        # turning the geometry so that the values fall where the weights
+        # are low: in a Monte Carlo of velocity fields, the inclination ran
+        # 1 to 4 degrees high, and to the end of its range with cos^2
+        # weights. Normalised, only the shape of the weights counts, and
+        # the bias is gone. (A choice over weights fixed at a given
+        # geometry, which remove it as well but stop following the disk.)
+        weights = model[key].weights
+        if weights is None:
+            return 1.0
+        driver = self._driver
+        flat = weights.reshape(-1)
+        # (the weights where the data do not mask them, in the residuals of
+        # the item, which take the type of the model: no array of its size
+        # allocated at each evaluation)
+        unmasked = driver.math_mul(
+            flat, self._d_mask[key].reshape(-1),
+            out=self._d_residual_nddata[key].reshape(-1))
+        total = float(driver.math_matmul(unmasked, flat))
+        return float(np.sqrt(self._nunmasked[key] / total)) \
+            if total > 0 else 1.0
+
 
 class _NoiseParams(NamedTuple):
     """
@@ -407,78 +447,6 @@ class _NoiseParams(NamedTuple):
     scale: str | None
     jitter: str | None
     scale_min: float
-
-
-class _Whitener:
-    """
-    The whitening of the residuals of a data item (see Whitening) on the
-    device of a driver: the indices of its pixels and its matrices (that
-    of the sky transposed), which copies share (see shared), and the
-    residuals of its pixels and their products, of its own.
-    """
-
-    def __init__(
-            self,
-            driver: Driver,
-            pixels: DeviceArray,
-            spatial: DeviceArray | None,
-            spectral: DeviceArray | None,
-            nchannels: int,
-            dtype: np.dtype
-    ):
-        self._driver = driver
-        self._pixels = pixels
-        self._spatial = spatial
-        self._spectral = spectral
-        self._dtype = dtype
-        # (the channels by the pixels; one channel for an image)
-        size = (nchannels, pixels.size)
-        self._values = driver.mem_alloc_d(size, dtype)
-        self._products = driver.mem_alloc_d(size, dtype)
-
-    @classmethod
-    def on_device(
-            cls,
-            driver: Driver,
-            whitening: Whitening,
-            shape: tuple[int, ...],
-            dtype: np.dtype
-    ) -> Self:
-        """
-        Return the whitening on the device of a driver, for residuals of a
-        shape and a type.
-        """
-        spatial = None if whitening.spatial is None \
-            else driver.mem_copy_h2d(np.ascontiguousarray(
-                whitening.spatial.T, dtype))
-        spectral = None if whitening.spectral is None \
-            else driver.mem_copy_h2d(whitening.spectral.astype(dtype))
-        return cls(
-            driver, driver.mem_copy_h2d(whitening.pixels), spatial, spectral,
-            int(np.prod(shape[:-2])), dtype)
-
-    def shared(self) -> Self:
-        """
-        Return a copy that shares its pixels and matrices, with residuals
-        of its own.
-        """
-        return type(self)(
-            self._driver, self._pixels, self._spatial, self._spectral,
-            self._values.shape[0], self._dtype)
-
-    def __call__(self, residual: DeviceArray) -> None:
-        """Whiten the residuals of the item (of its shape) in place."""
-        driver = self._driver
-        values, products = self._values, self._products
-        flat = residual.reshape(values.shape[0], -1)
-        driver.mem_gather(flat, self._pixels, out=values)
-        if self._spatial is not None:
-            driver.math_matmul(values, self._spatial, out=products)
-            values, products = products, values
-        if self._spectral is not None:
-            driver.math_matmul(self._spectral, values, out=products)
-            values, products = products, values
-        driver.mem_scatter(values, self._pixels, flat)
 
 
 class ComparisonGauss(Comparison):
@@ -522,11 +490,6 @@ class ComparisonGauss(Comparison):
         # number, of a point fitters cannot evaluate (a model that
         # failed), even with a missing_residual
         self._weights = {key: likelihood.weight(key) for key in keys}
-        # The number of values of each data item that the data do not mask
-        # (over which the weights of the model are normalised)
-        self._nunmasked = {
-            key: int(np.count_nonzero(self._dataset[key].mask()))
-            for key in keys}
         missing = likelihood.missing_residual()
         self._missing_residual = missing \
             if missing is not None \
@@ -553,10 +516,9 @@ class ComparisonGauss(Comparison):
 
     def _reset_memory(self) -> None:
         super()._reset_memory()
-        # The data, masks and errors of the data items on the device, by
-        # name (errors only of the items that have them)
+        # The data and errors of the data items on the device, by name
+        # (errors only of the items that have them)
         self._d_data: dict[str, DeviceArray] = {}
-        self._d_mask: dict[str, DeviceArray] = {}
         self._d_error: dict[str, DeviceArray] = {}
         # The footprints of upper limits, by name
         self._d_footprints: dict[str, DeviceArray] = {}
@@ -575,11 +537,11 @@ class ComparisonGauss(Comparison):
         # The whitening of the residuals of the data items whose noise is
         # correlated, by name, and the numbers of independent values they
         # are worth (see Whitening)
-        self._whiteners: dict[str, _Whitener] = {}
+        self._whiteners: dict[str, Whitener] = {}
         self._nindependent: dict[str, float] = {}
         # The whitening to take from a copy of it of other data, of each
         # data item, by name (see share), until prepared
-        self._shared: dict[str, tuple[_Whitener, float]] = {}
+        self._shared: dict[str, tuple[Whitener, float]] = {}
         # The share of its values that each data item whose noise is fitted
         # counts in its noise residual: 1, but the independent values they
         # are worth over their number for correlated noise (see
@@ -679,8 +641,6 @@ class ComparisonGauss(Comparison):
             data = self._dataset[key]
             self._d_data[key] = driver.mem_copy_h2d(
                 np.asarray(data.data(), dtype))
-            self._d_mask[key] = driver.mem_copy_h2d(
-                np.asarray(data.mask(), dtype))
             if data.error() is not None:
                 self._d_error[key] = driver.mem_copy_h2d(
                     np.asarray(data.error(), dtype))
@@ -695,10 +655,11 @@ class ComparisonGauss(Comparison):
                 self._nindependent[key] = nindependent
             elif (correlation := self._dataset.noise_correlation(key)) \
                     is not None:
+                mask = channel_mask(self._dataset, key)
                 whitening_ = whitening(
-                    key, data.mask(), correlation, self._white_floor)
-                self._whiteners[key] = _Whitener.on_device(
-                    driver, whitening_, shape, dtype)
+                    key, mask, correlation, self._white_floor)
+                self._whiteners[key] = Whitener.on_device(
+                    driver, whitening_, mask.shape[0], dtype)
                 self._nindependent[key] = whitening_.nindependent
         if self._noise_params:
             (self._h_noise_sums,
@@ -725,7 +686,6 @@ class ComparisonGauss(Comparison):
             self,
             model: ModelData,
             params: ParamValues,
-            weighted: bool,
             scales: Mapping[str, DeviceArray]
     ) -> None:
         driver = self._driver
@@ -736,8 +696,7 @@ class ComparisonGauss(Comparison):
         # pixel weights of its model, which its noise residual takes too
         weights = {}
         for key in self._observation.keys():
-            weights[key] = (self._weights[key] if weighted else 1.0) \
-                * self._pixel_weight(model, key)
+            weights[key] = self._weights[key] * self._pixel_weight(model, key)
             residual = self._d_residual_nddata[key]
             self._backend.residual(
                 self._d_data[key],
@@ -754,7 +713,7 @@ class ComparisonGauss(Comparison):
                 # (the limits count nothing outside the footprint)
                 driver.math_mul(
                     residual, self._d_footprints[key], out=residual)
-            if weighted and key in self._whiteners:
+            if key in self._whiteners:
                 self._whiteners[key](residual)
         if self._noise_params:
             self._update_noise_residuals(
@@ -894,31 +853,6 @@ class ComparisonGauss(Comparison):
         weight = (self._weights[key] * self._pixel_weight(model, key)) ** 2
         return weight * h_sums[0], weight * h_sums[1]
 
-    def _pixel_weight(self, model: ModelData, key: str) -> float:
-        """
-        Return the factor of the weights of the model of data item key (its
-        pixel weights, see Weights) that makes their mean square over the
-        values the data do not mask 1; 1 without weights.
-        """
-        # Pixel weights follow the free geometry of their disk, and the
-        # chi-square expected at the truth is the sum of the squares of the
-        # weights of the values compared. Unnormalised, a fit lowers it by
-        # turning the geometry so that the values fall where the weights
-        # are low: in a Monte Carlo of velocity fields, the inclination ran
-        # 1 to 4 degrees high, and to the end of its range with cos^2
-        # weights. Normalised, only the shape of the weights counts, and
-        # the bias is gone. (A choice over weights fixed at a given
-        # geometry, which remove it as well but stop following the disk.)
-        weights = model[key].weights
-        if weights is None:
-            return 1.0
-        driver = self._driver
-        flat = weights.reshape(-1)
-        unmasked = driver.math_mul(flat, self._d_mask[key].reshape(-1))
-        total = float(driver.math_matmul(unmasked, flat))
-        return float(np.sqrt(self._nunmasked[key] / total)) \
-            if total > 0 else 1.0
-
     def noise_constant(self) -> float:
         # (the noise residual of a fitted scale is sum c^2 ln(sigma^2 /
         # (f_ref e)^2), f_ref = min(f_min, 1), for least squares never
@@ -1036,7 +970,6 @@ class ComparisonUser(Comparison):
             self,
             model: ModelData,
             params: ParamValues,
-            weighted: bool,
             scales: Mapping[str, DeviceArray]
     ) -> None:
         driver = self._driver
@@ -1054,19 +987,53 @@ class ComparisonUser(Comparison):
                 residuals[...] = 0
                 continue
             if (weights := model[key].weights) is not None:
-                # (normalised to a mean square of 1 over the values the
-                # data do not mask, as ComparisonGauss._pixel_weight)
-                weights = np.asarray(driver.mem_copy_d2h(weights), float)
-                unmasked = weights[mask != 0]
-                total = float(np.sum(unmasked ** 2))
-                if total > 0:
-                    weights = weights * np.sqrt(unmasked.size / total)
-                result = result * weights
+                # (normalised as those of every comparison, before the
+                # residuals of the item are written: see _pixel_weight)
+                result = result * self._pixel_weight(model, key) \
+                    * np.asarray(driver.mem_copy_d2h(weights), float)
             residuals[...] = np.where(mask != 0, result * mask, 0)
         driver.mem_copy_h2d(self._h_residual_vector, self._d_residual_vector)
 
     def _terms_chi2(self) -> float:
         return self._chi2
+
+
+# The comparison of each kind of likelihood (see comparison_of)
+_COMPARISONS: dict[type[Likelihood], type[Comparison]] = {
+    LikelihoodGauss: ComparisonGauss,
+    LikelihoodUser: ComparisonUser
+}
+
+
+def comparison_of(observation: Observation, driver: Driver) -> Comparison:
+    """
+    Return the comparison of an observation with its data, of the kind of
+    its likelihood (that of the nearest base class of the likelihood that
+    has one), on the driver of its model.
+
+    Parameters
+    ----------
+    observation : Observation
+        The observation, with data.
+    driver : Driver
+        The driver of its model.
+
+    Returns
+    -------
+    Comparison
+        The comparison.
+
+    Raises
+    ------
+    ValueError
+        If no comparison is of its kind of likelihood.
+    """
+    likelihood = observation.likelihood()
+    for kind in type(likelihood).__mro__:
+        if kind in _COMPARISONS:
+            return _COMPARISONS[kind](observation, driver)
+    raise ValueError(
+        f"no comparison is of the likelihood {likelihood.type()!r}")
 
 
 def _read_only(array: np.ndarray | None) -> np.ndarray | None:

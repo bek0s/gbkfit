@@ -12,11 +12,12 @@ from gbkfit.io import write_data
 import gbkfit.params
 import numpy as np
 import pytest
+from astropy.io import fits
 from modelutils import observation_group
 
 from gbkfit.observation import (
     Foreground, Lens, LensDeflectionMap, LensEPL, LensMultipole, LensNFW,
-    LensSIE, LensShear, foreground_parser)
+    LensSIE, LensShear, foreground_parser, lens_mass_parser)
 
 
 DISK = dict(
@@ -368,6 +369,95 @@ def test_the_frame_of_an_observation_moves_its_lens(driver):
     np.testing.assert_allclose(images[1], images[0], rtol=1e-5, atol=1e-6)
 
 
+def sis_maps(size=100, step=0.5, theta_e=3.0):
+    """
+    The maps of the deflection of a singular isothermal sphere at the
+    centre of a grid of pixels of step arcsec, along x and y.
+    """
+    x, y = sky_positions(make_grid((size, size), step))
+    radius = np.hypot(x, y)
+    return theta_e * x / radius, theta_e * y / radius
+
+
+def test_the_frame_of_an_observation_moves_its_shifted_maps(driver):
+    # An offset of the frame moves the shifted deflection maps of its lens
+    # as the centres of its analytic masses (above): as moving both the
+    # galaxy and the maps by it (the maps stayed: audit 2026-11-11 d#4)
+    from gbkfit.observation import ObservationGroup, ObservationSky
+    group = observation_group([dict(
+        driver=dict(type=driver.type()), galaxy=GALAXY,
+        line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))])
+    plain = group.observations()[0]
+    reference = ObservationSky(
+        plain.observable(), plain.line_of_sight(), name='reference')
+    maps = LensDeflectionMap(*sis_maps(), step=0.5, shifted=True)
+    observation = ObservationSky(
+        plain.observable(), plain.line_of_sight(),
+        foreground=Foreground(Lens((40, 40), (0.5, 0.5), maps)),
+        name='obs', offsets=dict(position=True))
+    plan = ObservationGroup(
+        group.galaxies(), [reference, observation]).plan(driver)
+    images = []
+    for x, offset in ((1.5, 0.0), (0.0, 1.5)):
+        properties = PROPERTIES | dict(xpos=x, obs_dx=offset, obs_dy=0) \
+            | lens_params(xpos=x, ypos=0.3)
+        params = gbkfit.params.ParamSpace.from_properties(
+            plan.group().pdescs(), properties)
+        images.append(plan.model_h(params.evaluate())[1][
+            'brightness'].data.copy())
+    np.testing.assert_allclose(images[1], images[0], rtol=1e-5, atol=1e-6)
+    # (and the lens is seen)
+    unlensed = evaluate(driver, None, PROPERTIES | dict(xpos=1.5))
+    assert not np.allclose(images[0], unlensed, atol=0.1 * unlensed.max())
+
+
+@pytest.mark.parametrize('shifted', [False, True])
+def test_the_alignment_of_frames_leaves_maps_where_they_are(
+        driver, shifted):
+    # A cube whose reference pixel is 2 arcsec west of that of the first
+    # sees the galaxy at x - 2 in its frame (see test_frames), but the
+    # deflection maps of its lens where their RA and Dec put them, shifted
+    # or not: as the cube alone, with the galaxy at x - 2
+    import astropy.units as u
+    from astropy.coordinates import SkyCoord
+    from gbkfit.observation import ObservationGroup, ObservationSky
+    origin = (150.0, 2.0)
+    first = SkyCoord(*origin, unit='deg')
+    west = first.spherical_offsets_by(-2 * u.arcsec, 0 * u.arcsec)
+    east, north = west.spherical_offsets_to(first)
+    dx, dy = -east.to_value('arcsec'), north.to_value('arcsec')
+
+    def observation(name, rval, lens=None):
+        observable = IMAGE | dict(rval=list(rval))
+        plain = observation_group([dict(
+            driver=dict(type=driver.type()), galaxy=GALAXY,
+            line_of_sight=dict(type='flat'),
+            observable=observable)]).observations()[0]
+        return ObservationSky(
+            plain.observable(), plain.line_of_sight(), name=name,
+            foreground=lens)
+    maps = LensDeflectionMap(
+        *sis_maps(), step=0.5, rval=origin, shifted=shifted)
+    lens = Foreground(Lens((40, 40), (0.5, 0.5), maps))
+    cube = observation('obs', (west.ra.deg, west.dec.deg), lens)
+    galaxies = observation_group([dict(
+        driver=dict(type=driver.type()), galaxy=GALAXY,
+        line_of_sight=dict(type='flat'),
+        observable=copy.deepcopy(IMAGE))]).galaxies()
+    shift = lens_params(xpos=0, ypos=0) if shifted else {}
+    images = []
+    for observations, (x, y) in (
+            ([observation('reference', origin), cube], (0, 0)),
+            ([cube], (dx, dy))):
+        group = ObservationGroup(galaxies, observations)
+        params = gbkfit.params.ParamSpace.from_properties(
+            group.pdescs(), PROPERTIES | dict(xpos=x, ypos=y) | shift)
+        images.append(group.plan(driver).model_h(params.evaluate())[-1][
+            'brightness'].data.copy())
+    assert dx == pytest.approx(-2)
+    np.testing.assert_allclose(images[0], images[1], rtol=1e-6, atol=1e-6)
+
+
 def test_a_lens_is_placed_again_only_for_other_values(driver, monkeypatch):
     # Its deflection, costly (seconds for an elliptical NFW halo on
     # 400x400 pixels), is worked out again only when the values of its
@@ -470,8 +560,104 @@ def test_deflection_maps_from_files(tmp_path):
     assert again.lens().source_grid() == lens.source_grid()
     # The world coordinates given replace those of the files
     stretched = load(step=[1, 1], rpix=[0, 0]).lens().masses()[0]
-    assert stretched._grid.coords.step == (1, 1)
-    assert stretched._grid.coords.rpix == (0, 0)
+    assert stretched.grid().coords.step == (1, 1)
+    assert stretched.grid().coords.rpix == (0, 0)
+    # (without parameters, unless shifted or scaled)
+    assert lens.pdescs() == {}
+    assert set(load(shifted=True).lens().pdescs()) == {'xpos', 'ypos'}
+
+
+def write_sis_maps(path, axes, dec_first=False, size=20):
+    """
+    Write the deflection of a singular isothermal sphere of theta_e 1 at
+    RA 150, Dec 2 to files of maps, along their own pixel axes, of pixels
+    whose axes are the columns of axes: arcsec along x and y of the frame
+    of the model (+x west, +y north) of a step along the first and the
+    second axis of the files; with Dec first, if given. Return the names
+    of the files of x and y.
+    """
+    axes = np.asarray(axes, dtype=float)
+    # (the reference pixel between pixels, off the centre of the sphere)
+    centre = (size - 1) / 2
+    j, i = np.mgrid[0:size, 0:size]
+    position = np.tensordot(axes, np.stack([i - centre, j - centre]), 1)
+    alpha = position / np.hypot(*position)
+    units = axes / np.hypot(*axes)
+    along = [np.tensordot(units[:, k], alpha, 1) for k in range(2)]
+    # (the rows of CD are east and north, in degrees; Dec first, swapped)
+    cd = np.array([-axes[0], axes[1]]) / 3600
+    world = [('RA---TAN', 150.0), ('DEC--TAN', 2.0)]
+    if dec_first:
+        cd, world = cd[::-1], world[::-1]
+    header = fits.Header()
+    for a, (ctype, crval) in enumerate(world, 1):
+        header.update({
+            f'CTYPE{a}': ctype, f'CRVAL{a}': crval, f'CRPIX{a}': centre + 1,
+            f'CUNIT{a}': 'deg', f'CD{a}_1': cd[a - 1, 0],
+            f'CD{a}_2': cd[a - 1, 1]})
+    names = [str(path / f'{key}.fits') for key in ('ax', 'ay')]
+    for name, data in zip(names, along):
+        fits.writeto(name, data, header)
+    return names
+
+
+def turned(angle, mirrored=False, step=0.5):
+    """
+    The axes of pixels (see write_sis_maps) of a grid of rotation angle,
+    with x mirrored (east to the right of north), if given.
+    """
+    angle = np.radians(angle)
+    axes = step * np.array([
+        [np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]])
+    return axes * [[-1], [1]] if mirrored else axes
+
+
+@pytest.mark.parametrize('axes, dec_first', [
+    (turned(0), False),
+    # East to the right (CDELT1 > 0)
+    (turned(0, mirrored=True), False),
+    # Dec first: the first axis north, the second west
+    (turned(0)[:, ::-1], True),
+    (turned(30), False),
+    (turned(30, mirrored=True)[:, ::-1], True)])
+def test_deflection_maps_from_files_turn_their_vectors_with_them(
+        tmp_path, axes, dec_first):
+    # The files give the deflection along their own axes, which the maps
+    # are read in the orientation of the model with: a mirrored sphere is
+    # the sphere, as LensSIE (the maps of x were negated, swapped or
+    # turned: audit 2026-11-11 d#1), and so are the maps dumped
+    alpha_x, alpha_y = write_sis_maps(tmp_path, axes, dec_first)
+    mass = LensDeflectionMap.from_files(alpha_x, alpha_y)
+    # (at the pixels of the maps, as they are)
+    grid = mass.grid()
+    sphere = LensSIE().deflection(
+        grid, dict(theta_e=1, q=1, posa=0, xpos=0, ypos=0))
+    np.testing.assert_allclose(
+        mass.deflection(grid, {}), sphere, rtol=0, atol=1e-8)
+    dumped = lens_mass_parser.dump(mass, prefix=str(tmp_path / 'd_'))
+    np.testing.assert_allclose(
+        lens_mass_parser.load(dumped).deflection(grid, {}), sphere,
+        rtol=0, atol=1e-8)
+
+
+def test_a_shifted_map_is_sampled_at_the_shifted_positions():
+    # Its deflection at a point is that of the maps at the point less the
+    # shift: at the pixels of a grid moved by it
+    j, i = np.mgrid[0:12, 0:10]
+    alpha_x, alpha_y = 1.0 * i + 0.1 * j ** 2, np.sin(0.3 * i * j)
+    shifted = LensDeflectionMap(
+        alpha_x, alpha_y, step=0.5, rota=20, shifted=True)
+    plain = LensDeflectionMap(alpha_x, alpha_y, step=0.5, rota=20)
+    assert set(shifted.pdescs()) == {'xpos', 'ypos'}
+    assert shifted.shifted() and not plain.shifted()
+    # (a shift of 2 and -1 pixels of 0.5 arcsec)
+    grid = make_grid((6, 5), 0.5, rpix=(2.5, 2))
+    moved = make_grid((6, 5), 0.5, rpix=(4.5, 1))
+    np.testing.assert_allclose(
+        shifted.deflection(grid, dict(xpos=1, ypos=-0.5)),
+        plain.deflection(moved, {}), rtol=1e-12, atol=1e-12)
+    info = lens_mass_parser.dump(shifted, prefix='')
+    assert info['shifted'] is True and 'scaled' not in info
 
 
 def test_lenses_from_configurations():

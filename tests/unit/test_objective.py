@@ -378,7 +378,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
         objective.group_plan().model_h(compact)[0]['moment1'].data
     without = np.isnan(compact_moment1)
     has_data = dataset['moment1'].mask() != 0
-    residuals = objective.residual_nddata_h(compact, False)[0]
+    residuals = objective.residual_nddata_h(compact)[0]
     assert np.any(without & has_data)
     np.testing.assert_allclose(
         residuals['moment1'][without & has_data], 3)
@@ -481,10 +481,73 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
         4 * np.log((sigma / (0.1 * data.error()))[kept] ** 2)), rel=1e-6)
     residuals = objective.residuals(params)[:-1]
     assert np.sum(residuals ** 2) == pytest.approx(chi2, rel=1e-5)
-    # The residuals of each value, unweighted, are not whitened
-    unweighted = objective.residual_nddata_h(params, False)[0]['brightness']
+
+
+def residual_products(objective, params, name):
+    """
+    The residual products of an evaluation of an objective of one
+    observation of the given name, of its item 'brightness', by kind.
+    """
+    from gbkfit.setup import evaluation_outputs
+    outputs = evaluation_outputs(
+        objective.group_plan(), objective, params, False, True, False)
+    return {
+        output.kind: output.value.data for output in outputs.values()
+        if output.ids == dict(observation=name, item='brightness')}
+
+
+def test_the_residual_products_of_correlated_noise(driver):
+    # 'residual' is data - model, 'wresidual' (data - model) / sigma (the
+    # fitted noise; not times the weight of the item, nor whitened), and
+    # 'chi2_residual' the residuals of the fit, data - model whitened and
+    # weighted: the sum of their squares is its chi-square
+    from gbkfit.instrument import PSFGauss
+    data = correlated_data(np.random.default_rng(5), PSFGauss(2, 0.5, 20))
+    noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1))
+    objective, params = make_objective(
+        driver, data, LikelihoodGauss(weights=2.0, fitted_noise=noise),
+        'obs', obs_noise_scale_brightness=1.3)
+    products = residual_products(objective, params, 'obs')
+    model = objective.group_plan().model_h(params)[0]['brightness'].data
     np.testing.assert_allclose(
-        unweighted[kept], r / 2, rtol=1e-5, atol=1e-6)
+        products['residual'], data.data() - model, rtol=1e-6)
+    np.testing.assert_allclose(
+        products['wresidual'], (data.data() - model) / (1.3 * data.error()),
+        rtol=1e-6)
+    evaluation = objective.evaluate(params)
+    assert np.sum(products['chi2_residual'] ** 2) == pytest.approx(
+        evaluation.merits.chi2 - evaluation.noise_chi2, rel=1e-5)
+    np.testing.assert_allclose(
+        products['chi2_residual'],
+        -objective.residual_nddata_h(params)[0]['brightness'])
+
+
+def test_the_residuals_of_the_fit_are_written_where_they_differ(driver):
+    # (of independent noise, without pixel weights, the residuals of the
+    # fit are the wresidual, times the weight of the item; with pixel
+    # weights, they are times them)
+    from gbkfit.observation import WeightAzimuthPower, Weights
+    rng = np.random.default_rng(3)
+    data = Data(rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5))
+    objective, params = make_objective(
+        driver, data, LikelihoodGauss(weights=2.0))
+    assert set(residual_products(objective, params, 'observation0')) == {
+        'residual', 'wresidual'}
+    dataset = DatasetPixelBrightness(data)
+    observation = ObservationSky(
+        PixelBrightness.from_data(dataset), LineOfSightFlat(), data=dataset,
+        pixel_weights=Weights('disk', WeightAzimuthPower(2)))
+    group = ObservationGroup(galaxy_parser.load(dict(components=[
+        GALAXY['components'][0] | dict(name='disk')])), observation)
+    objective = Objective(group.plan(driver))
+    params = ParamSpace.from_properties(
+        group.pdescs(),
+        {f'disk_{key}': value for key, value in PROPERTIES.items()}
+    ).evaluate()
+    products = residual_products(objective, params, 'observation0')
+    assert np.sum(products['chi2_residual'] ** 2) == pytest.approx(
+        objective.chi2(params), rel=1e-5)
+    assert not np.allclose(products['chi2_residual'], products['wresidual'])
 
 
 def test_correlated_noise_is_in_float64_by_default():
@@ -842,7 +905,7 @@ def test_user_likelihoods_take_parameters_of_their_observation(
         driver, user_data(), cauchy, name='hst', hst_s=0.7)
     assert 'hst_s' in objective.pdescs()
     gaussian, _ = make_objective(driver, user_data())
-    x = gaussian.residual_nddata_h(params, False)[0]['brightness'] * 0.5 / 0.7
+    x = gaussian.residual_nddata_h(params)[0]['brightness'] * 0.5 / 0.7
     kept = user_data().mask() != 0
     assert objective.chi2(params) == pytest.approx(
         np.sum(2 * np.log1p(x[kept] ** 2)), rel=1e-5)

@@ -11,10 +11,10 @@ from gbkfit.dataset import Data, DatasetPixelSpectra, NoiseCorrelation
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective
+from gbkfit.objective import Objective, whitening
 from gbkfit.observation import (
     MAX_CORRELATED_PIXELS, LikelihoodGauss, ObservationGroup,
-    ObservationSky, PixelSpectra, line_of_sight_parser, whitening)
+    ObservationSky, PixelSpectra, line_of_sight_parser)
 from gbkfit.params import ParamSpace
 
 
@@ -144,3 +144,134 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
     with pytest.raises(ValueError, match="has correlated noise"):
         Objective(group.plan(driver),
                   dict(obs_flux_scale=SolveGauss(1, 0.5, 0)))
+
+
+def spectra_objective(driver, dataset, observable, likelihood):
+    """
+    The objective of a disk seen in spectra that are not of a cube (of
+    a slit, or of regions), under a likelihood.
+    """
+    group = ObservationGroup(
+        [galaxy_parser.load(GALAXY)], [ObservationSky(
+            observable, line_of_sight_parser.load(dict(type='flat')),
+            data=dataset, likelihood=likelihood)])
+    return (Objective(group.plan(driver)),
+            ParamSpace.from_properties(group.pdescs(), PARAMS).evaluate())
+
+
+def noisy_spectra(rng, npositions, blank):
+    """
+    Spectra (the channels by the positions) of noise with errors that
+    differ, two positions masked, channels blank in every spectrum, and
+    noise correlated along the channels.
+    """
+    shape = (SIZE[2], npositions)
+    mask = np.ones(shape)
+    mask[:, [1, 4]] = 0
+    mask[blank] = 0
+    return Data(
+        rng.normal(0, 0.01, shape), mask=mask,
+        error=rng.uniform(0.005, 0.02, shape),
+        spectral_correlation=LSFGauss(25 * u.km / u.s))
+
+
+def check_spectral_chi2(obj, params, data):
+    """
+    Check that the objective of spectra of noise correlated along their
+    channels alone has the chi-square r^T (C_z' (x) I)^-1 r over the kept
+    channels and positions, with the white floor f = 0.05: C_z' = (1 - f)
+    C_z + f I.
+    """
+    mask = data.mask()
+    model = obj.group_plan().model_h(
+        params)[0]['spectra'].data.astype(float)
+    assert np.any(model > 0)
+    kept = np.any(mask != 0, axis=0)
+    z = np.flatnonzero(np.any(mask != 0, axis=1))
+    r = ((model - data.data()) / data.error())[z][:, kept].ravel()
+    correlation = obj.datasets()[0].noise_correlation('spectra')
+    assert correlation.spatial is None
+    k_z = correlation.spectral[30 + z[:, None] - z]
+    positions = np.eye(np.count_nonzero(kept))
+    c = np.kron(0.95 * k_z + 0.05 * np.eye(len(k_z)), positions)
+    assert obj.chi2(params) == pytest.approx(
+        r @ np.linalg.solve(c, r), rel=1e-4)
+    assert obj.nindependent() == pytest.approx(
+        np.trace(np.linalg.solve(c, np.kron(k_z, positions))))
+
+
+@pytest.mark.parametrize('blank', [[], [0, 17]])
+def test_slit_spectra_have_the_chi2_of_their_spectral_correlation(
+        driver, blank):
+    # (the positions along a slit, which has no pixels across it, are not
+    # correlated)
+    from gbkfit.dataset import DatasetSlitSpectra
+    from gbkfit.observation import SlitSpectra
+    data = noisy_spectra(np.random.default_rng(11), 14, blank)
+    dataset = DatasetSlitSpectra(
+        data, step=(1,), spectral=SPECTRAL, slit_pa=-60)
+    obj, params = spectra_objective(
+        driver, dataset, SlitSpectra.from_data(dataset),
+        LikelihoodGauss(white_floor=0.05))
+    check_spectral_chi2(obj, params, data)
+
+
+@pytest.mark.parametrize('blank', [[], [0, 17]])
+def test_region_spectra_have_the_chi2_of_their_spectral_correlation(
+        driver, blank):
+    # (regions, which are not pixels of the sky, are not correlated)
+    from gbkfit.dataset import DatasetRegionSpectra
+    from gbkfit.observation import RegionSpectra
+    from gbkfit.region import regions_parser
+    regions = regions_parser.load(dict(type='apertures', apertures=[
+        dict(type='circle', x=x, y=y, radius=1.5)
+        for x, y in ((0, 0), (3, 1), (-3, -1), (1, -3), (-2, 3), (3, -3))]))
+    data = noisy_spectra(np.random.default_rng(12), 6, blank)
+    dataset = DatasetRegionSpectra(data, regions, spectral=SPECTRAL)
+    obj, params = spectra_objective(
+        driver, dataset,
+        RegionSpectra.from_data(dataset, size=SIZE[:2], step=STEP[:2]),
+        LikelihoodGauss(white_floor=0.05))
+    check_spectral_chi2(obj, params, data)
+
+
+def test_spectra_of_correlated_noise_keep_whole_spectra(tmp_path):
+    # (as cubes do: the option of the files masks a spectrum with a masked
+    # channel, and is read from a dump with the correlation)
+    from gbkfit.dataset import DatasetSlitSpectra, dataset_parser
+    from gbkfit.observation import SlitSpectra
+    data = noisy_spectra(np.random.default_rng(13), 14, [])
+    mask = data.mask().copy()
+    mask[3, 6] = 0
+    dataset = DatasetSlitSpectra(
+        Data(data.data(), mask=mask, error=data.error(),
+             spectral_correlation=data.spectral_correlation()),
+        step=(1,), spectral=SPECTRAL, slit_pa=-60)
+    with pytest.raises(ValueError, match="mask_whole_spectra"):
+        ObservationSky(
+            SlitSpectra.from_data(dataset),
+            line_of_sight_parser.load(dict(type='flat')), data=dataset)
+    info = dataset_parser.dump(dataset, prefix=str(tmp_path / ''))
+    assert 'spectral_correlation' in info
+    loaded = dataset_parser.load(info | dict(mask_whole_spectra=True))
+    masked = loaded['spectra'].mask() == 0
+    assert np.all(masked[:, [1, 4, 6]])
+    assert np.count_nonzero(masked) == 3 * SIZE[2]
+    ObservationSky(
+        SlitSpectra.from_data(loaded),
+        line_of_sight_parser.load(dict(type='flat')), data=loaded)
+
+
+def test_only_data_with_a_spectral_axis_have_a_spectral_correlation():
+    # (refused with the data, e.g. moment maps, not when compared)
+    from gbkfit.dataset import DatasetPixelMoments, DatasetSlitSpectra
+    lsf = LSFGauss(25 * u.km / u.s)
+    with pytest.raises(ValueError, match="have no spectral axis"):
+        DatasetPixelMoments(
+            {1: Data(np.ones((8, 8)), spectral_correlation=lsf)})
+    # (and spectra along a slit have no correlation on the sky)
+    dataset = DatasetSlitSpectra(
+        Data(np.ones((SIZE[2], 14)), spatial_correlation=PSFGauss(1.5)),
+        spectral=SPECTRAL)
+    with pytest.raises(ValueError, match="along their spectral axis alone"):
+        dataset.noise_correlation('spectra')

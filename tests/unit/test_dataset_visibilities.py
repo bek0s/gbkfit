@@ -6,7 +6,6 @@ reading of measurement sets.
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.dataset import (
     Data, DatasetVisibilities, UVCoverage, dataset_parser)
 
@@ -140,7 +139,7 @@ def test_measurement_sets_need_a_rest_frequency():
     write_ms(
         'test.ms', rng.uniform(-1e3, 1e3, (2, 3)), np.ones((2, 3, 2), complex),
         np.zeros((2, 3, 2), bool), np.ones((2, 2)), FREQUENCIES)
-    with pytest.raises(ConfigError, match="rest"):
+    with pytest.raises(ValueError, match="rest"):
         DatasetVisibilities.from_ms('test.ms')
     dataset = DatasetVisibilities.from_ms('test.ms', rest=HI)
     assert dataset.coverage().rest().unit == 'Hz'

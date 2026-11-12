@@ -18,6 +18,7 @@ import numpy as np
 import scipy.signal
 import scipy.special
 from annotated_types import Gt, Le
+from astropy.stats import gaussian_fwhm_to_sigma, gaussian_sigma_to_fwhm
 
 from gbkfit.config import (
     DataFile, TypedParser, Unit, Varying, check_options, split_data_file)
@@ -361,7 +362,7 @@ class PSFGauss(_AnalyticPSF):
             The PSF.
         """
         check_options(PSFGauss.from_fwhm, locals())
-        sigma = _profiles.gauss_fwhm_to_sigma(fwhm)
+        sigma = fwhm * gaussian_fwhm_to_sigma
         return cls(sigma, ratio, posa)._given_as(
             fwhm=fwhm, ratio=ratio, posa=posa)
 
@@ -400,7 +401,7 @@ class PSFGauss(_AnalyticPSF):
             raise ValueError(
                 f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
         return cls(
-            _profiles.gauss_fwhm_to_sigma(bmaj), bmin / bmaj, bpa
+            bmaj * gaussian_fwhm_to_sigma, bmin / bmaj, bpa
         )._given_as(bmaj=bmaj, bmin=bmin, bpa=bpa)
 
     @classmethod
@@ -451,7 +452,7 @@ class PSFGauss(_AnalyticPSF):
         Beam
             The beam.
         """
-        fwhm = float(_profiles.gauss_sigma_to_fwhm(self._scale))
+        fwhm = float(self._scale * gaussian_sigma_to_fwhm)
         return Beam(fwhm, fwhm * self._ratio, self._posa)
 
     def _beam_area_impl(self) -> float:

@@ -29,7 +29,7 @@ def write_run(directory, task, with_posterior=False):
         data = model + rng.normal(0, 0.1, model.shape)
         for kind, value in (
                 ('data', data), ('error', np.full_like(data, 0.1)),
-                ('model', model), ('residual', (model - data) / 0.1)):
+                ('model', model), ('wresidual', (data - model) / 0.1)):
             run.write(
                 f'observations/observation0/{kind}/{key}.fits', kind, value,
                 observation='observation0', item=key)
@@ -37,7 +37,8 @@ def write_run(directory, task, with_posterior=False):
     radii = np.linspace(1, 10, 8)
     for kind, value in (
             ('data', 150 * radii / (radii + 2)), ('error', np.full(8, 5.0)),
-            ('model', 148 * radii / (radii + 2)), ('residual', np.zeros(8))):
+            ('model', 148 * radii / (radii + 2)),
+            ('wresidual', np.zeros(8))):
         run.write(
             f'observations/rc/{kind}/vcirc.ecsv', kind,
             Table(dict(radius=radii, value=value)), observation='rc',

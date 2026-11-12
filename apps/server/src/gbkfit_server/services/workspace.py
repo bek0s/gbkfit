@@ -25,7 +25,7 @@ import numpy as np
 import ruamel.yaml
 from astropy.io import fits
 
-import gbkfit.dataset
+import gbkfit.io
 import gbkfit.outputs
 import gbkfit.project
 import gbkfit.units
@@ -435,7 +435,7 @@ class Workspace:
     ) -> list[dict[str, Any]]:
         """
         Describe a file of data from its headers (see
-        gbkfit.dataset.describe_fits), with the convention of velocities
+        gbkfit.io.describe_fits), with the convention of velocities
         that its headers leave ambiguous, the rest of its spectral axis
         (which makes wavelengths or frequencies velocities) and what a
         spectral axis of a type FITS does not define is, if given: each
@@ -459,7 +459,7 @@ class Workspace:
                 f"'{relative}' is not a file of data that GBKFIT reads: "
                 f"FITS ({', '.join(_DATA_FILES)})")
         try:
-            hdus = gbkfit.dataset.describe_fits(
+            hdus = gbkfit.io.describe_fits(
                 path, velocity, rest, spectral_type)
         except OSError as e:
             raise Invalid(f"cannot read '{relative}': {e}") from e
@@ -478,7 +478,7 @@ class Workspace:
                  rms=hdu.rms, ambiguous_velocity=hdu.ambiguous_velocity,
                  # (the paths of the problems in the workspace)
                  problems=[p.replace(path, relative) for p in hdu.problems],
-                 holds=hdu.holds, nonstandard_type=hdu.nonstandard_type,
+                 holds=hdu.error_kind, nonstandard_type=hdu.nonstandard_type,
                  rest=None if hdu.coords is None or hdu.coords.rest is None
                  else rest_text(hdu.coords.rest))
             for hdu in hdus]

@@ -22,10 +22,9 @@ import astropy.wcs
 import numpy as np
 
 import gbkfit.analysis
-import gbkfit.dataset
 from gbkfit import prep
 from gbkfit.config import ConfigError
-from gbkfit.io import read_oriented
+from gbkfit.io import describe_fits, read_oriented
 
 from .errors import Invalid
 from .workspace import Workspace
@@ -284,13 +283,13 @@ class Views:
         """
         Return the velocities of the channels of a cube of a file as a
         dataset of it reads them, with a rest, a convention and a type, if
-        given (see gbkfit.dataset.describe_fits; none if they are not read
+        given (see gbkfit.io.describe_fits; none if they are not read
         so), in the order of the channels of the cube.
         """
         if cube.spectral is None:
             return None
         try:
-            hdus = gbkfit.dataset.describe_fits(
+            hdus = describe_fits(
                 self._workspace.file(path), velocity, rest, spectral_type)
         except OSError:
             return None

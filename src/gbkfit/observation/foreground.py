@@ -71,7 +71,7 @@ class Foreground(Serializable):
         if self._lens is None:
             return {}
         return {
-            f'{self._prefix}lens_{name}': pdesc
+            self._full_name(name): pdesc
             for name, pdesc in self._lens.pdescs().items()}
 
     def centre_params(self) -> tuple[tuple[str, str], ...]:
@@ -81,9 +81,17 @@ class Foreground(Serializable):
         """
         if self._lens is None:
             return ()
-        return tuple(
-            (f'{self._prefix}lens_{x}', f'{self._prefix}lens_{y}')
-            for x, y in self._lens.centre_params())
+        return self._named(self._lens.centre_params())
+
+    def shift_params(self) -> tuple[tuple[str, str], ...]:
+        """
+        Return the names of the parameters of the shifts (x and y) of the
+        masses of its lens placed by their RA and Dec (see
+        Lens.shift_params), as pdescs names them.
+        """
+        if self._lens is None:
+            return ()
+        return self._named(self._lens.shift_params())
 
     def plan_lens(
             self, driver: Driver, grid: Grid, dtype: np.dtype
@@ -109,8 +117,21 @@ class Foreground(Serializable):
         if self._lens is None:
             return None
         return self._lens.plan(driver, grid, dtype, {
-            name: f'{self._prefix}lens_{name}'
-            for name in self._lens.pdescs()})
+            name: self._full_name(name) for name in self._lens.pdescs()})
+
+    def _named(
+            self, pairs: tuple[tuple[str, str], ...]
+    ) -> tuple[tuple[str, str], ...]:
+        """
+        Return pairs of names of parameters of its lens as pdescs names
+        them.
+        """
+        return tuple(
+            (self._full_name(x), self._full_name(y)) for x, y in pairs)
+
+    def _full_name(self, name: str) -> str:
+        """Return the name of a parameter of its lens as pdescs names it."""
+        return f'{self._prefix}lens_{name}'
 
 
 foreground_parser = BasicParser(Foreground)

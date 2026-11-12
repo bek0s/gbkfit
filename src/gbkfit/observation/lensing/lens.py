@@ -116,6 +116,17 @@ class Lens(Serializable):
             for mass, names in zip(self._masses, self._mappings)
             if mass.centred())
 
+    def shift_params(self) -> tuple[tuple[str, str], ...]:
+        """
+        Return the names of the parameters of the shifts (xpos and ypos)
+        of its masses that are shifted from where their RA and Dec put
+        them (see LensMass.shifted).
+        """
+        return tuple(
+            (names['xpos'], names['ypos'])
+            for mass, names in zip(self._masses, self._mappings)
+            if mass.shifted())
+
     def deflection(
             self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:

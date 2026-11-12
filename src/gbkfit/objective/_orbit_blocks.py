@@ -10,12 +10,13 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.observation import Comparison, GroupPlan
+from gbkfit.observation import GroupPlan
 from gbkfit.observation.orbits import OrbitRecording, OrbitSeries
 from gbkfit.params import (
     ParamValues, ParamView, Solution, Solve, StageCache, element_names,
     solve_together_rows)
 from ._block import Block
+from ._comparisons import Comparison
 
 
 __all__ = [
