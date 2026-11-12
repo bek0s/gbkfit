@@ -84,9 +84,9 @@ def test_the_same_dispersion_along_every_direction_is_isotropic(
     (directions,), _ = evaluate_cases(
         [case(driver, disk(DIRECTIONS, thick))],
         values | dict(dpt2_a=20, dpt3_a=20))
-    expected = isotropic['spectra']['d']
+    expected = isotropic['spectra'].data
     np.testing.assert_allclose(
-        directions['spectra']['d'], expected, rtol=1e-5,
+        directions['spectra'].data, expected, rtol=1e-5,
         atol=1e-6 * np.max(expected))
 
 

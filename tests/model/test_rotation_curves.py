@@ -121,7 +121,7 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_cases):
         vsys=0, xpos=0, ypos=-radius, posa=0, incl=incl, rpt_a=1,
         rpt_s=4, dpt_a=20) | {f'vpt_{k}': v for k, v in values.items()}
     data, extra = evaluate_cases([case], properties)
-    assert np.isfinite(data[0]['spectra']['d']).all()
+    assert np.isfinite(data[0]['spectra'].data).all()
     velocity = extra.get('vdata', component='component0').data
     expected = curve(radius, **values) * np.sin(np.radians(incl))
     assert velocity[4, 4] == pytest.approx(expected, rel=1e-3)

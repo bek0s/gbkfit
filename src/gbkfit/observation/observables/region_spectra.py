@@ -19,7 +19,7 @@ from ._data_units import flux_data_unit
 from ._options import Rota, Rpix, Rval, Size, Step
 from ._regions import (
     RegionsObservable, RegionsObservablePlan, spatial_options_from_regions)
-from .base import FluxScale, ModelData, ObservationSetup
+from .base import FluxScale, ModelData, ModelItem, ObservationSetup
 
 if TYPE_CHECKING:
     import scipy.sparse
@@ -251,4 +251,4 @@ class RegionSpectraPlan(RegionsObservablePlan):
             # (on any driver: its arrays take the ufuncs of numpy)
             np.multiply(cube, self._valid, out=self._valid_cube)
             cube = self._valid_cube
-        return dict(spectra=dict(d=self._sum_regions(cube), m=None, w=None))
+        return dict(spectra=ModelItem(self._sum_regions(cube)))

@@ -65,7 +65,7 @@ def evaluate(driver, with_opacity, opacity, times=1):
         plan.group().pdescs(), properties)
     values = params.evaluate()
     return [
-        copy.deepcopy(plan.model_h(values)[0]['spectra']['d'])
+        copy.deepcopy(plan.model_h(values)[0]['spectra'].data)
         for _ in range(times)]
 
 
@@ -189,7 +189,7 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
             line_of_sight=dict(type='grid'),
             galaxy=dict(components=components))
         data, _ = evaluate_cases([case], properties)
-        return data[0]['spectra']['d']
+        return data[0]['spectra'].data
     clear = evaluate([gas], properties)
     dusty = evaluate(
         [gas, dict(disk, name='dust', opacity=DUST)],
@@ -229,7 +229,7 @@ def image_and_optical_depth(driver, evaluate_cases, opacity, depth_step):
         dust_rpt_a=opacity, dust_rpt_s=4, dust_rht_s=1)
     data, extra = evaluate_cases([case], properties)
     tau = extra.get('total_odata').data.sum(axis=0)
-    return data[0]['brightness']['d'], tau
+    return data[0]['brightness'].data, tau
 
 
 @pytest.mark.parametrize('depth_step', [0.25, 1, 2])
@@ -284,7 +284,7 @@ def test_a_grid_sees_a_thin_disk_as_the_sky_does(
             line_of_sight=line_of_sight,
             galaxy=dict(components=[component]))], properties)[0][0]
         for line_of_sight in (dict(type='flat'), dict(type='grid'))]
-    np.testing.assert_array_equal(models[1][key]['d'], models[0][key]['d'])
+    np.testing.assert_array_equal(models[1][key].data, models[0][key].data)
 
 
 def face_on_dust_case(driver, components):
@@ -320,7 +320,7 @@ def test_dust_dims_a_thin_disk_in_front_of_its_plane(driver, evaluate_cases):
     dimmed, extra = evaluate_cases(
         [face_on_dust_case(driver, [stars])], properties | FACE_ON_DUST)
     tau = extra.get('total_odata').data.sum(axis=0)
-    clear, dimmed = (data[0]['brightness']['d'] for data in (clear, dimmed))
+    clear, dimmed = (data[0]['brightness'].data for data in (clear, dimmed))
     visible = clear > 1e-3 * clear.max()
     assert tau[visible].max() > 0.4
     np.testing.assert_allclose(
@@ -344,7 +344,7 @@ def test_dust_dims_a_point_in_front_of_its_depth(
     data, extra = evaluate_cases(
         [face_on_dust_case(driver, [nucleus])], properties | FACE_ON_DUST)
     tau = extra.get('total_odata').data.sum(axis=0)[12, 12]
-    assert data[0]['brightness']['d'][12, 12] == pytest.approx(
+    assert data[0]['brightness'].data[12, 12] == pytest.approx(
         np.exp(-fraction * tau), rel=1e-5)
 
 
@@ -406,7 +406,7 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
     taus = [
         extra.get('odata', component=f'dust{i}').data.sum(axis=0)
         for i in range(len(laws))]
-    return data[0]['spectra']['d'], taus
+    return data[0]['spectra'].data, taus
 
 
 def line_flux(cube, line):

@@ -51,7 +51,7 @@ def evaluate(driver, galaxy, observable, properties):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
-    return {key: value['d'].copy() for key, value in data.items()}
+    return {key: value.data.copy() for key, value in data.items()}
 
 
 def visibilities(driver, galaxy, properties):

@@ -39,6 +39,7 @@ __all__ = [
     'FluxScale',
     'HostModelData',
     'ModelData',
+    'ModelItem',
     'Observable',
     'ObservablePlan',
     'ObservationSetup',
@@ -46,14 +47,35 @@ __all__ = [
 ]
 
 
-# The model data of an observable: for each of its data items (e.g.
-# 'spectra'), the arrays of the model ('d'; NaN where it has no value),
-# of its mask ('m'; an output, which the objective does not use) and of
-# its weights ('w') on the driver, or None
-ModelData: TypeAlias = dict[str, dict[str, DeviceArray | None]]
+class ModelItem[A](NamedTuple):
+    """
+    The model of a data item of an observable (see ObservablePlan): its
+    arrays, of the shape of the data item, on the driver (see ModelData)
+    or on the host (see HostModelData).
+
+    Attributes
+    ----------
+    data : array
+        The values of the model; NaN where it has no value.
+    mask : array or None
+        Where the model has a value (1) or not (0), if the observable
+        measures it (e.g. moments, of the spectra where they have flux):
+        an output, which the objective does not use.
+    weights : array or None
+        The weights of the values in the comparison with the data (e.g.
+        the pixel weights, see Weights), if any.
+    """
+    data: A
+    mask: A | None = None
+    weights: A | None = None
+
+
+# The model data of an observable on the driver: the model of each of its
+# data items (e.g. 'spectra'), by key
+ModelData: TypeAlias = dict[str, ModelItem[DeviceArray]]
 
 # Model data copied to the host
-HostModelData: TypeAlias = dict[str, dict[str, np.ndarray | None]]
+HostModelData: TypeAlias = dict[str, ModelItem[np.ndarray]]
 
 
 class FluxScale(NamedTuple):
@@ -730,8 +752,7 @@ class ObservablePlan(abc.ABC):
         -------
         list of HostModelData
             The model data of each draw, on the host: of each data item,
-            the data ('d') and their mask ('m') as evaluate gives them;
-            no weights.
+            the data and their mask as evaluate gives them; no weights.
         dict or None
             The error of each value of each data item, by name, if known
             exactly (see has_exact_errors): the dispersion of the noise of

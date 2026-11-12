@@ -187,7 +187,7 @@ def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     setup = gbkfit.load(str(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml'))
     assert setup.objective is None
     values = setup.params.evaluate()
-    model = setup.group_plan.model_h(values)[0]['spectra']['d']
+    model = setup.group_plan.model_h(values)[0]['spectra'].data
     expected = array(run_eval('model', config, tmp_path / 'model'), 'model')
     np.testing.assert_array_equal(model, expected)
     # With data (the model plus 1, with errors of 2), its outputs have the

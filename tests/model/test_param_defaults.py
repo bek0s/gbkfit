@@ -33,5 +33,5 @@ def test_models_evaluate_at_the_defaults(path):
         models = setup.group_plan.model_h(default_values(pdescs))
         arrays = [
             array for observation in models for item in observation.values()
-            for array in item.values() if array is not None]
+            for array in item if array is not None]
         assert arrays and all(np.isfinite(array).any() for array in arrays)

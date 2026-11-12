@@ -48,7 +48,7 @@ def mass_galaxy(**info):
 
 
 def model(group, params):
-    return {key: item['d'].copy()
+    return {key: item.data.copy()
             for key, item in group.plan().model_h(params)[0].items()}
 
 
@@ -145,7 +145,7 @@ def test_profile_beside_a_sky_observation():
     group = ObservationGroup(galaxy, [profile, cube])
     params = PARAMS | GAS_PARAMS
     plan = group.plan()
-    rotation = plan.model_h(params)[0]['rotation_gas']['d'].copy()
+    rotation = plan.model_h(params)[0]['rotation_gas'].data.copy()
     assert plan.stage_caches()['galaxy.galaxy0.mass'].version() == 1
     expected = galaxy.plan_functions().bind(params)['rotation_gas'](radii)
     np.testing.assert_allclose(rotation, expected, rtol=1e-12)
@@ -172,7 +172,7 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
     params = dict(
         stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
         stars_rpt_a=1, stars_rpt_s=4, distance=10, mass_stellar_upsilon=1e8)
-    assert np.all(group.plan().model_h(params)[1]['vcirc']['d'] > 0)
+    assert np.all(group.plan().model_h(params)[1]['vcirc'].data > 0)
     ObservationGroup(galaxy, image)
     warnings = [record for record in caplog.records
                 if 'only derived values can use it' in record.message]
@@ -264,7 +264,7 @@ def test_plans_with_other_data_evaluate_profiles_at_their_radii():
         copied = plan.with_data([other]).model_h(params)[0]
         assert copied.keys() == fresh.keys()
         for key in keys:
-            np.testing.assert_array_equal(copied[key]['d'], fresh[key]['d'])
+            np.testing.assert_array_equal(copied[key].data, fresh[key].data)
 
 
 def test_profile_data_in_another_unit_are_converted():

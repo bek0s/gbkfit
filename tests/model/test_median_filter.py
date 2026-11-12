@@ -39,7 +39,7 @@ def model(driver, observable, galaxy, item, out_extra=None):
     params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()
-    return group.plan(driver).model_h(params, out_extra)[0][item]['d'].copy()
+    return group.plan(driver).model_h(params, out_extra)[0][item].data.copy()
 
 
 def zero_padded_median(data, size):

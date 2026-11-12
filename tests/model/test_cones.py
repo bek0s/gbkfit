@@ -85,7 +85,7 @@ def test_a_cone_has_the_light_of_its_walls_on_its_sides(
     cone = HOLLOW | dict(sides=sides, emission=BAND)
     data, extra = evaluate_cases(
         [image(driver, cone)], GEOMETRY | HOLLOW_PROPERTIES)
-    flux = data[0]['brightness']['d'].sum() * 0.5 ** 2
+    flux = data[0]['brightness'].data.sum() * 0.5 ** 2
     r = np.linspace(0, 11, 110001)
     moment = np.trapezoid(r * np.interp(r, HOLLOW_RNODES, HOLLOW_A), r)
     expected = nsides * 2 * np.pi * moment * np.sin(np.radians(30))
@@ -182,7 +182,7 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
         dimmed, extra = evaluate_cases(group, properties)
         tau = extra.get('total_odata').data.sum(axis=0)
         clear, dimmed = (
-            data[0]['brightness']['d'] for data in (clear, dimmed))
+            data[0]['brightness'].data for data in (clear, dimmed))
         visible = clear > 1e-3 * clear.max()
         assert tau[visible].min() > 0.05
         np.testing.assert_allclose(

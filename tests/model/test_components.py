@@ -183,7 +183,7 @@ def test_a_shared_height_trait_is_one_for_each_polar_trait(
         data, _ = evaluate_cases([case], dict(
             xpos=0.5, ypos=-0.5, posa=30, incl=70, rpt_a=1, rpt_s=3,
             rpt2_a=0.5, rpt2_s=2) | values)
-        return data[0]['brightness']['d']
+        return data[0]['brightness'].data
     shared = evaluate(SECH2, dict(rht_s=0.7))
     each = evaluate([SECH2, SECH2], dict(rht_s=0.7, rht2_s=0.7))
     np.testing.assert_allclose(shared, each, rtol=1e-6)

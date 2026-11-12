@@ -14,7 +14,7 @@ import numpy as np
 from gbkfit.driver import Driver
 from gbkfit.model import Extra, Extras
 from gbkfit.objective import Objective
-from gbkfit.observation import GroupPlan, Observation
+from gbkfit.observation import GroupPlan, HostModelData, Observation
 from gbkfit.outputs import Output, product_extension
 from gbkfit.params import ParamValues
 
@@ -137,20 +137,20 @@ def evaluation_outputs(
         for i, data_i in enumerate(models):
             observation = group.observations()[i]
             name = group.observation_label(i)
-            for key, value in data_i.items():
-                for kind, part in (
-                        ('model', 'd'), ('model_mask', 'm'),
-                        ('model_weight', 'w')):
-                    if value.get(part) is None:
+            for key, item in data_i.items():
+                for kind, array in (
+                        ('model', item.data), ('model_mask', item.mask),
+                        ('model_weight', item.weights)):
+                    if array is None:
                         continue
                     output = observation.output(
-                        value[part],
-                        _unit(observation, key) if part == 'd' else None)
+                        array,
+                        _unit(observation, key) if kind == 'model' else None)
                     outputs.append(
                         _observation_output(name, kind, key, output))
             outputs += _images(
                 observation, group_plan.observation_drivers()[i], name,
-                {k: v['d'] for k, v in data_i.items()})
+                {key: item.data for key, item in data_i.items()})
             if (scale := _flux_scale_map(observation, values, data_i)) \
                     is not None:
                 outputs.append(Output(
@@ -179,7 +179,7 @@ def evaluation_outputs(
 def _flux_scale_map(
         observation: Observation,
         values: ParamValues,
-        model: Mapping[str, Mapping[str, np.ndarray | None]]
+        model: HostModelData
 ) -> np.ndarray | None:
     """
     Return the values of the flux scale of an observation of several
@@ -191,7 +191,7 @@ def _flux_scale_map(
             or flux_scale[1].axis is None:
         return None
     param, scale = flux_scale
-    shape = list(model[scale.items[0]]['d'].shape)
+    shape = list(model[scale.items[0]].data.shape)
     del shape[scale.axis]
     return np.reshape(values[param], shape)
 

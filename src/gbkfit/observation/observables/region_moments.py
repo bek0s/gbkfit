@@ -22,7 +22,7 @@ from ._options import Rota, Rpix, Rval, Size, Step
 from ._orbit_moments import OrbitMomentsPlan, check_orbits
 from ._regions import (
     RegionsObservable, RegionsObservablePlan, spatial_options_from_regions)
-from .base import ModelData, ObservablePlan, ObservationSetup
+from .base import ModelData, ModelItem, ObservablePlan, ObservationSetup
 
 if TYPE_CHECKING:
     import scipy.sparse
@@ -302,5 +302,5 @@ class RegionMomentsPlan(RegionsObservablePlan):
             grid.coords.step, grid.zero(), self._spectra_cube, None)
         # The moments of the regions are vectors
         return {
-            key: dict(d=value['d'][0], m=value['m'][0], w=value['w'][0])
+            key: ModelItem(value.data[0], value.mask[0], value.weights[0])
             for key, value in moments.items()}

@@ -18,7 +18,8 @@ from ._data_units import data_unit
 from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size,
     warn_unsmoothed_weights)
-from .base import FluxScale, ModelData, Observable, ObservationSetup
+from .base import (
+    FluxScale, ModelData, ModelItem, Observable, ObservationSetup)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -211,5 +212,4 @@ class PixelSpectraPlan(CubeObservablePlan):
 
     def _measure(self) -> ModelData:
         plan = self._model_cube_plan
-        return dict(spectra=dict(
-            d=plan.cube(), m=None, w=plan.weights()))
+        return dict(spectra=ModelItem(plan.cube(), weights=plan.weights()))

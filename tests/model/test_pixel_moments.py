@@ -90,18 +90,18 @@ def test_higher_moments_of_a_gaussian_line(driver):
     # One mask for all moments: where the moments are defined.
     # Without spatial weights, all weights are 1.
     for key in ('moment1', 'moment2', 'moment3', 'moment4'):
-        defined = np.isfinite(mmaps[key]['d'])
-        np.testing.assert_array_equal(mmaps[key]['m'], defined)
-        np.testing.assert_array_equal(mmaps[key]['w'], 1)
-    sigma = mmaps['moment2']['d']
+        defined = np.isfinite(mmaps[key].data)
+        np.testing.assert_array_equal(mmaps[key].mask, defined)
+        np.testing.assert_array_equal(mmaps[key].weights, 1)
+    sigma = mmaps['moment2'].data
     disk = np.isfinite(sigma)
     assert disk.sum() > 100
     np.testing.assert_allclose(
         sigma[disk], np.sqrt(20 ** 2 + 5 ** 2 / 12), rtol=1e-3)
     np.testing.assert_allclose(
-        mmaps['moment3']['d'][disk], 0, atol=1e-3 * 20 ** 3)
+        mmaps['moment3'].data[disk], 0, atol=1e-3 * 20 ** 3)
     np.testing.assert_allclose(
-        mmaps['moment4']['d'][disk], 3 * sigma[disk] ** 4, rtol=1e-2)
+        mmaps['moment4'].data[disk], 3 * sigma[disk] ** 4, rtol=1e-2)
 
 
 def test_moment_maps_of_a_galaxy_at_a_high_velocity(driver):
@@ -113,7 +113,7 @@ def test_moment_maps_of_a_galaxy_at_a_high_velocity(driver):
         spectral=SpectralAxis(
             size=201, step=2, rval=1500, convention='relativistic'))
     mmaps = evaluate_mmaps(driver, observable, vsys=1500)
-    centre = mmaps['moment1']['d'][15:17, 15:17]
+    centre = mmaps['moment1'].data[15:17, 15:17]
     np.testing.assert_allclose(centre, 1500, atol=15)
 
 
@@ -208,7 +208,7 @@ def test_a_cube_without_flux_somewhere_is_a_failed_model(driver):
     cube[:, 0, 0] = 0
     maps = plan.evaluate((1, 1, 10), (0, 0, -20), driver.mem_copy_h2d(cube),
                          None)
-    assert driver.mem_copy_d2h(maps['moment0']['m'])[0, 0] == 0
+    assert driver.mem_copy_d2h(maps['moment0'].mask)[0, 0] == 0
     cube[2, 1, 1] = np.nan
     with pytest.raises(ModelEvaluationError, match="1 of its spectra"):
         plan.evaluate((1, 1, 10), (0, 0, -20), driver.mem_copy_h2d(cube),

@@ -48,7 +48,7 @@ def evaluate(driver, foreground=None, properties=PROPERTIES, observable=IMAGE,
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), properties)
     data = group.plan(driver).model_h(params.evaluate())[0]
-    return next(iter(data.values()))['d'].copy()
+    return next(iter(data.values())).data.copy()
 
 
 def deflection_lens(alpha_x, alpha_y, source_size, source_step, **coords):
@@ -362,8 +362,8 @@ def test_the_frame_of_an_observation_moves_its_lens(driver):
             | lens_params(**lens, x=x)
         params = gbkfit.params.ParamSpace.from_properties(
             plan.group().pdescs(), properties)
-        images.append(plan.model_h(params.evaluate())[1]['brightness'][
-            'd'].copy())
+        images.append(plan.model_h(params.evaluate())[1][
+            'brightness'].data.copy())
     np.testing.assert_allclose(images[1], images[0], rtol=1e-5, atol=1e-6)
 
 
@@ -397,8 +397,8 @@ def test_a_lens_is_placed_again_only_for_other_values(driver, monkeypatch):
     for properties in cases:
         params = gbkfit.params.ParamSpace.from_properties(
             plan.group().pdescs(), properties)
-        images.append(plan.model_h(params.evaluate())[0]['brightness'][
-            'd'].copy())
+        images.append(plan.model_h(params.evaluate())[0][
+            'brightness'].data.copy())
     assert len(calls) == 2
     for image, properties in zip(images, cases):
         np.testing.assert_allclose(

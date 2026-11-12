@@ -403,7 +403,7 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
         driver.mem_copy_h2d(np.ascontiguousarray(spectra[:, None, :])), None)
     for key, value in measured.items():
         np.testing.assert_allclose(
-            driver.mem_copy_d2h(value['d'])[0], model[key]['d'],
+            driver.mem_copy_d2h(value.data)[0], model[key].data,
             rtol=1e-6, atol=1e-6)
     assert extras.get('unbinned_moment2').data.shape == index.shape
     cells = extras.get('orbit_cells', component='stars')
@@ -450,7 +450,7 @@ def test_mock_data_of_orbits_are_the_model_plus_noise(driver):
         [noise_parser.load(dict(type='gauss', rms=rms))], nsamples=30,
         seed=1))
     z = np.concatenate([
-        (dataset[key].data() - model[key]['d']) / dataset[key].error()
+        (dataset[key].data() - model[key].data) / dataset[key].error()
         for key in model])
     assert np.all(np.isfinite(z))
     assert 0.5 < np.mean(z ** 2) < 2
@@ -469,7 +469,7 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     group = ObservationGroup([galaxy()], [without_data(observation(bins()))])
     model = group.plan(driver).model_h(
         PROPERTIES | dict(stars_weights=np.ones(400)))[0]
-    data = {m: model[KEYS[m]]['d'] for m in range(1, 5)}
+    data = {m: model[KEYS[m]].data for m in range(1, 5)}
     obs = observation(bins(), data=data)
     group = ObservationGroup([galaxy()], [obs])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
@@ -522,10 +522,10 @@ def test_the_model_of_bins_with_data_is_that_of_the_objective(driver):
     for key, compared in compared_model(
             objective, params.evaluate()).items():
         np.testing.assert_allclose(
-            model[key]['d'], compared, rtol=1e-12, atol=1e-12)
+            model[key].data, compared, rtol=1e-12, atol=1e-12)
     forward = ObservationGroup([galaxy()], [without_data(obs)]).plan(
         driver).model_h(values)[0]
-    assert np.abs(model['moment2']['d'] - forward['moment2']['d']).max() > 1
+    assert np.abs(model['moment2'].data - forward['moment2'].data).max() > 1
 
 
 def test_a_bootstrap_redraws_about_the_model_of_the_objective(driver):
@@ -674,7 +674,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
     errors = {1: 3.0, 2: 3.0, 3: 0.02, 4: 0.02}
     def item(m):
         return Data(
-            model[KEYS[m]]['d'], error=np.full(regions.nregions(), errors[m]))
+            model[KEYS[m]].data, error=np.full(regions.nregions(), errors[m]))
     dataset = DatasetRegionMoments(
         {m: item(m) for m in (1, 2)}, regions, {m: item(m) for m in (3, 4)})
     obs = ObservationSky(

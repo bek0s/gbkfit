@@ -61,7 +61,7 @@ def models(driver, sizes, values, galaxy=(CORE, ENVELOPE)):
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=copy.deepcopy(list(galaxy))))],
         [observation(size) for size in sizes])
-    return [m['brightness']['d'].astype(float)
+    return [m['brightness'].data.astype(float)
             for m in group.plan(driver).model_h(values)]
 
 
@@ -185,7 +185,7 @@ def test_the_pieces_of_a_model_are_its_parts_and_are_weighed(driver):
         [observation(None, image)])
     plan = group.plan(driver)
     pieces = plan.amplitude_pieces(TRUTH, AMPLITUDES[:2], [0])[0]
-    base = driver.mem_copy_d2h(pieces.base['brightness']['d'])
+    base = driver.mem_copy_d2h(pieces.base['brightness'].data)
     parts = driver.mem_copy_d2h(pieces.pieces['brightness'])
     atol = 1e-6 * image.max()
     np.testing.assert_allclose(

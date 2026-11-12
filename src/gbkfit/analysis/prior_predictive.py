@@ -107,7 +107,7 @@ def prior_predictive(
                 error = dataset[key].error()
                 noise = 0 if error is None else rng.normal(0, 1, error.shape)
                 predicted[i].setdefault(key, []).append(
-                    item['d'] + noise * (0 if error is None else error))
+                    item.data + noise * (0 if error is None else error))
     if not np.isfinite(chi2).any():
         raise ValueError("the parameters cannot be evaluated at any draw")
     bands, coverage = [], []

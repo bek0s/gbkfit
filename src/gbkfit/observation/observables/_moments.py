@@ -18,7 +18,7 @@ from gbkfit.model import STARS, LineEmission, StarsEmission
 from gbkfit.params import ModelEvaluationError
 from gbkfit.utils import numutils
 from . import _model_cube
-from .base import ModelData, ObservationSetup
+from .base import ModelData, ModelItem, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -341,7 +341,7 @@ class MomentsPlan:
         """
         Return the moments of cube (and its weights, wcube, if any), whose
         world coordinates are step and zero (see Grid): for each
-        order, its map (d), the mask (m) and its weights (w).
+        order, its map, the mask and its weights (see ModelItem).
 
         Raises
         ------
@@ -392,8 +392,8 @@ class MomentsPlan:
                 step, zero, cube, wcube, cutoff, self._mmaps_o,
                 self._mmaps_d, self._mmaps_m, self._mmaps_w)
         return {
-            moment_item(order, self._method): dict(
-                d=self._mmaps_d[i], m=self._mmaps_m, w=self._mmaps_w)
+            moment_item(order, self._method): ModelItem(
+                self._mmaps_d[i], self._mmaps_m, self._mmaps_w)
             for i, order in enumerate(self._orders)}
 
     def _flux(

@@ -55,7 +55,7 @@ def evaluate(driver, observable):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
-    return next(iter(data.values()))['d'].copy()
+    return next(iter(data.values())).data.copy()
 
 
 def aspec_of_apertures(apertures):
@@ -157,7 +157,7 @@ def test_region_spectra_of_a_point_is_its_flux(driver, step):
         observable=observable)])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), dict(xpos=0, ypos=0, flux=2, vsys=0, disp=30))
-    spectrum = plan.model_h(params.evaluate())[0]['spectra']['d'][:, 0]
+    spectrum = plan.model_h(params.evaluate())[0]['spectra'].data[:, 0]
     assert spectrum.sum() * 10 == pytest.approx(2, rel=1e-4)
 
 

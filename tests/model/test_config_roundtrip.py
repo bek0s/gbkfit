@@ -147,13 +147,13 @@ def test_config_roundtrip(config):
             constants=plan.group().constants())
         return plan.model_h(params.evaluate())
 
-    data = [{k: dict(v) for k, v in item.items()} for item in evaluate(info)]
+    data = [dict(item) for item in evaluate(info)]
     data_dumped = evaluate(dumped)
     for model, model_dumped in zip(data, data_dumped):
         for key, value in model.items():
             np.testing.assert_allclose(
-                model_dumped[key]['d'], value['d'],
-                rtol=1e-5, atol=1e-6 * np.nanmax(np.abs(value['d'])))
+                model_dumped[key].data, value.data,
+                rtol=1e-5, atol=1e-6 * np.nanmax(np.abs(value.data)))
 
 
 GAUSS = dict(type='gauss', sigma=1)

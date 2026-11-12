@@ -370,13 +370,13 @@ class Comparison(abc.ABC):
         copy of its own, allocated on first use), or as it is.
         """
         if key not in scales:
-            return model[key]['d']
+            return model[key].data
         driver = self._driver
         if key not in self._d_scaled_models:
             self._d_scaled_models[key] = driver.mem_alloc_d(
                 self._dataset.shape(), self._observation.dtype())
         return driver.math_mul(
-            model[key]['d'], scales[key], out=self._d_scaled_models[key])
+            model[key].data, scales[key], out=self._d_scaled_models[key])
 
 
 class _NoiseParams(NamedTuple):
@@ -726,7 +726,7 @@ class ComparisonGaussian(Comparison):
                 self._d_error.get(key),
                 self._d_mask[key],
                 scaled_models[key],
-                model[key]['w'],
+                model[key].weights,
                 weights[key],
                 self._missing_residual,
                 *self._upper_limits.get(key, _NO_UPPER_LIMIT),
@@ -824,7 +824,7 @@ class ComparisonGaussian(Comparison):
                     self._d_error.get(key),
                     self._d_mask[key],
                     pieces.pieces[key][k],
-                    pieces.base[key]['w'],
+                    pieces.base[key].weights,
                     weights[key],
                     np.nan, *_NO_UPPER_LIMIT,
                     *noise_values[key],
@@ -869,7 +869,7 @@ class ComparisonGaussian(Comparison):
         d_sums = self._d_scale_sums[key, axis]
         self._backend.amplitude_sums(
             self._d_data[key], self._d_error.get(key), self._d_mask[key],
-            model[key]['d'], model[key]['w'],
+            model[key].data, model[key].weights,
             *self._noise_values(key, params), axis, *d_sums)
         for h, d in zip(h_sums, d_sums):
             driver.mem_copy_d2h(d, h)
@@ -891,7 +891,7 @@ class ComparisonGaussian(Comparison):
         # weights. Normalised, only the shape of the weights counts, and
         # the bias is gone. (A choice over weights fixed at a given
         # geometry, which remove it as well but stop following the disk.)
-        weights = model[key]['w']
+        weights = model[key].weights
         if weights is None:
             return 1.0
         driver = self._driver
@@ -969,7 +969,7 @@ class ComparisonGaussian(Comparison):
                 self._d_error.get(key),
                 self._d_mask[key],
                 scaled_models[key],
-                model[key]['w'],
+                model[key].weights,
                 weights[key],
                 *self._noise_values(key, params),
                 noise.scale_min,
@@ -1035,7 +1035,7 @@ class ComparisonUser(Comparison):
                 self._chi2 -= 2 * result
                 residuals[...] = 0
                 continue
-            if (weights := model[key]['w']) is not None:
+            if (weights := model[key].weights) is not None:
                 # (normalised to a mean square of 1 over the values the
                 # data do not mask, as ComparisonGaussian._pixel_weight)
                 weights = np.asarray(driver.mem_copy_d2h(weights), float)

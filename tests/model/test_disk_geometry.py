@@ -95,7 +95,7 @@ def test_grid_rotation(driver, evaluate_cases, disk):
         data, _ = evaluate_cases(
             [thick_spectral_cube_case(driver, disk, rota)],
             properties | dict(posa=posa))
-        return data[0]['spectra']['d'].copy()
+        return data[0]['spectra'].data.copy()
 
     rotated = evaluate(posa=70, rota=40)
     expected = evaluate(posa=30, rota=0)
@@ -119,7 +119,7 @@ def test_grid_rotation_with_an_elongated_beam(driver, evaluate_cases):
         data, _ = evaluate_cases(
             [thick_spectral_cube_case(driver, 'smdisk', rota, beam)],
             properties | dict(posa=posa))
-        return data[0]['spectra']['d'].copy()
+        return data[0]['spectra'].data.copy()
 
     rotated = evaluate(posa=70, beam_posa=50, rota=40)
     expected = evaluate(posa=30, beam_posa=10, rota=0)
@@ -145,7 +145,7 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_cases):
         # The convolution pads the grid to 128 x 64
         case['observable']['size'] = [61, 17]
         data, _ = evaluate_cases([case], properties)
-        return data[0]['spectra']['d'].copy()
+        return data[0]['spectra'].data.copy()
 
     expected = evaluate(gauss)
     actual = evaluate(dict(type='image', file='psf.fits', step=[1, 1]))
@@ -169,7 +169,7 @@ def edge_disk_flux(driver, evaluate_cases, rnodes, loose):
         xpos=centre, ypos=centre, posa=0, incl=0,
         rpt_a=[1] * (nodes - 1) + [0])
     data, _ = evaluate_cases([case], properties)
-    return data[0]['brightness']['d'].sum() * 0.2 * 0.2
+    return data[0]['brightness'].data.sum() * 0.2 * 0.2
 
 
 @pytest.mark.parametrize('loose', [False, True])
@@ -202,7 +202,7 @@ def test_thin_disk_seen_from_below(driver, evaluate_cases, incl):
         properties = dict(
             xpos=0, ypos=0, posa=0, incl=incl, rpt_a=1, rpt_s=4)
         data, _ = evaluate_cases([case], properties)
-        return data[0]['brightness']['d']
+        return data[0]['brightness'].data
     below = image(incl)
     assert (below >= 0).all()
     if incl != 90:
@@ -226,7 +226,7 @@ def test_loose_disk_centres_its_rings(driver, evaluate_cases):
         xpos=[0.2 * r for r in rnodes], ypos=[0] * len(rnodes),
         posa=0, incl=0, rpt_a=1, rpt_s=4)
     data, _ = evaluate_cases([case], properties)
-    row = data[0]['brightness']['d'][20]
+    row = data[0]['brightness'].data[20]
     x = (np.arange(41) - 20) * 0.5
     radius = np.where(x > 0, x / 1.2, -x / 0.8)
     spread = np.where(x > 0, 1.2, 0.8)
@@ -255,7 +255,7 @@ def test_a_layer_thinner_than_a_voxel_keeps_its_light(
         case['line_of_sight'] = dict(type='grid', depth=dict(step=depth))
         data, _ = evaluate_cases([case], dict(
             xpos=0, ypos=0, posa=30, incl=incl, rpt_a=1, rpt_s=6, rht_s=0.25))
-        return data[0]['brightness']['d']
+        return data[0]['brightness'].data
     coarse, fine = image(1.0), image(0.02)
     # (but at the cusp of the exponential at the centre, where a voxel of
     # an inclined disk spans radii as well as heights)
@@ -286,7 +286,7 @@ def test_a_loose_thick_disk_centres_its_rings(driver, evaluate_cases):
         xpos=[0.2 * r for r in rnodes], ypos=[0] * len(rnodes),
         posa=0, incl=0, rpt_a=1, rpt_s=4, rht_s=1)
     data, _ = evaluate_cases([case], properties)
-    row = data[0]['brightness']['d'][20]
+    row = data[0]['brightness'].data[20]
     x = (np.arange(41) - 20) * 0.5
     radius = np.where(x > 0, x / 1.2, -x / 0.8)
     spread = np.where(x > 0, 1.2, 0.8)
@@ -319,10 +319,10 @@ def test_a_warped_disk_keeps_the_flux_of_its_rings(
         incl=list(incl[0] + (incl[1] - incl[0]) * ramp))
     flat = properties | dict(posa=posa[0], incl=incl[0])
     data, _ = evaluate_cases([case], properties)
-    flux = data[0]['brightness']['d'].sum() * 0.5 ** 2
+    flux = data[0]['brightness'].data.sum() * 0.5 ** 2
     # (the flat disk: the same field and sampling, to compare with)
     data, _ = evaluate_cases([case], flat)
-    flux_flat = data[0]['brightness']['d'].sum() * 0.5 ** 2
+    flux_flat = data[0]['brightness'].data.sum() * 0.5 ** 2
     assert flux_flat == pytest.approx(2 * np.pi * 4 ** 2, rel=2e-3)
     assert flux == pytest.approx(flux_flat, rel=2e-3)
 
@@ -344,7 +344,7 @@ def test_a_centre_that_is_not_a_number_gives_nan(driver, loose):
         params = {k: v[0] if isinstance(v, np.ndarray) else v
                   for k, v in params.items()}
     plan = group_plan([case])
-    assert np.all(np.isnan(plan.model_h(params)[0]['spectra']['d']))
+    assert np.all(np.isnan(plan.model_h(params)[0]['spectra'].data))
 
 
 def test_an_azimuth_that_is_not_finite_selects_nothing(driver):
@@ -356,4 +356,4 @@ def test_an_azimuth_that_is_not_finite_selects_nothing(driver):
         vsys=0, xpos=0, ypos=0, posa=0, incl=45, rpt_a=1, rpt_s=4,
         vpt_vt=100, dpt_a=10, spt_p=np.inf, spt_s=90)
     plan = group_plan([case])
-    assert not np.any(plan.model_h(params)[0]['spectra']['d'])
+    assert not np.any(plan.model_h(params)[0]['spectra'].data)

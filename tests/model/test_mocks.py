@@ -58,7 +58,7 @@ def evaluate(plan):
         plan.group().pdescs(), PROPERTIES).evaluate()
     extra = Extras()
     data = plan.model_h(params, extra)[0]
-    return {k: v['d'].copy() for k, v in data.items()}, extra, params
+    return {k: v.data.copy() for k, v in data.items()}, extra, params
 
 
 def mock_data(plan, params, noise, **options):

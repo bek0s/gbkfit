@@ -47,7 +47,7 @@ def evaluate(driver, observable, properties=PROPERTIES):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
-    return next(iter(data.values()))['d'].copy()
+    return next(iter(data.values())).data.copy()
 
 
 def test_pixel_footprint_of_a_still_pixel_is_its_overlaps():

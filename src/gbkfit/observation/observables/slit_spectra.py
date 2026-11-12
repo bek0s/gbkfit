@@ -18,7 +18,8 @@ from ._cube_plan import CubeObservablePlan
 from ._data_units import data_unit
 from ._options import (
     Rota, Rpix, Rval, Size, Step, warn_unsmoothed_weights)
-from .base import FluxScale, ModelData, Observable, ObservationSetup
+from .base import (
+    FluxScale, ModelData, ModelItem, Observable, ObservationSetup)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -259,7 +260,7 @@ class SlitSpectraPlan(CubeObservablePlan):
 
     def _measure(self) -> ModelData:
         plan = self._model_cube_plan
-        return dict(spectra=dict(
-            d=plan.cube()[:, 0, :],
-            m=None,
-            w=plan.weights()[:, 0, :] if plan.weights() is not None else None))
+        weights = plan.weights()
+        return dict(spectra=ModelItem(
+            plan.cube()[:, 0, :],
+            weights=None if weights is None else weights[:, 0, :]))

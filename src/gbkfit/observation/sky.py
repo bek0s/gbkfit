@@ -839,7 +839,7 @@ class _FluxScaledPlan(ObservablePlan):
         model = self._plan.evaluate(params, galaxies, out_extra)
         driver = self._driver
         if self._h_values is None:
-            shape = model[self._scale.items[0]]['d'].shape
+            shape = model[self._scale.items[0]].data.shape
             (self._h_values, self._d_values) = driver.mem_alloc_s(
                 tuple(1 if k == self._scale.axis else n
                       for k, n in enumerate(shape)), self._dtype)
@@ -847,7 +847,7 @@ class _FluxScaledPlan(ObservablePlan):
             params[self._param], self._h_values.shape)
         driver.mem_copy_h2d(self._h_values, self._d_values)
         for key in self._scale.items:
-            values = model[key]['d']
+            values = model[key].data
             driver.math_mul(values, self._d_values, out=values)
         return model
 

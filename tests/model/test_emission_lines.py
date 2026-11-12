@@ -54,7 +54,7 @@ def evaluate(driver, galaxy, observable, properties, line_of_sight=FLAT):
         line_of_sight=line_of_sight, observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
-    return plan.model_h(params.evaluate())[0]['spectra']['d'].copy()
+    return plan.model_h(params.evaluate())[0]['spectra'].data.copy()
 
 
 def galaxy_of(component):
@@ -218,7 +218,7 @@ def evaluate_observation(driver, galaxy, observable, properties, **options):
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
-    return {key: value['d'].copy() for key, value in data.items()}
+    return {key: value.data.copy() for key, value in data.items()}
 
 
 LINES = [dict(name='ha', rest='6562.8 Angstrom'),

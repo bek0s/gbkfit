@@ -15,7 +15,8 @@ from gbkfit.model import Extras, GalaxyState
 from gbkfit.params import ParamValues
 from ..weights import plan_weights
 from ._model_cube import ModelCube, cube_extra
-from .base import HostModelData, ModelData, ObservablePlan, ObservationSetup
+from .base import (
+    HostModelData, ModelData, ModelItem, ObservablePlan, ObservationSetup)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -192,10 +193,10 @@ class CubeObservablePlan(ObservablePlan):
     def _to_host(self, data: ModelData) -> HostModelData:
         """Return copies of the data and masks of model data on the host."""
         return {
-            key: dict(
-                d=self._driver.mem_copy_d2h(item['d']),
-                m=None if item['m'] is None
-                else self._driver.mem_copy_d2h(item['m']))
+            key: ModelItem(
+                self._driver.mem_copy_d2h(item.data),
+                None if item.mask is None
+                else self._driver.mem_copy_d2h(item.mask))
             for key, item in data.items()}
 
     def _flux_scale(self, params: ParamValues) -> float | None:

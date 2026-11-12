@@ -308,7 +308,7 @@ def test_the_geometry_of_a_model_is_found(driver):
                   vpt_rt=2, vpt_vt=150, dpt_a=20)
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), values)
-    v = plan.model_h(params.evaluate())[0]['moment1']['d']
+    v = plan.model_h(params.evaluate())[0]['moment1'].data
     x, y = grid()
     assert kinematic_pa(v, x, y, (20, 20)).pa == pytest.approx(40, abs=0.5)
     rings = kinemetry(v, x, y, (20, 20), radii=[6, 10, 14])
@@ -322,7 +322,7 @@ def test_the_geometry_of_a_model_is_found(driver):
         driver=dict(type=driver.type()), galaxy=galaxy,
         line_of_sight=dict(type='flat'),
         observable=observation.observable().dump() | dict(rota=25))])
-    v = rotated.model_h(params.evaluate())[0]['moment1']['d']
+    v = rotated.model_h(params.evaluate())[0]['moment1'].data
     sky_x, sky_y = sky_positions(
         rotated.group().observations()[0].observable().grid())
     assert kinematic_pa(v, sky_x, sky_y, (0, 0)).pa == pytest.approx(

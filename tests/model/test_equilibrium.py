@@ -79,7 +79,7 @@ def evaluate(driver, galaxy_, properties):
         line_of_sight_parser.load(dict(type='grid')))])
     params = ParamSpace.from_properties(group.pdescs(), properties)
     return group.plan(driver).model_h(
-        params.evaluate())[0]['spectra']['d'].copy()
+        params.evaluate())[0]['spectra'].data.copy()
 
 
 @pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])

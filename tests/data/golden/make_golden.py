@@ -71,6 +71,10 @@ TOLERANCES = {
 # The seed of the weights of the checksums of arrays (see summary)
 _CHECKSUM_SEED = 20261024
 
+# The names of the arrays of an item of model data (see ModelItem) in the
+# golden values, which keep those of the dicts that the items once were
+_PARTS = dict(data='d', mask='m', weights='w')
+
 
 @dataclasses.dataclass(frozen=True)
 class Case:
@@ -368,7 +372,8 @@ def golden_values(
         models = group_plan.model_h(params.evaluate(
             solved=evaluation.solved))
         golden: dict[str, Any] = dict(model=[
-            {key: {part: summary(array) for part, array in item.items()
+            {key: {_PARTS[part]: summary(array)
+                   for part, array in item._asdict().items()
                    if array is not None}
              for key, item in model.items()}
             for model in models])

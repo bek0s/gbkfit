@@ -68,12 +68,12 @@ def _same_models(actual: list, expected: list) -> None:
     """
     for model, other in zip(actual, expected, strict=True):
         for key, item in model.items():
-            for part, array in item.items():
+            for part, array, expected in zip(item._fields, item, other[key]):
                 if array is None:
                     continue
-                scale = np.nanmax(np.abs(other[key][part]), initial=0)
+                scale = np.nanmax(np.abs(expected), initial=0)
                 np.testing.assert_allclose(
-                    array, other[key][part], rtol=0,
+                    array, expected, rtol=0,
                     atol=1e3 * np.finfo(array.dtype).eps * scale,
                     err_msg=f"{key} {part}")
 

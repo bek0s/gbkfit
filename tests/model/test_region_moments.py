@@ -49,7 +49,7 @@ def evaluate(driver, observable):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
-    return {key: value['d'].copy() for key, value in data.items()}
+    return {key: value.data.copy() for key, value in data.items()}
 
 
 def write_bins(index):
@@ -215,7 +215,7 @@ def test_region_moments_objective_residual(driver):
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
     model = {
-        key: value['d'].copy() for key, value in
+        key: value.data.copy() for key, value in
         group.plan(driver).model_h(params.evaluate())[0].items()}
     dataset = DatasetRegionMoments({
         int(key.removeprefix('moment')):

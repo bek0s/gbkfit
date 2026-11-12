@@ -22,7 +22,8 @@ from ._cube_plan import CubeObservablePlan
 from ._data_units import flux_data_unit
 from ._options import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
-from .base import HostModelData, ModelData, Observable, ObservationSetup
+from .base import (
+    HostModelData, ModelData, ModelItem, Observable, ObservationSetup)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -525,8 +526,8 @@ class VisibilitiesPlan(CubeObservablePlan):
         brightest channel) is in the pixels at the edges of its field.
         """
         model, finer = (
-            self._driver.mem_copy_d2h(x['re']['d'])
-            + 1j * self._driver.mem_copy_d2h(x['im']['d'])
+            self._driver.mem_copy_d2h(x['re'].data)
+            + 1j * self._driver.mem_copy_d2h(x['im'].data)
             for x in (data, refined))
         largest = np.abs(finer).max(initial=0)
         if largest > 0 and (
@@ -560,11 +561,10 @@ class VisibilitiesPlan(CubeObservablePlan):
         self._model_cube_plan.record(self._flux_scale(params))
         recorded = self._to_host(self._measure())
         draws = [{
-            key: dict(d=(item['d'] + noise.draw(
-                rng, self._noise_grid, None, item['d'])).astype(self._dtype),
-                m=None)
+            key: ModelItem((item.data + noise.draw(
+                rng, self._noise_grid, None, item.data)).astype(self._dtype))
             for key, item in recorded.items()} for _ in range(ndraws)]
-        errors = {key: noise.sigma(self._noise_grid, item['d'])
+        errors = {key: noise.sigma(self._noise_grid, item.data)
                   for key, item in recorded.items()}
         return draws, errors
 
@@ -588,9 +588,7 @@ class VisibilitiesPlan(CubeObservablePlan):
         self._driver.math_mul(visibilities, self._area, out=visibilities)
         self._driver.mem_copy_d2d(visibilities.real, self._re)
         self._driver.mem_copy_d2d(visibilities.imag, self._im)
-        return dict(
-            re=dict(d=self._re, m=None, w=None),
-            im=dict(d=self._im, m=None, w=None))
+        return dict(re=ModelItem(self._re), im=ModelItem(self._im))
 
 
 def _default_step(coverage: UVCoverage) -> float:

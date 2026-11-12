@@ -16,7 +16,8 @@ from gbkfit.model.components.spheroids import OrbitIntegrator
 from gbkfit.params import ParamValues
 from . import _moments, _orbit_outputs
 from ._orbit_sky import PixelCube, bins_sky_grid
-from .base import HostModelData, ModelData, ObservablePlan, ObservationSetup
+from .base import (
+    HostModelData, ModelData, ModelItem, ObservablePlan, ObservationSetup)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -251,7 +252,7 @@ class OrbitMomentsPlan(ObservablePlan):
             None)
         # The moments of the regions are vectors
         return {
-            key: dict(d=value['d'][0], m=value['m'][0], w=value['w'][0])
+            key: ModelItem(value.data[0], value.mask[0], value.weights[0])
             for key, value in moments.items()}
 
     def _outputs_of(
@@ -302,8 +303,8 @@ class OrbitMomentsPlan(ObservablePlan):
         measured = moments.evaluate(
             (1.0, 1.0, self._step), (0.0, 0.0, self._zero), d_cube, None)
         for key, value in measured.items():
-            image = self._driver.mem_copy_d2h(value['d']).astype(float)
-            mask = self._driver.mem_copy_d2h(value['m'])
+            image = self._driver.mem_copy_d2h(value.data).astype(float)
+            mask = self._driver.mem_copy_d2h(value.mask)
             image[mask == 0] = np.nan
             out_extra.add(
                 f'unbinned_{key}',
@@ -345,9 +346,9 @@ class OrbitMomentsPlan(ObservablePlan):
             measured = self._measure(
                 (self._bin_weights @ noisy.reshape(len(noisy), -1).T).T)
             draws.append({
-                key: dict(
-                    d=self._driver.mem_copy_d2h(value['d']),
-                    m=self._driver.mem_copy_d2h(value['m']))
+                key: ModelItem(
+                    self._driver.mem_copy_d2h(value.data),
+                    self._driver.mem_copy_d2h(value.mask))
                 for key, value in measured.items()})
         return draws, None
 

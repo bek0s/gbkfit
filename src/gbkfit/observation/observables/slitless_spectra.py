@@ -32,7 +32,8 @@ from ._data_units import data_unit
 from ._options import Rota, Rpix, Rval, Size, Step
 from ._sparse_sums import SparseSumsPlan
 from .base import (
-    FluxScale, HostModelData, ModelData, Observable, ObservationSetup)
+    FluxScale, HostModelData, ModelData, ModelItem, Observable,
+    ObservationSetup)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -856,8 +857,7 @@ class SlitlessSpectraPlan(CubeObservablePlan):
     def _measure(self) -> ModelData:
         cube = self._model_cube_plan.cube()
         self._dispersion.evaluate(cube.reshape(1, 1, cube.size), self._image)
-        return dict(spectra=dict(
-            d=self._image.reshape(self._shape), m=None, w=None))
+        return dict(spectra=ModelItem(self._image.reshape(self._shape)))
 
     def _mock_once(
             self,
@@ -865,13 +865,12 @@ class SlitlessSpectraPlan(CubeObservablePlan):
             noise: 'Noise',
             rng: np.random.Generator
     ) -> HostModelData:
-        data = dict(spectra=dict(d=self._image_of(recorded), m=None))
-        data['spectra']['d'] += noise.draw(
-            rng, self._grid, self._model_cube.psf(),
-            data['spectra']['d'].copy())
-        return data
+        image = self._image_of(recorded)
+        image += noise.draw(
+            rng, self._grid, self._model_cube.psf(), image.copy())
+        return dict(spectra=ModelItem(image))
 
     def _image_of(self, recorded: np.ndarray) -> np.ndarray:
         """Return the image (on the host) of the recorded cube."""
         self._driver.mem_copy_h2d(recorded, self._model_cube_plan.cube())
-        return self._to_host(self._measure())['spectra']['d']
+        return self._to_host(self._measure())['spectra'].data

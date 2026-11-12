@@ -28,7 +28,7 @@ def evaluate(driver, galaxy, observable, properties, line_of_sight=FLAT):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
-    return next(iter(data.values()))['d'].copy()
+    return next(iter(data.values())).data.copy()
 
 
 # The area of a pixel of the test images and cubes

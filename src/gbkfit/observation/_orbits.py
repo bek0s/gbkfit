@@ -19,7 +19,7 @@ from gbkfit.model import GalaxyState
 from gbkfit.model.components.spheroids import (
     OrbitIntegrator, OrbitLibraryState, SkyGrid, Spheroid)
 from gbkfit.params import ModelEvaluationError, ParamValues
-from .observables import ModelData
+from .observables import ModelData, ModelItem
 from .observables._moments import moment_item
 from .observables._orbit_sky import bins_sky_grid
 
@@ -347,12 +347,10 @@ class OrbitRecording:
         driver, dtype = self._observation_drivers[k], self._dtypes[k]
         seen = self._data[k].seen
         return {
-            key: dict(
-                d=driver.mem_copy_h2d(np.ascontiguousarray(np.where(
-                    seen,
-                    moment.base + moment.slope * (moment.moments @ weights),
-                    np.nan), dtype)),
-                m=None, w=None)
+            key: ModelItem(driver.mem_copy_h2d(np.ascontiguousarray(np.where(
+                seen,
+                moment.base + moment.slope * (moment.moments @ weights),
+                np.nan), dtype)))
             for key, moment in series.moments[index].items()}
 
 

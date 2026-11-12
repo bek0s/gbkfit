@@ -53,7 +53,7 @@ def evaluate(
         observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
-    return plan.model_h(params.evaluate())[0][key]['d'].copy()
+    return plan.model_h(params.evaluate())[0][key].data.copy()
 
 
 @pytest.mark.parametrize('beam_class', [PrimaryBeamGauss, PrimaryBeamAiry])

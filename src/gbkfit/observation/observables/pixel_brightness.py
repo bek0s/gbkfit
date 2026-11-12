@@ -17,7 +17,7 @@ from ._cube_plan import CubeObservablePlan
 from ._data_units import data_unit
 from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size)
-from .base import ModelData, Observable, ObservationSetup
+from .base import ModelData, ModelItem, Observable, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -215,7 +215,7 @@ class PixelBrightnessPlan(CubeObservablePlan):
 
     def _measure(self) -> ModelData:
         plan = self._model_cube_plan
-        return dict(brightness=dict(
-            d=plan.cube()[0, :, :],
-            m=None,
-            w=plan.weights()[0, :, :] if plan.weights() is not None else None))
+        weights = plan.weights()
+        return dict(brightness=ModelItem(
+            plan.cube()[0, :, :],
+            weights=None if weights is None else weights[0, :, :]))

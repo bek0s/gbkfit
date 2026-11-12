@@ -14,8 +14,6 @@ import threading
 from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
-import numpy as np
-
 from gbkfit.config import config_path
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
@@ -25,7 +23,7 @@ from gbkfit.params import (
     ParamFunctions, ParamValues, ParamView, StageCache, with_elements)
 from gbkfit.utils import threadutils, timeutils
 from ._orbits import OrbitRecording, OrbitSeries, orbit_recordings
-from .observables import ModelData, ObservablePlan
+from .observables import HostModelData, ModelData, ModelItem, ObservablePlan
 
 if TYPE_CHECKING:
     from .group import ObservationGroup
@@ -35,6 +33,11 @@ __all__ = [
     'GroupPlan',
     'LinearPieces'
 ]
+
+
+# The host arrays of an item of model data before its first copy to the
+# host (see GroupPlan.model_h): none, so the copy makes them
+_NO_ITEM = ModelItem(None)
 
 
 class LinearPieces(NamedTuple):
@@ -172,10 +175,9 @@ class GroupPlan:
         on the host and the device, and the times of the steps.
         """
         observations = self._group.observations()
-        self._h_model_data = [
-            {key: dict(d=None, m=None, w=None) for key in obs.keys()}
-            for obs in observations]
-        self._d_model_data = [dict() for _ in observations]
+        self._h_model_data: list[HostModelData] = [
+            dict() for _ in observations]
+        self._d_model_data: list[ModelData] = [dict() for _ in observations]
         # The pieces of the models linear in amplitudes of the light, of
         # each observation that has some (see amplitude_pieces)
         self._pieces: dict[int, LinearPieces] = {}
@@ -594,9 +596,10 @@ class GroupPlan:
             pieces = _alloc_pieces(driver, model, size)
             self._pieces[index] = pieces
         for key, item in model.items():
-            for part, array in item.items():
+            # (each array of the item: the values, the mask and the weights)
+            for array, base in zip(item, pieces.base[key]):
                 if array is not None:
-                    driver.mem_copy_d2d(array, pieces.base[key][part])
+                    driver.mem_copy_d2d(array, base)
 
     def _keep_piece(self, index: int, k: int) -> None:
         """
@@ -607,7 +610,7 @@ class GroupPlan:
         pieces = self._pieces[index]
         for key, item in self._d_model_data[index].items():
             driver.math_sub(
-                item['d'], pieces.base[key]['d'], out=pieces.pieces[key][k])
+                item.data, pieces.base[key].data, out=pieces.pieces[key][k])
 
     def _evaluate_models(
             self,
@@ -704,7 +707,7 @@ class GroupPlan:
             self,
             params: ParamValues,
             out_extra: Extras | None = None
-    ) -> list[dict[str, dict[str, np.ndarray | None]]]:
+    ) -> list[HostModelData]:
         """
         Evaluate the model data of the observations, on the host.
 
@@ -717,9 +720,9 @@ class GroupPlan:
 
         Returns
         -------
-        list of dict
-            The model data of each observation (see ModelData), copied to
-            the host; they are overwritten by the next evaluation.
+        list of HostModelData
+            The model data of each observation, copied to the host; they
+            are overwritten by the next evaluation.
         """
         with self._lock:
             self.model_d(params, out_extra)
@@ -730,12 +733,14 @@ class GroupPlan:
         """Copy the model data of the last evaluation to the host."""
         with self._timers.measure('model_d2h'):
             for i, driver in enumerate(self._observation_drivers):
+                h_model = self._h_model_data[i]
                 for key, d_item in self._d_model_data[i].items():
-                    h_item = self._h_model_data[i][key]
-                    for k, d_array in d_item.items():
-                        if d_array is not None:
-                            h_item[k] = driver.mem_copy_d2h(
-                                d_array, h_item[k])
+                    # (into the arrays of the last copy, once there is one)
+                    h_item = h_model.get(key, _NO_ITEM)
+                    h_model[key] = ModelItem._make(
+                        None if d_array is None
+                        else driver.mem_copy_d2h(d_array, h_array)
+                        for d_array, h_array in zip(d_item, h_item))
 
 
 def _alloc_pieces(
@@ -743,15 +748,17 @@ def _alloc_pieces(
 ) -> LinearPieces:
     """
     Allocate the pieces of a model of the given number of pieces (see
-    GroupPlan.amplitude_pieces), on its driver: the base of the parts of
-    the model, and the pieces of its values ('d').
+    GroupPlan.amplitude_pieces), on its driver: the base of each array of
+    the model (its values, its mask and its weights), and the pieces of
+    its values.
     """
     return LinearPieces(
-        {key: {part: None if array is None
-               else driver.mem_alloc_d(array.shape, array.dtype)
-               for part, array in item.items()}
+        {key: ModelItem._make(
+            None if array is None
+            else driver.mem_alloc_d(array.shape, array.dtype)
+            for array in item)
          for key, item in model.items()},
-        {key: driver.mem_alloc_d((size, *item['d'].shape), item['d'].dtype)
+        {key: driver.mem_alloc_d((size, *item.data.shape), item.data.dtype)
          for key, item in model.items()})
 
 

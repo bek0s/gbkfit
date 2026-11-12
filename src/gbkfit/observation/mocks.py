@@ -274,7 +274,7 @@ def _draw(
         errors = _scatter(draws[nmocks:])
     return [
         observation.make_dataset({
-            key: Data(item['d'], error=errors[key], **items[key])
+            key: Data(item.data, error=errors[key], **items[key])
             for key, item in draw.items()})
         for draw in draws[:nmocks]]
 
@@ -334,7 +334,7 @@ def _scatter(draws: Sequence[HostModelData]) -> dict[str, np.ndarray]:
     """
     scatter = {}
     for key in draws[0]:
-        values = np.stack([draw[key]['d'] for draw in draws])
+        values = np.stack([draw[key].data for draw in draws])
         finite = np.isfinite(values)
         count = finite.sum(axis=0)
         values = np.where(finite, values, 0)

@@ -57,7 +57,7 @@ def evaluate(driver, galaxy, observations, properties):
         [galaxy_parser.load(copy.deepcopy(galaxy))], observations)
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), properties)
-    return [data['spectra']['d'].copy()
+    return [data['spectra'].data.copy()
             for data in group.plan(driver).model_h(params.evaluate())]
 
 
