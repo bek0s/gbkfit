@@ -45,10 +45,11 @@ observations:
     rpix: [9.5, 9.5]
     rval: [0, 0]
     rota: 0
+    spectral: {step: 15.0, rpix: 14.5, rval: 0.0}
     data: observation0_spectra_d.fits
     error: 0.0005
-    spectral: {step: 15, rpix: 14.5, rval: 0}
   likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  dtype: float64
   line_of_sight:
     type: transfer
     depth: {extent: galaxy, step: null}
@@ -61,7 +62,6 @@ observations:
     lsf: {type: gauss, sigma: 20.0 km s-1}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
-  dtype: float64
   fft_dtype: float64
 - type: sky
   galaxies: [back]
@@ -72,9 +72,12 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation1_moment0_d.fits, error: observation1_moment0_e.fits}
-    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits, error: observation1_moment1_e.fits}
-    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits, error: observation1_moment2_e.fits}
+    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits,
+      error: observation1_moment1_e.fits}
+    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits,
+      error: observation1_moment2_e.fits}
   likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  dtype: float64
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: null}
@@ -90,7 +93,6 @@ observations:
     method: moments
     median_size: null
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:

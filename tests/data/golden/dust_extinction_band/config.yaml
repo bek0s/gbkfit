@@ -39,6 +39,7 @@ observations:
     error: 0.01
     unit: uJy/arcsec2
   likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  dtype: float64
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: null}
@@ -49,7 +50,6 @@ observations:
     lsf: null
   observable: {type: pixel_brightness, median_size: null}
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:

@@ -8,7 +8,7 @@ import dataclasses
 import logging
 import os
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, NamedTuple, TypeVar
+from typing import Annotated, Any, NamedTuple
 
 import astropy.units
 import numpy as np
@@ -17,9 +17,9 @@ from annotated_types import Ge
 from ruamel.yaml.scalarbool import ScalarBoolean
 
 from gbkfit.config import (
-    FORMAT_VERSION, ConfigError, ConfigProblem, Family, FilePath,
-    collect_problems, config_path, families, name_problem, paths_relative_to,
-    report_unknown, strict_mode, warn)
+    FORMAT_VERSION, ConfigError, ConfigProblem, Family, collect_problems,
+    config_path, families, name_problem, paths_relative_to, report_unknown,
+    strict_mode, warn)
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.cosmology import Cosmology, cosmology_parser
 import gbkfit.model
@@ -30,7 +30,7 @@ from gbkfit.fitting import BootstrapOptions, Fitter, fitter_parser
 from gbkfit.parallel import Workers, workers_parser
 from gbkfit.observation import DepthGroup, MockOptions, ObservationGroup
 from gbkfit.params import (
-    JointPrior, ParamDesc, ParamMode, ParamSpace, Property, load_pdescs_dict,
+    ParamDesc, ParamSpace, ParamSpaceConfig, load_pdescs_dict,
     param_space_parser)
 from gbkfit.utils import iterutils, numutils
 from ._setup import Setup
@@ -48,52 +48,6 @@ __all__ = [
 
 
 _log = logging.getLogger(__name__)
-
-# A driver, or what stands for it (see _load_placement)
-_T = TypeVar('_T')
-
-
-class _FunctionFile(NamedTuple):
-    """
-    A function of a Python file.
-
-    Parameters
-    ----------
-    file : str
-        The file.
-    func : str
-        The name of the function, defined at the top level of the file.
-    """
-
-    file: FilePath
-    func: str
-
-
-class _ParamsSection(NamedTuple):
-    """
-    The section 'params' (see ParamSpace and ParamSpace.load).
-
-    Parameters
-    ----------
-    properties : Mapping
-        The property of each parameter, or of some of its elements, by
-        its name (with a subscript of its elements, e.g. 'v[0]').
-    modes : Mapping, optional
-        The modes of vector parameters, by name (see ParamMode).
-    transforms : dict, optional
-        The function that sets the elements whose property is null.
-    priors : Sequence, optional
-        The priors on several parameters at once (see JointPrior).
-    derived : Mapping, optional
-        The derived values, by name: the expression of each, or {expr,
-        unit}.
-    """
-
-    properties: Mapping[str, Property]
-    modes: Mapping[str, ParamMode] | None = None
-    transforms: _FunctionFile | None = None
-    priors: Sequence[JointPrior] | None = None
-    derived: Mapping[str, str | Mapping[str, str]] | None = None
 
 
 class _Section(NamedTuple):
@@ -126,7 +80,7 @@ _SECTIONS = dict(
     observations=_Section(
         gbkfit.observation.Observation, "The observations of the galaxies.",
         True, True, dict(driver=str)),
-    params=_Section(_ParamsSection, "The parameters.", True),
+    params=_Section(ParamSpaceConfig, "The parameters.", True),
     pdescs=_Section(
         Mapping[str, ParamDesc],
         "The descriptions of parameters of the configuration, by name."),
@@ -382,43 +336,24 @@ def describe(
     Description
         What it describes, as far as it could be loaded, and its problems.
     """
-    file = group = params = fitter = None
+    file = None
+    # (filled as they load: those before an error are described)
+    sections = _Sections()
     # (lenient, to list every unknown name)
     with strict_mode(False), \
             collect_problems() as problems:
         file = read_config(config, texts=texts) if isinstance(config, str) \
             else _config_file(config)
-        cfg = file.config
         with paths_relative_to(file.root):
-            _check_drivers(cfg)
-            group = _load_observation_group(cfg)
-            params = _load_params(
-                cfg, group.pdescs(), group.constants(),
-                group.function_names())
-            fitter = _load_fitter(cfg)
-            if fitter is not None:
-                # (the rules of the start of a fit, as load checks them)
-                fitter.check(params, group)
-                if not group.has_data():
-                    with config_path('fitter'):
-                        warn(
-                            "a fit needs data for every observation, and "
-                            "some have none: the configuration can only be "
-                            "evaluated")
-            _load_mock(cfg, group)
-            _load_bootstrap(cfg, group, params)
-            # (the names of drivers, checked against the configurations of
-            # those declared)
-            declared = {None: cfg['driver']} if 'driver' in cfg \
-                else dict(cfg.get('drivers', {}))
-            _load_placement(cfg, group, declared, 'host')
-            # (on a host driver in place of each of theirs: it needs no
-            # device)
-            from gbkfit.driver.drivers.host import DriverHost
-            _load_workers(cfg, declared, DriverHost())
+            # (the names of the drivers, checked against the
+            # configurations of those declared)
+            _load_sections(
+                file.config, _declared_drivers(file.config), described=True,
+                sections=sections)
     return Description(
-        tuple(problems), None if file is None else file.config, group,
-        params, fitter, {} if file is None else file.sources,
+        tuple(problems), None if file is None else file.config,
+        sections.group, sections.params, sections.fitter,
+        {} if file is None else file.sources,
         None if file is None else file.root)
 
 
@@ -454,7 +389,11 @@ def load(
     Raises
     ------
     ConfigError
-        If the configuration is invalid.
+        If the configuration is invalid (see ConfigError).
+    ValueError
+        If its options are invalid together (e.g. a fitter that cannot
+        fit its parameters, see Fitter.check), with their path in the
+        configuration (see config_path), as other errors of what it makes.
 
     Examples
     --------
@@ -467,25 +406,112 @@ def load(
         config = read_config(config)
     elif not isinstance(config, ConfigFile):
         config = _config_file(config)
-    cfg = config.config
     with paths_relative_to(config.root):
-        _log.info("setting up galaxies and observations...")
         if drivers is None:
-            drivers = _load_drivers(cfg)
-        group = _load_observation_group(cfg)
-        # (imported here: the host driver needs its native module)
-        from gbkfit.driver.drivers.host import DriverHost
-        driver, placed = _load_placement(cfg, group, drivers, DriverHost())
-        _log.info("setting up params...")
-        params = _load_params(
-            cfg, group.pdescs(), group.constants(), group.function_names())
-        fitter = _load_fitter(cfg)
-        workers = _load_workers(cfg, drivers)
-        mock_options = _load_mock(cfg, group)
-        bootstrap_options = _load_bootstrap(cfg, group, params)
+            drivers = _load_drivers(config.config)
+        sections = _load_sections(config.config, drivers)
         return Setup(
-            group, params, fitter, driver, placed, workers, mock_options,
-            bootstrap_options)
+            sections.group, sections.params, sections.fitter,
+            sections.driver, sections.placement, sections.workers,
+            sections.mock, sections.bootstrap)
+
+
+@dataclasses.dataclass
+class _Sections:
+    """
+    The sections of a configuration, loaded (see _load_sections): None
+    for those it does not have, or that an error came before.
+
+    Attributes
+    ----------
+    group : ObservationGroup or None
+        Its galaxies and their observations.
+    params : ParamSpace or None
+        Its parameters.
+    fitter : Fitter or None
+        Its fitter.
+    mock : MockOptions or None
+        Its options of mock data.
+    bootstrap : BootstrapOptions or None
+        Its options of a bootstrap.
+    driver : Driver or None
+        The driver of the galaxies and observations that name none (see
+        _load_placement).
+    placement : dict or None
+        The drivers of those that name one, by label.
+    workers : Workers or None
+        Its workers.
+    """
+    group: ObservationGroup | None = None
+    params: ParamSpace | None = None
+    fitter: Fitter | None = None
+    mock: MockOptions | None = None
+    bootstrap: BootstrapOptions | None = None
+    driver: Any = None
+    placement: dict[str, Any] | None = None
+    workers: Workers | None = None
+
+
+def _load_sections(
+        cfg: dict[str, Any],
+        drivers: Mapping[str | None, Any],
+        described: bool = False,
+        sections: _Sections | None = None
+) -> _Sections:
+    """
+    Load the sections of a configuration, each with its checks at its
+    path (see config_path), in order: its galaxies and their
+    observations, its parameters, its fitter (with the rules of the
+    start of a fit, see Fitter.check), its options of mock data and of a
+    bootstrap, where its galaxies and observations go among its drivers
+    (see _load_placement), and its workers.
+
+    Parameters
+    ----------
+    cfg : dict
+        The configuration, as plain values (see read_config).
+    drivers : Mapping of str or None to Driver
+        Its drivers, by name (see _load_drivers), or anything that stands
+        for them (e.g. their configurations, to check the names only).
+    described : bool, optional
+        Whether it is described without devices (see describe): its
+        workers are then on the host in place of its drivers, and a
+        fitter without data is warned of.
+    sections : _Sections, optional
+        The sections to load into, which keep those loaded before an
+        error (see describe); new ones by default.
+
+    Returns
+    -------
+    _Sections
+        The sections.
+    """
+    sections = _Sections() if sections is None else sections
+    # (imported here: the host driver needs its native module)
+    from gbkfit.driver.drivers.host import DriverHost
+    host = DriverHost()
+    _log.info("setting up galaxies and observations...")
+    group = sections.group = _load_observation_group(cfg)
+    _log.info("setting up params...")
+    params = sections.params = _load_params(
+        cfg, group.pdescs(), group.constants(), group.function_names())
+    fitter = sections.fitter = _load_fitter(cfg)
+    if fitter is not None:
+        # (the rules of the start of a fit, at the paths of the options
+        # they are about: of the parameters or of the fitter)
+        fitter.check(params, group)
+        if described and not group.has_data():
+            with config_path('fitter'):
+                warn(
+                    "a fit needs data for every observation, and some have "
+                    "none: the configuration can only be evaluated")
+    sections.mock = _load_mock(cfg, group)
+    sections.bootstrap = _load_bootstrap(cfg, group, params)
+    sections.driver, sections.placement = _load_placement(
+        cfg, group, drivers, host)
+    sections.workers = _load_workers(
+        cfg, drivers, host if described else None)
+    return sections
 
 
 def _root(config: Any) -> str | None:
@@ -642,11 +668,11 @@ def _merge_pdescs(
     return pdescs1 | pdescs2
 
 
-def _check_drivers(cfg: dict[str, Any]) -> None:
+def _declared_drivers(cfg: dict[str, Any]) -> dict[str | None, Any]:
     """
-    Check the names and the types of the drivers of a configuration (see
-    _load_drivers) without loading them, which needs their packages (e.g.
-    CuPy).
+    Return the configurations of the drivers of a configuration, by name
+    (see _load_drivers), with their names and types checked, without
+    loading them, which needs their packages (e.g. CuPy).
 
     Raises
     ------
@@ -658,11 +684,10 @@ def _check_drivers(cfg: dict[str, Any]) -> None:
         raise ConfigError(
             "the configuration must have either a section 'driver' (one "
             "driver) or a section 'drivers' (several, by name), not both")
-    infos = {None: cfg['driver']} if 'driver' in cfg \
+    declared = {None: cfg['driver']} if 'driver' in cfg \
         else dict(cfg.get('drivers', {}))
-    for name, info in infos.items():
-        path = ('driver',) if name is None else ('drivers', name)
-        with config_path(*path):
+    for name, info in declared.items():
+        with config_path(*_driver_path(name)):
             if name is not None \
                     and (problem := name_problem(name)) is not None:
                 raise ConfigError(problem)
@@ -671,6 +696,7 @@ def _check_drivers(cfg: dict[str, Any]) -> None:
                 raise ConfigError(
                     f"a driver is a dictionary of one of the types "
                     f"{driver_parser.types()}; it is {info!r}")
+    return declared
 
 
 def _load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
@@ -685,15 +711,20 @@ def _load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
         If it has both sections, a name is invalid, or a driver has an
         error.
     """
-    _check_drivers(cfg)
-    if 'driver' in cfg:
-        with config_path('driver'):
-            return {None: driver_parser.load(cfg['driver'])}
     drivers = {}
-    for name, info in cfg.get('drivers', {}).items():
-        with config_path('drivers', name):
+    for name, info in _declared_drivers(cfg).items():
+        with config_path(*_driver_path(name)):
             drivers[name] = driver_parser.load(info)
     return drivers
+
+
+def _driver_path(name: str | None) -> tuple[str, ...]:
+    """
+    Return the path of the driver of a name in a configuration: its
+    section 'driver' (the name None), or its item of the section
+    'drivers'.
+    """
+    return ('driver',) if name is None else ('drivers', name)
 
 
 def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
@@ -735,27 +766,28 @@ def _without_driver(infos: Sequence[Any]) -> list[Any]:
         if isinstance(info, dict) else info for info in infos]
 
 
-def _load_placement(
+def _load_placement[T](
         cfg: dict[str, Any],
         group: ObservationGroup,
-        drivers: Mapping[str | None, _T],
-        host: _T
-) -> tuple[_T | None, dict[str, _T] | None]:
+        drivers: Mapping[str | None, T],
+        host: T
+) -> tuple[T, dict[str, T]]:
     """
     Return where the galaxies and observations of a configuration (see
-    _load_observation_group) go among its drivers, as Setup takes it: the
-    driver of all of them, or else the driver of each, by its label (see
-    ObservationGroup.plan); the host is the given one (or anything that
-    stands for drivers, e.g. their configurations, to check the names
-    only; see describe).
+    _load_observation_group) go among its drivers (or anything that
+    stands for them, e.g. their configurations, to check the names only;
+    see describe), as Setup takes it: the driver of those that name none,
+    and the drivers of those that name one, by label (see
+    ObservationGroup.drivers, which places the others).
 
     The option driver of a galaxy or an observation is not a driver but
     the name of one of the drivers of the configuration, which declares
     them at its top level. An observation, and a galaxy with mass, can
     leave it out when there is one driver, and have the host when there
-    are none. A galaxy without mass and without it has the driver of the
-    observations that see it, if they have one, and else the host: its
-    stage is for them alone.
+    are none. A galaxy without mass can leave it out whatever the
+    drivers: it then has the driver of the observations that see it, if
+    they share one, and else that of those that name none (see
+    ObservationGroup.drivers).
 
     Raises
     ------
@@ -763,33 +795,24 @@ def _load_placement(
         If an option driver is not the name of one of the drivers, or is
         left out while there are several.
     """
-    def driver_of(section: str, index: int, owner: str) -> _T:
+    placement = {}
+
+    def place(section: str, index: int, owner: str, label: str) -> None:
         info = cfg[section][index]
         with config_path(section, index, 'driver'):
+            # (also when left out: it may be required)
             driver = driver_by_name(info.get('driver'), drivers, owner)
-        return host if driver is None else driver
+        if 'driver' in info:
+            placement[label] = host if driver is None else driver
 
-    observation_drivers = [
-        driver_of('observations', i, 'observation')
-        for i in range(len(cfg['observations']))]
-    galaxy_drivers = []
+    for i in range(group.nobservations()):
+        place('observations', i, 'observation', group.observation_label(i))
     for g, info in enumerate(cfg['galaxies']):
-        if 'driver' in info or info.get('mass'):
-            galaxy_drivers.append(driver_of('galaxies', g, 'galaxy'))
-            continue
-        seen_on = {
-            id(driver): driver
-            for i, driver in enumerate(observation_drivers)
-            if g in group.seen_galaxies(i)}
-        galaxy_drivers.append(
-            next(iter(seen_on.values())) if len(seen_on) == 1 else host)
-    placed = galaxy_drivers + observation_drivers
-    if len({id(driver) for driver in placed}) == 1:
-        return placed[0], None
-    labels = [
-        group.galaxy_label(g) for g in range(len(galaxy_drivers))] + [
-        group.observation_label(i) for i in range(len(observation_drivers))]
-    return None, dict(zip(labels, placed))
+        if 'driver' in info or not group.follows_observations(g):
+            place('galaxies', g, 'galaxy', group.galaxy_label(g))
+    # (of those that name none: the only driver, or else the host)
+    driver = next(iter(drivers.values())) if len(drivers) == 1 else host
+    return driver, placement
 
 
 def _load_params(
@@ -859,7 +882,7 @@ def _load_bootstrap(
 
 def _load_workers(
         cfg: dict[str, Any],
-        drivers: Mapping[str | None, _T],
+        drivers: Mapping[str | None, Any],
         stand_in: Driver | None = None
 ) -> Workers | None:
     """

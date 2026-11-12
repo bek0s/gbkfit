@@ -280,9 +280,14 @@ class PixelMomentsPlan(CubeObservablePlan):
             driver, moments.size(), moments.orders(), moments.flux_floor(),
             moments.method(), setup.dtype)
 
-    def _measure(self) -> ModelData:
-        # The moment maps, with the mask and the weight map they share
+    def _measure(self, draw: bool = False) -> ModelData:
+        # The moment maps, with the mask and the weight map they share: of
+        # the model, or of a mock draw (data, see _measure_draw)
         plan = self._model_cube_plan
         grid = self._model_cube.grid()
-        return _moments.model_data(self._moments.evaluate(
+        measure = self._moments.measure if draw else self._moments.evaluate
+        return _moments.model_data(measure(
             grid.coords.step, grid.zero(), plan.cube(), plan.weights()))
+
+    def _measure_draw(self) -> ModelData:
+        return self._measure(draw=True)

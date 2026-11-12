@@ -262,6 +262,31 @@ def test_the_errors_of_moments_are_their_scatter(driver, method):
         assert np.nanmedian(ratio) == pytest.approx(1, abs=0.1)
 
 
+@pytest.mark.parametrize('method', ['moments', 'gauss_fit'])
+def test_mocks_of_moments_miss_the_spectra_the_noise_blanks(driver, method):
+    # An error map that is not finite somewhere blanks the spectra there
+    # on purpose (see NoiseGauss): their moments are missing from the
+    # mock data, and the others are drawn; a model whose flux is not a
+    # number fails, as it does to evaluate
+    plan = plan_of(driver, dict(
+        type='pixel_moments', size=[16, 17],
+        spectral=dict(size=31, step=20, convention='relativistic'),
+        method=method))
+    _, extra, params = evaluate(plan)
+    error = np.full((17, 16), 0.05 * extra.get('dcube_lo').data.max())
+    error[:, :5] = np.nan
+    noise = NoiseGauss(error=error)
+    [mock] = mock_data(plan, params, noise, seed=1)
+    for key in ('moment0', 'moment1'):
+        item = mock[key]
+        assert np.all(item.mask()[:, :5] == 0)
+        assert np.all(np.isnan(item.data()[:, :5]))
+        assert np.all(np.isnan(item.error()[:, :5]))
+        assert item.mask()[:, 5:].sum() > 50
+    with pytest.raises(gbkfit.params.ModelEvaluationError, match="no flux"):
+        mock_data(plan, dict(params, vpt_vt=np.nan), noise, seed=1)
+
+
 @pytest.mark.parametrize('options, message', [
     (dict(nmocks='2'), "option 'nmocks' must be of type int; it is '2'"),
     (dict(nmocks=0), "option 'nmocks' must be at least 1; it is 0"),

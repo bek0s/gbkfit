@@ -64,7 +64,8 @@ class MomentsPlan:
     shared by them (with the method moments). To evaluate, a cube whose
     moment 0 is not a number (NaN) somewhere is a model that failed
     there, not one without flux there; measure takes cubes of data, with
-    channels without a value (see measure).
+    channels without a value (see measure; e.g. mock data, whose noise
+    blanks the spectra of values without an error).
 
     Parameters
     ----------
@@ -162,8 +163,7 @@ class MomentsPlan:
                 f"the model has no flux (NaN) in {failed} of its spectra: it "
                 f"cannot be evaluated there (e.g. a rotation or a dispersion "
                 f"without a solution)")
-        cutoff = self._flux_floor * float(np.max(np.abs(flux), initial=0))
-        return self.measure(step, zero, cube, wcube, cutoff)
+        return self.measure(step, zero, cube, wcube, self._cutoff(flux))
 
     def measure(
             self,
@@ -171,28 +171,32 @@ class MomentsPlan:
             zero: Sequence[float],
             cube: DeviceArray,
             wcube: DeviceArray | None,
-            cutoff: float
+            cutoff: float | None = None
     ) -> DeviceMomentMaps:
         """
-        Return the moments of cube, as evaluate, but with the spectra
-        whose moment 0 is not above cutoff (in absolute value) masked.
-        The fits of the methods gauss_fit and gauss_hermite leave the
-        channels without a value (NaN) out; the moments of a spectrum
-        with one are not numbers.
+        Return the moments of cube, as evaluate, but of data: with the
+        spectra whose moment 0 is not above cutoff (in absolute value)
+        masked, and a spectrum without one (NaN) missing, not a model
+        that failed. The fits of the methods gauss_fit and gauss_hermite
+        leave the channels without a value (NaN) out; the moments of a
+        spectrum with one are not numbers.
 
         Parameters
         ----------
         step, zero, cube, wcube
             As those of evaluate.
-        cutoff : float
+        cutoff : float, optional
             The moment 0 that a spectrum must be above (in absolute
-            value).
+            value): by default, the flux floor times the largest of the
+            spectra that have one.
 
         Returns
         -------
         DeviceMomentMaps
             The maps, as evaluate.
         """
+        if cutoff is None:
+            cutoff = self._cutoff(self._flux(step, zero, cube))
         if self._method in ('gauss_fit', 'gauss_hermite'):
             self._backend.mmaps_gaussian(
                 step, zero, cube, cutoff, self._mmaps_o,
@@ -221,6 +225,14 @@ class MomentsPlan:
             step, zero, cube, None, -1, self._flux_o, self._flux_d,
             self._flux_m, self._flux_w)
         return self._driver.mem_copy_d2h(self._flux_d)
+
+    def _cutoff(self, flux: np.ndarray) -> float:
+        """
+        Return the cutoff of the moment 0 of the spectra of a map of it
+        (see _flux): the flux floor times the largest (in absolute
+        value) of those that are numbers; 0 without any.
+        """
+        return self._flux_floor * float(np.nanmax(np.abs(flux), initial=0))
 
 
 @dataclasses.dataclass(frozen=True)

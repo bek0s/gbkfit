@@ -34,7 +34,7 @@ POLL_INTERVAL = 0.2
 
 
 # The drivers of a copy: of each galaxy and of each observation (see
-# ObservationGroup.placement)
+# ObservationGroup.drivers)
 Drivers: TypeAlias = tuple[tuple[Driver, ...], tuple[Driver, ...]]
 
 
@@ -183,9 +183,9 @@ def placement_drivers(objective: Objective, placement: Placement) -> Drivers:
     Return the drivers of a copy of an objective on a placement, or raise
     ValueError if it names unknown galaxies or observations.
     """
-    driver, drivers = (placement, None) if isinstance(placement, Driver) \
+    driver, by_label = (placement, None) if isinstance(placement, Driver) \
         else placement
-    return objective.group().placement(driver, drivers)
+    return objective.group().drivers(driver, by_label)
 
 
 def dump_placements(placements: Sequence[Placement]) -> list[Any]:

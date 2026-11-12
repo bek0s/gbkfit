@@ -32,6 +32,7 @@ observations:
     h3: {data: observation0_h3_d.fits, error: observation0_h3_e.fits}
     h4: {data: observation0_h4_d.fits, error: observation0_h4_e.fits}
   likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -45,7 +46,6 @@ observations:
     method: gauss_hermite
     median_size: null
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:

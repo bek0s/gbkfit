@@ -37,7 +37,8 @@ class CubeObservablePlan(ObservablePlan):
     ModelCubePlan.evaluate), and measures the data items from its
     low-resolution cube (_measure, of each observable). Its mock data are
     measured from the recorded low-resolution cube plus noise, masked as
-    the model.
+    the model (see _measure_draw), after the model without noise is
+    measured once, which raises if it failed (e.g. its moments).
 
     Parameters
     ----------
@@ -143,6 +144,8 @@ class CubeObservablePlan(ObservablePlan):
         model_cube_plan = self._model_cube_plan
         model_cube_plan.record(self._flux_scale(params))
         recorded = self._driver.mem_copy_d2h(model_cube_plan.cube())
+        # (a model that failed raises here, not in the draws)
+        self._measure()
         draws = [self._mock_once(recorded, noise, rng) for _ in range(ndraws)]
         return draws, self._exact_errors(noise, recorded)
 
@@ -168,6 +171,16 @@ class CubeObservablePlan(ObservablePlan):
     def _measure(self) -> ModelData:
         """Return the model data measured from the low-resolution cube."""
 
+    def _measure_draw(self) -> ModelData:
+        """
+        Return the model data measured from the low-resolution cube of a
+        mock draw (see _mock_once): here as _measure. Observables whose
+        measurement of a model checks that it did not fail (e.g. moments,
+        see MomentsPlan.evaluate) measure a draw as data, whose noise may
+        blank values on purpose (see Noise).
+        """
+        return self._measure()
+
     def _mock_once(
             self,
             recorded: np.ndarray,
@@ -187,7 +200,7 @@ class CubeObservablePlan(ObservablePlan):
             noisy.astype(self._dtype), self._model_cube_plan.cube())
         # (the data are smoothed with their noise)
         self._model_cube_plan.smooth()
-        return self._to_host(self._measure())
+        return self._to_host(self._measure_draw())
 
     def _to_host(self, data: ModelData) -> HostModelData:
         """Return copies of the data and masks of model data on the host."""

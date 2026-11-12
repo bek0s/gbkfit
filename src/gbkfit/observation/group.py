@@ -388,19 +388,19 @@ class ObservationGroup:
     def plan(
             self,
             driver: Driver | None = None,
-            drivers: Mapping[str, Driver] | None = None
+            placement: Mapping[str, Driver] | None = None
     ) -> 'GroupPlan':
         """
         Plan the evaluation of the group on devices (see GroupPlan): the
         stage of each galaxy and the model of each observation, each on
-        its driver (see placement).
+        its driver (see drivers).
 
         Parameters
         ----------
         driver : Driver, optional
             The driver of the galaxies and the observations; the host by
             default.
-        drivers : Mapping of str to Driver, optional
+        placement : Mapping of str to Driver, optional
             Other drivers of some of them, by their labels (see
             galaxy_label and observation_label): e.g. {'halpha': gpu0,
             'hi': gpu1}.
@@ -413,28 +413,33 @@ class ObservationGroup:
         Raises
         ------
         ValueError
-            If drivers names unknown galaxies or observations, or what an
-            observation sees does not go with it (see Observation.plan), or
-            a galaxy cannot plan its stage (see Galaxy.plan_stage).
+            If the placement names unknown galaxies or observations, or
+            what an observation sees does not go with it (see
+            Observation.plan), or a galaxy cannot plan its stage (see
+            Galaxy.plan_stage).
         """
-        return GroupPlan(self, *self.placement(driver, drivers))
+        return GroupPlan(self, *self.drivers(driver, placement))
 
-    def placement(
+    def drivers(
             self,
             driver: Driver | None = None,
-            drivers: Mapping[str, Driver] | None = None
+            placement: Mapping[str, Driver] | None = None
     ) -> tuple[tuple[Driver, ...], tuple[Driver, ...]]:
         """
-        Return the driver of each galaxy and of each observation: the
-        given one (the host by default), or another one of their label
-        (see plan).
+        Return the driver of each galaxy and of each observation (see
+        plan): that of its label in the placement, or else the given one.
+        A galaxy that follows its observations (one without mass, see
+        follows_observations) and that the placement leaves out has the
+        driver of the observations that see it, if they share one: its
+        stage is for them alone, and on another driver it would be copied
+        to theirs at every evaluation.
 
         Parameters
         ----------
         driver : Driver, optional
-            The driver of those without one of their own; the host by
+            The driver of those that the placement leaves out; the host by
             default.
-        drivers : Mapping, optional
+        placement : Mapping of str to Driver, optional
             The drivers of some galaxies and observations, by label.
 
         Returns
@@ -445,28 +450,52 @@ class ObservationGroup:
         Raises
         ------
         ValueError
-            If drivers names unknown galaxies or observations, or a label
-            that is of a galaxy and of an observation.
+            If the placement names unknown galaxies or observations, or a
+            label that is of a galaxy and of an observation.
         """
         if driver is None:
             # (imported here: the host driver needs its native module)
             from gbkfit.driver.drivers.host import DriverHost
             driver = DriverHost()
-        drivers = dict(drivers or {})
-        galaxies = self._galaxy_labels
-        observations = [member.label for member in self._members]
-        if unknown := sorted(drivers.keys() - {*galaxies, *observations}):
+        placement = dict(placement or {})
+        galaxy_labels = self._galaxy_labels
+        observation_labels = [member.label for member in self._members]
+        labels = {*galaxy_labels, *observation_labels}
+        if unknown := sorted(placement.keys() - labels):
             raise ValueError(
-                f"there are drivers of unknown galaxies or observations "
-                f"{unknown}; the galaxies are {galaxies} and the "
-                f"observations {observations}")
-        if both := sorted(drivers.keys() & set(galaxies) & set(observations)):
+                f"the placement names unknown galaxies or observations "
+                f"{unknown}; the galaxies are {galaxy_labels} and the "
+                f"observations {observation_labels}")
+        if both := sorted(
+                placement.keys() & set(galaxy_labels)
+                & set(observation_labels)):
             raise ValueError(
-                f"there are drivers of {both}, which are labels of a galaxy "
+                f"the placement names {both}, which are labels of a galaxy "
                 f"and of an observation; name them apart")
-        return (
-            tuple(drivers.get(label, driver) for label in galaxies),
-            tuple(drivers.get(label, driver) for label in observations))
+        observations = tuple(
+            placement.get(label, driver) for label in observation_labels)
+        galaxies = []
+        for g, label in enumerate(galaxy_labels):
+            if label in placement or not self.follows_observations(g):
+                galaxies.append(placement.get(label, driver))
+                continue
+            seen_on = [
+                observation_driver for observation_driver, member in zip(
+                    observations, self._members) if g in member.seen]
+            shared = bool(seen_on) and all(
+                other is seen_on[0] for other in seen_on)
+            galaxies.append(seen_on[0] if shared else driver)
+        return tuple(galaxies), observations
+
+    def follows_observations(self, index: int) -> bool:
+        """
+        Check whether the galaxy of the given index follows the
+        observations that see it onto their driver, unless placed (see
+        drivers): whether it has no mass, so that its stage is for them
+        alone. (The functions of a galaxy with mass, of the derived
+        values, run on its own driver; see GroupPlan.functions.)
+        """
+        return self._galaxies[index].mass_model() is None
 
     def with_data(self, datasets: Sequence[Dataset]) -> Self:
         """

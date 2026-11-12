@@ -23,6 +23,7 @@ observations:
     data: observation0_spectra_d.fits
     error: 0.005
   likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -31,7 +32,8 @@ observations:
     lsf: {type: gauss, sigma: 40.0 km s-1}
   observable:
     type: slitless_spectra
-    spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical, rest: 4e-06 m}
+    spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical,
+      rest: 4e-06 m}
     trace:
       type: polynomial
       wave: 4e-06 m
@@ -59,7 +61,6 @@ observations:
     sky_sampling: 2
     resampled: false
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:

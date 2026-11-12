@@ -37,6 +37,7 @@ observations:
     data: observation0_spectra_d.fits
     error: 0.0002
   likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  dtype: float64
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: null}
@@ -47,7 +48,6 @@ observations:
     lsf: {type: gauss, sigma: 20.0 km s-1}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:

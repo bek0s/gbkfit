@@ -21,15 +21,16 @@ observations:
     rpix: [9.5, 9.5]
     rval: [0, 0]
     rota: 0
+    spectral: {step: 20.0, rpix: 19.5, rval: 0.0}
     data: cube_spectra_d.fits
     error: 0.0005
-    spectral: {step: 20, rpix: 19.5, rval: 0}
   likelihood:
     type: user
     file: user_likelihoods.py
     func: cauchy_residuals
     form: residuals
     params: [s]
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -38,7 +39,6 @@ observations:
     lsf: {type: gauss, sigma: 20.0 km s-1}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
-  dtype: float64
   fft_dtype: float64
 - type: sky
   name: maps
@@ -57,6 +57,7 @@ observations:
     func: student_residuals
     form: residuals
     params: [nu]
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -70,7 +71,6 @@ observations:
     method: moments
     median_size: null
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 - type: sky
   name: jittered
@@ -89,6 +89,7 @@ observations:
     func: jitter_log_likelihood
     form: log_likelihood
     params: [jitter]
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -102,7 +103,6 @@ observations:
     method: moments
     median_size: null
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:
