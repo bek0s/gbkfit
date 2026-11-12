@@ -306,6 +306,22 @@ def make_cube_grid(
     after them: of the spectral axis, step 1, rval 0 and rpix the centre
     by default.
 
+    Parameters
+    ----------
+    size : Sequence of int
+        The number of pixels of each axis on the sky, in FITS order.
+    step, rpix, rval : float or Sequence of float or None
+        The world coordinates of the axes on the sky (see make_grid).
+    rota : float or None
+        The rotation of the grid on the sky (see make_grid).
+    spectral : SpectralAxis
+        The spectral axis, with its number of channels.
+
+    Returns
+    -------
+    Grid
+        The grid.
+
     Raises
     ------
     ValueError

@@ -145,9 +145,10 @@ class RegionMoments(RegionsObservable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of moments in regions.
         ValueError
-            If the dataset is not of moments in regions, or the options
-            are not valid.
+            If the options are not valid.
         """
         check_options(RegionMoments.from_data, locals())
         return cls(
@@ -189,12 +190,18 @@ class RegionMoments(RegionsObservable):
                 "of regions)")
 
     def orders(self) -> tuple[int, ...]:
+        """Return the orders of the moments, sorted."""
         return self._orders
 
     def flux_floor(self) -> float:
+        """
+        Return the fraction of the largest moment 0 of the regions that the
+        moment 0 of a region must be above to have moments.
+        """
         return self._flux_floor
 
     def method(self) -> str:
+        """Return how the moments are measured (see MOMENT_METHODS)."""
         return self._method
 
     def spectral(self) -> SpectralAxis:

@@ -169,9 +169,7 @@ class Setup:
 
     @property
     def pool(self) -> WorkerPool | None:
-        """
-        The workers of copies of the objective, if given and it has one.
-        """
+        """The workers of copies of the objective, if given and it has one."""
         return self._pool
 
     @property

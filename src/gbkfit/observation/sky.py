@@ -86,25 +86,24 @@ class ObservationSky(Observation):
     solved, each is worked out at each evaluation with exact formulas,
     never putting the flux of the data into the model.
 
-    Why that prior for scales per spectrum (the user chose it,
-    2026-10-15; revise here): the log-likelihood of samplers needs one
-    (they integrate the solved values out). A flat prior on a scale makes
-    the integral grow as the model gets fainter (half the light, twice
-    the scales, twice the integral): samplers would prefer galaxies of no
-    light. A flat prior on the flux of each spectrum (the scale times the
-    sum of the model there) removes that, but favours model lines whose
-    flux the data pin down loosely (broad lines) where the spectra are
-    faint: in 4000 random spectra of 61 channels of 10 km/s (noise 1),
-    the log-evidence of a 60 km/s model line over a 30 km/s one was
-    +0.35 on noise alone and +0.22 on a faint line truly 30 km/s wide
-    (flux 3); with this prior (sigma 0.5), +0.03 and -0.09. Over
-    thousands of faint spectra (e.g. of clumpy disks at z ~ 1.5) the flat
-    prior would pull the dispersion up. This prior is proper (the evidence
-    is a normal one), and keeps the brightness of the model meaningful:
-    it is the mean brightness, about which the spectra scatter. Its cost
-    is sigma, a statement of how much the spectra may differ from the
-    model: a very large sigma is a flat prior on the scales again, with
-    its bias.
+    Why that prior for scales per spectrum: the log-likelihood of samplers
+    needs one (they integrate the solved values out). A flat prior on a
+    scale makes the integral grow as the model gets fainter (half the
+    light, twice the scales, twice the integral): samplers would prefer
+    galaxies of no light. A flat prior on the flux of each spectrum (the
+    scale times the sum of the model there) removes that, but favours
+    model lines whose flux the data pin down loosely (broad lines) where
+    the spectra are faint: in 4000 random spectra of 61 channels of
+    10 km/s (noise 1), the log-evidence of a 60 km/s model line over a
+    30 km/s one was +0.35 on noise alone and +0.22 on a faint line truly
+    30 km/s wide (flux 3); with this prior (sigma 0.5), +0.03 and -0.09.
+    Over thousands of faint spectra (e.g. of clumpy disks at z ~ 1.5) the
+    flat prior would pull the dispersion up. This prior is proper (the
+    evidence is a normal one), and keeps the brightness of the model
+    meaningful: it is the mean brightness, about which the spectra
+    scatter. Its cost is sigma, a statement of how much the spectra may
+    differ from the model: a very large sigma is a flat prior on the
+    scales again, with its bias.
 
     Parameters
     ----------
@@ -167,17 +166,16 @@ class ObservationSky(Observation):
         inside the data, and in cubes, whose lines then miss the
         broadening by the velocity gradient within the pixel. On a mock
         disk of scale length 2.5 pixels at peak S/N 20, 1 biased the
-        dispersion by +2 error bars and 2 by +0.5; on LVHIS data, of many
-        pixels per beam, it changed nothing (see
-        notes/adaptive-pixel-sampling.md).
+        dispersion by +2 error bars and 2 by +0.5; on data of many pixels
+        per beam (e.g. the cubes of LVHIS), it changed nothing.
     dtype : str, optional
         The floating type of the model: 'float32' or 'float64'. By default
         float64 if the noise of an item of its data is correlated (see
         Data): the whitening of its residuals (see LikelihoodGaussian)
         magnifies the rounding of a float32 model enough to stop least
-        squares up to about 1 sigma short of the best fit (NGC 1313 of
-        LVHIS, 2026-10-20); float32 otherwise. A copy with other data (see
-        with_data, e.g. mock data) then chooses again, by them.
+        squares up to about 1 sigma short of the best fit; float32
+        otherwise. A copy with other data (see with_data, e.g. mock data)
+        then chooses again, by them.
     fft_dtype : str, optional
         The floating type of the FFT convolutions of the model by the PSF
         and the LSF: 'float64' (by default) or 'float32' (faster, for a

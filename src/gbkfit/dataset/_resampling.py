@@ -10,7 +10,6 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 
 
-
 def block_size(
         size: Sequence[float], axes: Sequence[str]
 ) -> tuple[int, ...]:

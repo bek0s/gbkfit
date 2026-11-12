@@ -143,7 +143,6 @@ class Comparison(abc.ABC):
         with other data, before it is prepared (see Objective.with_data):
         nothing here.
         """
-        pass
 
     def prepare(self) -> None:
         """
@@ -173,7 +172,6 @@ class Comparison(abc.ABC):
             self, driver: Driver, shape: tuple[int, ...], dtype: np.dtype
     ) -> None:
         """Allocate the memory of its kind (see prepare); none here."""
-        pass
 
     def close(self) -> None:
         """Release its memory; prepare allocates it again."""
@@ -204,7 +202,6 @@ class Comparison(abc.ABC):
             The scales of data items, by name (none for the others): arrays
             on the device that broadcast to the item.
         """
-        pass
 
     def linear_form(self, keys: Collection[str]) -> str | None:
         """
@@ -290,10 +287,31 @@ class Comparison(abc.ABC):
         Return the sums that the best scale of the model of a data item
         takes along an axis (see Solve): at each point of the other axes,
         A = sum w m^2 and B = sum w m d of the values along it, m the
-        model, d the data and w the weight of the value in the chi-square;
-        new arrays of the shape of the item, of 1 along the axis. Only
-        comparisons whose weighted residuals are pointwise give them (see
-        pointwise_form).
+        model, d the data and w the weight of the value in the chi-square.
+        Only comparisons whose weighted residuals are pointwise give them
+        (see pointwise_form).
+
+        Parameters
+        ----------
+        model : ModelData
+            The model of the observation, with the scale at 1.
+        params : ParamValues
+            The parameters, prefixed (see Objective.pdescs).
+        key : str
+            The name of the data item.
+        axis : int
+            The axis of the item along which the values share a scale.
+
+        Returns
+        -------
+        A, B : np.ndarray
+            The sums: new arrays of the shape of the item, of 1 along the
+            axis.
+
+        Raises
+        ------
+        NotImplementedError
+            If its weighted residuals are not pointwise.
         """
         raise NotImplementedError
 

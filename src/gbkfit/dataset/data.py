@@ -1,4 +1,3 @@
-
 """
 Data items: measured values, with their mask and error.
 """
@@ -435,6 +434,16 @@ class Data:
         its values and errors converted, its mask, beam, correlations of
         the noise and footprint.
 
+        Parameters
+        ----------
+        unit : UnitBase
+            The other unit.
+
+        Returns
+        -------
+        Data
+            The copy.
+
         Raises
         ------
         ValueError
@@ -456,6 +465,16 @@ class Data:
         Return a copy with other values (e.g. those of a bootstrap), of its
         dtype, and its mask, error, unit, beam, correlations of the noise
         and footprint: the values it masks stay masked.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            The other values.
+
+        Returns
+        -------
+        Data
+            The copy.
 
         Raises
         ------

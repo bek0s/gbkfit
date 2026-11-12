@@ -202,10 +202,9 @@ class Observable(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ValueError
+        TypeError
             If the dataset is not of the dataset class of the observable.
         """
-        pass
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
@@ -317,11 +316,10 @@ class Observable(TypedSerializable, abc.ABC):
             spectral: SpectralAxis | None = None
     ):
         """
-        The grid of the data: its axes on the sky (size, step, rpix, rval,
-        rota), and of an observable with a spectral axis (see
-        spectral_axis), the spectral axis after them (see
-        make_cube_grid), whose velocities need their convention
-        (see check_convention).
+        Make the grid of the data: its axes on the sky (size, step, rpix,
+        rval, rota), and of an observable with a spectral axis (see
+        spectral_axis), the spectral axis after them (see make_cube_grid),
+        whose velocities need their convention (see check_convention).
         """
         # (the axes on the sky are those before the spectral axis, or
         # without one, those of an image)
@@ -376,7 +374,6 @@ class Observable(TypedSerializable, abc.ABC):
     @abc.abstractmethod
     def keys(self) -> tuple[str, ...]:
         """Return the names of the data items (e.g. 'spectra')."""
-        pass
 
     def linear_in_light(self) -> bool:
         """
@@ -397,7 +394,6 @@ class Observable(TypedSerializable, abc.ABC):
         flux_floor): the likelihood then needs a residual for them (see
         LikelihoodGaussian).
         """
-        pass
 
     @abc.abstractmethod
     def make_dataset(self, items: Mapping[str, Data]) -> Dataset:
@@ -416,7 +412,6 @@ class Observable(TypedSerializable, abc.ABC):
             The dataset, of the dataset class, where the observable is
             modelled.
         """
-        pass
 
     @abc.abstractmethod
     def data_unit(
@@ -443,7 +438,6 @@ class Observable(TypedSerializable, abc.ABC):
             either, or without an item of light (e.g. moments of order 1
             and above only: velocities).
         """
-        pass
 
     @abc.abstractmethod
     def light_items(self) -> tuple[str, ...]:
@@ -453,7 +447,6 @@ class Observable(TypedSerializable, abc.ABC):
         flux scale multiplies (see flux_scales); none for data of
         velocities only.
         """
-        pass
 
     def flux_scales(self) -> dict[str, FluxScale]:
         """
@@ -486,7 +479,6 @@ class Observable(TypedSerializable, abc.ABC):
         ValueError
             If the observable cannot be seen so.
         """
-        pass
 
     def check_scene(self, scene: 'Scene', setup: ObservationSetup) -> None:
         """
@@ -682,10 +674,9 @@ class Observable(TypedSerializable, abc.ABC):
         Raises
         ------
         ValueError
-            If it does not support pixel weights, or with the foreground (see
-            CubeObservablePlan).
+            If the pixel weights are not in the plane of a disk of the
+            scene (see CubeObservablePlan).
         """
-        pass
 
 
 class ObservablePlan(abc.ABC):
@@ -719,7 +710,6 @@ class ObservablePlan(abc.ABC):
         ModelData
             The model data.
         """
-        pass
 
     @abc.abstractmethod
     def mock(
@@ -764,7 +754,6 @@ class ObservablePlan(abc.ABC):
             If the noise does not suit the recorded data (see
             Noise.draw).
         """
-        pass
 
     @abc.abstractmethod
     def has_exact_errors(self) -> bool:
@@ -775,7 +764,6 @@ class ObservablePlan(abc.ABC):
         measured from them (e.g. moments), when their errors are those of
         the scatter of draws.
         """
-        pass
 
 
 observable_parser = TypedParser(Observable, family='observable')

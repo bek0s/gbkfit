@@ -170,6 +170,18 @@ def make_convention(
     velocities to 1 + z by itself; none if not given (relativistic too,
     or an axis that is not spectral).
 
+    Parameters
+    ----------
+    convention : str or None
+        The convention, if given.
+    rest : Quantity or None
+        The rest of the spectral axis.
+
+    Returns
+    -------
+    str or None
+        The convention.
+
     Raises
     ------
     ValueError
@@ -245,6 +257,16 @@ def air_refractive_index(wavelength: float) -> float:
     (m), as the IAU adopted it (Morton 2000, ApJS 130, 403, eq. 8; from
     Edlen 1966 and Birch & Downs 1994): air wavelengths are those in
     vacuum over it.
+
+    Parameters
+    ----------
+    wavelength : float
+        The wavelength in vacuum (m).
+
+    Returns
+    -------
+    float
+        The refractive index.
 
     Raises
     ------
@@ -494,6 +516,16 @@ class VelocityConvention:
         """
         Return the frequencies (Hz, in vacuum) at velocities of the axis.
 
+        Parameters
+        ----------
+        velocity : array_like
+            The velocities of the axis (km/s).
+
+        Returns
+        -------
+        ndarray
+            The frequencies.
+
         Raises
         ------
         ValueError
@@ -507,6 +539,16 @@ class VelocityConvention:
         Return the wavelengths (m; in the medium of a rest wavelength, in
         vacuum of a rest frequency) at velocities of the axis.
 
+        Parameters
+        ----------
+        velocity : array_like
+            The velocities of the axis (km/s).
+
+        Returns
+        -------
+        ndarray
+            The wavelengths.
+
         Raises
         ------
         ValueError
@@ -519,6 +561,16 @@ class VelocityConvention:
         """
         Return the velocities of the axis (km/s) at frequencies (Hz, in
         vacuum).
+
+        Parameters
+        ----------
+        frequency : array_like
+            The frequencies (Hz).
+
+        Returns
+        -------
+        ndarray
+            The velocities.
 
         Raises
         ------

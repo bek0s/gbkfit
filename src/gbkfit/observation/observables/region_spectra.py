@@ -118,9 +118,10 @@ class RegionSpectra(RegionsObservable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of spectra in regions.
         ValueError
-            If the dataset is not of spectra in regions, or the options
-            are not valid.
+            If the options are not valid.
         """
         check_options(RegionSpectra.from_data, locals())
         return cls(

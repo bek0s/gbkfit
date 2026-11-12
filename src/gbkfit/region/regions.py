@@ -42,42 +42,54 @@ class Regions(TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def nregions(self) -> int:
-        pass
+        """Return the number of regions."""
 
     @abc.abstractmethod
     def grid(self) -> Grid | None:
         """
-        The spatial grid on which the regions are defined, or None if they
-        are defined on the sky (and can be put on any grid that covers
-        them).
+        Return the spatial grid on which the regions are defined, or None
+        if they are defined on the sky (and can be put on any grid that
+        covers them).
         """
-        pass
 
     @abc.abstractmethod
     def centres(self) -> np.ndarray:
         """
-        The centre of each region, x and y (arcsec, in the frame of the
-        model, like xpos and ypos), of shape (nregions, 2): of bins, the
-        mean of the positions of their pixels; of apertures, their centres
-        (see Aperture.centre).
+        Return the centre of each region, x and y (arcsec, in the frame of
+        the model, like xpos and ypos), of shape (nregions, 2): of bins,
+        the mean of the positions of their pixels; of apertures, their
+        centres (see Aperture.centre).
         """
-        pass
 
     @abc.abstractmethod
     def weights(self, grid: Grid) -> scipy.sparse.csr_array:
         """
-        The weights of the pixels of a spatial grid in the regions: a
-        matrix of one row for each region and one column for each pixel
-        (flat index, x fastest).
+        Return the weights of the pixels of a spatial grid in the regions.
+
+        Parameters
+        ----------
+        grid : Grid
+            The spatial grid (of bins, that of the bins).
+
+        Returns
+        -------
+        scipy.sparse.csr_array
+            One row for each region and one column for each pixel (flat
+            index, x fastest).
+
+        Raises
+        ------
+        RuntimeError
+            If the regions do not fit on the grid (bins on another grid,
+            or an aperture not inside it).
         """
-        pass
 
     def valid(self) -> np.ndarray | None:
         """
-        Which pixels of its grid count in each channel of spectra: 1 or
-        0, of shape (channels, ny, nx), e.g. of a spectrum of a bin that
-        sums the valid pixels of each channel of a cube (see RegionsBins);
-        None (here) if all do.
+        Return which pixels of its grid count in each channel of spectra:
+        1 or 0, of shape (channels, ny, nx), e.g. of a spectrum of a bin
+        that sums the valid pixels of each channel of a cube (see
+        RegionsBins); None (here) if all do.
         """
         return None
 
@@ -91,6 +103,25 @@ class RegionsBins(Regions):
     each channel (valid: 1 or 0, of shape (channels, ny, nx), e.g. those
     of a cube of which some spaxels are masked in some channels; see
     prep_region_spectra), which the model sums too.
+
+    Parameters
+    ----------
+    index : array_like
+        The bin of each pixel, an image (ny, nx).
+    step, rpix, rval : float or Sequence of float, optional
+        The world coordinates of the grid of the bins (see Coords); with
+        the defaults of make_grid.
+    rota : float, optional
+        The rotation of the grid on the sky; 0 by default (see make_grid).
+    valid : array_like, optional
+        Which pixels are valid in each channel (see above); all by
+        default.
+
+    Raises
+    ------
+    ValueError
+        If the bins are not an image of integers numbered from 0 with
+        pixels in each, or valid is not a cube of their pixels.
     """
 
     @staticmethod
@@ -181,10 +212,6 @@ class RegionsBins(Regions):
             rota: _Angle | None = None,
             valid: npt.ArrayLike | None = None
     ):
-        """
-        The world coordinates of the grid of the bins (see
-        Coords) have defaults (see make_grid).
-        """
         check_options(RegionsBins.__init__, locals())
         index = np.asarray(index)
         if index.ndim != 2:
@@ -226,7 +253,7 @@ class RegionsBins(Regions):
                 and np.array_equal(self._valid, other._valid))
 
     def index(self) -> np.ndarray:
-        """The bin of each pixel (negative for none)."""
+        """Return the bin of each pixel (negative for none)."""
         return self._index
 
     def valid(self) -> np.ndarray | None:
@@ -261,6 +288,11 @@ class RegionsApertures(Regions):
     """
     Apertures on the sky (e.g. the circles of fibres), one region each.
     Their shapes are those of Aperture.
+
+    Parameters
+    ----------
+    apertures : Sequence of Aperture
+        The apertures; at least one.
     """
 
     @staticmethod
@@ -291,6 +323,7 @@ class RegionsApertures(Regions):
                 == aperture_parser.dump(list(other._apertures)))
 
     def apertures(self) -> tuple[Aperture, ...]:
+        """Return the apertures."""
         return self._apertures
 
     def nregions(self) -> int:

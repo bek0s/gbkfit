@@ -22,7 +22,7 @@ from gbkfit.model.mass.units import G
 from gbkfit.params import (
     ParamFunctions, ParamValues, ParamView, StageCache, with_elements)
 from gbkfit.utils import threadutils, timeutils
-from ._orbits import OrbitRecording, OrbitSeries, orbit_recordings
+from .orbits import OrbitRecording, OrbitSeries, orbit_recordings
 from .observables import HostModelData, ModelData, ModelItem, ObservablePlan
 
 if TYPE_CHECKING:
@@ -277,6 +277,16 @@ class GroupPlan:
         own, in the series of its data. A copy whose observations have
         other parameters (e.g. a likelihood of data that they had none of;
         see ObservationGroup.same_params) has plans of its own.
+
+        Parameters
+        ----------
+        datasets : Sequence of Dataset
+            The data, one dataset for each observation, in their order.
+
+        Returns
+        -------
+        GroupPlan
+            The plan.
 
         Raises
         ------

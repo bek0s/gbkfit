@@ -103,6 +103,16 @@ class UVCoverage(Serializable):
         Make the coverage of its arrays (see arrays; e.g. those of a file
         of visibilities).
 
+        Parameters
+        ----------
+        arrays : Mapping
+            The arrays, by name.
+
+        Returns
+        -------
+        UVCoverage
+            The coverage.
+
         Raises
         ------
         ValueError
@@ -124,6 +134,16 @@ class UVCoverage(Serializable):
         arrays; e.g. a file of visibilities, see
         DatasetVisibilities.from_file, or one of write).
 
+        Parameters
+        ----------
+        file : str
+            The filename.
+
+        Returns
+        -------
+        UVCoverage
+            The coverage.
+
         Raises
         ------
         ValueError
@@ -136,6 +156,13 @@ class UVCoverage(Serializable):
     def write(self, filename: str, overwrite: bool = False) -> None:
         """
         Write its arrays to a numpy file (npz; see from_file).
+
+        Parameters
+        ----------
+        filename : str
+            The filename.
+        overwrite : bool, optional
+            Whether to overwrite an existing file.
 
         Raises
         ------

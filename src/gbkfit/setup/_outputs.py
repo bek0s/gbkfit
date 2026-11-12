@@ -111,21 +111,45 @@ def evaluation_outputs(
     """
     Return the outputs of an evaluation of a plan of a group, by path, in
     the form the observations give them (their images made on their
-    drivers), in observations/<observation>/<kind>/<item>
-    of each data item: the models (kind 'model'; 'model_mask' and
-    'model_weight'), and the residuals ((model - data) / error) without
-    and with the weights of the data items ('residual' and 'wresidual';
-    these need the objective; the values of the parameters must have
-    those of the solved elements that it solves, see Setup.evaluate).
-    With the models, a flux scale of several values of an observation
-    (see ObservationSky) is 'flux_scale'
-    (observations/<observation>/flux_scale), of the shape of its spectra
-    but their axis. With the models, the images that the observations
-    make of them ('model_image', in place of the item: the name of the
-    image; see Observation.images), and of the data minus them
-    ('residual_image'), with the weights of the data. Unless left out
+    drivers), in observations/<observation>/<kind>/<item> of each data
+    item: the models (kind 'model'; 'model_mask' and 'model_weight'), and
+    the residuals ((model - data) / error) without and with the weights
+    of the data items ('residual' and 'wresidual'; these need the
+    objective; the values of the parameters must have those of the solved
+    elements that it solves, see Setup.evaluate). With the models, a flux
+    scale of several values of an observation (see ObservationSky) is
+    'flux_scale' (observations/<observation>/flux_scale), of the shape of
+    its spectra but their axis. With the models, the images that the
+    observations make of them ('model_image', in place of the item: the
+    name of the image; see Observation.images), and of the data minus
+    them ('residual_image'), with the weights of the data. Unless left out
     (extra), the extra outputs of the models are 'extra', with their
     titles and descriptions (see _extra_output).
+
+    Parameters
+    ----------
+    group_plan : GroupPlan
+        The plan of the group.
+    objective : Objective or None
+        The objective of the group, which the residuals need.
+    values : ParamValues
+        The values of the parameters of the evaluation.
+    model : bool
+        Whether to give the models (and their images and flux scales).
+    residuals : bool
+        Whether to give the residuals.
+    extra : bool, optional
+        Whether to give the extra outputs of the models; True by default.
+
+    Returns
+    -------
+    dict of str to Output
+        The outputs, by path.
+
+    Raises
+    ------
+    ValueError
+        If the residuals are wanted without an objective.
     """
     group = group_plan.group()
     outputs = []

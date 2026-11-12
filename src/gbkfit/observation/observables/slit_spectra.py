@@ -125,9 +125,10 @@ class SlitSpectra(Observable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of slit spectra.
         ValueError
-            If the dataset is not of slit spectra, or the options are not
-            valid.
+            If the options are not valid.
         """
         check_options(SlitSpectra.from_data, locals())
         return cls(

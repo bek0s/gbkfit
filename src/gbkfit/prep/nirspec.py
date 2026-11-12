@@ -17,7 +17,7 @@ from gbkfit.instrument import SlitMaskShutters, TraceTable
 
 if TYPE_CHECKING:
     from gbkfit.dataset import DatasetSlitlessSpectra
-    from gbkfit.observation.observables.slitless_spectra import Exposure
+    from gbkfit.observation import Exposure
 
 
 __all__ = [
@@ -265,7 +265,7 @@ def nirspec_msa_rectified(
         between open ones or no shutter of the source.
     """
     from gbkfit.dataset import Data, DatasetSlitlessSpectra
-    from gbkfit.observation.observables.slitless_spectra import Exposure
+    from gbkfit.observation import Exposure
     from stdatamodels.jwst import datamodels
     with datamodels.open(cal_filename) as cal, \
             datamodels.open(s2d_filename) as s2d:
@@ -353,7 +353,7 @@ def _slitlet_spectra(
     those of the geometries of slitlets.
     """
     from gbkfit.dataset import Data, DatasetSlitlessSpectra
-    from gbkfit.observation.observables.slitless_spectra import Exposure
+    from gbkfit.observation import Exposure
     slitlet = slitlets[index]
     data, error = exposure.data.copy(), exposure.err.copy()
     if undo_corrections:

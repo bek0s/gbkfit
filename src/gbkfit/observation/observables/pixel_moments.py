@@ -146,9 +146,10 @@ class PixelMoments(Observable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of moment maps.
         ValueError
-            If the dataset is not of moment maps, or the options are not
-            valid.
+            If the options are not valid.
         """
         check_options(PixelMoments.from_data, locals())
         return cls(
@@ -216,12 +217,18 @@ class PixelMoments(Observable):
         return any(order >= 1 for order in self._orders)
 
     def orders(self) -> tuple[int, ...]:
+        """Return the orders of the moments, sorted."""
         return self._orders
 
     def flux_floor(self) -> float:
+        """
+        Return the fraction of the largest moment 0 of the model that the
+        moment 0 of a spectrum must be above to have moments.
+        """
         return self._flux_floor
 
     def method(self) -> str:
+        """Return how the moments are measured (see MOMENT_METHODS)."""
         return self._method
 
     def spectral(self) -> SpectralAxis:

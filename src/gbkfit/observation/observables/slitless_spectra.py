@@ -459,9 +459,10 @@ class SlitlessSpectra(Observable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of slitless spectra.
         ValueError
-            If the dataset is not of slitless spectra, or the options are
-            not valid.
+            If the options are not valid.
         """
         check_options(SlitlessSpectra.from_data, locals())
         return cls(

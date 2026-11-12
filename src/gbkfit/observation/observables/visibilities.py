@@ -189,9 +189,10 @@ class Visibilities(Observable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of visibilities.
         ValueError
-            If the dataset is not of visibilities, or the options are not
-            valid.
+            If the options are not valid.
         """
         check_options(Visibilities.from_data, locals())
         return cls(

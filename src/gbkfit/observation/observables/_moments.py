@@ -146,9 +146,25 @@ def check_moment_orders(
         method: str
 ) -> tuple[int, ...]:
     """
-    Return the moment orders, sorted and unique. Raise ValueError unless
-    they are valid for the method (see MOMENT_METHODS; a Gaussian has moments 0
-    to 2, a Gauss-Hermite series 0 to 4).
+    Return the moment orders, sorted and unique.
+
+    Parameters
+    ----------
+    orders : Sequence of int
+        The orders.
+    method : str
+        The method that measures them (see MOMENT_METHODS).
+
+    Returns
+    -------
+    tuple of int
+        The orders, sorted and unique.
+
+    Raises
+    ------
+    ValueError
+        If there are none, or they are not valid for the method (a
+        Gaussian has moments 0 to 2, a Gauss-Hermite series 0 to 4).
     """
     max_order = _MAX_ORDERS[method]
     orders = tuple(sorted(set(orders)))
@@ -297,6 +313,22 @@ class MomentsPlan:
     0 is not a number (NaN) somewhere is a model that failed there, not
     one without flux there; measure takes cubes of data, with channels
     without a value (see measure).
+
+    Parameters
+    ----------
+    driver : Driver
+        The driver of the cubes.
+    size : Sequence of int
+        The size of the maps (nx, ny).
+    orders : Sequence of int
+        The orders of the moments (see check_moment_orders).
+    flux_floor : float
+        The share of the largest moment 0 of the map (in absolute value)
+        that the moment 0 of a spectrum must be above.
+    method : str
+        The method (see MOMENT_METHODS).
+    dtype : np.dtype
+        The floating type of the cubes.
     """
 
     def __init__(
@@ -308,7 +340,6 @@ class MomentsPlan:
             method: str,
             dtype: np.dtype
     ):
-        """size is that of the maps (nx, ny)."""
         size_all = tuple(size) + (len(orders),)
         self._orders = orders
         self._flux_floor = flux_floor
@@ -340,8 +371,24 @@ class MomentsPlan:
     ) -> ModelData:
         """
         Return the moments of cube (and its weights, wcube, if any), whose
-        world coordinates are step and zero (see Grid): for each
-        order, its map, the mask and its weights (see ModelItem).
+        world coordinates are step and zero (see Grid): for each order,
+        its map, the mask and its weights (see ModelItem).
+
+        Parameters
+        ----------
+        step, zero : Sequence of float
+            The step of each axis of the cube, and the world position of
+            its first pixel (see Grid.zero).
+        cube : DeviceArray
+            The cube (nz, ny, nx).
+        wcube : DeviceArray or None
+            Its weights, if any.
+
+        Returns
+        -------
+        ModelData
+            The model item of each moment, by the name of its data item
+            (see moment_item).
 
         Raises
         ------
@@ -381,6 +428,19 @@ class MomentsPlan:
         The fits of the methods gaussian_fit and gauss_hermite leave the
         channels without a value (NaN) out; the moments of a spectrum
         with one are not numbers.
+
+        Parameters
+        ----------
+        step, zero, cube, wcube
+            As those of evaluate.
+        cutoff : float
+            The moment 0 that a spectrum must be above (in absolute
+            value).
+
+        Returns
+        -------
+        ModelData
+            The model item of each moment, as evaluate.
         """
         if self._method in ('gaussian_fit', 'gauss_hermite'):
             self._backend.mmaps_gaussian(

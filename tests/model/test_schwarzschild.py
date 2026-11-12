@@ -1,7 +1,7 @@
 """
 Tests of the Schwarzschild kinematics of spheroids (its configuration,
 the gravity and the observations it takes), of the recording of the
-orbits in the bins of their stars with data (observation._orbits) and of
+orbits in the bins of their stars with data (observation.orbits) and of
 the objective that solves their weights (objective._orbit_blocks): the
 sky of the bins, the light of the spheroid in them, the solved weights
 and the model of the bins there.
@@ -22,7 +22,7 @@ from gbkfit.objective import Objective
 from gbkfit.observation import (
     FittedNoise, LikelihoodGaussian, ObservationGroup, ObservationSky,
     PixelSpectra, RegionMoments, line_of_sight_parser)
-from gbkfit.observation._orbits import _bins_light
+from gbkfit.observation.orbits import _bins_light
 from gbkfit.observation.observables._orbit_sky import bins_sky_grid
 from gbkfit.params import ParamSpace
 from gbkfit.region import RegionsBins

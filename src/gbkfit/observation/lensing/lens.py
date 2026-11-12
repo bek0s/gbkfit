@@ -181,7 +181,26 @@ class LensPlan:
     the image plane, on a driver: the position on the source plane of
     each pixel of the image (in pixels of the source), worked out once,
     or if the lens has parameters, again for each evaluation at which
-    their values change.
+    their values change (see Lens.plan, which makes it).
+
+    Parameters
+    ----------
+    lens : Lens
+        The lens.
+    driver : Driver
+        The driver the cubes are on.
+    grid : Grid
+        The grid of the image plane.
+    dtype : np.dtype
+        The floating type of the cubes.
+    names : Mapping of str to str
+        The names of the parameters of the lens among those of the
+        evaluations, by their own names (see Lens.pdescs).
+
+    Raises
+    ------
+    ValueError
+        If the names of parameters of the lens are missing.
     """
 
     def __init__(
@@ -260,6 +279,15 @@ class LensPlan:
         Lens the source cube (nz, sy, sx) into the image cube, with the
         values of the parameters of the evaluation (those of the lens, if
         any, by the names of the plan).
+
+        Parameters
+        ----------
+        params : ParamValues
+            The values of the parameters of the evaluation.
+        source : DeviceArray
+            The cube of the source plane (see source_grid).
+        image : DeviceArray
+            The cube of the image plane, which it writes.
         """
         self._placement.evaluate(params, self._place)
         self._backend.lens_resample(

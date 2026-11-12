@@ -56,10 +56,9 @@ class PixelBrightness(Observable):
         The rotation of the image on the sky.
     median_size : int, optional
         The size (an odd number of pixels, at least 3) of the median filter
-        that smoothed the data on the sky, which smooths the model as well
-        (e.g. 3, of cubes smoothed before their maps were made): each
-        channel takes the median of the square of the size about each
-        pixel, with zero beyond the edges (see ModelCube); none by default.
+        that smoothed the data on the sky, which smooths the model as well:
+        each pixel takes the median of the square of the size about it,
+        with zero beyond the edges (see ModelCube); none by default.
 
     Raises
     ------
@@ -106,9 +105,10 @@ class PixelBrightness(Observable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of brightness.
         ValueError
-            If the dataset is not of brightness, or the options are not
-            valid.
+            If the options are not valid.
         """
         check_options(PixelBrightness.from_data, locals())
         return cls(

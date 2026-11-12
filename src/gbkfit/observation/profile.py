@@ -397,7 +397,6 @@ class ObservationProfile(Observation):
         -------
         ObservablePlan
             The plan.
-
         """
         galaxy, mapping = seen.galaxies[0], seen.mappings[0]
         functions = galaxy.plan_functions(

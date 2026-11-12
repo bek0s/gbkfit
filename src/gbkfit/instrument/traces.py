@@ -56,6 +56,18 @@ class Trace(TypedSerializable, abc.ABC):
         Return the offsets (dx, dy; pixels) of the wavelengths (m, in
         vacuum) at the places (x, y) of their undispersed light (pixels of
         the image, from its first pixel), broadcast together.
+
+        Parameters
+        ----------
+        wavelength : array_like
+            The wavelengths (m, in vacuum).
+        x, y : array_like
+            The places of their undispersed light (pixels).
+
+        Returns
+        -------
+        dx, dy : np.ndarray
+            The offsets (pixels).
         """
 
 
@@ -144,6 +156,9 @@ class TraceGrismConf(Trace):
     wavelength solves w(t) = w (by Newton iterations from t = 0.5, to
     1e-12); the wavelengths are in vacuum.
 
+    Its configuration has the coefficients, or a GRISMCONF file and the
+    order (file and order, and origin; see from_file).
+
     Parameters
     ----------
     displ, dispx, dispy : Sequence of Sequence of float
@@ -152,9 +167,6 @@ class TraceGrismConf(Trace):
     origin : Sequence of float, optional
         The place on the detector (x0, y0; pixels) of the first pixel of
         the image (e.g. of a cutout); (0, 0) by default.
-
-    Its configuration has the coefficients, or a GRISMCONF file and the
-    order (file and order, and origin; see from_file).
 
     Raises
     ------
@@ -394,6 +406,16 @@ class TraceTable(Trace):
     def from_file(cls, file: FilePath) -> 'TraceTable':
         """
         Read a trace from a FITS file of its nodes and offsets (see write).
+
+        Parameters
+        ----------
+        file : str
+            The filename.
+
+        Returns
+        -------
+        TraceTable
+            The trace.
 
         Raises
         ------

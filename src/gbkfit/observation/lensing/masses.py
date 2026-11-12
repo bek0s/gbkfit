@@ -115,7 +115,6 @@ class LensMass(TypedSerializable, abc.ABC):
             The deflection (arcsec) along x and y of the frame of the
             model, each of shape (ny, nx).
         """
-        pass
 
 
 class LensDeflectionMap(LensMass):

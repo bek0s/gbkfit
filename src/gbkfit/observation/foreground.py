@@ -91,6 +91,20 @@ class Foreground(Serializable):
         """
         Plan the lensing of cubes on a grid of the image plane (see
         Lens.plan), if it has a lens.
+
+        Parameters
+        ----------
+        driver : Driver
+            The driver the cubes are on.
+        grid : Grid
+            The grid of the image plane.
+        dtype : np.dtype
+            The floating type of the cubes.
+
+        Returns
+        -------
+        LensPlan or None
+            The plan, or None without a lens.
         """
         if self._lens is None:
             return None

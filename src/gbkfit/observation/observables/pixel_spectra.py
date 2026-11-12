@@ -108,9 +108,10 @@ class PixelSpectra(Observable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of spectra on pixels.
         ValueError
-            If the dataset is not of spectra on pixels, or the options are
-            not valid.
+            If the options are not valid.
         """
         check_options(PixelSpectra.from_data, locals())
         return cls(

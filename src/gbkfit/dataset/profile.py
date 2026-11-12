@@ -214,4 +214,3 @@ class DatasetProfile(Dataset):
         if given.
         """
         return self._assumed_distance
-

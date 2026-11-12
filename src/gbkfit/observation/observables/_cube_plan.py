@@ -53,8 +53,7 @@ class CubeObservablePlan(ObservablePlan):
     Raises
     ------
     ValueError
-        If there are pixel weights and a lens (not supported yet), or the
-        pixel weights are not in the plane of a disk of the scene.
+        If the pixel weights are not in the plane of a disk of the scene.
     """
 
     def __init__(

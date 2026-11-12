@@ -110,23 +110,55 @@ class Aperture(TypedSerializable, abc.ABC):
     @abc.abstractmethod
     def centre(self) -> tuple[float, float]:
         """
-        The centre of the aperture, x and y (arcsec): of a polygon, the
-        centroid of its area. Raise ValueError if it has none (a field).
+        Return the centre of the aperture, x and y (arcsec): of a polygon,
+        the centroid of its area.
+
+        Raises
+        ------
+        ValueError
+            If it has none (a field).
         """
-        pass
 
     @abc.abstractmethod
     def overlaps(self, grid: Grid) -> tuple[np.ndarray, np.ndarray]:
         """
-        The pixels of a spatial grid (flat indices, x fastest) that overlap
-        the aperture, and the fraction of the area of each inside it.
-        Raise RuntimeError unless the aperture is inside the grid.
+        Return the pixels of a spatial grid that overlap the aperture, and
+        the fraction of the area of each inside it.
+
+        Parameters
+        ----------
+        grid : Grid
+            The spatial grid.
+
+        Returns
+        -------
+        pixels : np.ndarray
+            The flat indices of the pixels (x fastest).
+        fractions : np.ndarray
+            The fraction of the area of each pixel inside the aperture.
+
+        Raises
+        ------
+        RuntimeError
+            If the aperture is not inside the grid.
         """
-        pass
 
 
 class ApertureEllipse(Aperture):
-    """An ellipse of semi-axes a (along posa) and b."""
+    """
+    An ellipse of semi-axes a (along posa) and b.
+
+    Parameters
+    ----------
+    x, y : float
+        The centre (arcsec).
+    a : float
+        The semi-axis along posa (arcsec).
+    b : float
+        The other semi-axis (arcsec).
+    posa : float, optional
+        The position angle of a (degrees); 0 by default.
+    """
 
     @staticmethod
     def type() -> str:
@@ -160,7 +192,16 @@ class ApertureEllipse(Aperture):
 
 
 class ApertureCircle(Aperture):
-    """A circle."""
+    """
+    A circle.
+
+    Parameters
+    ----------
+    x, y : float
+        The centre (arcsec).
+    radius : float
+        The radius (arcsec).
+    """
 
     @staticmethod
     def type() -> str:
@@ -171,7 +212,8 @@ class ApertureCircle(Aperture):
         return 'Circle'
 
     def dump(self) -> dict[str, Any]:
-        return dict(type=self.type(), x=self._x, y=self._y, radius=self._radius)
+        return dict(
+            type=self.type(), x=self._x, y=self._y, radius=self._radius)
 
     def __init__(self, x: _Arcsec, y: _Arcsec, radius: _Length):
         check_options(ApertureCircle.__init__, locals())
@@ -218,7 +260,14 @@ def _ellipse_overlaps(
 
 
 class AperturePolygon(Aperture):
-    """A simple polygon (it can be concave), of the given vertices."""
+    """
+    A simple polygon (it can be concave), of the given vertices.
+
+    Parameters
+    ----------
+    vertices : Sequence of Sequence of float
+        The vertices, in order, each x and y (arcsec); at least three.
+    """
 
     @staticmethod
     def type() -> str:
@@ -257,7 +306,20 @@ class AperturePolygon(Aperture):
 
 
 class ApertureRectangle(Aperture):
-    """A rectangle, its length along posa (e.g. a slit or a shutter)."""
+    """
+    A rectangle, its length along posa (e.g. a slit or a shutter).
+
+    Parameters
+    ----------
+    x, y : float
+        The centre (arcsec).
+    length : float
+        The length, along posa (arcsec).
+    width : float
+        The width, across posa (arcsec).
+    posa : float, optional
+        The position angle of the length (degrees); 0 by default.
+    """
 
     @staticmethod
     def type() -> str:

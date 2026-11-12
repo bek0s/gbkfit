@@ -11,7 +11,7 @@ import numpy.typing as npt
 
 from gbkfit.driver import Driver
 from gbkfit.driver.drivers.host import DriverHost
-from gbkfit.observation.observables import (
+from gbkfit.observation import (
     MOMENT_METHODS, MomentsPlan, check_moment_orders)
 
 

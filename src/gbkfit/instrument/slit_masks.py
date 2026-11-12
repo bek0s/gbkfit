@@ -42,7 +42,6 @@ class SlitMask(TypedSerializable, abc.ABC):
         np.ndarray
             The edges of each (x0, x1, y0, y1; arcsec), of shape (n, 4).
         """
-        pass
 
     def clip(
             self,
