@@ -19,7 +19,7 @@ from gbkfit.model import GalaxyState
 from gbkfit.model.components.spheroids import (
     OrbitIntegrator, OrbitLibraryState, SkyGrid, Spheroid)
 from gbkfit.params import ModelEvaluationError, ParamValues
-from .observables import ModelData
+from .observables import ModelData, ModelItem
 from .observables._moments import moment_item
 from .observables._orbit_sky import bins_sky_grid
 
@@ -28,18 +28,18 @@ if TYPE_CHECKING:
     from .sky import ObservationSky
 
 
-_log = logging.getLogger(__name__)
-
-# The most drift of the energy of an orbit in its integration, as a
-# fraction of it, before a warning (the target of the design, step 9)
-_ENERGY_DRIFT = 1e-3
-
-
 __all__ = [
     'LinearMoment',
     'OrbitRecording',
     'OrbitSeries'
 ]
+
+
+_log = logging.getLogger(__name__)
+
+# The most drift of the energy of an orbit in its integration, as a
+# fraction of it, before a warning (the target of the design)
+_ENERGY_DRIFT = 1e-3
 
 
 # The parameters of the frame of a spheroid whose orbits are recorded
@@ -243,8 +243,22 @@ class OrbitRecording:
         GroupPlan.galaxy_states), and return them in the series of the
         bins of its observations.
 
+        Parameters
+        ----------
+        params : ParamValues
+            The values of the parameters of the group.
+        states : Sequence of GalaxyState
+            The state of each galaxy at those values.
+
+        Returns
+        -------
+        OrbitSeries
+            The orbits, in the series of the bins.
+
         Raises
         ------
+        ValueError
+            If the spheroid has no orbits in the state of its galaxy.
         ModelEvaluationError
             If bins see no light of the spheroid.
         """
@@ -258,8 +272,7 @@ class OrbitRecording:
             self._group.frame_shifts(i, params) for i in self._observations]
         if self._integrator is None:
             # (in float64 whatever the dtype of the observations: chaotic
-            # orbits turn float32 rounding into noise of the chi-square,
-            # audit 2026-10-31 #10)
+            # orbits turn float32 rounding into noise of the chi-square)
             self._integrator = OrbitIntegrator(
                 self._galaxy_driver, np.float64, len(state.starts),
                 tolerance=state.tolerance, max_steps=state.max_steps(),
@@ -289,8 +302,7 @@ class OrbitRecording:
                 f"light of the rest of it is left out")
             self._cut_warned = True
         if not self._drift_warned:
-            # (an orbit whose energy drifts is recorded as other orbits:
-            # audit 2026-10-31 #11)
+            # (an orbit whose energy drifts is recorded as other orbits)
             start, end = records.energies.astype(np.float64).T
             drift = np.abs(end - start) / np.abs(start)
             if drifted := int(np.sum(drift > _ENERGY_DRIFT)):
@@ -341,18 +353,30 @@ class OrbitRecording:
         in the parameters, on the driver of the observation: its moments
         (NaN in the bins without a series, whose data are masked), without
         a mask or weights.
+
+        Parameters
+        ----------
+        series : OrbitSeries
+            The orbits in the series of the bins (see record).
+        index : int
+            The index of the observation in the group.
+        params : ParamValues
+            The values of the parameters, with the weights of the orbits.
+
+        Returns
+        -------
+        ModelData
+            The model data of the observation.
         """
         weights = np.asarray(params[self._weights], dtype=float)
         k = self._observations.index(index)
         driver, dtype = self._observation_drivers[k], self._dtypes[k]
         seen = self._data[k].seen
         return {
-            key: dict(
-                d=driver.mem_copy_h2d(np.ascontiguousarray(np.where(
-                    seen,
-                    moment.base + moment.slope * (moment.moments @ weights),
-                    np.nan), dtype)),
-                m=None, w=None)
+            key: ModelItem(driver.mem_copy_h2d(np.ascontiguousarray(np.where(
+                seen,
+                moment.base + moment.slope * (moment.moments @ weights),
+                np.nan), dtype)))
             for key, moment in series.moments[index].items()}
 
 

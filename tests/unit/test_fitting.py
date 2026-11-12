@@ -70,7 +70,7 @@ def mock_objective(
     image = group(DatasetPixelBrightness(Data(np.zeros(shape))))
     model = image.model_h(
         ParamSpace.from_properties(image.group().pdescs(), TRUE).evaluate())[0]
-    model = model['brightness']['d']
+    model = model['brightness'].data
     sigma = 0.01 * model.max()
     noise = np.random.default_rng(seed).normal(0, sigma, shape)
     dataset = DatasetPixelBrightness(
@@ -1518,7 +1518,7 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
     image = group(DatasetPixelBrightness(Data(np.zeros((48, 48)))))
     values = ParamSpace.from_properties(
         image.group().pdescs(), TRUE).evaluate()
-    peak = image.model_h(values)[0]['brightness']['d'].max()
+    peak = image.model_h(values)[0]['brightness'].data.max()
     noise = NoiseGauss(rms=0.01 * peak, spatial_correlation='instrument')
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     fits = []

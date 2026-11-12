@@ -20,7 +20,7 @@ from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from .likelihoods import Likelihood, likelihood_parser
-from .observables import HostModelData, ModelData, ObservablePlan
+from .observables import HostModelData, ModelData, ModelItem, ObservablePlan
 from .observation import Observation, SeenGalaxies
 
 if TYPE_CHECKING:
@@ -397,7 +397,6 @@ class ObservationProfile(Observation):
         -------
         ObservablePlan
             The plan.
-
         """
         galaxy, mapping = seen.galaxies[0], seen.mappings[0]
         functions = galaxy.plan_functions(
@@ -517,9 +516,7 @@ class _ProfilePlan(ObservablePlan):
         values = self._values(params, galaxies)
         for key, value in values.items():
             self._driver.mem_copy_h2d(value, self._model[key])
-        return {
-            key: dict(d=self._model[key], m=None, w=None)
-            for key in self._keys}
+        return {key: ModelItem(self._model[key]) for key in self._keys}
 
     def mock(
             self,
@@ -532,7 +529,7 @@ class _ProfilePlan(ObservablePlan):
         values = self._values(params, galaxies)
         grid = self._noise_grid
         draws = [
-            {key: dict(d=value + noise.draw(rng, grid, None, value), m=None)
+            {key: ModelItem(value + noise.draw(rng, grid, None, value))
              for key, value in values.items()}
             for _ in range(ndraws)]
         errors = {

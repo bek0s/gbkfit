@@ -63,7 +63,7 @@ def test_weights_follow_the_plane_of_the_disk(driver):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES).evaluate()
     extra = Extras()
-    weights = plan.model_h(params, extra)[0]['spectra']['w']
+    weights = plan.model_h(params, extra)[0]['spectra'].weights
     velocity = extra.get('vdata', component='gas').data
     disk = np.isfinite(velocity)
     assert disk.sum() > 100
@@ -103,7 +103,7 @@ def test_weights_are_worked_out_again_only_as_the_disk_turns(
     for changed in (dict(), dict(gas_rpt_s=5), dict(gas_posa=50)):
         params = gbkfit.params.ParamSpace.from_properties(
             plan.group().pdescs(), PROPERTIES | changed).evaluate()
-        weights.append(plan.model_h(params)[0]['spectra']['w'].copy())
+        weights.append(plan.model_h(params)[0]['spectra'].weights.copy())
     assert len(calls) == 2
     np.testing.assert_array_equal(weights[1], weights[0])
     assert not np.allclose(weights[2], weights[0])
@@ -140,7 +140,7 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
     blank = plan(np.zeros(size[::-1]), None)
     params = gbkfit.params.ParamSpace.from_properties(
         blank.group().pdescs(), values)
-    model = blank.model_h(params.evaluate())[0]['spectra']['d']
+    model = blank.model_h(params.evaluate())[0]['spectra'].data
     mask = np.random.default_rng(1).random(model.shape) < 0.5
     objective = Objective(plan(model - 1, mask))
     assert objective.chi2(params.evaluate()) \

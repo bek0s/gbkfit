@@ -64,7 +64,6 @@ class WeightAzimuthPower(WeightTrait):
     axis : str, optional
         The axis near which the weight is less: 'minor' (the default) or
         'major'.
-
     """
 
     @staticmethod
@@ -102,7 +101,6 @@ class WeightAzimuthRange(WeightTrait):
         The axis: 'minor' (the default) or 'major'.
     weight : float, optional
         The weight within the angle; 0 by default.
-
     """
 
     @staticmethod
@@ -202,9 +200,22 @@ class Weights(Serializable):
     ) -> np.ndarray:
         """
         Return the weight of points on the sky (arcsec, in the frame of the
-        model; see sky_positions), in the plane of a disk of the
-        given geometry (xpos, ypos, posa and incl), as the disk kernels
-        place them.
+        model; see sky_positions), in the plane of a disk of the given
+        geometry (xpos, ypos, posa and incl), as the disk kernels place
+        them.
+
+        Parameters
+        ----------
+        geometry : dict
+            The geometry of the disk: xpos, ypos (arcsec), posa and incl
+            (degrees).
+        x, y : np.ndarray
+            The positions of the points (arcsec).
+
+        Returns
+        -------
+        np.ndarray
+            The weight of each point, of their shape.
         """
         posa = np.radians(geometry['posa'])
         incl = np.radians(geometry['incl'])

@@ -191,7 +191,7 @@ def cubes_of(evaluate_cases, driver, components, properties, **observation):
             line_of_sight=dict(type=kind),
             galaxy=dict(components=components))
         data, _ = evaluate_cases([case], of_model([case], properties))
-        models.append(next(iter(data[0].values()))['d'])
+        models.append(next(iter(data[0].values())).data)
     return models
 
 
@@ -304,7 +304,7 @@ def transfer_cube(evaluate_cases, driver, components, properties):
     data, _ = evaluate_cases([case], {
         key: value for key, value in properties.items()
         if key.split('_')[0] in names})
-    return data[0]['spectra']['d']
+    return data[0]['spectra'].data
 
 
 @pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])
@@ -432,7 +432,7 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
                 spectral=dict(size=31, step=10, convention='relativistic')),
             galaxy=dict(components=components))
         data, extra = evaluate_cases([case], of_model([case], properties))
-        models.append((data[0]['spectra']['d'], extra))
+        models.append((data[0]['spectra'].data, extra))
     (cube, extra), *others = models
     for other_cube, other_extra in others:
         assert_same_model(other_cube, cube)
@@ -486,7 +486,7 @@ def galaxies_model(
         key: value for key, value in properties.items() if key in pdescs})
     extra = Extras() if with_extras else None
     data = plan.model_h(params.evaluate(), extra)
-    return next(iter(data[0].values()))['d'], extra
+    return next(iter(data[0].values())).data, extra
 
 
 def galaxy_properties(galaxy, properties):
@@ -660,7 +660,7 @@ def evaluate_transfer(evaluate_cases, case, properties):
     data, extra = evaluate_cases([case], {
         key: value for key, value in properties.items()
         if key.split('_')[0] in names})
-    return data[0]['spectra']['d'], extra
+    return data[0]['spectra'].data, extra
 
 
 def test_subchannels_march_each_channel_at_finer_channels(

@@ -68,7 +68,7 @@ def evaluate(driver, case, dtype, fft_dtype='float64'):
     properties = PROPERTIES | (dict(rht_s=0.5) if '3d' in case else {})
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), properties).evaluate()
-    return {key: value['d'].copy()
+    return {key: value.data.copy()
             for key, value in group.plan(driver).model_h(params)[0].items()}
 
 

@@ -39,20 +39,43 @@ __all__ = [
     'FluxScale',
     'HostModelData',
     'ModelData',
+    'ModelItem',
     'Observable',
     'ObservablePlan',
+    'ObservationSetup',
     'observable_parser'
 ]
 
 
-# The model data of an observable: for each of its data items (e.g.
-# 'spectra'), the arrays of the model ('d'; NaN where it has no value),
-# of its mask ('m'; an output, which the objective does not use) and of
-# its weights ('w') on the driver, or None
-ModelData: TypeAlias = dict[str, dict[str, DeviceArray | None]]
+class ModelItem[A](NamedTuple):
+    """
+    The model of a data item of an observable (see ObservablePlan): its
+    arrays, of the shape of the data item, on the driver (see ModelData)
+    or on the host (see HostModelData).
+
+    Attributes
+    ----------
+    data : array
+        The values of the model; NaN where it has no value.
+    mask : array or None
+        Where the model has a value (1) or not (0), if the observable
+        measures it (e.g. moments, of the spectra where they have flux):
+        an output, which the objective does not use.
+    weights : array or None
+        The weights of the values in the comparison with the data (e.g.
+        the pixel weights, see Weights), if any.
+    """
+    data: A
+    mask: A | None = None
+    weights: A | None = None
+
+
+# The model data of an observable on the driver: the model of each of its
+# data items (e.g. 'spectra'), by key
+ModelData: TypeAlias = dict[str, ModelItem[DeviceArray]]
 
 # Model data copied to the host
-HostModelData: TypeAlias = dict[str, dict[str, np.ndarray | None]]
+HostModelData: TypeAlias = dict[str, ModelItem[np.ndarray]]
 
 
 class FluxScale(NamedTuple):
@@ -66,6 +89,49 @@ class FluxScale(NamedTuple):
     items: tuple[str, ...]
     axis: int | None
     size: int
+
+
+class ObservationSetup(NamedTuple):
+    """
+    How an observation on the sky (see ObservationSky) sees what it sees
+    as its observable: the options of the observation that the checks and
+    the plans of the observable take (see Observable.check_observation,
+    check_scene and plan), made once by the observation.
+
+    Attributes
+    ----------
+    line_of_sight : LineOfSight
+        The line of sight, along which the plan of an observable plans
+        the scene (see LineOfSight.plan_scene).
+    foreground : Foreground
+        What the light meets before the telescope (e.g. a lens).
+    instrument : Instrument
+        The telescope and the instrument.
+    oversampling : tuple of int
+        How many times the model is oversampled along each axis of the
+        data.
+    dtype : np.dtype
+        The floating type of the model.
+    fft_dtype : np.dtype
+        The floating type of the FFT convolutions of the model (at least
+        as precise as dtype).
+    pixel_weights : Weights or None
+        The pixel weights of the data, if any.
+    flux_scale_param : str or None
+        The name of the parameter of the flux scale of the observation, if
+        it is one value (the flux scale 'one'), which scales the flux of
+        the model where the observable records it. A flux scale of
+        several values multiplies the items of light of the model instead
+        (see ObservationSky), and is not here.
+    """
+    line_of_sight: 'LineOfSight'
+    foreground: 'Foreground'
+    instrument: Instrument
+    oversampling: tuple[int, ...]
+    dtype: np.dtype
+    fft_dtype: np.dtype
+    pixel_weights: 'Weights | None'
+    flux_scale_param: str | None
 
 
 class Observable(TypedSerializable, abc.ABC):
@@ -136,10 +202,9 @@ class Observable(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ValueError
+        TypeError
             If the dataset is not of the dataset class of the observable.
         """
-        pass
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
@@ -251,11 +316,10 @@ class Observable(TypedSerializable, abc.ABC):
             spectral: SpectralAxis | None = None
     ):
         """
-        The grid of the data: its axes on the sky (size, step, rpix, rval,
-        rota), and of an observable with a spectral axis (see
-        spectral_axis), the spectral axis after them (see
-        make_cube_grid), whose velocities need their convention
-        (see check_convention).
+        Make the grid of the data: its axes on the sky (size, step, rpix,
+        rval, rota), and of an observable with a spectral axis (see
+        spectral_axis), the spectral axis after them (see make_cube_grid),
+        whose velocities need their convention (see check_convention).
         """
         # (the axes on the sky are those before the spectral axis, or
         # without one, those of an image)
@@ -310,7 +374,6 @@ class Observable(TypedSerializable, abc.ABC):
     @abc.abstractmethod
     def keys(self) -> tuple[str, ...]:
         """Return the names of the data items (e.g. 'spectra')."""
-        pass
 
     def linear_in_light(self) -> bool:
         """
@@ -331,7 +394,6 @@ class Observable(TypedSerializable, abc.ABC):
         flux_floor): the likelihood then needs a residual for them (see
         LikelihoodGaussian).
         """
-        pass
 
     @abc.abstractmethod
     def make_dataset(self, items: Mapping[str, Data]) -> Dataset:
@@ -350,7 +412,6 @@ class Observable(TypedSerializable, abc.ABC):
             The dataset, of the dataset class, where the observable is
             modelled.
         """
-        pass
 
     @abc.abstractmethod
     def data_unit(
@@ -377,7 +438,6 @@ class Observable(TypedSerializable, abc.ABC):
             either, or without an item of light (e.g. moments of order 1
             and above only: velocities).
         """
-        pass
 
     @abc.abstractmethod
     def light_items(self) -> tuple[str, ...]:
@@ -387,7 +447,6 @@ class Observable(TypedSerializable, abc.ABC):
         flux scale multiplies (see flux_scales); none for data of
         velocities only.
         """
-        pass
 
     def flux_scales(self) -> dict[str, FluxScale]:
         """
@@ -399,16 +458,12 @@ class Observable(TypedSerializable, abc.ABC):
         items = self.light_items()
         return {} if not items else dict(one=FluxScale(items, None, 1))
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
+    def check_observation(self, setup: ObservationSetup) -> None:
         """
-        Check the options of the observation of the observable: the
-        instrument it is seen through, the oversampling of its model and
-        its pixel weights, if any (see ObservationSky), before any plan.
+        Check the setup of an observation of the observable (see
+        ObservationSky): e.g. the instrument it is seen through, the
+        oversampling of its model and its pixel weights, if any, before any
+        plan.
 
         It warns about the options of the observable that the instrument
         makes useless (see warn). Here, every observation suits;
@@ -416,34 +471,31 @@ class Observable(TypedSerializable, abc.ABC):
 
         Parameters
         ----------
-        instrument : Instrument
-            The instrument.
-        oversampling : Sequence of int
-            The oversampling of each axis of the model.
-        pixel_weights : Weights, optional
-            The pixel weights.
+        setup : ObservationSetup
+            The setup of the observation.
 
         Raises
         ------
         ValueError
             If the observable cannot be seen so.
         """
-        pass
 
-    def check_scene(
-            self,
-            scene: 'Scene',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            flux_scale: str | None
-    ) -> None:
+    def check_scene(self, scene: 'Scene', setup: ObservationSetup) -> None:
         """
-        Check that the observable can see a scene (see make_scene), through
-        the foreground and the instrument, with the given flux scale of one
-        value (its parameter), if any, before any plan: here, that it sees
-        the stars on orbits whose weights are solved, if any (see
-        orbit_stars); the observables of moments also check that they
-        see one line (see _moments.check_one_line), and RegionMoments more.
+        Check that the observable can see a scene (see make_scene) as an
+        observation of the given setup sees it: through its foreground and
+        its instrument, with its flux scale of one value, if any, before
+        any plan. Here, that it sees the stars on orbits whose weights are
+        solved, if any (see orbit_stars); the observables of moments also
+        check that they see one line (see _moments.check_one_line), and
+        RegionMoments more.
+
+        Parameters
+        ----------
+        scene : Scene
+            What is seen.
+        setup : ObservationSetup
+            The setup of the observation.
 
         Raises
         ------
@@ -594,14 +646,7 @@ class Observable(TypedSerializable, abc.ABC):
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> 'ObservablePlan':
         """
         Plan the evaluation of a scene (what an observation sees) as this
@@ -614,27 +659,12 @@ class Observable(TypedSerializable, abc.ABC):
         scene : Scene
             What is seen: the galaxies, and the components of each whose
             light is seen.
-        line_of_sight : LineOfSight
-            The line of sight of the observation, along which it plans the
-            scene (see LineOfSight.plan_scene).
-        foreground : Foreground
-            What the light meets before the telescope.
-        instrument : Instrument
-            The instrument.
-        oversampling : Sequence of int
-            How many times the model is oversampled along each axis of the
-            data.
-        dtype : np.dtype
-            The floating type of the model.
-        fft_dtype : np.dtype
-            The floating type of the FFT convolutions of the model (at
-            least as precise as dtype).
-        pixel_weights : Weights, optional
-            The pixel weights of the data.
-        flux_scale : str, optional
-            The name of the parameter that scales the flux of the model, if
-            one value (the flux scale 'one' of the observation; see
-            ObservationSky).
+        setup : ObservationSetup
+            The setup of the observation: its line of sight, along which it
+            plans the scene (see LineOfSight.plan_scene), its foreground,
+            its instrument, the oversampling and the floating types of its
+            model, its pixel weights and its flux scale of one value, if
+            any.
 
         Returns
         -------
@@ -644,10 +674,9 @@ class Observable(TypedSerializable, abc.ABC):
         Raises
         ------
         ValueError
-            If it does not support pixel weights, or with the foreground (see
-            CubeObservablePlan).
+            If the pixel weights are not in the plane of a disk of the
+            scene (see CubeObservablePlan).
         """
-        pass
 
 
 class ObservablePlan(abc.ABC):
@@ -681,7 +710,6 @@ class ObservablePlan(abc.ABC):
         ModelData
             The model data.
         """
-        pass
 
     @abc.abstractmethod
     def mock(
@@ -714,8 +742,7 @@ class ObservablePlan(abc.ABC):
         -------
         list of HostModelData
             The model data of each draw, on the host: of each data item,
-            the data ('d') and their mask ('m') as evaluate gives them;
-            no weights.
+            the data and their mask as evaluate gives them; no weights.
         dict or None
             The error of each value of each data item, by name, if known
             exactly (see has_exact_errors): the dispersion of the noise of
@@ -727,7 +754,6 @@ class ObservablePlan(abc.ABC):
             If the noise does not suit the recorded data (see
             Noise.draw).
         """
-        pass
 
     @abc.abstractmethod
     def has_exact_errors(self) -> bool:
@@ -738,7 +764,6 @@ class ObservablePlan(abc.ABC):
         measured from them (e.g. moments), when their errors are those of
         the scatter of draws.
         """
-        pass
 
 
 observable_parser = TypedParser(Observable, family='observable')

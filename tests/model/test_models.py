@@ -190,7 +190,7 @@ def test_model(driver, name, evaluate_cases, ndarrays_regression):
     # The extra outputs on a grid are compared by their data, named after
     # their ids and names (e.g. 'observation0.galaxy0.disk1.vdata')
     outputs = {
-        f'data_{key}': data_[key]['d']
+        f'data_{key}': data_[key].data
         for data_ in data for key in data_} | {
         '.'.join([*x.ids.values(), x.name]):
             x.value.data if isinstance(x.value, GridData)
@@ -223,8 +223,8 @@ def test_galaxy_dump_and_load(driver, name, evaluate_cases):
     # Thick disks on cuda differ by float32 rounding between runs
     for key, value in data[0].items():
         np.testing.assert_allclose(
-            data_loaded[0][key]['d'], value['d'],
-            rtol=1e-4, atol=1e-6 * np.abs(value['d']).max())
+            data_loaded[0][key].data, value.data,
+            rtol=1e-4, atol=1e-6 * np.abs(value.data).max())
 
 
 THICK_DISK = dict(components=smdisk(

@@ -61,7 +61,7 @@ def evaluate(driver, galaxy, properties, line_of_sight='flat'):
         line_of_sight=line_of_sight, observable=CUBE)])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
-    return plan.model_h(params.evaluate())[0]['spectra']['d'].astype(float)
+    return plan.model_h(params.evaluate())[0]['spectra'].data.astype(float)
 
 
 def moments(cube):
@@ -128,7 +128,7 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
         line_of_sight=dict(type='flat'), observable=CUBE)])
     values = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), GEOMETRY).evaluate()
-    peak = plan.model_h(values)[0]['spectra']['d'].max()
+    peak = plan.model_h(values)[0]['spectra'].data.max()
     [[mock]] = draw_mocks(
         plan, values, MockOptions(NoiseGauss(rms=0.01 * peak), seed=2))
     disk = observation_group([dict(
@@ -170,7 +170,7 @@ def test_particles_in_an_image(driver, tmp_path):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), dict(
             xpos=0, ypos=0, posa=0, incl=0))
-    image = plan.model_h(params.evaluate())[0]['brightness']['d']
+    image = plan.model_h(params.evaluate())[0]['brightness'].data
     assert image.sum() * 0.25 == pytest.approx(5)
     assert np.count_nonzero(image) == 2
 

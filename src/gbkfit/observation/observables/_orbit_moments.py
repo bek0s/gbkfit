@@ -11,19 +11,18 @@ import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.grid import Coords, Grid, GridData
-from gbkfit.instrument import Instrument
 from gbkfit.model import Extras, GalaxyState
 from gbkfit.model.components.spheroids import OrbitIntegrator
 from gbkfit.params import ParamValues
 from . import _moments, _orbit_outputs
 from ._orbit_sky import PixelCube, bins_sky_grid
-from .base import HostModelData, ModelData, ObservablePlan
+from .base import (
+    HostModelData, ModelData, ModelItem, ObservablePlan, ObservationSetup)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
     from gbkfit.model.components.spheroids import (
         OrbitLibraryState, OrbitRecords)
-    from ..foreground import Foreground
     from ..noise import Noise
     from .region_moments import RegionMoments
 
@@ -31,21 +30,19 @@ if TYPE_CHECKING:
 def check_orbits(
         moments: 'RegionMoments',
         scene: 'Scene',
-        foreground: 'Foreground',
-        instrument: Instrument,
-        flux_scale: str | None
+        setup: ObservationSetup
 ) -> None:
     """
     Raise ValueError unless moments of regions can see stars on orbits
-    whose weights are solved (see OrbitMomentsPlan) in a scene, through
-    the foreground and the instrument, with the given flux scale of one
-    value (its parameter), if any (see Observable.check_scene): only them,
-    in bins, of the method gauss_hermite and the orders 1 to M (V, sigma,
-    h3 ... hM), without a flux scale; through a PSF that does not vary,
-    without an LSF (pPXF takes it out of their kinematics), a primary
-    beam, a lens or dust, which the recording of the orbits does not
-    apply.
+    whose weights are solved (see OrbitMomentsPlan) in a scene, as an
+    observation of the given setup sees them (see Observable.check_scene):
+    only them, in bins, of the method gauss_hermite and the orders 1 to M
+    (V, sigma, h3 ... hM), without a flux scale; through a PSF that does
+    not vary, without an LSF (pPXF takes it out of their kinematics), a
+    primary beam, a lens or dust, which the recording of the orbits does
+    not apply.
     """
+    instrument = setup.instrument
     # (refused here, before the plan: it ignored them, or failed on a
     # varying PSF before the objective refused it)
     for applies, what in (
@@ -54,7 +51,7 @@ def check_orbits(
             (instrument.psf() is not None and instrument.psf().varies(),
              "a PSF that varies"),
             (instrument.primary_beam() is not None, "a primary beam"),
-            (foreground.lens() is not None, "a lens"),
+            (setup.foreground.lens() is not None, "a lens"),
             (scene.has_dust(), "dust in the galaxies it sees")):
         if applies:
             raise ValueError(
@@ -81,7 +78,7 @@ def check_orbits(
             f"Gauss-Hermite series (method gauss_hermite) of the orders "
             f"1 to M (V, sigma, h3 ... hM); they are of the method "
             f"{moments.method()!r} and the orders {list(orders)}")
-    if flux_scale is not None:
+    if setup.flux_scale_param is not None:
         raise ValueError(
             "moments of stars on orbits whose weights are solved have "
             "no flux scale")
@@ -118,27 +115,24 @@ class OrbitMomentsPlan(ObservablePlan):
     ----------
     moments : RegionMoments
         The moments.
-    scene : Scene
-        What they see: the stars of one component, on orbits.
-    instrument : Instrument
-        The instrument of their observation.
-    oversampling : Sequence of int
-        The oversampling of their model (along x and y).
     driver : Driver
         The driver.
-    dtype : np.dtype
-        The precision of the model.
+    scene : Scene
+        What they see: the stars of one component, on orbits.
+    setup : ObservationSetup
+        The setup of their observation: its instrument, the oversampling
+        of its model (along x and y) and its precision.
     """
 
     def __init__(
             self,
             moments: 'RegionMoments',
-            scene: 'Scene',
-            instrument: Instrument,
-            oversampling: Sequence[int],
             driver: Driver,
-            dtype: np.dtype
+            scene: 'Scene',
+            setup: ObservationSetup
     ):
+        instrument, oversampling = setup.instrument, setup.oversampling
+        dtype = setup.dtype
         (galaxy, component), = scene.orbit_emitters()
         self._galaxy = galaxy
         self._component = component
@@ -258,7 +252,7 @@ class OrbitMomentsPlan(ObservablePlan):
             None)
         # The moments of the regions are vectors
         return {
-            key: dict(d=value['d'][0], m=value['m'][0], w=value['w'][0])
+            key: ModelItem(value.data[0], value.mask[0], value.weights[0])
             for key, value in moments.items()}
 
     def _outputs_of(
@@ -309,8 +303,8 @@ class OrbitMomentsPlan(ObservablePlan):
         measured = moments.evaluate(
             (1.0, 1.0, self._step), (0.0, 0.0, self._zero), d_cube, None)
         for key, value in measured.items():
-            image = self._driver.mem_copy_d2h(value['d']).astype(float)
-            mask = self._driver.mem_copy_d2h(value['m'])
+            image = self._driver.mem_copy_d2h(value.data).astype(float)
+            mask = self._driver.mem_copy_d2h(value.mask)
             image[mask == 0] = np.nan
             out_extra.add(
                 f'unbinned_{key}',
@@ -352,9 +346,9 @@ class OrbitMomentsPlan(ObservablePlan):
             measured = self._measure(
                 (self._bin_weights @ noisy.reshape(len(noisy), -1).T).T)
             draws.append({
-                key: dict(
-                    d=self._driver.mem_copy_d2h(value['d']),
-                    m=self._driver.mem_copy_d2h(value['m']))
+                key: ModelItem(
+                    self._driver.mem_copy_d2h(value.data),
+                    self._driver.mem_copy_d2h(value.mask))
                 for key, value in measured.items()})
         return draws, None
 

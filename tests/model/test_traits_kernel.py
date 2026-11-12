@@ -184,7 +184,7 @@ def test_every_trait_parameter_changes_the_model(
 
     def evaluate(props):
         data, _ = evaluate_cases([case], props)
-        return data[0]['spectra']['d'].copy()
+        return data[0]['spectra'].data.copy()
 
     base = evaluate(properties)
     assert np.isfinite(base).all()

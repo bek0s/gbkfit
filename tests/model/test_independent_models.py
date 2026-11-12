@@ -59,7 +59,7 @@ def _cube(driver, galaxy, observable, line_of_sight, properties):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     return np.asarray(
-        plan.model_h(params.evaluate())[0]['spectra']['d'], float)
+        plan.model_h(params.evaluate())[0]['spectra'].data, float)
 
 
 def _moments(cube, velocities):

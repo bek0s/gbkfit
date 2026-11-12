@@ -32,7 +32,7 @@ def evaluate(driver, observable):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
-    return next(iter(data.values()))['d'].copy()
+    return next(iter(data.values())).data.copy()
 
 
 @pytest.mark.parametrize('rota', [0, 30])

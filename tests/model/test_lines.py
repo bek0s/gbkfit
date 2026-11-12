@@ -37,7 +37,7 @@ def line_flux(driver, evaluate_cases, dispersion):
         vsys=3, xpos=0, ypos=0, posa=30, incl=45,
         rpt_a=1, rpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=dispersion)
     data, _ = evaluate_cases([case], properties)
-    scube = data[0]['spectra']['d']
+    scube = data[0]['spectra'].data
     assert np.isfinite(scube).all()
     return scube.sum(axis=0) * 10
 
@@ -222,7 +222,7 @@ def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
             vsys=vsys, xpos=0, ypos=0, posa=0, incl=45,
             rpt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
         data, _ = evaluate_cases([case], properties)
-        spectrum = data[0]['spectra']['d'].sum(axis=(1, 2))
+        spectrum = data[0]['spectra'].data.sum(axis=(1, 2))
         velocity = centre + 2 * (np.arange(201) - 100)
         mean = np.sum(spectrum * velocity) / spectrum.sum()
         return np.sqrt(np.sum(spectrum * (velocity - mean) ** 2)
@@ -262,7 +262,7 @@ def test_the_lsf_is_in_km_s_of_the_light(driver, evaluate_cases):
             vsys=0, xpos=0, ypos=0, posa=0, incl=45,
             rpt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
         data, _ = evaluate_cases([case], properties)
-        spectrum = data[0]['spectra']['d'].sum(axis=(1, 2))
+        spectrum = data[0]['spectra'].data.sum(axis=(1, 2))
         velocity = centre + step * (np.arange(201) - 100)
         mean = np.sum(spectrum * velocity) / spectrum.sum()
         return np.sqrt(np.sum(spectrum * (velocity - mean) ** 2)

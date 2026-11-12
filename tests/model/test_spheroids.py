@@ -95,7 +95,7 @@ def test_a_flattened_sersic_spheroid_projects_exactly(driver, evaluate_cases):
     m = np.sqrt(major ** 2 + (minor / qp) ** 2)
     b = _numerics.sersic_b(1)
     expected = 2 * np.exp(-b * (m / 3 - 1)) / qp
-    model = data[0]['brightness']['d']
+    model = data[0]['brightness'].data
     within = (m > 3) & (m < 9)
     np.testing.assert_allclose(model[within], expected[within], rtol=2e-3)
     flux = model.sum() * STEP ** 2
@@ -120,7 +120,7 @@ def test_an_mge_spheroid_projects_exactly(driver, evaluate_cases):
         a / projected(qk) * np.exp(
             -(major ** 2 + (minor / projected(qk)) ** 2) / (2 * s ** 2))
         for a, s, qk in zip(i0, sigma, q))
-    model = data[0]['brightness']['d']
+    model = data[0]['brightness'].data
     away = np.hypot(major, minor) > 2.25
     np.testing.assert_allclose(model[away], expected[away], atol=1e-5)
     flux = model.sum() * STEP ** 2
@@ -159,7 +159,7 @@ def test_without_a_depth_axis_a_spheroid_is_its_exact_projection(
                 properties['i0'], properties['sigma'], properties['q']))
     away = np.hypot(major, minor) > 3 * np.hypot(STEP, STEP)
     np.testing.assert_allclose(
-        data[0]['brightness']['d'][away], expected[away], rtol=1e-9)
+        data[0]['brightness'].data[away], expected[away], rtol=1e-9)
     assert 'its rmax cuts' not in caplog.text
 
 
@@ -174,7 +174,7 @@ def test_with_and_without_a_depth_axis_a_spheroid_agrees(
         [image(driver, spheroid, size=96)], properties)
     (flat,), _ = evaluate_cases(
         [image(driver, spheroid, size=96, flat=True)], properties)
-    grid, flat = grid['brightness']['d'], flat['brightness']['d']
+    grid, flat = grid['brightness'].data, flat['brightness'].data
     bright = flat > 1e-2 * flat.max()
     np.testing.assert_allclose(grid[bright], flat[bright], rtol=5e-3)
 
@@ -196,7 +196,7 @@ def test_the_cusp_of_a_sersic_sphere_keeps_its_light(
     case = image(driver, spheroid, dtype)
     case['observable'] |= dict(oversampling=[3, 3])
     data, _ = evaluate_cases([case], properties)
-    model = data[0]['brightness']['d']
+    model = data[0]['brightness'].data
     assert np.isfinite(model).all()
     flux = model.sum() * STEP ** 2
     share = float(_numerics.sersic_tables(4).mass(12 / 2))
@@ -214,7 +214,7 @@ def test_rmax_cuts_each_term_at_its_spheroidal_radius(
         emission=BAND)
     properties = GEOMETRY | dict(i0=[1], sigma=[3], q=[q])
     data, _ = evaluate_cases([image(driver, spheroid)], properties)
-    flux = data[0]['brightness']['d'].sum() * STEP ** 2
+    flux = data[0]['brightness'].data.sum() * STEP ** 2
     _, cut = component_parser.load(dict(spheroid)).extent_cut(properties)
     assert 0.1 < cut < 0.9
     assert flux == pytest.approx(2 * np.pi * 9 * (1 - cut), rel=1e-2)
@@ -410,7 +410,7 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
         params = ParamSpace.from_properties(
             group.pdescs(), light | disk_properties | properties)
         return group.plan(driver).model_h(params.evaluate())[0][
-            'spectra']['d']
+            'spectra'].data
     upsilon = BULGE_PROPERTIES['mass_stars_upsilon']
     light = {name: value for name, value in BULGE_PROPERTIES.items()
              if name != 'mass_stars_upsilon'}
@@ -638,7 +638,7 @@ def test_float32_stars_keep_their_dispersion_at_a_large_vsys(
         case['observable'] |= dict(dtype=dtype)
         case['observable']['spectral'] |= dict(rval=15000)
         data, _ = evaluate_cases([case], properties)
-        cubes.append(data[0]['spectra']['d'][:, 14:18, 14:18])
+        cubes.append(data[0]['spectra'].data[:, 14:18, 14:18])
     # (the cubes have the light of each pixel: their channels are about
     # vsys)
     assert all(np.all(cube.sum(axis=0) > 0) for cube in cubes)
@@ -664,7 +664,7 @@ def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
     properties = JEANS_PROPERTIES | dict(stars_vsys=0)
     spheroid = dict(JEANS_SPHEROID)
     data, _ = evaluate_cases([stars_cube(driver, spheroid)], properties)
-    cube = data[0]['spectra']['d']
+    cube = data[0]['spectra'].data
     velocity = (np.arange(181) - 90) * 10.0
     pixels = (np.arange(32) - 15.5) * 2
     galaxy = jeans_galaxy()
@@ -741,7 +741,7 @@ def test_an_image_sees_the_stars_of_a_spheroid(driver, evaluate_cases):
         mass=[dict(type='point', name='bh')], distance=DISTANCE)
     data, _ = evaluate_cases([case], JEANS_PROPERTIES)
     # (the light of the Gaussian within the image, 64 pixels wide)
-    flux = data[0]['brightness']['d'].sum() * STEP ** 2
+    flux = data[0]['brightness'].data.sum() * STEP ** 2
     within = scipy.special.erf(64 * STEP / 2 / (np.sqrt(2) * S)) ** 2
     assert flux == pytest.approx(2 * np.pi * S ** 2 * within, rel=1e-3)
 
@@ -864,13 +864,13 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
     data, _ = evaluate_cases([case], properties)
     moments = data[0]
     c = 299792.458
-    assert moments['moment1']['d'].shape == (8,)
+    assert moments['moment1'].data.shape == (8,)
     np.testing.assert_allclose(
-        moments['moment1']['d'], c * np.arctanh(1000 / c), atol=0.02)
+        moments['moment1'].data, c * np.arctanh(1000 / c), atol=0.02)
     np.testing.assert_allclose(
-        moments['moment2']['d'], np.sqrt(80 ** 2 + 10 ** 2 / 12), rtol=1e-3)
-    np.testing.assert_allclose(moments['h3']['d'], 0, atol=1e-3)
-    np.testing.assert_allclose(moments['h4']['d'], 0, atol=1e-3)
+        moments['moment2'].data, np.sqrt(80 ** 2 + 10 ** 2 / 12), rtol=1e-3)
+    np.testing.assert_allclose(moments['h3'].data, 0, atol=1e-3)
+    np.testing.assert_allclose(moments['h4'].data, 0, atol=1e-3)
 
 
 # The exact mock of the Schwarzschild proof of concept (orbit_mock): a
@@ -977,7 +977,7 @@ def test_the_stars_of_a_cube_have_the_second_moments_of_the_exact_mock(
     case['galaxy'] = galaxy
     case['line_of_sight'] = dict(type='grid', depth=dict(step=2))
     data, _ = evaluate_cases([case], properties)
-    cube = data[0]['spectra']['d']
+    cube = data[0]['spectra'].data
     velocity = (np.arange(181) - 90) * 10.0
     exact = np.linspace(-1500, 1500, 3001)
     pixels = (np.arange(32) - 15.5) * 2

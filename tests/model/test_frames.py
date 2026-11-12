@@ -68,7 +68,7 @@ def test_offsets_move_all_that_an_observation_sees(driver):
         driver, disk_xpos=1.5, disk_ypos=-0.5, disk_vsys=20,
         core_xpos=2, core_ypos=-1.5, core_vsys=30)
     for key in ('moment0', 'moment1'):
-        np.testing.assert_array_equal(moved[key]['d'], expected[key]['d'])
+        np.testing.assert_array_equal(moved[key].data, expected[key].data)
 
 
 def test_offsets_are_parameters_of_named_observations():
@@ -138,7 +138,7 @@ def test_observations_are_aligned_by_their_coordinates(driver):
     assert dx == pytest.approx(-2)
     for key in ('moment0', 'moment1'):
         np.testing.assert_allclose(
-            aligned[key]['d'], expected[key]['d'], rtol=1e-6, atol=1e-6)
+            aligned[key].data, expected[key].data, rtol=1e-6, atol=1e-6)
 
 
 def test_frames_far_apart_are_warned_of(driver, caplog):

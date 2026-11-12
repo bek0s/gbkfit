@@ -81,12 +81,15 @@ class Instrument(Serializable):
         self._lsf = lsf
 
     def primary_beam(self) -> PrimaryBeam | None:
+        """Return the primary beam, if any."""
         return self._primary_beam
 
     def psf(self) -> PSF | None:
+        """Return the point spread function, if any."""
         return self._psf
 
     def lsf(self) -> LSF | None:
+        """Return the line spread function, if any."""
         return self._lsf
 
 

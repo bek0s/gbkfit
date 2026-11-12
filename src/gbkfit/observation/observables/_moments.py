@@ -18,7 +18,7 @@ from gbkfit.model import STARS, LineEmission, StarsEmission
 from gbkfit.params import ModelEvaluationError
 from gbkfit.utils import numutils
 from . import _model_cube
-from .base import ModelData
+from .base import ModelData, ModelItem, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -146,9 +146,25 @@ def check_moment_orders(
         method: str
 ) -> tuple[int, ...]:
     """
-    Return the moment orders, sorted and unique. Raise ValueError unless
-    they are valid for the method (see MOMENT_METHODS; a Gaussian has moments 0
-    to 2, a Gauss-Hermite series 0 to 4).
+    Return the moment orders, sorted and unique.
+
+    Parameters
+    ----------
+    orders : Sequence of int
+        The orders.
+    method : str
+        The method that measures them (see MOMENT_METHODS).
+
+    Returns
+    -------
+    tuple of int
+        The orders, sorted and unique.
+
+    Raises
+    ------
+    ValueError
+        If there are none, or they are not valid for the method (a
+        Gaussian has moments 0 to 2, a Gauss-Hermite series 0 to 4).
     """
     max_order = _MAX_ORDERS[method]
     orders = tuple(sorted(set(orders)))
@@ -227,15 +243,13 @@ def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
 
 def spectra_model_cube(
         observable: 'PixelMoments | RegionMoments',
-        oversampling: Sequence[int],
-        instrument: Instrument,
-        dtype: np.dtype,
-        fft_dtype: np.dtype,
+        setup: ObservationSetup,
         median_size: int | None = None
 ) -> _model_cube.ModelCube:
     """
     Return the ModelCube of the spectra that the moments of an observable are
-    measured from: on its spatial grid and its spectral axis (see
+    measured from, as an observation of the given setup sees them (see
+    ObservationSetup): on its spatial grid and its spectral axis (see
     spectral_axis), smoothed by the median filter of median_size (if
     given; see ModelCube).
     """
@@ -245,13 +259,13 @@ def spectra_model_cube(
         make_cube_grid(
             grid.size, coords.step, coords.rpix, coords.rval, coords.rota,
             observable.spectral()),
-        oversampling=tuple(oversampling) + (1,),
-        primary_beam=instrument.primary_beam(),
-        psf=instrument.psf(),
-        lsf=instrument.lsf(),
+        oversampling=setup.oversampling + (1,),
+        primary_beam=setup.instrument.primary_beam(),
+        psf=setup.instrument.psf(),
+        lsf=setup.instrument.lsf(),
         smooth_weights=False,
-        dtype=dtype,
-        fft_dtype=fft_dtype,
+        dtype=setup.dtype,
+        fft_dtype=setup.fft_dtype,
         median_size=median_size)
 
 
@@ -299,6 +313,22 @@ class MomentsPlan:
     0 is not a number (NaN) somewhere is a model that failed there, not
     one without flux there; measure takes cubes of data, with channels
     without a value (see measure).
+
+    Parameters
+    ----------
+    driver : Driver
+        The driver of the cubes.
+    size : Sequence of int
+        The size of the maps (nx, ny).
+    orders : Sequence of int
+        The orders of the moments (see check_moment_orders).
+    flux_floor : float
+        The share of the largest moment 0 of the map (in absolute value)
+        that the moment 0 of a spectrum must be above.
+    method : str
+        The method (see MOMENT_METHODS).
+    dtype : np.dtype
+        The floating type of the cubes.
     """
 
     def __init__(
@@ -310,7 +340,6 @@ class MomentsPlan:
             method: str,
             dtype: np.dtype
     ):
-        """size is that of the maps (nx, ny)."""
         size_all = tuple(size) + (len(orders),)
         self._orders = orders
         self._flux_floor = flux_floor
@@ -342,8 +371,24 @@ class MomentsPlan:
     ) -> ModelData:
         """
         Return the moments of cube (and its weights, wcube, if any), whose
-        world coordinates are step and zero (see Grid): for each
-        order, its map (d), the mask (m) and its weights (w).
+        world coordinates are step and zero (see Grid): for each order,
+        its map, the mask and its weights (see ModelItem).
+
+        Parameters
+        ----------
+        step, zero : Sequence of float
+            The step of each axis of the cube, and the world position of
+            its first pixel (see Grid.zero).
+        cube : DeviceArray
+            The cube (nz, ny, nx).
+        wcube : DeviceArray or None
+            Its weights, if any.
+
+        Returns
+        -------
+        ModelData
+            The model item of each moment, by the name of its data item
+            (see moment_item).
 
         Raises
         ------
@@ -383,6 +428,19 @@ class MomentsPlan:
         The fits of the methods gaussian_fit and gauss_hermite leave the
         channels without a value (NaN) out; the moments of a spectrum
         with one are not numbers.
+
+        Parameters
+        ----------
+        step, zero, cube, wcube
+            As those of evaluate.
+        cutoff : float
+            The moment 0 that a spectrum must be above (in absolute
+            value).
+
+        Returns
+        -------
+        ModelData
+            The model item of each moment, as evaluate.
         """
         if self._method in ('gaussian_fit', 'gauss_hermite'):
             self._backend.mmaps_gaussian(
@@ -394,8 +452,8 @@ class MomentsPlan:
                 step, zero, cube, wcube, cutoff, self._mmaps_o,
                 self._mmaps_d, self._mmaps_m, self._mmaps_w)
         return {
-            moment_item(order, self._method): dict(
-                d=self._mmaps_d[i], m=self._mmaps_m, w=self._mmaps_w)
+            moment_item(order, self._method): ModelItem(
+                self._mmaps_d[i], self._mmaps_m, self._mmaps_w)
             for i, order in enumerate(self._orders)}
 
     def _flux(

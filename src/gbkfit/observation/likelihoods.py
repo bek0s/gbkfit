@@ -140,13 +140,19 @@ class Likelihood(TypedSerializable, abc.ABC):
         Check that it suits an observation of the given data items, of the
         given data.
 
+        Parameters
+        ----------
+        keys : Sequence of str
+            The names of the data items of the observation.
+        data : Dataset
+            The data.
+
         Raises
         ------
         ValueError
             If it does not (e.g. its options name items that the
             observation does not have); here, it suits any.
         """
-        pass
 
     def noise(
             self,
@@ -159,6 +165,20 @@ class Likelihood(TypedSerializable, abc.ABC):
         of its errors, at the values of the parameters (e.g. with a fitted
         noise; see LikelihoodGaussian): the errors here, 1 where it has
         none.
+
+        Parameters
+        ----------
+        key : str
+            The name of the data item.
+        error : np.ndarray or None
+            Its errors, if any.
+        params : ParamValues
+            The values of the parameters, by name (see pdescs).
+
+        Returns
+        -------
+        np.ndarray
+            The noise, of the shape of the errors (a scalar without them).
         """
         return np.ones(()) if error is None else error
 
@@ -169,7 +189,6 @@ class Likelihood(TypedSerializable, abc.ABC):
         the data have some (e.g. the velocity of a spectrum below the
         flux_floor of a moment map; see LikelihoodGaussian).
         """
-        pass
 
     @abc.abstractmethod
     def comparison(
@@ -404,6 +423,13 @@ class LikelihoodGaussian(Likelihood):
         Check that it suits an observation of the given data items, of the
         given data.
 
+        Parameters
+        ----------
+        keys : Sequence of str
+            The names of the data items of the observation.
+        data : Dataset
+            The data.
+
         Raises
         ------
         ValueError
@@ -527,6 +553,19 @@ class Whitening:
     the chi-square tr(C C'^-1) on average, nindependent: the number of
     independent values they are worth (e.g. one in 4.5 of the pixels of
     moment maps of a beam of 6.6 by 5.4 pixels, with a floor of 0.01).
+
+    Attributes
+    ----------
+    pixels : np.ndarray
+        The flat indices of the pixels of the sky it keeps.
+    spatial : np.ndarray or None
+        The whitening of the pixels it keeps, if their noise is correlated
+        on the sky.
+    spectral : np.ndarray or None
+        The whitening of the channels, if their noise is correlated along
+        the spectral axis.
+    nindependent : float
+        The number of independent values they are worth.
     """
     pixels: np.ndarray
     spatial: np.ndarray | None
@@ -599,6 +638,23 @@ def whitening(
     Return the whitening of the residuals of a data item whose noise is
     correlated (see LikelihoodGaussian), of its mask and of the
     correlation of its noise, with a white floor.
+
+    Parameters
+    ----------
+    key : str
+        The name of the data item.
+    mask : np.ndarray
+        Its mask (see correlated_pixels).
+    correlation : NoiseCorrelation
+        The correlation of its noise.
+    white_floor : float
+        The share of the variance of the noise taken as white (see
+        LikelihoodGaussian).
+
+    Returns
+    -------
+    Whitening
+        The whitening.
 
     Raises
     ------
@@ -705,16 +761,15 @@ _Form: TypeAlias = Annotated[
 class LikelihoodUser(Likelihood):
     """
     A likelihood given by a Python function (as BayesianBBarolo's
-    log_like). The objective calls it on the host at each evaluation,
-    for each data item of the observation: func(item, data, model, error,
+    log_like). The objective calls it on the host at each evaluation, for
+    each data item of the observation: func(item, data, model, error,
     mask, params), with item the name of the item (e.g. 'moment1'), data
     and model arrays of its shape (the model NaN where a value is
-    missing),
-    error its errors (None without) and mask its mask (values where it
-    is 0 do not count), and params the values of the parameters of the
-    likelihood (a dict, by their names in it). The data, errors and mask
-    are those of the dataset, read-only (copy them to change them). It
-    returns, by its form:
+    missing), error its errors (None without) and mask its mask (values
+    where it is 0 do not count), and params the values of the parameters
+    of the likelihood (a dict, by their names in it). The data, errors and
+    mask are those of the dataset, read-only (copy them to change them).
+    It returns, by its form:
 
     - 'residuals': the residual r of each value (an array of the shape of
       the data), of the log-likelihood -r^2 / 2 (e.g. (model - data) /
@@ -870,6 +925,25 @@ class LikelihoodUser(Likelihood):
         Return what its function returns for a data item, at the values
         of the parameters of the observation (prefixed): the residuals of
         its values, or its log-likelihood, by its form.
+
+        Parameters
+        ----------
+        key : str
+            The name of the data item.
+        data, model : np.ndarray
+            Its values and those of the model, of its shape.
+        error : np.ndarray or None
+            Its errors, if any.
+        mask : np.ndarray
+            Its mask.
+        params : ParamValues
+            The values of the parameters of the observation, prefixed.
+
+        Returns
+        -------
+        np.ndarray or float
+            The residuals, of the shape of the data, or the
+            log-likelihood.
 
         Raises
         ------

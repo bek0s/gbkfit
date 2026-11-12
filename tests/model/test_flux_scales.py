@@ -75,7 +75,7 @@ def objective(driver, data, error, scale=None, likelihood=None, **values):
 def model(driver):
     """The spectra of the disk, of a flux scale of 1."""
     obj, params = objective(driver, np.zeros(SIZE[::-1]), 1.0, scale=1)
-    return obj.group_plan().model_h(params.evaluate())[0]['spectra']['d'] \
+    return obj.group_plan().model_h(params.evaluate())[0]['spectra'].data \
         .astype(float)
 
 
@@ -130,8 +130,8 @@ def test_a_flux_scale_of_one_value_scales_the_flux(driver):
             ParamSpace.from_properties(
                 plan.group().pdescs(), PARAMS | scale).evaluate())
         return (
-            data[0]['moment0']['d'].copy(), data[0]['moment1']['d'].copy(),
-            data[1]['spectra']['d'].copy())
+            data[0]['moment0'].data.copy(), data[0]['moment1'].data.copy(),
+            data[1]['spectra'].data.copy())
     moment0, moment1, spectra = evaluate(None)
     scaled = evaluate('one')
     np.testing.assert_allclose(scaled[0], 2 * moment0, rtol=1e-6)
@@ -160,7 +160,7 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
         blank.group().pdescs(), PARAMS | dict(obs_flux_scale=1)
     ).evaluate())[0]
     scaled = moments(
-        2 * model['moment0']['d'], np.nan_to_num(model['moment1']['d']))
+        2 * model['moment0'].data, np.nan_to_num(model['moment1'].data))
     params = ParamSpace.from_properties(
         scaled.group().pdescs(),
         PARAMS | dict(obs_flux_scale=dict(solve=SOLVE)))
@@ -200,7 +200,7 @@ def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
     # (fitted, the same scales give the same model as solved)
     values = params.evaluate() | dict(obs_flux_scale=found.ravel())
     np.testing.assert_allclose(
-        fixed.group_plan().model_h(values)[0]['spectra']['d'],
+        fixed.group_plan().model_h(values)[0]['spectra'].data,
         spectra * found, rtol=1e-6, atol=1e-9 * spectra.max())
 
 
@@ -344,7 +344,7 @@ def test_the_scales_of_slitless_rows_scale_their_rows():
     import gbkfit
     setup = gbkfit.load(str(GOLDEN / 'slitless_rows' / 'config.yaml'))
     unscaled = setup.group_plan.model_h(
-        setup.params.evaluate())[0]['spectra']['d'].copy()
+        setup.params.evaluate())[0]['spectra'].data.copy()
     outputs = {
         x.kind: x.value for x in setup.outputs(setup.evaluate()).values()}
     scales = outputs['flux_scale']

@@ -191,6 +191,7 @@ def _on_the_same_pixels(
     """
     if shape != other_shape:
         return False
+
     def sky_grid(c: Coords) -> Grid:
         return make_grid(shape[::-1], c.step, c.rpix, c.rval, c.rota)
     x, y = pixels_on(sky_grid(coords), sky_grid(other_coords))

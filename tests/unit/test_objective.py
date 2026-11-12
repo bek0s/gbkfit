@@ -99,7 +99,7 @@ def test_prior_predictive_checks_tell_priors_that_reach_the_data(driver):
     from gbkfit.analysis import prior_predictive
     rng = np.random.default_rng(5)
     empty, values = make_objective(driver, Data(np.zeros((24, 32))))
-    model = empty.group_plan().model_h(values)[0]['brightness']['d']
+    model = empty.group_plan().model_h(values)[0]['brightness'].data
     error = np.full(model.shape, 0.01 * model.max())
     data = Data(model + rng.normal(0, 1, model.shape) * error, error=error)
     objective, _ = make_objective(driver, data)
@@ -222,7 +222,7 @@ def test_masked_values_with_an_upper_limit_are_non_detections(driver):
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(
             upper_limits=dict(brightness=UpperLimit(limit=0.01, error=0.2))))
-    model = objective.group_plan().model_h(params)[0]['brightness']['d']
+    model = objective.group_plan().model_h(params)[0]['brightness'].data
     residuals = objective.residuals(params).reshape(24, 32)
     z = (0.01 - model[:, :8].astype(float)) / 0.2
     np.testing.assert_allclose(
@@ -269,7 +269,7 @@ def test_a_fitted_noise_is_exact_to_a_constant(driver):
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(noise=noise), 'obs',
         obs_noise_scale_brightness=1.0, obs_noise_jitter_brightness=0.0)
-    model = objective.group_plan().model_h(params)[0]['brightness']['d']
+    model = objective.group_plan().model_h(params)[0]['brightness'].data
     offsets = []
     for f, j in [(1.0, 0.0), (1.7, 0.3), (0.6, 1.2)]:
         point = params | dict(
@@ -365,7 +365,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
         ParamSpace.from_properties(image.group().pdescs(), DISK).evaluate())[0]
     errors = dict(moment0=0.01, moment1=5.0, moment2=5.0)
     dataset = DatasetPixelMoments({
-        order: Data(model[f'moment{order}']['d'], error=np.full(
+        order: Data(model[f'moment{order}'].data, error=np.full(
             (24, 24), errors[f'moment{order}']))
         for order in (0, 1, 2)})
     observable = PixelMoments.from_data(
@@ -375,7 +375,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     compact = ParamSpace.from_properties(
         objective.pdescs(), DISK | dict(rpt_s=0.1)).evaluate()
     compact_moment1 = \
-        objective.group_plan().model_h(compact)[0]['moment1']['d']
+        objective.group_plan().model_h(compact)[0]['moment1'].data
     without = np.isnan(compact_moment1)
     has_data = dataset['moment1'].mask() != 0
     residuals = objective.residual_nddata_h(compact, False)[0]
@@ -410,14 +410,14 @@ def test_missing_values_take_the_noise_of_their_error(driver):
     model = image.model_h(
         ParamSpace.from_properties(image.group().pdescs(), DISK).evaluate())[0]
     dataset = DatasetPixelMoments({
-        order: Data(model[f'moment{order}']['d'], error=np.full((24, 24), 5.0))
+        order: Data(model[f'moment{order}'].data, error=np.full((24, 24), 5.0))
         for order in (0, 1)})
     observable = PixelMoments.from_data(
         dataset, spectral=SpectralAxis(convention='relativistic'))
     objective = Objective(group(observable, dataset))
     compact = ParamSpace.from_properties(objective.pdescs(), DISK | dict(
         rpt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()
-    moment1 = objective.group_plan().model_h(compact)[0]['moment1']['d']
+    moment1 = objective.group_plan().model_h(compact)[0]['moment1'].data
     unmasked = dataset['moment1'].mask() != 0
     has = ~np.isnan(moment1) & unmasked
     missing = np.isnan(moment1) & unmasked
@@ -460,7 +460,7 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
         driver, data, LikelihoodGaussian(
             weights=2.0, noise=noise, white_floor=0.05), 'obs',
         obs_noise_scale_brightness=1.3, obs_noise_jitter_brightness=0.2)
-    model = objective.group_plan().model_h(params)[0]['brightness']['d']
+    model = objective.group_plan().model_h(params)[0]['brightness'].data
     sigma = np.hypot(1.3 * data.error(), 0.2)
     kept = data.mask() != 0
     r = (2 * (model - data.data()) / sigma)[kept]
@@ -771,8 +771,8 @@ def test_copies_with_other_data_share_the_plans_of_the_models(driver):
     copy = group_plan.with_data([other])
     assert copy._plans[0] is group_plan._plans[0]
     np.testing.assert_array_equal(
-        copy.model_h(params)[0]['brightness']['d'],
-        group_plan.model_h(params)[0]['brightness']['d'])
+        copy.model_h(params)[0]['brightness'].data,
+        group_plan.model_h(params)[0]['brightness'].data)
 
 
 USER_LIKELIHOODS = '''

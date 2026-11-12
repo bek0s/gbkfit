@@ -43,7 +43,7 @@ def spectra(driver, psf=None, lsf=None, oversampling=(1, 1, 1)):
                     convention='relativistic'))))])
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES).evaluate()
-    return group.plan(driver).model_h(params)[0]['spectra']['d'].copy()
+    return group.plan(driver).model_h(params)[0]['spectra'].data.copy()
 
 
 def table(low, high):

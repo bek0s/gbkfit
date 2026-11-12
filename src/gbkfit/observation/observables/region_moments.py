@@ -13,7 +13,6 @@ from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectralAxis
-from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.region import Regions
 from . import _model_cube, _moments
@@ -23,15 +22,12 @@ from ._options import Rota, Rpix, Rval, Size, Step
 from ._orbit_moments import OrbitMomentsPlan, check_orbits
 from ._regions import (
     RegionsObservable, RegionsObservablePlan, spatial_options_from_regions)
-from .base import ModelData, ObservablePlan
+from .base import ModelData, ModelItem, ObservablePlan, ObservationSetup
 
 if TYPE_CHECKING:
     import scipy.sparse
 
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
-    from ..weights import Weights
 
 
 __all__ = [
@@ -149,9 +145,10 @@ class RegionMoments(RegionsObservable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of moments in regions.
         ValueError
-            If the dataset is not of moments in regions, or the options
-            are not valid.
+            If the options are not valid.
         """
         check_options(RegionMoments.from_data, locals())
         return cls(
@@ -193,12 +190,18 @@ class RegionMoments(RegionsObservable):
                 "of regions)")
 
     def orders(self) -> tuple[int, ...]:
+        """Return the orders of the moments, sorted."""
         return self._orders
 
     def flux_floor(self) -> float:
+        """
+        Return the fraction of the largest moment 0 of the regions that the
+        moment 0 of a region must be above to have moments.
+        """
         return self._flux_floor
 
     def method(self) -> str:
+        """Return how the moments are measured (see MOMENT_METHODS)."""
         return self._method
 
     def spectral(self) -> SpectralAxis:
@@ -231,25 +234,14 @@ class RegionMoments(RegionsObservable):
         # (moment 0, the flux, always has a value)
         return any(order >= 1 for order in self._orders)
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
-        super().check_observation(instrument, oversampling, pixel_weights)
-        _moments.warn_unmasked_noise(self._flux_floor, instrument)
+    def check_observation(self, setup: ObservationSetup) -> None:
+        super().check_observation(setup)
+        _moments.warn_unmasked_noise(self._flux_floor, setup.instrument)
 
-    def check_scene(
-            self,
-            scene: 'Scene',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            flux_scale: str | None
-    ) -> None:
+    def check_scene(self, scene: 'Scene', setup: ObservationSetup) -> None:
         _moments.check_one_line(scene)
         if scene.orbit_emitters():
-            check_orbits(self, scene, foreground, instrument, flux_scale)
+            check_orbits(self, scene, setup)
 
     def check_dataset(self, dataset: Dataset) -> None:
         _moments.check_moment_items(dataset, self._method)
@@ -282,23 +274,13 @@ class RegionMoments(RegionsObservable):
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> ObservablePlan:
         if scene.orbit_emitters():
-            return OrbitMomentsPlan(
-                self, scene, instrument, oversampling, driver, dtype)
-        model_cube = _moments.spectra_model_cube(
-            self, oversampling, instrument, dtype, fft_dtype)
+            return OrbitMomentsPlan(self, driver, scene, setup)
+        model_cube = _moments.spectra_model_cube(self, setup)
         return RegionMomentsPlan(
-            self, self._flux_weights, model_cube, driver, scene,
-            line_of_sight, foreground, dtype, flux_scale)
+            self, self._flux_weights, model_cube, driver, scene, setup)
 
 
 class RegionMomentsPlan(RegionsObservablePlan):
@@ -310,20 +292,15 @@ class RegionMomentsPlan(RegionsObservablePlan):
             model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            dtype: np.dtype,
-            flux_scale: str | None
+            setup: ObservationSetup
     ):
-        super().__init__(
-            weights, model_cube, driver, scene, line_of_sight, foreground,
-            dtype, flux_scale)
+        super().__init__(weights, model_cube, driver, scene, setup)
         nchannels, nregions = self._spectra.shape
         # The spectra of the regions, as a cube of one row of regions
         self._spectra_cube = self._spectra.reshape(nchannels, 1, nregions)
         self._moments = _moments.MomentsPlan(
             driver, (nregions, 1), moments.orders(), moments.flux_floor(),
-            moments.method(), dtype)
+            moments.method(), setup.dtype)
 
     def _measure(self) -> ModelData:
         self._sum_regions(self._model_cube_plan.cube())
@@ -332,5 +309,5 @@ class RegionMomentsPlan(RegionsObservablePlan):
             grid.coords.step, grid.zero(), self._spectra_cube, None)
         # The moments of the regions are vectors
         return {
-            key: dict(d=value['d'][0], m=value['m'][0], w=value['w'][0])
+            key: ModelItem(value.data[0], value.mask[0], value.weights[0])
             for key, value in moments.items()}

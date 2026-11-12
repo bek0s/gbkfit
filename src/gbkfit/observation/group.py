@@ -413,6 +413,19 @@ class ObservationGroup:
         given one (the host by default), or another one of their label
         (see plan).
 
+        Parameters
+        ----------
+        driver : Driver, optional
+            The driver of those without one of their own; the host by
+            default.
+        drivers : Mapping, optional
+            The drivers of some galaxies and observations, by label.
+
+        Returns
+        -------
+        galaxies, observations : tuple of Driver
+            The driver of each galaxy, and of each observation.
+
         Raises
         ------
         ValueError
@@ -448,6 +461,16 @@ class ObservationGroup:
         this one, with the parameters in the units of the new data; one
         whose observations have other parameters (e.g. a likelihood of
         data that they had none of) is made again.
+
+        Parameters
+        ----------
+        datasets : Sequence of Dataset
+            The data, one dataset for each observation, in their order.
+
+        Returns
+        -------
+        ObservationGroup
+            The group.
 
         Raises
         ------

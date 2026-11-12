@@ -219,6 +219,19 @@ class ConfigFile(NamedTuple):
     root), and the project it is in, if any (see gbkfit.project), with the
     name of its setup (none out of the folder setups) and its sources (see
     gbkfit.project.Resolved).
+
+    Attributes
+    ----------
+    config : dict
+        The configuration.
+    root : str
+        The directory its relative paths are relative to.
+    project : Project or None
+        The project it is in, if any.
+    setup : str or None
+        The name of its setup in the project, if it is one.
+    sources : dict
+        Its sources (see gbkfit.project.Resolved).
     """
     config: dict[str, Any]
     root: str

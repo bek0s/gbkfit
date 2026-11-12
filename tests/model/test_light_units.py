@@ -69,7 +69,7 @@ def model(
             instrument=Instrument(psf=psf), data=data, unit=unit)])
     plan = group.plan(driver)
     space = ParamSpace.from_properties(group.pdescs(), params)
-    return plan.model_h(space.evaluate())[0]['spectra']['d'].copy()
+    return plan.model_h(space.evaluate())[0]['spectra'].data.copy()
 
 
 def per_kelvin(vsys):

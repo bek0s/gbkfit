@@ -389,7 +389,7 @@ def _write_image(folder: pathlib.Path) -> None:
     group = ObservationGroup(
         galaxy_parser.load(galaxy), observation_parser.load(observation))
     params = dict(xpos=0.27, ypos=-0.38, posa=40, incl=55, rpt_a=1, rpt_s=2.5)
-    image = group.plan(DriverHost()).model_h(params)[0]['brightness']['d']
+    image = group.plan(DriverHost()).model_h(params)[0]['brightness'].data
     coords = group.observations()[0].observable().grid().coords
     write_data(
         str(folder / 'image.fits'), image.astype(np.float32), coords,

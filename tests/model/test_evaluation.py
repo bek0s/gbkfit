@@ -52,8 +52,8 @@ def test_evaluation_does_not_modify_params(driver):
         modes=dict(vpt_vt=gbkfit.params.ParamModeOffsets()))
     values = params.evaluate()
     values_before = copy.deepcopy(values)
-    first = copy.deepcopy(plan.model_h(values)[0]['spectra']['d'])
-    second = plan.model_h(values)[0]['spectra']['d']
+    first = copy.deepcopy(plan.model_h(values)[0]['spectra'].data)
+    second = plan.model_h(values)[0]['spectra'].data
     np.testing.assert_array_equal(values['vpt_vt'], values_before['vpt_vt'])
     np.testing.assert_array_equal(first, second)
 
@@ -82,7 +82,7 @@ plan = group_plan([dict(
 params = gbkfit.params.ParamSpace.from_properties(plan.group().pdescs(), dict(
     vsys=0, xpos=0, ypos=0, posa=30, incl=60, rpt_a=1, rpt_s=4, rht_s=1,
     vpt_rt=2, vpt_vt=150, dpt_a=20))
-np.save(sys.argv[1], plan.model_h(params.evaluate())[0]['spectra']['d'])
+np.save(sys.argv[1], plan.model_h(params.evaluate())[0]['spectra'].data)
 """
 
 
@@ -141,7 +141,7 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
         params = gbkfit.params.ParamSpace.from_properties(
             group.pdescs(), properties)
         return group.plan(driver).model_h(
-            params.evaluate())[i][key]['d'].copy()
+            params.evaluate())[i][key].data.copy()
 
     shared = ObservationGroup(
         [galaxy_parser.load(galaxy_info)], [observation(1), observation(0.5)])
@@ -192,7 +192,7 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
     cube = plan.model_h(dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=4,
         vpt_rt=-3, vpt_vt=100, vpt_b=0.4, vpt_g=2, dpt_a=10
-    ))[0]['spectra']['d']
+    ))[0]['spectra'].data
     nan = np.isnan(cube)
     assert nan.any() and np.isfinite(cube[~nan]).all()
     # The spectra of the spaxels within -rt are NaN
@@ -222,7 +222,7 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
         params = gbkfit.params.ParamSpace.from_properties(
             plan.group().pdescs(), dict(
                 xpos=0, ypos=0, posa=0, incl=30, rpt_a=1, rpt_s=6, rht_s=1))
-        return plan.model_h(params.evaluate())[0]['brightness']['d']
+        return plan.model_h(params.evaluate())[0]['brightness'].data
     many = image(528384, 0.001)
     few = image(1032, 0.512)
     assert few.sum() > 0
@@ -276,7 +276,7 @@ TWO_PARAMS = dict(
 
 def spectra(models):
     """Copies of the spectra of the models of observations."""
-    return [model['spectra']['d'].copy() for model in models]
+    return [model['spectra'].data.copy() for model in models]
 
 
 def test_evaluations_skip_what_reads_no_changed_parameter(driver):

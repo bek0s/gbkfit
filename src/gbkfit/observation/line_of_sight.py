@@ -52,24 +52,28 @@ class Depth(Serializable):
     Parameters
     ----------
     extent : str or float, optional
-        Its length (arcsec); 'galaxy' (the default): that which holds the
-        galaxies the observation evaluates, at any inclination: the
-        diagonal of the x and y axes of the grid they are evaluated on
-        (the grid of the data, oversampled and padded for the
-        convolutions), the longest line across the field, for disks, which
-        do not end at their last ring (see Disk), or twice the bounding
-        radius of the largest of the components that have one (e.g. a
-        spheroid, see Component.bounding_radius), if longer; through
-        radiative transfer, where each galaxy has a depth axis of its own,
-        that of each galaxy; or 'legacy': the longer (in arcsec) of those
-        x and y axes, as the 3d models of earlier versions took it. A
-        shorter axis than that of 'galaxy' (of 'legacy' or a length) loses
-        the density beyond its ends: a warning says so for a length (see
-        warn); 'legacy' always is (the diagonal is longer), by choice.
+        Its length (arcsec), or:
+
+        - 'galaxy' (the default): that which holds the galaxies the
+          observation evaluates, at any inclination: the diagonal of the
+          x and y axes of the grid they are evaluated on (the grid of the
+          data, oversampled and padded for the convolutions), the longest
+          line across the field, for disks, which do not end at their
+          last ring (see Disk), or twice the bounding radius of the
+          largest of the components that have one (e.g. a spheroid, see
+          Component.bounding_radius), if longer; through radiative
+          transfer, where each galaxy has a depth axis of its own, that of
+          each galaxy;
+        - 'legacy': the longer (in arcsec) of those x and y axes, as the
+          3d models of earlier versions took it.
+
+        A shorter axis than that of 'galaxy' (of 'legacy' or a length)
+        loses the density beyond its ends: a warning says so for a length
+        (see warn); 'legacy' always is (the diagonal is longer), by
+        choice.
     step : float, optional
         The size of its voxels (arcsec); by default that of the pixels
         along the longer (in arcsec) of the x and y axes of that grid.
-
     """
 
     def dump(self) -> dict[str, Any]:
@@ -100,6 +104,18 @@ class Depth(Serializable):
         galaxies of the given bounding radius (arcsec, of those of their
         components that have one; see Component.bounding_radius): as many
         voxels as cover the extent, centred on 0.
+
+        Parameters
+        ----------
+        grid : Grid
+            The grid of the x and y axes the galaxies are evaluated on.
+        bounding_radius : float
+            The bounding radius of the galaxies (arcsec).
+
+        Returns
+        -------
+        DepthAxis
+            The axis.
         """
         # (the longer axis in arcsec, which pixels that are not square can
         # make the one of fewer pixels)
@@ -140,8 +156,19 @@ class LineOfSight(TypedSerializable, abc.ABC):
         Return the depth axis of the grid of the galaxies, on the given
         grid of the x and y axes, for disks of the given bounding radius
         (arcsec; see Depth.axis); none on the plane of the sky.
+
+        Parameters
+        ----------
+        grid : Grid
+            The grid of the x and y axes the galaxies are evaluated on.
+        bounding_radius : float
+            The bounding radius of the galaxies (arcsec).
+
+        Returns
+        -------
+        DepthAxis or None
+            The axis, if any.
         """
-        pass
 
     @abc.abstractmethod
     def check(
@@ -151,12 +178,18 @@ class LineOfSight(TypedSerializable, abc.ABC):
         Check that a component can be seen along this line of sight, by an
         observation of emission of the given type (see Component.thick).
 
+        Parameters
+        ----------
+        component : Component
+            The component.
+        seen_by : type of Emission
+            The type of the emission the observation sees.
+
         Raises
         ------
         ValueError
             If it cannot.
         """
-        pass
 
     def check_order(
             self,
@@ -168,6 +201,13 @@ class LineOfSight(TypedSerializable, abc.ABC):
         have opacity, along it (the light of one can be dimmed by
         another), in the given order, front to back (in units; see
         ObservationGroup: depth_order): here, it cannot.
+
+        Parameters
+        ----------
+        galaxies : Sequence of Galaxy
+            The galaxies.
+        order : Sequence or None
+            Their order, front to back, if given.
 
         Raises
         ------
@@ -184,6 +224,11 @@ class LineOfSight(TypedSerializable, abc.ABC):
         Check, without a driver, that a scene can be evaluated along this
         line of sight (see plan_scene): here, each galaxy dimmed by its own
         dust (see AdditiveScenePlan.check).
+
+        Parameters
+        ----------
+        scene : Scene
+            The scene.
 
         Raises
         ------
@@ -209,6 +254,25 @@ class LineOfSight(TypedSerializable, abc.ABC):
         light to the image or the spectral cube, dimmed by its own opacity,
         on the depth axis of the scene (see Depth.axis and
         AdditiveScenePlan).
+
+        Parameters
+        ----------
+        scene : Scene
+            The scene.
+        driver : Driver
+            The driver of the evaluation.
+        grid : Grid
+            The grid of the image or of the spectral cube.
+        dtype : np.dtype
+            The floating type of the evaluation.
+        smoothing : float or None
+            The dispersion (km/s) by which the instrument smooths the
+            spectra of the model; None for an image.
+
+        Returns
+        -------
+        ScenePlan
+            The plan.
         """
         depth = self.depth_axis(grid.spatial(), max(scene.bounding_radii()))
         return AdditiveScenePlan(scene, driver, grid, depth, dtype, smoothing)
@@ -341,7 +405,6 @@ class LineOfSightTransfer(LineOfSight):
         over a channel wider than its lines dims their light too little;
         sub-channels resolve the lines, at their number times the time of
         the march (light without line opacity needs none).
-
     """
 
     @staticmethod

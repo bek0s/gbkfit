@@ -11,8 +11,7 @@ from gbkfit.grid import SpectralAxis, air_refractive_index
 import gbkfit.params
 import numpy as np
 import pytest
-from gbkfit.observation.observables.slitless_spectra import (
-    pixel_footprint, pixel_footprints)
+from gbkfit.observation import pixel_footprint, pixel_footprints
 from modelutils import group_plan, observation_group
 
 
@@ -47,7 +46,7 @@ def evaluate(driver, observable, properties=PROPERTIES):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
-    return next(iter(data.values()))['d'].copy()
+    return next(iter(data.values())).data.copy()
 
 
 def test_pixel_footprint_of_a_still_pixel_is_its_overlaps():
@@ -250,8 +249,7 @@ def test_traces_that_vary_across_the_detector_move_each_pixel():
     # light of each pixel and channel lands about the middle of its
     # segment, at its own offset
     from gbkfit.instrument import traces
-    from gbkfit.observation.observables.slitless_spectra import (
-        SlitlessSpectra)
+    from gbkfit.observation import SlitlessSpectra
     trace = traces.TraceGrismConf(
         displ=[[4], [1e-4]], dispx=[[0, 0.05, 0], [4]], dispy=[[0]])
     observable = SlitlessSpectra(

@@ -117,7 +117,7 @@ def test_a_configuration_without_data_cannot_fit():
         params=PARAMS))
     assert loaded.objective is None
     model = loaded.group_plan.model_h(loaded.evaluate().values)[0]
-    assert model['brightness']['d'].sum() > 0
+    assert model['brightness'].data.sum() > 0
     with pytest.raises(ValueError, match="a fit needs a fitter"):
         loaded.fit()
     # (a configuration of a fit, with workers even of MPI outside a job,
@@ -359,7 +359,7 @@ def test_configurations_in_python_take_quantities_and_numpy_values():
     assert plain['observations'][0]['observable']['size'] == [8, 8]
     with gbkfit.load(config) as loaded:
         model = loaded.group_plan.model_h(loaded.evaluate().values)[0]
-        assert model['brightness']['d'].shape == (8, 8)
+        assert model['brightness'].data.shape == (8, 8)
 
 
 def test_the_units_of_a_configuration_are_read_as_fits_reads_them(tmp_path):

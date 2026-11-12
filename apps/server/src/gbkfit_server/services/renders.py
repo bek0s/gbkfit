@@ -245,7 +245,7 @@ class Renders:
             data = group.plan(DriverHost()).model_h(values)[0]
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
-        cube_values = np.array(data['spectra']['d'], dtype=np.float32)
+        cube_values = np.array(data['spectra'].data, dtype=np.float32)
         velocities = low + width * np.arange(nchannels)
         return Cube.of(cube_values, velocities, 'km/s')
 

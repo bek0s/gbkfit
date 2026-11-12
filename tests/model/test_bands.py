@@ -61,7 +61,7 @@ def test_light_in_each_band(driver, evaluate_cases, emitter):
     images = [
         evaluate_cases(
             [image_case(driver, [component], band)],
-            PROPERTIES[emitter])[0][0]['brightness']['d']
+            PROPERTIES[emitter])[0][0]['brightness'].data
         for band in ('sdss_g', 'sdss_r')]
     assert images[0].sum() > 0
     np.testing.assert_allclose(images[1], 0.5 * images[0], rtol=1e-6)
@@ -115,7 +115,7 @@ def test_dust_dims_an_image_at_the_rest_wavelength_of_its_band(
         data, extra = evaluate_cases(
             [case], properties | dict(dust_rpt_a=opacity))
         tau = extra.get('total_odata').data.sum(axis=0)
-        return data[0]['brightness']['d'], tau
+        return data[0]['brightness'].data, tau
     clear, _ = evaluate(0)
     dimmed, tau = evaluate(0.5)
     ratio = 3 - 2.5 * (0.6166 / (1 + redshift) - 0.2)

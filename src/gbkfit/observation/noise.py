@@ -538,7 +538,6 @@ class NoisePoisson(Noise):
     gain : float, optional
         The counts per unit of the data (e.g. of the photons per unit of
         flux).
-
     """
 
     @staticmethod

@@ -3,7 +3,7 @@ The observable of spectra in regions of the sky (e.g. fibres,
 apertures, bins, or the whole field for an integrated spectrum).
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -12,7 +12,6 @@ from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, SpectraData, SpectralAxis
-from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.region import Regions
 from . import _model_cube
@@ -20,15 +19,12 @@ from ._data_units import flux_data_unit
 from ._options import Rota, Rpix, Rval, Size, Step
 from ._regions import (
     RegionsObservable, RegionsObservablePlan, spatial_options_from_regions)
-from .base import FluxScale, ModelData
+from .base import FluxScale, ModelData, ModelItem, ObservationSetup
 
 if TYPE_CHECKING:
     import scipy.sparse
 
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
-    from ..weights import Weights
 
 
 __all__ = [
@@ -122,9 +118,10 @@ class RegionSpectra(RegionsObservable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of spectra in regions.
         ValueError
-            If the dataset is not of spectra in regions, or the options
-            are not valid.
+            If the options are not valid.
         """
         check_options(RegionSpectra.from_data, locals())
         return cls(
@@ -209,29 +206,22 @@ class RegionSpectra(RegionsObservable):
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> 'RegionSpectraPlan':
         # The masking of ModelCube is disabled: every pixel of a region adds
         # to its spectrum
         model_cube = _model_cube.ModelCube(
             self._grid,
-            oversampling=tuple(oversampling),
-            primary_beam=instrument.primary_beam(),
-            psf=instrument.psf(),
-            lsf=instrument.lsf(),
+            oversampling=setup.oversampling,
+            primary_beam=setup.instrument.primary_beam(),
+            psf=setup.instrument.psf(),
+            lsf=setup.instrument.lsf(),
             smooth_weights=False,
-            dtype=dtype,
-            fft_dtype=fft_dtype)
+            dtype=setup.dtype,
+            fft_dtype=setup.fft_dtype)
         return RegionSpectraPlan(
             self._flux_weights, self._regions.valid(), model_cube, driver,
-            scene, line_of_sight, foreground, dtype, flux_scale)
+            scene, setup)
 
 
 class RegionSpectraPlan(RegionsObservablePlan):
@@ -248,18 +238,13 @@ class RegionSpectraPlan(RegionsObservablePlan):
             model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            dtype: np.dtype,
-            flux_scale: str | None
+            setup: ObservationSetup
     ):
-        super().__init__(
-            weights, model_cube, driver, scene, line_of_sight, foreground,
-            dtype, flux_scale)
+        super().__init__(weights, model_cube, driver, scene, setup)
         self._valid = self._valid_cube = None
         if valid is not None:
-            self._valid = driver.mem_copy_h2d(valid.astype(dtype))
-            self._valid_cube = driver.mem_alloc_d(valid.shape, dtype)
+            self._valid = driver.mem_copy_h2d(valid.astype(setup.dtype))
+            self._valid_cube = driver.mem_alloc_d(valid.shape, setup.dtype)
 
     def _measure(self) -> ModelData:
         cube = self._model_cube_plan.cube()
@@ -267,4 +252,4 @@ class RegionSpectraPlan(RegionsObservablePlan):
             # (on any driver: its arrays take the ufuncs of numpy)
             np.multiply(cube, self._valid, out=self._valid_cube)
             cube = self._valid_cube
-        return dict(spectra=dict(d=self._sum_regions(cube), m=None, w=None))
+        return dict(spectra=ModelItem(self._sum_regions(cube)))

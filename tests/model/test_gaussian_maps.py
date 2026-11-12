@@ -35,7 +35,7 @@ def evaluate(driver, observable):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
-    return {key: value['d'].copy() for key, value in data.items()}
+    return {key: value.data.copy() for key, value in data.items()}
 
 
 def test_gaussian_fit_recovers_gaussians(driver):
@@ -57,8 +57,8 @@ def test_gaussian_fit_recovers_gaussians(driver):
     maps = plan.evaluate(
         (1, 1, step), (0, 0, zero),
         driver.mem_copy_h2d(cube.astype(np.float32)), None)
-    maps = {key: driver.mem_copy_d2h(value['d']) for key, value in
-            maps.items()} | dict(mask=driver.mem_copy_d2h(maps['moment0']['m']))
+    maps = {key: driver.mem_copy_d2h(value.data) for key, value in
+            maps.items()} | dict(mask=driver.mem_copy_d2h(maps['moment0'].mask))
     assert maps['mask'][0, 0] == 0 and np.isnan(maps['moment1'][0, 0])
     good = maps['mask'] == 1
     assert good.sum() == nx * ny - 1
@@ -90,7 +90,7 @@ def test_gauss_hermite_fit_recovers_the_series(driver, step):
     maps = plan.evaluate(
         (1, 1, step), (0, 0, zero),
         driver.mem_copy_h2d(cube.astype(np.float32)), None)
-    maps = {key: driver.mem_copy_d2h(value['d']) for key, value in maps.items()}
+    maps = {key: driver.mem_copy_d2h(value.data) for key, value in maps.items()}
     np.testing.assert_allclose(maps['moment0'], flux * np.sign(step), rtol=1e-3)
     np.testing.assert_allclose(maps['moment1'], centre, atol=0.05)
     np.testing.assert_allclose(np.abs(maps['moment2']), sigma, rtol=1e-3)
@@ -114,8 +114,8 @@ def test_gaussian_fit_of_noisy_spectra_stays_on_the_line(driver):
         (1, 1, 1), (0, 0, 0),
         driver.mem_copy_h2d(cube.astype(np.float32)), None)
     flux, centre, sigma = (
-        driver.mem_copy_d2h(maps[f'moment{order}']['d']) for order in range(3))
-    assert (driver.mem_copy_d2h(maps['moment0']['m']) == 1).all()
+        driver.mem_copy_d2h(maps[f'moment{order}'].data) for order in range(3))
+    assert (driver.mem_copy_d2h(maps['moment0'].mask) == 1).all()
     np.testing.assert_allclose(flux, 1.5 * np.sqrt(2 * np.pi), rtol=0.5)
     np.testing.assert_allclose(centre, 15, atol=1.5)
     np.testing.assert_allclose(sigma, 1.5, rtol=0.6)
@@ -136,7 +136,7 @@ def test_the_flux_floor_is_relative_to_the_brightest_spectrum(
         maps = plan.evaluate(
             (1, 1, 5.0), (0, 0, -100.0),
             driver.mem_copy_h2d(flux * line * unit), None)
-        mask = driver.mem_copy_d2h(maps['moment0']['m'])
+        mask = driver.mem_copy_d2h(maps['moment0'].mask)
         np.testing.assert_array_equal(mask, flux > 1e-3)
 
 

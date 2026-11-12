@@ -32,7 +32,7 @@ from .line_of_sight import LineOfSight, line_of_sight_parser
 from .noise import Noise
 from .observables import (
     FluxScale, HostModelData, ModelData, Observable, ObservablePlan,
-    observable_parser)
+    ObservationSetup, observable_parser)
 from .observation import Observation, SeenGalaxies, SkyFrame
 from .weights import Weights, weights_geometry
 
@@ -86,25 +86,24 @@ class ObservationSky(Observation):
     solved, each is worked out at each evaluation with exact formulas,
     never putting the flux of the data into the model.
 
-    Why that prior for scales per spectrum (the user chose it,
-    2026-10-15; revise here): the log-likelihood of samplers needs one
-    (they integrate the solved values out). A flat prior on a scale makes
-    the integral grow as the model gets fainter (half the light, twice
-    the scales, twice the integral): samplers would prefer galaxies of no
-    light. A flat prior on the flux of each spectrum (the scale times the
-    sum of the model there) removes that, but favours model lines whose
-    flux the data pin down loosely (broad lines) where the spectra are
-    faint: in 4000 random spectra of 61 channels of 10 km/s (noise 1),
-    the log-evidence of a 60 km/s model line over a 30 km/s one was
-    +0.35 on noise alone and +0.22 on a faint line truly 30 km/s wide
-    (flux 3); with this prior (sigma 0.5), +0.03 and -0.09. Over
-    thousands of faint spectra (e.g. of clumpy disks at z ~ 1.5) the flat
-    prior would pull the dispersion up. This prior is proper (the evidence
-    is a normal one), and keeps the brightness of the model meaningful:
-    it is the mean brightness, about which the spectra scatter. Its cost
-    is sigma, a statement of how much the spectra may differ from the
-    model: a very large sigma is a flat prior on the scales again, with
-    its bias.
+    Why that prior for scales per spectrum: the log-likelihood of samplers
+    needs one (they integrate the solved values out). A flat prior on a
+    scale makes the integral grow as the model gets fainter (half the
+    light, twice the scales, twice the integral): samplers would prefer
+    galaxies of no light. A flat prior on the flux of each spectrum (the
+    scale times the sum of the model there) removes that, but favours
+    model lines whose flux the data pin down loosely (broad lines) where
+    the spectra are faint: in 4000 random spectra of 61 channels of
+    10 km/s (noise 1), the log-evidence of a 60 km/s model line over a
+    30 km/s one was +0.35 on noise alone and +0.22 on a faint line truly
+    30 km/s wide (flux 3); with this prior (sigma 0.5), +0.03 and -0.09.
+    Over thousands of faint spectra (e.g. of clumpy disks at z ~ 1.5) the
+    flat prior would pull the dispersion up. This prior is proper (the
+    evidence is a normal one), and keeps the brightness of the model
+    meaningful: it is the mean brightness, about which the spectra
+    scatter. Its cost is sigma, a statement of how much the spectra may
+    differ from the model: a very large sigma is a flat prior on the
+    scales again, with its bias.
 
     Parameters
     ----------
@@ -167,17 +166,16 @@ class ObservationSky(Observation):
         inside the data, and in cubes, whose lines then miss the
         broadening by the velocity gradient within the pixel. On a mock
         disk of scale length 2.5 pixels at peak S/N 20, 1 biased the
-        dispersion by +2 error bars and 2 by +0.5; on LVHIS data, of many
-        pixels per beam, it changed nothing (see
-        notes/adaptive-pixel-sampling.md).
+        dispersion by +2 error bars and 2 by +0.5; on data of many pixels
+        per beam (e.g. the cubes of LVHIS), it changed nothing.
     dtype : str, optional
         The floating type of the model: 'float32' or 'float64'. By default
         float64 if the noise of an item of its data is correlated (see
         Data): the whitening of its residuals (see LikelihoodGaussian)
         magnifies the rounding of a float32 model enough to stop least
-        squares up to about 1 sigma short of the best fit (NGC 1313 of
-        LVHIS, 2026-10-20); float32 otherwise. A copy with other data (see
-        with_data, e.g. mock data) then chooses again, by them.
+        squares up to about 1 sigma short of the best fit; float32
+        otherwise. A copy with other data (see with_data, e.g. mock data)
+        then chooses again, by them.
     fft_dtype : str, optional
         The floating type of the FFT convolutions of the model by the PSF
         and the LSF: 'float64' (by default) or 'float32' (faster, for a
@@ -284,6 +282,7 @@ class ObservationSky(Observation):
             The options.
         """
         kwargs = dict(prefix=prefix, dump_path=dump_path, overwrite=overwrite)
+        setup = self._setup
         name = dict(name=self._name) if self._name is not None else {}
         galaxies = {} if self._galaxies is None else dict(
             galaxies=list(self._galaxies))
@@ -292,8 +291,8 @@ class ObservationSky(Observation):
         lines = {} if self._lines is None else dict(lines=list(self._lines))
         band = {} if self._band is None else dict(
             band=band_parser.dump(self._band))
-        pixel_weights = {} if self._pixel_weights is None else dict(
-            pixel_weights=self._pixel_weights.dump())
+        pixel_weights = {} if setup.pixel_weights is None else dict(
+            pixel_weights=setup.pixel_weights.dump())
         flux_scale = {} if self._flux_scale is None else dict(
             flux_scale=self._flux_scale)
         offsets = {} if not self._offsets else dict(offsets=dict(
@@ -309,13 +308,13 @@ class ObservationSky(Observation):
             dtype=self._given_dtype)
         return name | galaxies | components | lines | band | pixel_weights \
             | flux_scale | offsets | unit | data | dtype | dict(
-            line_of_sight=line_of_sight_parser.dump(self._line_of_sight),
-            foreground=foreground_parser.dump(self._foreground, **kwargs),
-            instrument=instrument_parser.dump(self._instrument, **kwargs),
+            line_of_sight=line_of_sight_parser.dump(setup.line_of_sight),
+            foreground=foreground_parser.dump(setup.foreground, **kwargs),
+            instrument=instrument_parser.dump(setup.instrument, **kwargs),
             observable=observable_parser.dump(
                 self._observable, data=self._data, **kwargs),
-            oversampling=self._oversampling,
-            fft_dtype=self._fft_dtype.name)
+            oversampling=setup.oversampling,
+            fft_dtype=setup.fft_dtype.name)
 
     def __init__(
             self,
@@ -375,21 +374,36 @@ class ObservationSky(Observation):
         if data is not None:
             observable.check_dataset(data)
         self._observable = observable
-        self._foreground = foreground
-        self._instrument = instrument
-        self._line_of_sight = line_of_sight
         self._components = components
         self._lines = lines
         self._band = band
-        self._pixel_weights = pixel_weights
         self._flux_scale = flux_scale
         self._offsets = offsets
-        self._oversampling = oversampling
         super().__init__(
             observable.keys(), galaxies, data, likelihood, name,
             observable.model_can_have_missing_values())
-        observable.check_observation(
-            instrument, self._oversampling, pixel_weights)
+        # (as given, for copies of other data and dumps: by default, the
+        # data choose it, see with_data)
+        self._given_dtype = dtype
+        if dtype is None:
+            dtype = 'float64' if data is not None \
+                and _has_correlated_noise(data) else 'float32'
+        dtype, fft_dtype = np.dtype(dtype), np.dtype(fft_dtype)
+        if fft_dtype.itemsize < dtype.itemsize:
+            raise ValueError(
+                f"the fft_dtype ({fft_dtype.name}) is less precise than the "
+                f"dtype ({dtype.name})")
+        # (a flux scale of one value scales the flux of the model where the
+        # observable records it; one of several values, its items of light,
+        # see plan)
+        scale = self.flux_scale()
+        one = scale is not None and scale[1].axis is None
+        self._setup = ObservationSetup(
+            line_of_sight=line_of_sight, foreground=foreground,
+            instrument=instrument, oversampling=oversampling, dtype=dtype,
+            fft_dtype=fft_dtype, pixel_weights=pixel_weights,
+            flux_scale_param=scale[0] if one else None)
+        observable.check_observation(self._setup)
         if pixel_weights is not None and foreground.lens() is not None:
             raise ValueError("a lens does not support pixel_weights yet")
         # (the unit of the model without data, and its beam, of a unit per
@@ -398,22 +412,10 @@ class ObservationSky(Observation):
             else _light_unit(unit, data, observable, instrument)
         if data is not None:
             _check_beams(data, instrument, observable)
-        # (as given, for copies of other data and dumps: by default, the
-        # data choose it, see with_data)
-        self._given_dtype = dtype
-        if dtype is None:
-            dtype = 'float64' if data is not None \
-                and _has_correlated_noise(data) else 'float32'
-        self._dtype = np.dtype(dtype)
-        self._fft_dtype = np.dtype(fft_dtype)
-        if self._fft_dtype.itemsize < self._dtype.itemsize:
-            raise ValueError(
-                f"the fft_dtype ({self._fft_dtype.name}) is less precise "
-                f"than the dtype ({self._dtype.name})")
 
     def line_of_sight(self) -> LineOfSight:
         """Return how it treats the line of sight."""
-        return self._line_of_sight
+        return self._setup.line_of_sight
 
     def components(self) -> tuple[str, ...] | None:
         """Return the names of the components it sees, if given."""
@@ -429,7 +431,7 @@ class ObservationSky(Observation):
 
     def pixel_weights(self) -> Weights | None:
         """Return the weights of the pixels of its data, if any."""
-        return self._pixel_weights
+        return self._setup.pixel_weights
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
@@ -461,7 +463,7 @@ class ObservationSky(Observation):
             for param, (title, desc, unit) in zip(
                 self._offset_params(), descs)
             if param is not None}
-        return flux_scale | offsets | self._foreground.pdescs() \
+        return flux_scale | offsets | self._setup.foreground.pdescs() \
             | super().pdescs()
 
     def _offset_params(self) -> tuple[str | None, str | None, str | None]:
@@ -491,7 +493,7 @@ class ObservationSky(Observation):
         return SkyFrame(
             self._observable.sky_rval(), self._offset_params(),
             None if spectral is None else spectral.frame(),
-            self._foreground.centre_params())
+            self._setup.foreground.centre_params())
 
     def flux_scale(self) -> tuple[str, FluxScale] | None:
         """
@@ -506,13 +508,14 @@ class ObservationSky(Observation):
     def with_data(
             self, data: Dataset, likelihood: Likelihood | None = None
     ) -> Self:
+        setup = self._setup
         return type(self)(
-            self._observable, self._line_of_sight, self._foreground,
-            self._instrument, self._galaxies,
-            self._components, self._lines, self._band, self._pixel_weights,
+            self._observable, setup.line_of_sight, setup.foreground,
+            setup.instrument, self._galaxies,
+            self._components, self._lines, self._band, setup.pixel_weights,
             self._flux_scale, self._offsets, data,
             likelihood if likelihood is not None else self._likelihood,
-            self._oversampling, self._given_dtype, self._fft_dtype.name,
+            setup.oversampling, self._given_dtype, setup.fft_dtype.name,
             self._name)
 
     def observable(self) -> Observable:
@@ -521,11 +524,11 @@ class ObservationSky(Observation):
 
     def foreground(self) -> Foreground:
         """Return the foreground."""
-        return self._foreground
+        return self._setup.foreground
 
     def instrument(self) -> Instrument:
         """Return the instrument."""
-        return self._instrument
+        return self._setup.instrument
 
     def make_dataset(self, items: Mapping[str, Data]) -> Dataset:
         """
@@ -600,15 +603,15 @@ class ObservationSky(Observation):
 
     def oversampling(self) -> tuple[int, ...]:
         """Return the oversampling of the model along each axis."""
-        return self._oversampling
+        return self._setup.oversampling
 
     def dtype(self) -> np.dtype:
         """Return the floating type of the model."""
-        return self._dtype
+        return self._setup.dtype
 
     def fft_dtype(self) -> np.dtype:
         """Return the floating type of the FFT convolutions of the model."""
-        return self._fft_dtype
+        return self._setup.fft_dtype
 
     def light_amplitudes(self, seen: SeenGalaxies) -> dict[str, str | None]:
         linear = self._observable.linear_in_light()
@@ -640,23 +643,19 @@ class ObservationSky(Observation):
         """
         return make_scene(
             seen, self._components, self._lines, self._band,
-            self._line_of_sight, self._observable.emission, self.data_unit())
+            self._setup.line_of_sight, self._observable.emission,
+            self.data_unit())
 
     def check(self, seen: SeenGalaxies) -> None:
         scene = self._scene(seen)
+        setup = self._setup
         # (the light of an image is blurred by its PSF and again by ours)
         for trait in scene.image_traits():
-            trait.check_psf(self._instrument.psf())
-        if self._pixel_weights is not None:
-            weights_geometry(self._pixel_weights, scene)
-        self._line_of_sight.check_scene(scene)
-        # (a flux scale of one value scales the flux of the model where the
-        # observable records it; one of several values, its items of light)
-        scale = self.flux_scale()
-        one = scale is not None and scale[1].axis is None
-        self._observable.check_scene(
-            scene, self._foreground, self._instrument,
-            scale[0] if one else None)
+            trait.check_psf(setup.instrument.psf())
+        if setup.pixel_weights is not None:
+            weights_geometry(setup.pixel_weights, scene)
+        setup.line_of_sight.check_scene(scene)
+        self._observable.check_scene(scene, setup)
 
     def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """
@@ -682,16 +681,13 @@ class ObservationSky(Observation):
             If what it sees does not go with it (see make_scene), or with
             its observable (see Observable.plan).
         """
-        scene = self._scene(seen)
+        plan = self._observable.plan(driver, self._scene(seen), self._setup)
+        # (the observable applies a flux scale of one value, see __init__;
+        # one of several values multiplies the items of light of its plan)
         scale = self.flux_scale()
-        one = scale is not None and scale[1].axis is None
-        plan = self._observable.plan(
-            driver, scene, self._line_of_sight, self._foreground,
-            self._instrument, self._oversampling, self._dtype,
-            self._fft_dtype, self._pixel_weights, scale[0] if one else None)
-        if scale is None or one:
+        if scale is None or scale[1].axis is None:
             return plan
-        return _FluxScaledPlan(plan, driver, *scale, self._dtype)
+        return _FluxScaledPlan(plan, driver, *scale, self._setup.dtype)
 
 
 def _light_unit(
@@ -841,7 +837,7 @@ class _FluxScaledPlan(ObservablePlan):
         model = self._plan.evaluate(params, galaxies, out_extra)
         driver = self._driver
         if self._h_values is None:
-            shape = model[self._scale.items[0]]['d'].shape
+            shape = model[self._scale.items[0]].data.shape
             (self._h_values, self._d_values) = driver.mem_alloc_s(
                 tuple(1 if k == self._scale.axis else n
                       for k, n in enumerate(shape)), self._dtype)
@@ -849,7 +845,7 @@ class _FluxScaledPlan(ObservablePlan):
             params[self._param], self._h_values.shape)
         driver.mem_copy_h2d(self._h_values, self._d_values)
         for key in self._scale.items:
-            values = model[key]['d']
+            values = model[key].data
             driver.math_mul(values, self._d_values, out=values)
         return model
 

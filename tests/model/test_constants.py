@@ -54,7 +54,7 @@ def test_rotation_curve_from_radial_nodes(evaluate_cases):
     values, _ = evaluate_cases(
         [case], PROPERTIES | dict(vpt_vt=curve.tolist()))
     np.testing.assert_array_equal(
-        expression[0]['spectra']['d'], values[0]['spectra']['d'])
+        expression[0]['spectra'].data, values[0]['spectra'].data)
 
 
 def test_names_of_constants():

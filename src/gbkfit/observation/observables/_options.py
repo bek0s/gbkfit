@@ -1,6 +1,6 @@
 """
 The options of the observables: the types of the options of their grids,
-the options of grids, the options their data give, and checks of
+the configuration of grids, the options their data give, and checks of
 options.
 """
 
@@ -11,7 +11,7 @@ from annotated_types import Ge
 
 from gbkfit.config import ConfigError, Unit, make_typed_desc, warn
 from gbkfit.dataset import Dataset
-from gbkfit.grid import Grid, SpectralAxis
+from gbkfit.grid import Grid, grid_options
 from gbkfit.instrument import Instrument
 
 if TYPE_CHECKING:
@@ -34,42 +34,14 @@ Rota: TypeAlias = Annotated[float, Unit('deg')]
 MedianSize: TypeAlias = Annotated[int, Ge(3)]
 
 
-def grid_options(grid: Grid) -> dict[str, Any]:
-    """
-    Return the options of the grid of an observable (size, step, rpix,
-    rval and rota, of the axes on the sky, and spectral, its spectral axis
-    after them, if any) of the given grid.
-    """
-    coords = grid.coords
-    axes = slice(None) if grid.spectral_axis is None \
-        else slice(grid.spectral_axis)
-    options = dict(
-        size=grid.size[axes], step=coords.step[axes], rpix=coords.rpix[axes],
-        rval=coords.rval[axes], rota=coords.rota)
-    if grid.spectral_axis is not None:
-        options.update(spectral=SpectralAxis.of(grid))
-    return options
-
-
 def dump_grid(grid: Grid) -> dict[str, Any]:
-    """Return the configuration of the grid of an observable."""
+    """
+    Return the configuration of the grid of an observable: its options
+    (see grid_options), with its spectral axis dumped, if any.
+    """
     options = grid_options(grid)
     if 'spectral' in options:
         options['spectral'] = options['spectral'].dump()
-    return options
-
-
-def dataset_grid_options(grid: Grid) -> dict[str, Any]:
-    """
-    Return the options of the grid of a dataset on the grid of an
-    observable: its grid options but the sizes, which the data give.
-    """
-    options = grid_options(grid)
-    del options['size']
-    if 'spectral' in options:
-        options['spectral'] = SpectralAxis(**{
-            key: value for key, value in options['spectral'].dump().items()
-            if key != 'size'})
     return options
 
 

@@ -475,6 +475,11 @@ class Objective:
             The residuals (a new array on every call: solvers that keep
             the residuals of earlier calls, e.g. scipy's least_squares,
             need one).
+
+        Raises
+        ------
+        ValueError
+            If an observation gives no residuals (see require_residuals).
         """
         self.require_residuals()
         vectors = self.residual_vector_h(params, True, out_extra)
@@ -533,6 +538,8 @@ class Objective:
         NotImplementedError
             If an observation fits its noise, or values are solved (see
             Solve), whose terms are sums over many points.
+        ValueError
+            If an observation gives no residuals (see require_residuals).
         """
         if self._blocks or any(
                 c.noise_residuals().size for c in self._comparisons):

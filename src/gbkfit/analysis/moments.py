@@ -11,7 +11,7 @@ import numpy.typing as npt
 
 from gbkfit.driver import Driver
 from gbkfit.driver.drivers.host import DriverHost
-from gbkfit.observation.observables import (
+from gbkfit.observation import (
     MOMENT_METHODS, MomentsPlan, check_moment_orders)
 
 
@@ -162,10 +162,10 @@ def moment_maps(
     maps = plan.measure(
         (1, 1, step), (0, 0, velocities[0]), driver.mem_copy_h2d(cube),
         None, cutoff)
-    data = {key: driver.mem_copy_d2h(value['d'])
+    data = {key: driver.mem_copy_d2h(value.data)
             for key, value in maps.items()}
     # (one mask, shared by the maps)
-    mask = driver.mem_copy_d2h(next(iter(maps.values()))['m']) == 1
+    mask = driver.mem_copy_d2h(next(iter(maps.values())).mask) == 1
     mask &= ~blank
     for value in data.values():
         value[blank] = np.nan

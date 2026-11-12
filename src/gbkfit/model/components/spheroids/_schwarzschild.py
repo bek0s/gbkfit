@@ -92,7 +92,7 @@ class SchwarzschildKinematics(SpheroidKinematics):
     the orbits keep their energy. The observations of its stars are the
     bins of region_moments of the method gauss_hermite (their V, sigma,
     h3, h4 ...), which model the orbits in the series of their data (see
-    observation.OrbitRecording).
+    observation.orbits.OrbitRecording).
 
     Parameters
     ----------

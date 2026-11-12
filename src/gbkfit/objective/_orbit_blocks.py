@@ -10,8 +10,8 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.observation import (
-    Comparison, GroupPlan, OrbitRecording, OrbitSeries)
+from gbkfit.observation import Comparison, GroupPlan
+from gbkfit.observation.orbits import OrbitRecording, OrbitSeries
 from gbkfit.params import (
     ParamValues, ParamView, Solution, Solve, StageCache, element_names,
     solve_together_rows)

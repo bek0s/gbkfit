@@ -325,7 +325,7 @@ class Component(TypedSerializable, abc.ABC):
         which solves them); None by default. Its part in the stage of its
         galaxy does not read them (see ComponentStage): only the
         observations of the orbits weigh the orbits by them (see
-        observation.OrbitRecording).
+        observation.orbits.OrbitRecording).
         """
         return None
 

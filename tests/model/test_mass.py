@@ -1712,7 +1712,7 @@ def evaluate(driver, galaxy, line_of_sight, properties):
         line_of_sight_parser.load(dict(type=line_of_sight)))])
     params = ParamSpace.from_properties(group.pdescs(), properties)
     return group.plan(driver).model_h(
-        params.evaluate())[0]['spectra']['d'].copy()
+        params.evaluate())[0]['spectra'].data.copy()
 
 
 @pytest.mark.parametrize('line_of_sight, disk_type', [
@@ -2633,9 +2633,9 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     assert plan.galaxy_drivers() == (driver,)
     single, double = plan.model_h(params)
     assert len(calls) == 1
-    assert np.isfinite(single['spectra']['d']).all()
+    assert np.isfinite(single['spectra'].data).all()
     np.testing.assert_allclose(
-        single['spectra']['d'], double['spectra']['d'], rtol=1e-5,
+        single['spectra'].data, double['spectra'].data, rtol=1e-5,
         atol=1e-7)
 
 

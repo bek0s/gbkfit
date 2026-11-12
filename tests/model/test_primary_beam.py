@@ -53,7 +53,7 @@ def evaluate(
         observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
-    return plan.model_h(params.evaluate())[0][key]['d'].copy()
+    return plan.model_h(params.evaluate())[0][key].data.copy()
 
 
 @pytest.mark.parametrize('beam_class', [PrimaryBeamGauss, PrimaryBeamAiry])
@@ -239,8 +239,8 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
     # with the prefix of the dump, which can be dumped again (overwrite)
     from gbkfit.instrument import PrimaryBeamImage
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationSky, observation_parser)
-    from gbkfit.observation.observables import PixelBrightness
+        LineOfSightFlat, ObservationSky, PixelBrightness,
+        observation_parser)
     beam = PrimaryBeamImage(np.ones((8, 8)))
     observation = ObservationSky(
         PixelBrightness(size=(8, 8)), LineOfSightFlat(),

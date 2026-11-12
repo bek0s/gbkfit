@@ -49,7 +49,7 @@ def evaluate(driver, component, properties):
     plan = observe(driver, component)
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
-    return plan.model_h(params.evaluate())[0]['spectra']['d'].copy()
+    return plan.model_h(params.evaluate())[0]['spectra'].data.copy()
 
 
 def with_density(**traits):
@@ -214,7 +214,7 @@ def evaluate_with(plan, properties, out_extra=None):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     return plan.model_h(
-        params.evaluate(), out_extra)[0]['spectra']['d'].copy()
+        params.evaluate(), out_extra)[0]['spectra'].data.copy()
 
 
 def flux(plan, properties, out_extra=None):
@@ -317,7 +317,7 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
         plan.group().pdescs(), properties | dict(zpt_a=[20] * 14)).evaluate()
     caplog.set_level(logging.WARNING)
     limited = plan.model_h(
-        values | dict(zpt_a=np.full(14, 30.0)), Extras())[0]['spectra']['d']
+        values | dict(zpt_a=np.full(14, 30.0)), Extras())[0]['spectra'].data
     assert 'zmax shapes the disk' in caplog.text
     np.testing.assert_allclose(
         limited, at_zmax, rtol=1e-5, atol=1e-7 * at_zmax.max())

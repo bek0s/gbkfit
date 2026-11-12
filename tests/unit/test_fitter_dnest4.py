@@ -174,7 +174,7 @@ def blob_objective():
     model = image.model_h(
         ParamSpace.from_properties(
             image.group().pdescs(), truth).evaluate())[0]
-    model = model['brightness']['d']
+    model = model['brightness'].data
     sigma = 0.02 * model.max()
     noise = np.random.default_rng(1).normal(0, sigma, shape)
     return Objective(group(DatasetPixelBrightness(

@@ -6,28 +6,21 @@ maps.
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
 from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
-from gbkfit.grid import SpectralAxis
-from gbkfit.instrument import Instrument
+from gbkfit.grid import SpectralAxis, grid_options
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from . import _model_cube, _moments
 from ._cube_plan import CubeObservablePlan
 from ._data_units import data_unit
 from ._moments import FluxFloor, Method
 from ._options import (
-    MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size,
-    dataset_grid_options, grid_options)
-from .base import ModelData, Observable
+    MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size)
+from .base import ModelData, Observable, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
-    from ..weights import Weights
 
 
 __all__ = [
@@ -153,9 +146,10 @@ class PixelMoments(Observable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of moment maps.
         ValueError
-            If the dataset is not of moment maps, or the options are not
-            valid.
+            If the options are not valid.
         """
         check_options(PixelMoments.from_data, locals())
         return cls(
@@ -204,7 +198,7 @@ class PixelMoments(Observable):
         moments, hermite = _moments.moment_maps(
             items, self._orders, self._method)
         return DatasetPixelMoments(
-            moments, hermite, **dataset_grid_options(self.grid()))
+            moments, hermite, **grid_options(self.grid(), sizes=False))
 
     def data_unit(
             self,
@@ -223,12 +217,18 @@ class PixelMoments(Observable):
         return any(order >= 1 for order in self._orders)
 
     def orders(self) -> tuple[int, ...]:
+        """Return the orders of the moments, sorted."""
         return self._orders
 
     def flux_floor(self) -> float:
+        """
+        Return the fraction of the largest moment 0 of the model that the
+        moment 0 of a spectrum must be above to have moments.
+        """
         return self._flux_floor
 
     def method(self) -> str:
+        """Return how the moments are measured (see MOMENT_METHODS)."""
         return self._method
 
     def spectral(self) -> SpectralAxis:
@@ -237,27 +237,16 @@ class PixelMoments(Observable):
         """
         return self._spectral
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
-        if pixel_weights is not None and self._method != 'moments':
+    def check_observation(self, setup: ObservationSetup) -> None:
+        if setup.pixel_weights is not None and self._method != 'moments':
             raise ValueError(
                 f"the method {self._method} does not support pixel_weights "
                 f"yet")
-        _moments.warn_unmasked_noise(self._flux_floor, instrument)
+        _moments.warn_unmasked_noise(self._flux_floor, setup.instrument)
 
-    def check_scene(
-            self,
-            scene: 'Scene',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            flux_scale: str | None
-    ) -> None:
+    def check_scene(self, scene: 'Scene', setup: ObservationSetup) -> None:
         _moments.check_one_line(scene)
-        super().check_scene(scene, foreground, instrument, flux_scale)
+        super().check_scene(scene, setup)
 
     def check_dataset(self, dataset: Dataset) -> None:
         _moments.check_moment_items(dataset, self._method)
@@ -267,21 +256,11 @@ class PixelMoments(Observable):
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> 'PixelMomentsPlan':
         model_cube = _moments.spectra_model_cube(
-            self, oversampling, instrument, dtype, fft_dtype,
-            self._median_size)
-        return PixelMomentsPlan(
-            self, model_cube, driver, scene, line_of_sight, foreground, dtype,
-            pixel_weights, flux_scale)
+            self, setup, self._median_size)
+        return PixelMomentsPlan(self, model_cube, driver, scene, setup)
 
 
 class PixelMomentsPlan(CubeObservablePlan):
@@ -292,18 +271,12 @@ class PixelMomentsPlan(CubeObservablePlan):
             model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ):
-        super().__init__(
-            model_cube, driver, scene, line_of_sight, foreground, dtype,
-            pixel_weights, flux_scale)
+        super().__init__(model_cube, driver, scene, setup)
         self._moments = _moments.MomentsPlan(
             driver, moments.size(), moments.orders(), moments.flux_floor(),
-            moments.method(), dtype)
+            moments.method(), setup.dtype)
 
     def _measure(self) -> ModelData:
         # The moment maps, one mask shared by all of them, and the weight

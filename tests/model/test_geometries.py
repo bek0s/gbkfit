@@ -55,7 +55,7 @@ def test_a_tied_geometry_is_the_geometry_it_is_tied_to(
         f'hi_{name}': value for name, value in GEOMETRY.items()} | {
         f'ha_{name}': f'hi_{name}' for name in GEOMETRY})
     np.testing.assert_allclose(
-        data_given[0]['spectra']['d'], data_tied[0]['spectra']['d'],
+        data_given[0]['spectra'].data, data_tied[0]['spectra'].data,
         rtol=1e-6, atol=1e-9)
 
 

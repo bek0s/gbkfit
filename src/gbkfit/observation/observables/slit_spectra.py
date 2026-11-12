@@ -2,7 +2,7 @@
 The observable of spectra along a long slit.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 
 import numpy as np
@@ -11,23 +11,19 @@ from annotated_types import Gt
 from gbkfit.config import Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
-from gbkfit.grid import Grid, GridData, SpectralAxis
-from gbkfit.instrument import Instrument
+from gbkfit.grid import Grid, GridData, SpectralAxis, grid_options
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from . import _model_cube
 from ._cube_plan import CubeObservablePlan
 from ._data_units import data_unit
 from ._options import (
-    Rota, Rpix, Rval, Size, Step, dataset_grid_options, grid_options,
-    warn_unsmoothed_weights)
-from .base import FluxScale, ModelData, Observable
+    Rota, Rpix, Rval, Size, Step, warn_unsmoothed_weights)
+from .base import (
+    FluxScale, ModelData, ModelItem, Observable, ObservationSetup)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
     from ..noise import Noise
-    from ..weights import Weights
 
 
 __all__ = [
@@ -129,9 +125,10 @@ class SlitSpectra(Observable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of slit spectra.
         ValueError
-            If the dataset is not of slit spectra, or the options are not
-            valid.
+            If the options are not valid.
         """
         check_options(SlitSpectra.from_data, locals())
         return cls(
@@ -183,7 +180,7 @@ class SlitSpectra(Observable):
 
     def make_dataset(self, items: Mapping[str, Data]) -> DatasetSlitSpectra:
         return DatasetSlitSpectra(
-            items['spectra'], **dataset_grid_options(self.grid()))
+            items['spectra'], **grid_options(self.grid(), sizes=False))
 
     def data_unit(
             self,
@@ -211,47 +208,34 @@ class SlitSpectra(Observable):
     def model_can_have_missing_values(self) -> bool:
         return False
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
-        warn_unsmoothed_weights(self._smooth_weights, instrument)
+    def check_observation(self, setup: ObservationSetup) -> None:
+        warn_unsmoothed_weights(self._smooth_weights, setup.instrument)
 
     def plan(
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> 'SlitSpectraPlan':
         # The cube of a slit is one pixel (the slit width) across the slit,
         # sampled as finely as the pixels along it (the model is the mean
         # over the slit)
         size, coords = self._grid.size, self._grid.coords
         step, rpix, rval = coords.step, coords.rpix, coords.rval
+        oversampling = setup.oversampling
         across = oversampling[0] * max(1, round(self._slit_width / step[0]))
         model_cube = _model_cube.ModelCube(
             Grid((size[0], 1, size[1]), coords._replace(
                 step=(step[0], self._slit_width, step[1]),
                 rpix=(rpix[0], 0, rpix[1]), rval=(rval[0], 0, rval[1])), 2),
             oversampling=(oversampling[0], across, oversampling[1]),
-            primary_beam=instrument.primary_beam(),
-            psf=instrument.psf(),
-            lsf=instrument.lsf(),
+            primary_beam=setup.instrument.primary_beam(),
+            psf=setup.instrument.psf(),
+            lsf=setup.instrument.lsf(),
             smooth_weights=self._smooth_weights,
-            dtype=dtype,
-            fft_dtype=fft_dtype)
-        return SlitSpectraPlan(
-            model_cube, driver, scene, line_of_sight, foreground, dtype,
-            pixel_weights, flux_scale)
+            dtype=setup.dtype,
+            fft_dtype=setup.fft_dtype)
+        return SlitSpectraPlan(model_cube, driver, scene, setup)
 
 
 class SlitSpectraPlan(CubeObservablePlan):
@@ -277,7 +261,7 @@ class SlitSpectraPlan(CubeObservablePlan):
 
     def _measure(self) -> ModelData:
         plan = self._model_cube_plan
-        return dict(spectra=dict(
-            d=plan.cube()[:, 0, :],
-            m=None,
-            w=plan.weights()[:, 0, :] if plan.weights() is not None else None))
+        weights = plan.weights()
+        return dict(spectra=ModelItem(
+            plan.cube()[:, 0, :],
+            weights=None if weights is None else weights[:, 0, :]))

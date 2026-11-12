@@ -14,7 +14,7 @@ import numpy as np
 from gbkfit.driver import Driver
 from gbkfit.model import Extra, Extras
 from gbkfit.objective import Objective
-from gbkfit.observation import GroupPlan, Observation
+from gbkfit.observation import GroupPlan, HostModelData, Observation
 from gbkfit.outputs import Output, product_extension
 from gbkfit.params import ParamValues
 
@@ -111,21 +111,45 @@ def evaluation_outputs(
     """
     Return the outputs of an evaluation of a plan of a group, by path, in
     the form the observations give them (their images made on their
-    drivers), in observations/<observation>/<kind>/<item>
-    of each data item: the models (kind 'model'; 'model_mask' and
-    'model_weight'), and the residuals ((model - data) / error) without
-    and with the weights of the data items ('residual' and 'wresidual';
-    these need the objective; the values of the parameters must have
-    those of the solved elements that it solves, see Setup.evaluate).
-    With the models, a flux scale of several values of an observation
-    (see ObservationSky) is 'flux_scale'
-    (observations/<observation>/flux_scale), of the shape of its spectra
-    but their axis. With the models, the images that the observations
-    make of them ('model_image', in place of the item: the name of the
-    image; see Observation.images), and of the data minus them
-    ('residual_image'), with the weights of the data. Unless left out
+    drivers), in observations/<observation>/<kind>/<item> of each data
+    item: the models (kind 'model'; 'model_mask' and 'model_weight'), and
+    the residuals ((model - data) / error) without and with the weights
+    of the data items ('residual' and 'wresidual'; these need the
+    objective; the values of the parameters must have those of the solved
+    elements that it solves, see Setup.evaluate). With the models, a flux
+    scale of several values of an observation (see ObservationSky) is
+    'flux_scale' (observations/<observation>/flux_scale), of the shape of
+    its spectra but their axis. With the models, the images that the
+    observations make of them ('model_image', in place of the item: the
+    name of the image; see Observation.images), and of the data minus
+    them ('residual_image'), with the weights of the data. Unless left out
     (extra), the extra outputs of the models are 'extra', with their
     titles and descriptions (see _extra_output).
+
+    Parameters
+    ----------
+    group_plan : GroupPlan
+        The plan of the group.
+    objective : Objective or None
+        The objective of the group, which the residuals need.
+    values : ParamValues
+        The values of the parameters of the evaluation.
+    model : bool
+        Whether to give the models (and their images and flux scales).
+    residuals : bool
+        Whether to give the residuals.
+    extra : bool, optional
+        Whether to give the extra outputs of the models; True by default.
+
+    Returns
+    -------
+    dict of str to Output
+        The outputs, by path.
+
+    Raises
+    ------
+    ValueError
+        If the residuals are wanted without an objective.
     """
     group = group_plan.group()
     outputs = []
@@ -137,20 +161,20 @@ def evaluation_outputs(
         for i, data_i in enumerate(models):
             observation = group.observations()[i]
             name = group.observation_label(i)
-            for key, value in data_i.items():
-                for kind, part in (
-                        ('model', 'd'), ('model_mask', 'm'),
-                        ('model_weight', 'w')):
-                    if value.get(part) is None:
+            for key, item in data_i.items():
+                for kind, array in (
+                        ('model', item.data), ('model_mask', item.mask),
+                        ('model_weight', item.weights)):
+                    if array is None:
                         continue
                     output = observation.output(
-                        value[part],
-                        _unit(observation, key) if part == 'd' else None)
+                        array,
+                        _unit(observation, key) if kind == 'model' else None)
                     outputs.append(
                         _observation_output(name, kind, key, output))
             outputs += _images(
                 observation, group_plan.observation_drivers()[i], name,
-                {k: v['d'] for k, v in data_i.items()})
+                {key: item.data for key, item in data_i.items()})
             if (scale := _flux_scale_map(observation, values, data_i)) \
                     is not None:
                 outputs.append(Output(
@@ -179,7 +203,7 @@ def evaluation_outputs(
 def _flux_scale_map(
         observation: Observation,
         values: ParamValues,
-        model: Mapping[str, Mapping[str, np.ndarray | None]]
+        model: HostModelData
 ) -> np.ndarray | None:
     """
     Return the values of the flux scale of an observation of several
@@ -191,7 +215,7 @@ def _flux_scale_map(
             or flux_scale[1].axis is None:
         return None
     param, scale = flux_scale
-    shape = list(model[scale.items[0]]['d'].shape)
+    shape = list(model[scale.items[0]].data.shape)
     del shape[scale.axis]
     return np.reshape(values[param], shape)
 

@@ -3,30 +3,23 @@ The base of the observables of data in regions of the sky (see
 RegionsObservable), its plan, and the grids and weights of regions.
 """
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 import scipy.sparse
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.grid import Grid, SpectralAxis, make_grid, per_axis
-from gbkfit.instrument import Instrument
+from gbkfit.grid import Grid, SpectralAxis, grid_options, make_grid, per_axis
 from gbkfit.region import Regions, regions_parser
 from ._cube_plan import CubeObservablePlan
 from ._model_cube import ModelCube
 from ._options import (
-    GRID_OPTIONS, Rota, Rpix, Rval, Size, Step, grid_options,
-    without_options_from_data)
+    GRID_OPTIONS, Rota, Rpix, Rval, Size, Step, without_options_from_data)
 from ._sparse_sums import SparseSumsPlan
-from .base import Observable
+from .base import Observable, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
-    from ..weights import Weights
 
 
 def spatial_grid_of_regions(
@@ -168,13 +161,8 @@ class RegionsObservable(Observable):
         """Return the regions."""
         return self._regions
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
-        if pixel_weights is not None:
+    def check_observation(self, setup: ObservationSetup) -> None:
+        if setup.pixel_weights is not None:
             raise ValueError(
                 f"{self.type()} does not support pixel_weights yet")
 
@@ -188,9 +176,10 @@ class RegionsObservablePlan(CubeObservablePlan):
     """
     The evaluation of an observable of data in regions (see
     RegionsObservable): its cube (see CubeObservablePlan; without pixel
-    weights), and the sums of its pixels in each region, with their flux
-    weights (see flux_weights), in each of its channels: the spectra of
-    the regions (see _sum_regions).
+    weights, which RegionsObservable.check_observation refuses), and the
+    sums of its pixels in each region, with their flux weights (see
+    flux_weights), in each of its channels: the spectra of the regions
+    (see _sum_regions).
     """
 
     def __init__(
@@ -199,18 +188,13 @@ class RegionsObservablePlan(CubeObservablePlan):
             model_cube: ModelCube,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            dtype: np.dtype,
-            flux_scale: str | None
+            setup: ObservationSetup
     ):
-        super().__init__(
-            model_cube, driver, scene, line_of_sight, foreground, dtype, None,
-            flux_scale)
-        self._sums = SparseSumsPlan(weights, driver, dtype)
+        super().__init__(model_cube, driver, scene, setup)
+        self._sums = SparseSumsPlan(weights, driver, setup.dtype)
         # The spectra of the regions (nchannels, nregions)
         self._spectra = driver.mem_alloc_d(
-            (model_cube.grid().size[2], self._sums.nrows()), dtype)
+            (model_cube.grid().size[2], self._sums.nrows()), setup.dtype)
 
     def _sum_regions(self, cube: DeviceArray) -> DeviceArray:
         """

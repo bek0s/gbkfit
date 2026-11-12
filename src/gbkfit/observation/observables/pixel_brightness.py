@@ -2,7 +2,7 @@
 The observable of brightness on a grid of pixels: an image.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -10,23 +10,18 @@ import numpy as np
 from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
-from gbkfit.grid import Grid, GridData
-from gbkfit.instrument import Instrument
+from gbkfit.grid import Grid, GridData, grid_options
 from gbkfit.model import BandEmission, DataUnit, LightUnit
 from . import _model_cube
 from ._cube_plan import CubeObservablePlan
 from ._data_units import data_unit
 from ._options import (
-    MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size,
-    dataset_grid_options, grid_options)
-from .base import ModelData, Observable
+    MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size)
+from .base import ModelData, ModelItem, Observable, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
     from ..noise import Noise
-    from ..weights import Weights
 
 
 __all__ = [
@@ -61,10 +56,9 @@ class PixelBrightness(Observable):
         The rotation of the image on the sky.
     median_size : int, optional
         The size (an odd number of pixels, at least 3) of the median filter
-        that smoothed the data on the sky, which smooths the model as well
-        (e.g. 3, of cubes smoothed before their maps were made): each
-        channel takes the median of the square of the size about each
-        pixel, with zero beyond the edges (see ModelCube); none by default.
+        that smoothed the data on the sky, which smooths the model as well:
+        each pixel takes the median of the square of the size about it,
+        with zero beyond the edges (see ModelCube); none by default.
 
     Raises
     ------
@@ -111,9 +105,10 @@ class PixelBrightness(Observable):
 
         Raises
         ------
+        TypeError
+            If the dataset is not of brightness.
         ValueError
-            If the dataset is not of brightness, or the options are not
-            valid.
+            If the options are not valid.
         """
         check_options(PixelBrightness.from_data, locals())
         return cls(
@@ -145,7 +140,7 @@ class PixelBrightness(Observable):
             self, items: Mapping[str, Data]
     ) -> DatasetPixelBrightness:
         return DatasetPixelBrightness(
-            items['brightness'], **dataset_grid_options(self.grid()))
+            items['brightness'], **grid_options(self.grid(), sizes=False))
 
     def data_unit(
             self,
@@ -167,13 +162,8 @@ class PixelBrightness(Observable):
     def model_can_have_missing_values(self) -> bool:
         return False
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
-        if instrument.lsf() is not None:
+    def check_observation(self, setup: ObservationSetup) -> None:
+        if setup.instrument.lsf() is not None:
             raise ValueError(
                 "an image has no spectral axis for an LSF; remove the LSF "
                 "of the instrument")
@@ -182,14 +172,7 @@ class PixelBrightness(Observable):
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> 'PixelBrightnessPlan':
         # The cube of an image has one channel (of no width)
         coords = self._grid.coords
@@ -197,17 +180,15 @@ class PixelBrightness(Observable):
             Grid(self._grid.size + (1,), coords._replace(
                 step=coords.step + (0,), rpix=coords.rpix + (0,),
                 rval=coords.rval + (0,)), 2),
-            oversampling=tuple(oversampling) + (1,),
-            primary_beam=instrument.primary_beam(),
-            psf=instrument.psf(),
+            oversampling=setup.oversampling + (1,),
+            primary_beam=setup.instrument.primary_beam(),
+            psf=setup.instrument.psf(),
             lsf=None,
             smooth_weights=False,
-            dtype=dtype,
-            fft_dtype=fft_dtype,
+            dtype=setup.dtype,
+            fft_dtype=setup.fft_dtype,
             median_size=self._median_size)
-        return PixelBrightnessPlan(
-            model_cube, driver, scene, line_of_sight, foreground, dtype,
-            pixel_weights, flux_scale)
+        return PixelBrightnessPlan(model_cube, driver, scene, setup)
 
 
 class PixelBrightnessPlan(CubeObservablePlan):
@@ -234,7 +215,7 @@ class PixelBrightnessPlan(CubeObservablePlan):
 
     def _measure(self) -> ModelData:
         plan = self._model_cube_plan
-        return dict(brightness=dict(
-            d=plan.cube()[0, :, :],
-            m=None,
-            w=plan.weights()[0, :, :] if plan.weights() is not None else None))
+        weights = plan.weights()
+        return dict(brightness=ModelItem(
+            plan.cube()[0, :, :],
+            weights=None if weights is None else weights[0, :, :]))

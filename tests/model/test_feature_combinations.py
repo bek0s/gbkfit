@@ -116,12 +116,12 @@ def test_feature_combinations(driver, name, lens):
     observable = observation.observable()
     assert set(data) == set(observable.keys())
     for key, value in data.items():
-        model = value['d']
+        model = value.data
         assert np.isfinite(model).any(), key
         assert np.nanmax(np.abs(model)) > 0, key
-        if value['m'] is None:
+        if value.mask is None:
             assert np.isfinite(model).all(), key
     # The extra outputs can be written as their observables give them
     for key, value in data.items():
-        observable.output(value['d'])
+        observable.output(value.data)
     assert extra.find(observation='observation0', galaxy='galaxy0')

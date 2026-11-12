@@ -66,7 +66,7 @@ def evaluate_disk(
         plan.group().pdescs(),
         config['params']['properties'] | (properties or {}))
     data = plan.model_h(params.evaluate(), out_extra)
-    return data[0]['spectra']['d'].copy()
+    return data[0]['spectra'].data.copy()
 
 
 def velocity_field(scube):
@@ -387,7 +387,7 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), config['params']['properties'])
     extra = Extras()
-    scube = plan.model_h(params.evaluate(), extra)[0]['spectra']['d']
+    scube = plan.model_h(params.evaluate(), extra)[0]['spectra'].data
     velocities = (np.arange(120) - 59.5) * 5
     intensity = scube.sum(axis=0)
     bright = intensity > 0.01 * intensity.max()
@@ -496,9 +496,9 @@ def test_the_clouds_of_a_pool_stay_when_another_changes(driver):
     plan = group_plan([case])
     params = dict(
         xpos=0, ypos=0, posa=0, incl=0, rpt_a=np.ones(10), rht_s=0.2)
-    first = plan.model_h(params)[0]['brightness']['d'].copy()
+    first = plan.model_h(params)[0]['brightness'].data.copy()
     params['rpt_a'] = np.where(np.arange(10) == 3, 2.0, 1.0)
-    second = plan.model_h(params)[0]['brightness']['d']
+    second = plan.model_h(params)[0]['brightness'].data
     y, x = np.indices(first.shape)
     beyond = 0.5 * np.hypot(x - 19.5, y - 19.5) > 5.5
     assert np.any(first[beyond])

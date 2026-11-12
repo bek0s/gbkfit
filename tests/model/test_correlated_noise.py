@@ -71,7 +71,7 @@ def test_cubes_have_the_chi2_of_the_product_of_their_correlations(
     obj, params = objective(
         driver, data, LikelihoodGaussian(white_floor=0.05))
     model = obj.group_plan().model_h(
-        params)[0]['spectra']['d'].astype(float)
+        params)[0]['spectra'].data.astype(float)
     kept = np.any(mask != 0, axis=0)
     z = np.flatnonzero(np.any(mask != 0, axis=(1, 2)))
     r = ((model - data.data()) / data.error())[z][:, kept]

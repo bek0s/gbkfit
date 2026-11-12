@@ -48,9 +48,9 @@ class UVTransform(abc.ABC):
     to the points of each channel in each call (see NUFFT.set_points),
     which is faster than making one (e.g. 0.2 ms rather than 3 ms on a
     GPU, of a transform of 5 ms), and the memory of the device holds that
-    of one channel. Not done yet: keeping a NUFFT for each channel, which
-    would save the moves too (1 to 20% of the time of the transforms,
-    measured 2026-10-19), but needs the memory of one for each.
+    of one channel. Keeping a NUFFT for each channel would save the moves
+    too (1 to 20% of the time of the transforms), but needs the memory of
+    one for each.
 
     Parameters
     ----------
