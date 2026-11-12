@@ -140,7 +140,7 @@ def lines(velocities, flux, centre, sigma):
         -0.5 * ((velocities[:, None, None] - centre) / sigma) ** 2)
 
 
-@pytest.mark.parametrize('method', ['moments', 'gaussian_fit'])
+@pytest.mark.parametrize('method', ['moments', 'gauss_fit'])
 def test_the_moment_maps_of_a_cube_are_its_lines(driver, method):
     # Gaussian lines, on channels of decreasing velocity (as those of many
     # radio cubes): the maps are their flux, centre and dispersion; a
@@ -166,7 +166,7 @@ def test_the_moment_maps_of_a_cube_are_its_lines(driver, method):
         maps.data['moment2'][good], sigma[good], rtol=1e-3)
 
 
-@pytest.mark.parametrize('method', ['gaussian_fit', 'gauss_hermite'])
+@pytest.mark.parametrize('method', ['gauss_fit', 'gauss_hermite'])
 def test_the_fits_leave_missing_channels_out(driver, method):
     # (audit 2026-10-31 #20: zeroed, two missing channels at the peak
     # moved the centre by 4.5 km/s and the dispersion by 34)
@@ -190,7 +190,7 @@ def test_the_moments_of_a_spectrum_with_a_missing_channel_are_masked(
     assert np.isnan([maps.data[f'moment{i}'][0, 1] for i in range(3)]).all()
 
 
-@pytest.mark.parametrize('method', ['gaussian_fit', 'gauss_hermite'])
+@pytest.mark.parametrize('method', ['gauss_fit', 'gauss_hermite'])
 def test_the_fits_of_faint_lines_in_float32_are_those_of_bright_ones(
         driver, method):
     # (audit 2026-10-31 #21: in float32, the Gaussian fit of a line of

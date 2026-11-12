@@ -70,7 +70,7 @@ class ObjectiveEvaluation:
         The chi-square of the comparisons of the data with the models, with
         the noise residuals of a fitted noise (see noise_chi2).
     noise_chi2 : float
-        The sum of the squared noise residuals (see LikelihoodGaussian):
+        The sum of the squared noise residuals (see LikelihoodGauss):
         the part of data_chi2 that is not of the data (0 without a fitted
         noise).
     prior_chi2 : float
@@ -108,7 +108,7 @@ class Objective:
     Each observation has a comparison of its kind of likelihood (see
     Comparison): its residuals, of each value of its data, and the terms
     of the chi-square beyond them (e.g. the noise residuals of a fitted
-    noise; see LikelihoodGaussian). The objective sums them.
+    noise; see LikelihoodGauss). The objective sums them.
 
     The elements of parameters can be solved at each evaluation, rather
     than fitted (see Solve and ParamSpace): those that the models are
@@ -259,7 +259,7 @@ class Objective:
         """
         Release its memory on the devices and the host now, rather than
         when Python collects it (e.g. hundreds of megabytes of the whitening
-        of correlated noise; see LikelihoodGaussian), with that of the
+        of correlated noise; see LikelihoodGauss), with that of the
         recordings of orbits of its plan (see GroupPlan.close). The next
         evaluation allocates it again.
         """
@@ -460,7 +460,7 @@ class Objective:
         other, in a new array (in float64; see residual_vector_h for each
         observation), after them the residuals of the priors of the solved
         values (see Solve), and then the noise residuals of each
-        observation (see LikelihoodGaussian), if any.
+        observation (see LikelihoodGauss), if any.
 
         Parameters
         ----------
@@ -553,7 +553,7 @@ class Objective:
     def _noise_chi2(self) -> float:
         """
         Return the sum of the squared noise residuals of all observations
-        (see LikelihoodGaussian), of the last evaluation.
+        (see LikelihoodGauss), of the last evaluation.
         """
         return float(sum(
             np.sum(c.noise_residuals() ** 2) for c in self._comparisons))
@@ -593,7 +593,7 @@ class Objective:
         Return the number of residuals of the data that count: those of the
         comparisons (see Comparison.nresiduals); not the residuals of the
         priors of solved values (see ObjectiveEvaluation.nnuisance), nor
-        the noise residuals (see LikelihoodGaussian), which are not of the
+        the noise residuals (see LikelihoodGauss), which are not of the
         data.
         """
         return sum(c.nresiduals() for c in self._comparisons)

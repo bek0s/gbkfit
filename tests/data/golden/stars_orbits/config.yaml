@@ -1,6 +1,6 @@
 # stars_orbits: The kinematics of the stars of a flattened spheroid in Voronoi bins, as pPXF gives them (V, sigma, h3 and h4; log velocities, a PSF and no LSF), as Schwarzschild models are fitted to them: the weights of their orbits solved, of a prior whose width the AICp chooses. The data are of its rotating Jeans kinematics in the gravity of its light and a black hole.
 # (written by make_golden.py; do not edit)
-version: 8
+version: 9
 driver: {type: host}
 galaxies:
 - components:
@@ -31,7 +31,7 @@ observations:
     moment2: {data: observation0_moment2_d.fits, error: observation0_moment2_e.fits}
     h3: {data: observation0_h3_d.fits, error: observation0_h3_e.fits}
     h4: {data: observation0_h4_d.fits, error: observation0_h4_e.fits}
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: 0.5}
@@ -63,7 +63,7 @@ params:
     mass_bh_log_m: {value: 8.3, min: 6, max: 10}
     stars_weights:
       solve:
-        type: gaussian
+        type: gauss
         mean: 1
         sigma_aicp: [0.1, 100]
         min: 0

@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     'BootstrapBlocks',
-    'BootstrapGaussian',
+    'BootstrapGauss',
     'BootstrapOptions',
     'BootstrapScheme',
     'bootstrap_scheme_parser',
@@ -160,7 +160,7 @@ class BootstrapBlocks(BootstrapScheme):
         return dataset.resample_blocks(residuals, self._size, rng)
 
 
-class BootstrapGaussian(BootstrapScheme):
+class BootstrapGauss(BootstrapScheme):
     """
     Residuals drawn anew from a Gaussian of the noise of each value: a
     parametric bootstrap. Each value of the data is the model plus
@@ -178,7 +178,7 @@ class BootstrapGaussian(BootstrapScheme):
 
     @staticmethod
     def type() -> str:
-        return 'gaussian'
+        return 'gauss'
 
     @staticmethod
     def type_title() -> str:
@@ -213,7 +213,7 @@ class BootstrapGaussian(BootstrapScheme):
 
 
 bootstrap_scheme_parser = TypedParser(
-    BootstrapScheme, [BootstrapBlocks, BootstrapGaussian],
+    BootstrapScheme, [BootstrapBlocks, BootstrapGauss],
     family='bootstrap_scheme')
 
 

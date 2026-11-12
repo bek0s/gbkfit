@@ -1,6 +1,6 @@
 # image_light: A cube at an RA and Dec of a disk whose light is that of an observed image there (an image trait, with offsets), made by its galaxy at the geometry of the disk.
 # (written by make_golden.py; do not edit)
-version: 8
+version: 9
 driver: {type: host}
 galaxies:
 - components:
@@ -28,7 +28,7 @@ observations:
     data: observation0_spectra_d.fits
     error: 0.00015
     spectral: {step: 15, rpix: 19.5, rval: 0}
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:

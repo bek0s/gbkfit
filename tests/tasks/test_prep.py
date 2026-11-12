@@ -1037,7 +1037,7 @@ def test_nirspec_msa_spectra_of_a_source_in_a_slitlet():
         os.environ['GBKFIT_TEST_NIRSPEC_CAL'])
     assert len(spectra) == 3
     for slitlet in spectra:
-        shutters = slitlet.aperture.rectangles()
+        shutters = slitlet.slit_mask.rectangles()
         pitch = shutters[1, 2] - shutters[0, 2]
         assert [e.weight() for e in slitlet.exposures] == [1, -0.5, -0.5]
         # (nods of about a pitch: the source within 1% of a pitch of the same

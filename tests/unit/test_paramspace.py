@@ -400,7 +400,7 @@ def test_mode_errors(properties, modes, pattern):
         load_moded_params(dict(v=[1, 2, 3, 4], s=0, t=0) | properties, modes)
 
 
-SOLVE = dict(type='gaussian', mean=1, sigma=0.5, min=0)
+SOLVE = dict(type='gauss', mean=1, sigma=0.5, min=0)
 
 
 def test_solved_elements_take_their_values_without_data_or_given():
@@ -432,11 +432,11 @@ def test_solved_elements_take_their_values_without_data_or_given():
 
 @pytest.mark.parametrize('properties, modes, pattern', [
     (dict(s=dict(solve=SOLVE, value=1)), {}, r"its 'solve' alone"),
-    (dict(s=dict(solve=dict(type='gaussian', mean=1, sigma=0))), {},
+    (dict(s=dict(solve=dict(type='gauss', mean=1, sigma=0))), {},
      "'sigma' must be finite and greater than 0"),
     (dict(s=dict(solve=SOLVE | dict(min=-1))), {},
      r"gives values in \[-1.0, inf\], outside its valid range"),
-    (dict(s=dict(solve=dict(type='gaussian', mean=1, sigma=1))), {},
+    (dict(s=dict(solve=dict(type='gauss', mean=1, sigma=1))), {},
      "outside its valid range"),
     (dict(v=dict(solve=SOLVE)), dict(v=dict(type='offsets')),
      "with a mode cannot have solved elements"),

@@ -11,7 +11,8 @@ from annotated_types import Gt
 from gbkfit.config import Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
-from gbkfit.grid import Grid, GridData, SpectralAxis, grid_options
+from gbkfit.grid import (
+    Grid, GridData, SpectralAxis, grid_options, x_axis_rota)
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from . import _model_cube
 from ._cube_plan import CubeObservablePlan
@@ -49,8 +50,12 @@ class SlitSpectra(Observable):
     Spectra along a long slit: the model, seen through the instrument,
     averaged across the slit at each position along it.
 
-    Its configuration has the options below, but those of the grid when
-    it has data, which give them (see from_data).
+    The slit is oriented on the sky by its position angle, slit_pa, as
+    that of its data (see DatasetSlitSpectra): the position angle of its
+    +x axis, the way the positions along it increase.
+
+    Its configuration has the options below, but those of the grid (and
+    slit_pa) when it has data, which give them (see from_data).
 
     Parameters
     ----------
@@ -62,10 +67,12 @@ class SlitSpectra(Observable):
     step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the positions along the slit (see
         Coords; one value each); rpix is the centre by default.
-    rota : float, optional
-        The rotation of the frame of the slit (see Coords): the
-        position angle (degrees) of its +y axis, across the slit, which
-        lies along its x axis.
+    slit_pa : float, optional
+        The position angle of the slit (degrees, north through east), of
+        its +x axis; -90 by default (+x to the west, as the x axis of an
+        image of north up and east to the left). The rotation of its grid
+        (see Coords), the position angle of +y, across the slit, is 90
+        degrees more (see x_axis_rota).
     slit_width : float, optional
         The width of the slit; by default, the step along it.
     sky_rval : Sequence of float, optional
@@ -131,9 +138,27 @@ class SlitSpectra(Observable):
             If the options are not valid.
         """
         check_options(SlitSpectra.from_data, locals())
+        # (oriented by the slit of the data, not the rotation of its grid)
+        options = grid_options(dataset.grid())
+        del options['rota']
         return cls(
-            **grid_options(dataset.grid()), slit_width=slit_width,
+            **options, slit_pa=dataset.slit_pa(), slit_width=slit_width,
             sky_rval=sky_rval, smooth_weights=smooth_weights)
+
+    @classmethod
+    def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
+        # (the orientation of the slit, in place of the rotation of the
+        # grid)
+        return tuple(
+            'slit_pa' if option == 'rota' else option
+            for option in super().options_from_data(dataset))
+
+    def _dump_grid(self) -> dict[str, Any]:
+        # (the orientation of the slit, in place of the rotation of the
+        # grid, at its place)
+        return dict(
+            ('slit_pa', self._slit_pa) if key == 'rota' else (key, value)
+            for key, value in super()._dump_grid().items())
 
     def _dump_options(
             self, prefix: str, dump_path: bool, overwrite: bool
@@ -150,13 +175,15 @@ class SlitSpectra(Observable):
             step: Step = (1,),
             rpix: Rpix | None = None,
             rval: Rval = (0,),
-            rota: Rota = 0,
+            slit_pa: Rota = -90,
             slit_width: _Width | None = None,
             sky_rval: Rval = (0, 0),
             smooth_weights: bool = False
     ):
         check_options(SlitSpectra.__init__, locals())
-        super().__init__(size, step, rpix, rval, rota, spectral)
+        super().__init__(
+            size, step, rpix, rval, x_axis_rota(slit_pa), spectral)
+        self._slit_pa = float(slit_pa)
         if slit_width is None:
             slit_width = self.step()[0]
         sky_rval = tuple(sky_rval)
@@ -167,6 +194,10 @@ class SlitSpectra(Observable):
         self._sky_rval = float(sky_rval[0]), float(sky_rval[1])
         self._slit_width = slit_width
         self._smooth_weights = smooth_weights
+
+    def slit_pa(self) -> float:
+        """Return the position angle of the slit (see the class)."""
+        return self._slit_pa
 
     def slit_width(self) -> float:
         """Return the width of the slit."""
@@ -179,8 +210,10 @@ class SlitSpectra(Observable):
         return ('spectra',)
 
     def make_dataset(self, items: Mapping[str, Data]) -> DatasetSlitSpectra:
+        options = grid_options(self.grid(), sizes=False)
+        del options['rota']
         return DatasetSlitSpectra(
-            items['spectra'], **grid_options(self.grid(), sizes=False))
+            items['spectra'], **options, slit_pa=self._slit_pa)
 
     def data_unit(
             self,

@@ -70,7 +70,7 @@ class PixelMoments(Observable):
         The orders of the moments.
     method : str, optional
         How the maps are measured from the spectra, as the maps of the
-        data were: 'moments'; 'gaussian_fit' (the flux, centre and
+        data were: 'moments'; 'gauss_fit' (the flux, centre and
         dispersion of a Gaussian fitted to each, for the orders 0 to 2);
         or 'gauss_hermite' (of a Gauss-Hermite series fitted to each, for
         the orders 0 to 4: its flux, centre, dispersion, h3 and h4, with

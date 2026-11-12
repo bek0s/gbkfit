@@ -10,7 +10,8 @@ from typing import Any
 
 from ruamel.yaml.comments import CommentedMap
 
-from .rules import Change, Rule, components, flow, items, rename
+from .rules import (
+    EXPRESSIONS, Change, Rule, components, flow, items, rename, replaced)
 
 
 __all__ = [
@@ -23,10 +24,6 @@ __all__ = [
 # The options of the rings of a disk, which a warped geometry gave the
 # disks that shared it
 _RINGS = ('rnmax', 'rnsep', 'rnlen', 'rnodes')
-
-# The options of params sections that hold names of parameters
-_EXPRESSIONS = ('properties', 'derived', 'priors')
-
 
 class OwnGeometries(Rule):
     """
@@ -286,33 +283,12 @@ def _renamed_in_expressions(
     pattern = re.compile(rf'(?<![\w.]){re.escape(old)}(?!\w)')
     changes = []
     # Only the options of expressions: others hold e.g. file names
-    for key in [k for k in _EXPRESSIONS if k in params]:
-        params[key], replaced = _replace(params[key], pattern, new)
-        if replaced:
+    for key in [k for k in EXPRESSIONS if k in params]:
+        params[key], found = replaced(params[key], pattern, new)
+        if found:
             changes.append(Change(path + [key], (
                 f"{old} -> {new} in its expressions")))
     return changes
-
-
-def _replace(value: Any, pattern: re.Pattern, new: str) -> tuple[Any, bool]:
-    """
-    Return a value with the name of a pattern replaced in its strings and
-    those of its items (in place for lists and dictionaries), and whether
-    any was.
-    """
-    if isinstance(value, str):
-        result = pattern.sub(new, value)
-        return result, result != value
-    replaced = False
-    if isinstance(value, MutableMapping):
-        for key in list(value):
-            value[key], one = _replace(value[key], pattern, new)
-            replaced |= one
-    elif isinstance(value, list):
-        for i, item in enumerate(value):
-            value[i], one = _replace(item, pattern, new)
-            replaced |= one
-    return value, replaced
 
 
 def _insert_after(

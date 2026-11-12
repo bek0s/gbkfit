@@ -28,7 +28,7 @@ from gbkfit.params import (
 from ...mass._numerics import (
     sersic_b, sersic_density_table, sersic_tables)
 from ...mass import SpheroidDensity
-from ...mass.profiles import ProfileGaussian, ProfileSersic, SpheroidProfile
+from ...mass.profiles import ProfileGauss, ProfileSersic, SpheroidProfile
 from ...mass.shapes import (
     ShapeFlattened, ShapeSphere, SpheroidShape, spheroid_shape_parser)
 from .. import traits
@@ -428,7 +428,7 @@ class LightMGE(LightProfile):
     ) -> list[tuple[SpheroidShape, SpheroidProfile, ParamValues]]:
         # (a flattened spherical Gaussian of the mass of its light, 2 pi i0
         # sigma^2, in kpc, of each)
-        flattened, gaussian = ShapeFlattened(), ProfileGaussian()
+        flattened, gaussian = ShapeFlattened(), ProfileGauss()
         terms = []
         for i0, sigma, q in zip(*(
                 np.asarray(params[name], dtype=float)

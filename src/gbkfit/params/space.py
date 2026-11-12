@@ -158,7 +158,7 @@ class ParamSpace(Serializable):
     of the options of a free element ({'value': 1, 'min': 0, 'max': 2},
     whose attributes whose names start with '*' are lists spread over the
     elements, e.g. {'*value': [1, 2, 3], 'min': 0}), a dict of 'solve'
-    alone ({'solve': {'type': 'gaussian', 'mean': 1, 'sigma': 0.5}}),
+    alone ({'solve': {'type': 'gauss', 'mean': 1, 'sigma': 0.5}}),
     None, or a list of these.
 
     The keys are the names of the parameters, with a subscript of integer

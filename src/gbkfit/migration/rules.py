@@ -5,13 +5,15 @@ place, with the comments and the styles of YAML.
 """
 
 import abc
-from collections.abc import Iterator, Mapping, MutableMapping
+import re
+from collections.abc import Callable, Iterator, Mapping, MutableMapping
 from typing import Any, NamedTuple
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 
 __all__ = [
+    'EXPRESSIONS',
     'Change',
     'PiecesView',
     'Rule',
@@ -20,8 +22,15 @@ __all__ = [
     'insert_first',
     'items',
     'like',
-    'rename'
+    'rename',
+    'renamed_params',
+    'replaced'
 ]
+
+
+# The options of params sections that hold names of parameters (others
+# hold e.g. file names)
+EXPRESSIONS = ('properties', 'derived', 'priors')
 
 
 class Change(NamedTuple):
@@ -158,3 +167,68 @@ def flow(mapping: dict[str, Any]) -> CommentedMap:
     result = CommentedMap(mapping)
     result.fa.set_flow_style()
     return result
+
+
+def replaced(
+        value: Any,
+        pattern: re.Pattern,
+        new: str | Callable[[re.Match], str]
+) -> tuple[Any, bool]:
+    """
+    Return a value with the matches of a pattern replaced in its strings
+    and those of its items (in place for lists and dictionaries), and
+    whether any was.
+    """
+    if isinstance(value, str):
+        result = pattern.sub(new, value)
+        return result, result != value
+    found = False
+    if isinstance(value, MutableMapping):
+        for key in list(value):
+            value[key], one = replaced(value[key], pattern, new)
+            found |= one
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            value[i], one = replaced(item, pattern, new)
+            found |= one
+    return value, found
+
+
+def renamed_params(
+        params: MutableMapping[str, Any],
+        path: list[str | int],
+        renames: Mapping[str, str],
+        what: str
+) -> list[Change]:
+    """
+    Rename parameters of a params section by their names, in place, at
+    once (so that renames do not chain): the keys of its properties and
+    modes (e.g. a, a[1:]), and the names in its expressions; the function
+    of its transforms is code, which the changes say to rename by hand.
+    The changes of the expressions say whose parameters were renamed
+    (what, e.g. 'halos').
+    """
+    changes = []
+    for option in ('properties', 'modes'):
+        mapping = params.get(option)
+        if not isinstance(mapping, MutableMapping):
+            continue
+        for key in list(mapping):
+            name = key.split('[')[0]
+            if name in renames:
+                new = renames[name] + key[len(name):]
+                rename(mapping, key, new)
+                changes.append(Change(path + [option], f"{key} -> {new}"))
+    if 'transforms' in params:
+        changes.append(Change(path + ['transforms'], (
+            f"by hand: rename {', '.join(renames)} in the transforms "
+            f"function")))
+    pattern = re.compile(
+        rf'(?<![\w.])({"|".join(re.escape(o) for o in renames)})(?!\w)')
+    for key in [k for k in EXPRESSIONS if k in params]:
+        params[key], found = replaced(
+            params[key], pattern, lambda m: renames[m.group(1)])
+        if found:
+            changes.append(Change(path + [key], (
+                f"the parameters of {what} renamed in its expressions")))
+    return changes

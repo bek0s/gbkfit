@@ -45,9 +45,9 @@ SPEC_RANGE = 1000
 # moments, the moments of a Gaussian fitted to them (its flux, centre and
 # dispersion), or a Gauss-Hermite series fitted to them (its flux, centre,
 # dispersion, h3 and h4)
-MOMENT_METHODS = ('moments', 'gaussian_fit', 'gauss_hermite')
+MOMENT_METHODS = ('moments', 'gauss_fit', 'gauss_hermite')
 Method: TypeAlias = Annotated[Literal[MOMENT_METHODS], Choices(
-    moments='Moments', gaussian_fit='Gaussian fit',
+    moments='Moments', gauss_fit='Gaussian fit',
     gauss_hermite='Gauss-Hermite fit')]
 
 # The flux floor of the moments: a fraction of the flux of the brightest
@@ -55,7 +55,7 @@ Method: TypeAlias = Annotated[Literal[MOMENT_METHODS], Choices(
 FluxFloor: TypeAlias = Annotated[float, Ge(0), Lt(1)]
 
 # The highest order of the maps of each method
-_MAX_ORDERS = dict(moments=7, gaussian_fit=2, gauss_hermite=4)
+_MAX_ORDERS = dict(moments=7, gauss_fit=2, gauss_hermite=4)
 
 # The smallest dispersion (km/s) a spectral axis derived from the data
 # leaves room for (see spectral_axis)
@@ -425,7 +425,7 @@ class MomentsPlan:
         """
         Return the moments of cube, as evaluate, but with the spectra
         whose moment 0 is not above cutoff (in absolute value) masked.
-        The fits of the methods gaussian_fit and gauss_hermite leave the
+        The fits of the methods gauss_fit and gauss_hermite leave the
         channels without a value (NaN) out; the moments of a spectrum
         with one are not numbers.
 
@@ -442,7 +442,7 @@ class MomentsPlan:
         ModelData
             The model item of each moment, as evaluate.
         """
-        if self._method in ('gaussian_fit', 'gauss_hermite'):
+        if self._method in ('gauss_fit', 'gauss_hermite'):
             self._backend.mmaps_gaussian(
                 step, zero, cube, cutoff, self._mmaps_o,
                 self._mmaps_d, self._mmaps_m,

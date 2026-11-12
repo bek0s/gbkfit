@@ -21,13 +21,13 @@ from .observation import Observation
 
 __all__ = [
     'Comparison',
-    'ComparisonGaussian',
+    'ComparisonGauss',
     'ComparisonUser'
 ]
 
 
 # The upper limit of a data item without one, and its noise, as the
-# native residual takes them (see ComparisonGaussian.evaluate)
+# native residual takes them (see ComparisonGauss.evaluate)
 _NO_UPPER_LIMIT = (np.nan, np.nan)
 
 
@@ -124,7 +124,7 @@ class Comparison(abc.ABC):
         """
         Return the part of its chi-square of censored values, of the last
         evaluation: values below a limit (e.g. upper limits, see
-        LikelihoodGaussian), whose residuals are of the probability of
+        LikelihoodGauss), whose residuals are of the probability of
         being below it, about 0 where the model is well below it, rather
         than of a deviation; none here.
         """
@@ -317,7 +317,7 @@ class Comparison(abc.ABC):
 
     def noise_residuals(self) -> np.ndarray:
         """
-        Return its noise residuals (see LikelihoodGaussian), of the last
+        Return its noise residuals (see LikelihoodGauss), of the last
         evaluation: none here.
         """
         return np.zeros(0)
@@ -325,7 +325,7 @@ class Comparison(abc.ABC):
     def noise_constant(self) -> float:
         """
         Return the constant that its noise residuals add to -2 ln L (see
-        LikelihoodGaussian): none here.
+        LikelihoodGauss): none here.
         """
         return 0.0
 
@@ -400,7 +400,7 @@ class Comparison(abc.ABC):
 class _NoiseParams(NamedTuple):
     """
     The parameters of the fitted noise of a data item (see
-    LikelihoodGaussian): the names of those of its scale and of its jitter
+    LikelihoodGauss): the names of those of its scale and of its jitter
     (None for those not fitted), and the smallest scale (1 if the scale is
     not fitted).
     """
@@ -481,9 +481,9 @@ class _Whitener:
         driver.mem_scatter(values, self._pixels, flat)
 
 
-class ComparisonGaussian(Comparison):
+class ComparisonGauss(Comparison):
     """
-    The comparison of a Gaussian likelihood (see LikelihoodGaussian).
+    The comparison of a Gaussian likelihood (see LikelihoodGauss).
 
     The residual of each value is (model - data) / error, times the
     weights of the model (if any; their pixel weights, normalised to a
@@ -583,7 +583,7 @@ class ComparisonGaussian(Comparison):
         # The share of its values that each data item whose noise is fitted
         # counts in its noise residual: 1, but the independent values they
         # are worth over their number for correlated noise (see
-        # LikelihoodGaussian)
+        # LikelihoodGauss)
         self._noise_shares: np.ndarray | None = None
 
     def counted(self) -> np.ndarray:
@@ -657,7 +657,7 @@ class ComparisonGaussian(Comparison):
         data, if worked out (see prepare), for those of the same
         correlation and mask.
         """
-        if not isinstance(other, ComparisonGaussian):
+        if not isinstance(other, ComparisonGauss):
             return
         for key, whitener in other._whiteners.items():
             item, old = self._dataset[key], other._dataset[key]
@@ -800,7 +800,7 @@ class ComparisonGaussian(Comparison):
         Return the factor c of the weighted residual c (m - d) of each
         value of the given data items (see Comparison.pointwise_factors):
         the weight of the item times the mask, over the noise of the value
-        (see LikelihoodGaussian.noise); 0 where the data mask it.
+        (see LikelihoodGauss.noise); 0 where the data mask it.
         """
         likelihood = self._observation.likelihood()
         factors = {}
@@ -936,7 +936,7 @@ class ComparisonGaussian(Comparison):
 
     def noise_residuals(self) -> np.ndarray:
         """
-        Return its noise residuals (see LikelihoodGaussian), of the last
+        Return its noise residuals (see LikelihoodGauss), of the last
         evaluation: one for each data item whose noise is fitted (none
         without); not a copy.
         """
@@ -1055,7 +1055,7 @@ class ComparisonUser(Comparison):
                 continue
             if (weights := model[key].weights) is not None:
                 # (normalised to a mean square of 1 over the values the
-                # data do not mask, as ComparisonGaussian._pixel_weight)
+                # data do not mask, as ComparisonGauss._pixel_weight)
                 weights = np.asarray(driver.mem_copy_d2h(weights), float)
                 unmasked = weights[mask != 0]
                 total = float(np.sum(unmasked ** 2))

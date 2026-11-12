@@ -12,7 +12,7 @@ from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
-    LikelihoodGaussian, LineOfSightFlat, ObservationSky, PixelBrightness,
+    LikelihoodGauss, LineOfSightFlat, ObservationSky, PixelBrightness,
     PixelMoments, UpperLimit, observable_parser, observation_parser)
 
 
@@ -29,7 +29,7 @@ def test_observable_from_data():
     assert observable.spectral().rval() == 1500
     ObservationSky(
         observable, LineOfSightFlat(), data=data,
-        likelihood=LikelihoodGaussian(missing_residual=3))
+        likelihood=LikelihoodGauss(missing_residual=3))
 
 
 @pytest.mark.parametrize('dataset_class, observable_class, shape', [
@@ -164,7 +164,7 @@ def test_a_group_with_other_data_has_the_units_they_give():
     data = brightness('Jy')
     observation = ObservationSky(
         PixelBrightness.from_data(data), LineOfSightFlat(), data=data,
-        likelihood=LikelihoodGaussian(noise=dict(
+        likelihood=LikelihoodGauss(fitted_noise=dict(
             brightness=FittedNoise(jitter=True))), name='obs')
     group = ObservationGroup([galaxy], [observation])
     jitter = 'obs_noise_jitter_brightness'
@@ -186,7 +186,7 @@ def test_a_group_with_other_data_is_a_copy_of_the_same_parameters():
     plain = ObservationSky(
         PixelBrightness.from_data(data), LineOfSightFlat(), data=data,
         name='obs')
-    fitted = plain.with_data(data, LikelihoodGaussian(noise=dict(
+    fitted = plain.with_data(data, LikelihoodGauss(fitted_noise=dict(
         brightness=FittedNoise(jitter=True))))
     group = ObservationGroup([galaxy], [plain])
     copied = group.with_data([brightness('Jy')])
@@ -209,7 +209,7 @@ def test_likelihoods_name_items_of_their_observation(options, message):
             PixelMoments.from_data(
                 data, spectral=SpectralAxis(step=5, convention='relativistic')),
             LineOfSightFlat(), data=data,
-            likelihood=LikelihoodGaussian(missing_residual=3, **options))
+            likelihood=LikelihoodGauss(missing_residual=3, **options))
 
 
 def test_residuals_of_upper_limits_are_not_linear_in_the_model():
@@ -222,7 +222,7 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
         spectral=SpectralAxis(convention='relativistic'))
     observation = ObservationSky(
         PixelSpectra.from_data(data), LineOfSightFlat(), data=data,
-        likelihood=LikelihoodGaussian(
+        likelihood=LikelihoodGauss(
             upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))))
     comparison_ = observation.likelihood().comparison(
         observation, DriverHost())

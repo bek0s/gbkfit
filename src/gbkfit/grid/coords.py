@@ -33,7 +33,9 @@ __all__ = [
     'per_axis',
     'pixels_on',
     'sky_positions',
-    'sky_to_pixel'
+    'sky_to_pixel',
+    'x_axis_pa',
+    'x_axis_rota'
 ]
 
 
@@ -437,6 +439,26 @@ def sky_to_pixel(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
         [-np.sin(rota), np.cos(rota)]])
     matrix = rotation / np.asarray(grid.coords.step[:2], float)[:, None]
     return matrix, np.asarray(grid.coords.rpix[:2], float)
+
+
+def x_axis_rota(position_angle: float) -> float:
+    """
+    Return the rotation (rota, the position angle of its +y axis; see
+    Coords) of a grid whose +x axis is at the given position angle
+    (degrees, north through east; e.g. a slit along x, whose position
+    angle is quoted so): 90 degrees more, as +x is 90 degrees clockwise of
+    +y on a sky of north up and east to the left (west, of a grid of rota
+    0; see sky_positions).
+    """
+    return position_angle + 90
+
+
+def x_axis_pa(rota: float) -> float:
+    """
+    Return the position angle (degrees, north through east) of the +x
+    axis of a grid of the given rotation (see x_axis_rota).
+    """
+    return rota - 90
 
 
 def _to_sky(

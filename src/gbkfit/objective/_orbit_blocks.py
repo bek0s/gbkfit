@@ -177,7 +177,7 @@ def orbit_blocks(
                 f"the weights of the orbits of the stars of "
                 f"{recording.spheroid().name()!r} ({param!r}) are solved to "
                 f"fit the data: give them a solve, e.g. {param}: {{solve: "
-                f"{{type: gaussian, mean: 1, sigma: 1, min: 0, "
+                f"{{type: gauss, mean: 1, sigma: 1, min: 0, "
                 f"likelihood: profiled}}}}")
         if len({id(solves[element]) for element in elements}) > 1:
             raise ValueError(

@@ -10,7 +10,7 @@ import pytest
 
 from gbkfit.grid import (
     CONVENTIONS, Grid, VelocityConvention, check_overlap, make_convention,
-    make_grid, make_rest, pixels_on)
+    make_grid, make_rest, pixels_on, x_axis_pa, x_axis_rota)
 from gbkfit.io import coords_from_header, read_data, write_data
 
 
@@ -40,6 +40,25 @@ def test_grids_are_placed_by_their_sky_positions():
     expected = wcs_b.world_to_pixel(wcs_a.pixel_to_world(i, j))
     np.testing.assert_allclose(
         pixels_on(grid_a, grid_b), expected, atol=1e-6)
+
+
+@pytest.mark.parametrize('position_angle', [-90, 0, 30, 135])
+def test_the_x_axis_of_a_grid_is_90_degrees_from_its_rotation(
+        position_angle):
+    # The rotation of a grid (rota) is the position angle of its +y axis;
+    # its +x axis (e.g. along a slit, whose position angle is quoted) is
+    # 90 degrees clockwise of it, on the sky of north up and east to the
+    # left: astropy finds the position angle of +x of the WCS of the
+    # rotation of x_axis_rota
+    rota = x_axis_rota(position_angle)
+    wcs = celestial_wcs([150.0, 50.0], [1, 1], rota)
+    coords = coords_from_header('a', wcs.to_header())
+    assert (coords.rota - rota + 180) % 360 - 180 == pytest.approx(
+        0, abs=1e-6)
+    centre, ahead = wcs.pixel_to_world([0, 1], [0, 0])
+    assert (centre.position_angle(ahead).deg - position_angle + 180) \
+        % 360 - 180 == pytest.approx(0, abs=1e-6)
+    assert x_axis_pa(rota) == position_angle
 
 
 def test_grids_must_overlap():

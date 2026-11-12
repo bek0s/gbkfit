@@ -1,6 +1,6 @@
 # mcdisk_cube: A thick Monte Carlo disk of clouds of a fixed seed in a cube, float64, on a grid.
 # (written by make_golden.py; do not edit)
-version: 8
+version: 9
 driver: {type: host}
 galaxies:
 - components:
@@ -25,7 +25,7 @@ observations:
     data: observation0_spectra_d.fits
     error: 0.00015
     spectral: {step: 15, rpix: 19.5, rval: 0}
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: null}

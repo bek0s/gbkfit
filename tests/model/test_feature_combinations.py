@@ -53,7 +53,7 @@ OBSERVABLES = dict(
         type='pixel_spectra', size=[24, 25], step=[1, 1],
         spectral=dict(size=61, step=20, rest='6562.8 Angstrom')),
     slit_spectra=dict(
-        type='slit_spectra', size=[24], step=[1], rota=40,
+        type='slit_spectra', size=[24], step=[1], slit_pa=-50,
         spectral=dict(size=61, step=20, rest='6562.8 Angstrom')),
     pixel_moments=dict(
         type='pixel_moments', size=[24, 25],
@@ -62,7 +62,7 @@ OBSERVABLES = dict(
     pixel_moments_fit=dict(
         type='pixel_moments', size=[24, 25],
         spectral=dict(size=81, step=10, rest='6562.8 Angstrom'),
-        flux_floor=1e-4, method='gaussian_fit'),
+        flux_floor=1e-4, method='gauss_fit'),
     region_moments=dict(
         type='region_moments', regions=APERTURES, size=[24, 25],
         spectral=dict(size=81, step=10, rest='6562.8 Angstrom'),

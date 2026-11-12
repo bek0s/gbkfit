@@ -26,7 +26,7 @@ from gbkfit.model import galaxy_parser
 from gbkfit.objective import Merits, Objective
 from gbkfit.parallel import WorkersProcesses, WorkersThreads
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGaussian, LikelihoodUser, LineOfSightFlat,
+    FittedNoise, LikelihoodGauss, LikelihoodUser, LineOfSightFlat,
     ObservationGroup, ObservationSky, PixelBrightness)
 from gbkfit.params import (
     FreeElement, ParamEvaluationError, ParamScalarDesc, ParamSpace,
@@ -271,8 +271,9 @@ def test_least_squares_fit_the_scale_of_the_errors(driver):
     # tolerance of the fit), not about 7 (with the noise residual, N log
     # (2 / 0.1)^2)
     from gbkfit.fitting.fitters.scipy import FitterScipyLeastSquares
-    likelihood = LikelihoodGaussian(
-        noise=dict(brightness=FittedNoise(scale=True, scale_min=0.1)))
+    likelihood = LikelihoodGauss(
+        fitted_noise=dict(
+            brightness=FittedNoise(scale=True, scale_min=0.1)))
     objective = mock_objective(
         driver, error_scale=0.5, likelihood=likelihood, name='mock')
     params = ParamSpace.from_properties(
@@ -375,7 +376,7 @@ def test_a_prior_chosen_by_the_aicp_needs_fits_of_the_aicp():
     params = ParamSpace.from_properties(
         plan.group().pdescs(), bounded_properties() | dict(
             obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma_aicp=[0.1, 10], min=0,
+            type='gauss', mean=1, sigma_aicp=[0.1, 10], min=0,
             likelihood='profiled'))))
     objective = Objective(plan, params.solves())
     with pytest.raises(ValueError, match="minimises the aicp"):
@@ -396,7 +397,7 @@ def test_the_reduced_chi2_is_of_the_data_alone():
     params = ParamSpace.from_properties(
         plan.group().pdescs(), bounded_properties() | dict(
             rpt_a=TRUE['rpt_a'], obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1.5, sigma=0.05, min=0))))
+            type='gauss', mean=1.5, sigma=0.05, min=0))))
     objective = Objective(plan, params.solves())
     best = FitterScipyLeastSquares().fit(objective, params).best()
     residuals = objective.residuals(params.evaluate(list(best.free.values())))
@@ -415,7 +416,7 @@ def test_a_fit_of_solved_values_has_a_covariance():
     params = ParamSpace.from_properties(
         plan.group().pdescs(), bounded_properties() | dict(
             rpt_a=TRUE['rpt_a'], obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=1e8, min=0))))
+            type='gauss', mean=1, sigma=1e8, min=0))))
     objective = Objective(plan, params.solves())
     result = FitterScipyLeastSquares().fit(objective, params)
     best = result.best()
@@ -933,7 +934,7 @@ def test_optimizers_of_the_aicp_minimise_it():
         DriverHost(), name='obs', flux_scale='one').group_plan()
     params = ParamSpace.from_properties(plan.group().pdescs(), TRUE | dict(
         obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.1, min=0)),
+            type='gauss', mean=1, sigma=0.1, min=0)),
         posa=dict(min=36, max=44, n=5)))
     objective = Objective(plan, params.solves())
     reports = []
@@ -1138,13 +1139,13 @@ def test_a_stopped_bootstrap_resumes_from_its_log(tmp_path):
     # (stopped after two refits, it resumes with them, and ends as the
     # bootstrap that did not stop)
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
+        BootstrapGauss, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
     params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     start = fitter.fit(objective, params).best().elements
-    options = BootstrapOptions(4, BootstrapGaussian())
+    options = BootstrapOptions(4, BootstrapGauss())
     whole = run_bootstrap(objective, params, start, fitter, options)
     filename = str(tmp_path / 'bootstrap.jsonl')
     control = StopControl()
@@ -1208,7 +1209,7 @@ def test_a_gaussian_bootstrap_draws_the_noise_anew():
     # Refits of the model plus Gaussian noise of the errors: of white
     # noise, they scatter about as the covariance says
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
+        BootstrapGauss, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
     params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties())
@@ -1216,7 +1217,7 @@ def test_a_gaussian_bootstrap_draws_the_noise_anew():
     result = fitter.fit(objective, params)
     boot = run_bootstrap(
         objective, params, result.best().elements, fitter,
-        BootstrapOptions(10, BootstrapGaussian()))
+        BootstrapOptions(10, BootstrapGauss()))
     assert boot.samples.shape == (10, 6) and not boot.failures
     std = result.best().covariance.std
     for name in TRUE:
@@ -1227,7 +1228,7 @@ def test_a_bootstrap_keeps_refits_that_do_not_converge():
     # Refits stopped by their budget of evaluations are kept, and flagged:
     # leaving them out would bias the samples to the refits easy to fit
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
+        BootstrapGauss, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
     params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties())
@@ -1236,7 +1237,7 @@ def test_a_bootstrap_keeps_refits_that_do_not_converge():
     boot = run_bootstrap(
         objective, params, result.best().elements,
         fitter_parser.load(dict(type='scipy.least_squares', max_nfev=2)),
-        BootstrapOptions(3, BootstrapGaussian()))
+        BootstrapOptions(3, BootstrapGauss()))
     assert len(boot.samples) == 3 and not boot.failures
     assert not boot.converged.any()
     assert boot.info()['nunconverged'] == 3
@@ -1246,19 +1247,19 @@ def test_a_bootstrap_refits_fits_of_solved_values():
     # (the refits start at copies of the parameters, whose solves are equal
     # to those of the objective)
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
+        BootstrapGauss, BootstrapOptions, fitter_parser, run_bootstrap)
     plan = mock_objective(
         DriverHost(), name='obs', flux_scale='one').group_plan()
     params = ParamSpace.from_properties(
         plan.group().pdescs(), bounded_properties() | dict(
             obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.1, min=0))))
+            type='gauss', mean=1, sigma=0.1, min=0))))
     objective = Objective(plan, params.solves())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     result = fitter.fit(objective, params)
     boot = run_bootstrap(
         objective, params, result.best().elements, fitter,
-        BootstrapOptions(3, BootstrapGaussian()))
+        BootstrapOptions(3, BootstrapGauss()))
     assert len(boot.samples) == 3 and not boot.failures
 
 
@@ -1620,7 +1621,7 @@ def test_a_nested_evidence_of_profiled_solves_says_it_is_not_one(caplog):
     params = ParamSpace.from_properties(plan.group().pdescs(), TRUE | dict(
         incl=dict(prior=dict(type='uniform', min=50, max=60)),
         obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.5, min=0,
+            type='gauss', mean=1, sigma=0.5, min=0,
             likelihood='profiled'))))
     objective = Objective(plan, params.solves())
     result = FitterDynestyStatic(nlive=20, dlogz=10).fit(objective, params)
@@ -1860,7 +1861,7 @@ def test_the_information_criteria_take_solved_values_by_their_likelihood():
             DriverHost(), name='obs', flux_scale='one').group_plan()
         params = ParamSpace.from_properties(plan.group().pdescs(), TRUE | dict(
             obs_flux_scale=dict(solve=dict(
-                type='gaussian', mean=1, sigma=0.1, min=0,
+                type='gauss', mean=1, sigma=0.1, min=0,
                 likelihood=likelihood)),
             posa=dict(min=36, max=44, n=3)))
         best[likelihood] = FitterGrid().fit(

@@ -17,7 +17,7 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    LikelihoodGaussian, ObservationGroup, ObservationSky, PixelBrightness,
+    LikelihoodGauss, ObservationGroup, ObservationSky, PixelBrightness,
     line_of_sight_parser)
 from gbkfit.params import ParamSpace
 
@@ -41,7 +41,7 @@ ERROR = 0.05
 # Each amplitude solved above 0 (profiled: their integral has no exact
 # formula), of a broad prior
 SOLVE = dict(solve=dict(
-    type='gaussian', mean=0, sigma=100, min=0, likelihood='profiled'))
+    type='gauss', mean=0, sigma=100, min=0, likelihood='profiled'))
 
 
 def observation(size, data=None, observable=None):
@@ -141,7 +141,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
             observable, line_of_sight_parser.load(
                 dict(type='grid', depth=dict(step=0.5))),
             data=moments, lines=['stars'],
-            likelihood=LikelihoodGaussian(missing_residual=3))
+            likelihood=LikelihoodGauss(missing_residual=3))
     else:
         obs = observation(None, data)
     group = ObservationGroup([galaxy_parser.load(galaxy)], [obs])
@@ -169,7 +169,7 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
         core_xpos=0, core_ypos=0, core_posa=0, core_incl=0,
         core_sigma=[1, 2], core_q=[1, 1],
         core_i0=SOLVE, obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.5, min=0))))
+            type='gauss', mean=1, sigma=0.5, min=0))))
     with pytest.raises(ValueError, match="not linear in both"):
         Objective(group.plan(driver), params.solves())
 

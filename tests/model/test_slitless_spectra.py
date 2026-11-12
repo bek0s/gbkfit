@@ -301,7 +301,7 @@ def test_slitless_spectra_have_flux_scales_per_row(driver):
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES | dict(
             grism_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.5, min=0))))
+            type='gauss', mean=1, sigma=0.5, min=0))))
     objective = Objective(group.plan(driver), params.solves())
     found = np.array(list(
         objective.evaluate(params.evaluate()).solved.values()))
@@ -333,7 +333,7 @@ def test_shutters_let_through_the_light_of_their_sky(driver):
     # row 5: the image is the light of the sky under them, dispersed. And
     # a shutter over all the sky lets all of it through
     width, height = SIZE
-    shutters = SLITLESS | dict(aperture=dict(
+    shutters = SLITLESS | dict(slit_mask=dict(
         type='shutters', size=[1, 2], pitch=3, count=2,
         centre=[-2.5, -0.5]))
     cube = evaluate(driver, dict(
@@ -343,7 +343,7 @@ def test_shutters_let_through_the_light_of_their_sky(driver):
         evaluate(driver, shutters),
         disperse_by_hand(cube, [3, 4, 6, 7], 5, width),
         rtol=1e-4, atol=1e-6 * cube.max())
-    everything = SLITLESS | dict(aperture=dict(
+    everything = SLITLESS | dict(slit_mask=dict(
         type='shutters', size=[1000, 1000]))
     np.testing.assert_allclose(
         evaluate(driver, everything), evaluate(driver, SLITLESS),
@@ -368,7 +368,7 @@ def test_a_finer_sky_places_the_light_within_its_pixels(driver):
 def test_nods_subtract_the_other_exposures(driver):
     # Three exposures of the sky moved by 0 and +-3 pixels along the slit,
     # of weights 1, -1/2 and -1/2: the image of the galaxy moved likewise
-    shutters = SLITLESS | dict(aperture=dict(
+    shutters = SLITLESS | dict(slit_mask=dict(
         type='shutters', size=[3, 2], pitch=3, count=3))
     nods = shutters | dict(exposures=[
         dict(weight=1), dict(sky_offset=[0, 3], weight=-0.5),
@@ -391,8 +391,8 @@ def test_nods_subtract_the_other_exposures(driver):
 def test_exposures_whose_light_misses_the_image_add_nothing(driver):
     # Behind shutters, an exposure of the sky moved 100 pixels up, with
     # its image moved back down, has none of the sky of the cube open in
-    # the aperture: none of its light lands on the image
-    shutters = SLITLESS | dict(aperture=dict(
+    # the slit mask: none of its light lands on the image
+    shutters = SLITLESS | dict(slit_mask=dict(
         type='shutters', size=[3, 2], pitch=3, count=3))
     missing = shutters | dict(exposures=[
         dict(), dict(sky_offset=[0, 100], image_offset=[0, -100])])
@@ -415,10 +415,10 @@ def test_slitless_spectra_of_air_wavelengths_take_traces_in_vacuum(driver):
         atol=1e-9 * expected.max())
 
 
-def test_an_aperture_lets_the_spectrograph_blur_the_spectra(driver):
-    # Behind an aperture, the LSF of the instrument blurs the spectra along
+def test_a_slit_mask_lets_the_spectrograph_blur_the_spectra(driver):
+    # Behind a slit mask, the LSF of the instrument blurs the spectra along
     # the trace, keeping their light
-    shutter = SLITLESS | dict(aperture=dict(type='shutters', size=[3, 6]))
+    shutter = SLITLESS | dict(slit_mask=dict(type='shutters', size=[3, 6]))
     sharp = evaluate(driver, shutter)
     blurred = evaluate(driver, shutter | dict(
         lsf=dict(type='gauss', sigma='40 km/s')))
@@ -435,20 +435,20 @@ def test_resampled_spectra_spread_the_light_by_a_pixel_more(driver):
     assert resampled.max() < plain.max()
 
 
-def test_apertures_and_exposures_from_configurations():
+def test_slit_masks_and_exposures_from_configurations():
     from gbkfit.observation import observable_parser
     info = SLITLESS | dict(
-        aperture=dict(type='shutters', size=[0.2, 0.46], pitch=0.53,
-                      count=3, centre=[0.1, 0]),
+        slit_mask=dict(type='shutters', size=[0.2, 0.46], pitch=0.53,
+                       count=3, centre=[0.1, 0]),
         exposures=[dict(), dict(sky_offset=[0, 0.53], weight=-1)],
         sky_sampling=4, resampled=True)
     observable = observable_parser.load(copy.deepcopy(info))
-    assert observable.aperture().rectangles().shape == (3, 4)
+    assert observable.slit_mask().rectangles().shape == (3, 4)
     assert [e.weight() for e in observable.exposures()] == [1, -1]
     dumped = observable_parser.dump(observable)
     assert observable_parser.dump(observable_parser.load(dumped)) == dumped
     with pytest.raises(ValueError, match="pitch"):
-        observable_parser.load(SLITLESS | dict(aperture=dict(
+        observable_parser.load(SLITLESS | dict(slit_mask=dict(
             type='shutters', size=[0.2, 0.46], count=3)))
     with pytest.raises(ConfigError, match="sky_sampling"):
         observable_parser.load(SLITLESS | dict(sky_sampling=0))

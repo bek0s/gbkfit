@@ -108,11 +108,11 @@ class Lens(Serializable):
 
     def centre_params(self) -> tuple[tuple[str, str], ...]:
         """
-        Return the names of the parameters of the centres (x and y) of its
-        masses that are placed by them (see LensMass.centred).
+        Return the names of the parameters of the centres (xpos and ypos)
+        of its masses that are placed by them (see LensMass.centred).
         """
         return tuple(
-            (names['x'], names['y'])
+            (names['xpos'], names['ypos'])
             for mass, names in zip(self._masses, self._mappings)
             if mass.centred())
 

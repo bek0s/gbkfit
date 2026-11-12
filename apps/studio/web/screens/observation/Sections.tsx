@@ -342,7 +342,7 @@ export function LineOfSightFields({ defs, project, options, onChange, blocks, ti
 
 export function LikelihoodFields({ defs, project, options, onChange, blocks, titleOf }: Common & { titleOf: (family: string, type: unknown) => string }) {
   const likelihood = isObject(options.likelihood) ? options.likelihood : null;
-  const type = String(likelihood?.type ?? 'gaussian');
+  const type = String(likelihood?.type ?? 'gauss');
   const members = membersOf(defs.likelihood ?? {}, defs);
   const member = members.find((m) => typeOf(m) === type);
   const properties = member ? Object.fromEntries(Object.entries(propertiesOf(member)).filter(([key]) => key !== 'type')) : {};
@@ -353,7 +353,7 @@ export function LikelihoodFields({ defs, project, options, onChange, blocks, tit
         items={members.map((m) => ({ value: typeOf(m) ?? '', label: titleOf('likelihood', typeOf(m)) }))}
         value={type}
         label="The likelihood"
-        onChange={(next) => set(next === 'gaussian' ? undefined : { type: next })}
+        onChange={(next) => set(next === 'gauss' ? undefined : { type: next })}
       />
       {typeof member?.description === 'string' && <p className="ob-text">{firstSentence(member.description)}</p>}
       <More title={`Options of the ${titleOf('likelihood', type).toLowerCase()} likelihood`} count={likelihood ? Object.keys(likelihood).length - 1 : 0}>
@@ -362,7 +362,7 @@ export function LikelihoodFields({ defs, project, options, onChange, blocks, tit
           node={{ type: 'object', properties, required: [] }}
           project={project}
           value={likelihood ? Object.fromEntries(Object.entries(likelihood).filter(([key]) => key !== 'type')) : {}}
-          onChange={(next) => set(Object.keys(next).length || type !== 'gaussian' ? { type, ...next } : undefined)}
+          onChange={(next) => set(Object.keys(next).length || type !== 'gauss' ? { type, ...next } : undefined)}
           blocks={blocks}
         />
       </More>

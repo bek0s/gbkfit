@@ -1,6 +1,6 @@
 # regions: One galaxy in two observations of regions: the moments of Voronoi bins, and the spectra of apertures (a circle, an ellipse, a rectangle and the field).
 # (written by make_golden.py; do not edit)
-version: 8
+version: 9
 driver: {type: host}
 galaxies:
 - components:
@@ -24,11 +24,9 @@ observations:
       rval: [0.0, 0.0]
       rota: 0.0
     moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
-      error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
-      error: observation0_moment2_e.fits}
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
+  likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -56,7 +54,7 @@ observations:
     data: observation1_spectra_d.fits
     error: observation1_spectra_e.fits
     spectral: {step: 20, rpix: 19.5, rval: 0, rest: null, medium: null}
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:

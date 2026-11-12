@@ -268,7 +268,7 @@ class Observable(TypedSerializable, abc.ABC):
     ) -> dict[str, Any]:
         """
         Dump the observable to its configuration: its type, its grid (see
-        dump_grid) and its other options (see _dump_options), without
+        _dump_grid) and its other options (see _dump_options), without
         those that its data give, if any (see options_from_data).
         Observables with options in files that their data give (e.g.
         regions) override this: such a file is written only without data.
@@ -292,8 +292,16 @@ class Observable(TypedSerializable, abc.ABC):
             The options.
         """
         return without_options_from_data(self, dict(
-            type=self.type(), **dump_grid(self._grid),
+            type=self.type(), **self._dump_grid(),
             **self._dump_options(prefix, dump_path, overwrite)), data)
+
+    def _dump_grid(self) -> dict[str, Any]:
+        """
+        Return the configuration of its grid (see dump_grid); observables
+        whose options give their grid otherwise (e.g. a slit by its
+        position angle) override this.
+        """
+        return dump_grid(self._grid)
 
     @abc.abstractmethod
     def _dump_options(
@@ -392,7 +400,7 @@ class Observable(TypedSerializable, abc.ABC):
         Check whether its model can have missing values (NaN) where the
         data have some (e.g. the velocity of a spectrum below its
         flux_floor): the likelihood then needs a residual for them (see
-        LikelihoodGaussian).
+        LikelihoodGauss).
         """
 
     @abc.abstractmethod

@@ -37,20 +37,50 @@ def evaluate(driver, observable):
 
 @pytest.mark.parametrize('rota', [0, 30])
 @pytest.mark.parametrize('psf', [None, dict(type='gauss', sigma=1.5)])
-def test_slit_spectra_matches_the_central_row_of_pixel_spectra(driver, psf, rota):
-    # The cube has an odd number of rows, so its central row is
-    # centred on the slit, which passes through the reference position
-    common = dict(rota=rota, psf=psf, lsf=dict(
-        type='gauss', sigma='15 km/s'))
+def test_slit_spectra_matches_the_central_row_of_pixel_spectra(
+        driver, psf, rota):
+    # The cube has an odd number of rows, so its central row is centred on
+    # the slit, which passes through the reference position; the slit
+    # runs along the x axis of the cube, whose position angle is 90
+    # degrees less than the rotation of the cube (that of its +y axis)
+    common = dict(psf=psf, lsf=dict(type='gauss', sigma='15 km/s'))
     scube = evaluate(driver, dict(
-        type='pixel_spectra', size=[32, 41], step=[1, 1],
+        type='pixel_spectra', size=[32, 41], step=[1, 1], rota=rota,
         spectral=dict(size=51, step=10, convention='relativistic'), **common))
     lslit = evaluate(driver, dict(
-        type='slit_spectra', size=[32], step=[1],
+        type='slit_spectra', size=[32], step=[1], slit_pa=rota - 90,
         spectral=dict(size=51, step=10, convention='relativistic'), **common))
     assert lslit.shape == (51, 32)
     np.testing.assert_allclose(
         lslit, scube[:, 20, :], rtol=1e-4, atol=1e-5 * scube.max())
+
+
+@pytest.mark.parametrize('slit_pa, side', [(50, 1), (230, -1), (140, 0)])
+def test_a_slit_sees_the_rotation_along_its_position_angle(
+        driver, slit_pa, side):
+    # Of a disk of posa 50 (its receding major axis, of positive
+    # rotation): a slit at that position angle sees it recede towards +x,
+    # the way its positions increase; one the other way round, approach;
+    # and one across it, along the minor axis, no rotation
+    properties = PROPERTIES | dict(xpos=0, ypos=0)
+    plan = group_plan([dict(
+        driver=dict(type=driver.type()), galaxy=GALAXY,
+        line_of_sight=dict(type='flat'), observable=dict(
+            type='slit_spectra', size=[32], step=[1], slit_pa=slit_pa,
+            spectral=dict(size=51, step=10, convention='relativistic')))])
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
+    spectra = plan.model_h(params.evaluate())[0]['spectra'].data
+    velocities = (np.arange(51) - 25) * 10
+    centroid = velocities @ spectra / spectra.sum(axis=0)
+    # (the positions beyond 3 arcsec of the centre, at +x)
+    ahead = centroid[20:]
+    if side:
+        assert np.all(side * ahead > 50)
+        np.testing.assert_allclose(
+            centroid[::-1][1:], -centroid[1:], atol=1e-3 * abs(ahead).max())
+    else:
+        assert np.all(abs(centroid) < 1)
 
 
 def test_slit_spectra_width_is_the_mean_of_its_rows(driver):
@@ -74,11 +104,13 @@ def test_slit_spectra_objective_residual(driver):
     from gbkfit.objective import Objective
     observable = dict(
         type='slit_spectra', size=[32], step=[1],
-        spectral=dict(size=51, step=10, convention='relativistic'), rota=30)
+        spectral=dict(size=51, step=10, convention='relativistic'),
+        slit_pa=-60)
     model = evaluate(driver, observable)
     dataset = DatasetSlitSpectra(
         Data(model + 1, error=np.full_like(model, 2)), step=(1,),
-        spectral=SpectralAxis(step=10, convention='relativistic'), rota=30)
+        spectral=SpectralAxis(step=10, convention='relativistic'),
+        slit_pa=-60)
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
         LineOfSightFlat, ObservationGroup, ObservationSky, observable_parser)

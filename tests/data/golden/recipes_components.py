@@ -210,7 +210,7 @@ _WARPED_DISK = dict(
         vpt2_p=[30, 30, 35, 40, 45], vpt3_vv=_free(5, -50, 50),
         dpt_a=_free(28, 5, 80), dpt2_a=20, dpt3_a=14),
     noises=[dict(type='gauss', rms=1e-4)],
-    likelihoods=[dict(type='gaussian', missing_residual=3)])
+    likelihoods=[dict(type='gauss', missing_residual=3)])
 
 
 # --- A4: density as a sum of traits, and selection ---------------------------
@@ -250,7 +250,7 @@ _BLOBS_MAPS_SELECTION = dict(
         rpt2_q=[0.6, 0.8, 1], rpt2_p=[0, 30, 0], rpt3_a=_MAP_TRIAL,
         spt_rmin=0.5, spt_rmax=7.2, spt2_p=10, spt2_s=300),
     noises=[dict(type='gauss', rms=1e-4)],
-    likelihoods=[dict(type='gaussian', missing_residual=3)])
+    likelihoods=[dict(type='gauss', missing_residual=3)])
 
 
 # --- A5: a disk and an outflow cone, in two lines ----------------------------
@@ -284,7 +284,7 @@ _DISK_CONE_LINES = dict(
         wall=_free(35, 5, 60), vpt_vo=_free(220, 0, 500),
         nii_ratio=_free(0.7, 0, 2)))
     | dict(cube_flux_scale=dict(solve=dict(
-        type='gaussian', mean=1, sigma=0.5, min=0))),
+        type='gauss', mean=1, sigma=0.5, min=0))),
     noises=[dict(type='gauss', rms=1.5e-4)])
 
 

@@ -149,9 +149,9 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
 
 @pytest.mark.parametrize('observable, component, message', [
     (dict(
-        type='pixel_moments', size=[24, 24], method='gaussian_fit',
+        type='pixel_moments', size=[24, 24], method='gauss_fit',
         spectral=dict(convention='relativistic')), None,
-     "gaussian_fit does not support pixel_weights"),
+     "gauss_fit does not support pixel_weights"),
     (dict(
         type='pixel_spectra', size=[24, 24],
         spectral=dict(size=21, convention='relativistic')),

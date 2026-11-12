@@ -100,7 +100,7 @@ def test_objective_residuals(tmp_path):
     observation['data'] = dict(
         data=str(tmp_path / 'data.fits'), error=2.0) \
         | data_grid(observation['observable'])
-    observation['likelihood'] = dict(type='gaussian', weights=0.5)
+    observation['likelihood'] = dict(type='gauss', weights=0.5)
     # (a configuration of a fit evaluates too: its fitter is left)
     config['fitter'] = dict(type='scipy.least_squares')
     run = run_eval('objective', config, tmp_path / 'objective')
