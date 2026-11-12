@@ -161,7 +161,7 @@ def test_region_moments_observation_from_data(tmp_path):
         observable=dict(
             type='region_moments',
             spectral=dict(step=2, convention='relativistic')),
-        likelihood=dict(type='gaussian', missing_residual=3))
+        likelihood=dict(type='gauss', missing_residual=3))
     observation = observation_parser.load(copy.deepcopy(info))
     observable = observation.observable()
     assert observable.size() == (3, 2)
@@ -200,7 +200,7 @@ def test_region_moments_objective_residual(driver):
     from gbkfit.objective import Objective
     from gbkfit.instrument import instrument_parser
     from gbkfit.observation import (
-        LikelihoodGaussian, LineOfSightFlat, ObservationGroup, ObservationSky,
+        LikelihoodGauss, LineOfSightFlat, ObservationGroup, ObservationSky,
         RegionMoments)
     index = np.full((41, 32), -1)
     index[10:20, 5:15] = 0
@@ -225,7 +225,7 @@ def test_region_moments_objective_residual(driver):
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
         [ObservationSky(
             observable, LineOfSightFlat(), instrument=instrument,
-            data=dataset, likelihood=LikelihoodGaussian(missing_residual=3))])
+            data=dataset, likelihood=LikelihoodGauss(missing_residual=3))])
     residual = Objective(group.plan(driver)).residual_nddata_h(
         params.evaluate(), False)
     for key in ('moment1', 'moment2'):

@@ -32,8 +32,8 @@ class SlitletSpectra:
     """
     The spectra of a source in a slitlet of the micro-shutter array of
     JWST NIRSpec in one exposure, ready for slitless spectra behind the
-    shutters (see SlitlessSpectra.from_data, with the trace, the aperture
-    and the exposures; and nirspec_msa_spectra).
+    shutters (see SlitlessSpectra.from_data, with the trace, the slit
+    mask and the exposures; and nirspec_msa_spectra).
 
     Attributes
     ----------
@@ -42,7 +42,7 @@ class SlitletSpectra:
         undispersed light.
     trace : TraceTable
         The trace, of the model of the instrument.
-    aperture : SlitMaskShutters
+    slit_mask : SlitMaskShutters
         The open shutters of the slitlet.
     exposures : tuple of Exposure
         The exposures combined into the spectra: the exposure, and those
@@ -52,7 +52,7 @@ class SlitletSpectra:
     """
     dataset: 'DatasetSlitlessSpectra'
     trace: TraceTable
-    aperture: SlitMaskShutters
+    slit_mask: SlitMaskShutters
     exposures: tuple['Exposure', ...]
     resampled: bool = False
 
@@ -299,9 +299,9 @@ def nirspec_msa_rectified(
             return to_s2d(*from_detector(*detector))
         geometry = _nirspec_image(first, rectified)
         rpix, step, rota = geometry
-        aperture = _nirspec_shutters(first)
+        slit_mask = _nirspec_shutters(first)
         trace = _nirspec_trace(
-            first, s2d.data.shape, aperture, *geometry, rectified)
+            first, s2d.data.shape, slit_mask, *geometry, rectified)
         times = np.array([e.meta.exposure.exposure_time for e in exposures])
         weights = times / times.sum()
         nods = [_nirspec_nod(first, other, rota) for other in slitlets]
@@ -318,7 +318,7 @@ def nirspec_msa_rectified(
             step=step, rpix=tuple(rpix),
             rval=(first.origin.ra.deg, first.origin.dec.deg), rota=rota)
         return SlitletSpectra(
-            dataset, trace, aperture, tuple(combined), True)
+            dataset, trace, slit_mask, tuple(combined), True)
 
 
 def _nirspec_pathloss_at(
@@ -363,9 +363,9 @@ def _slitlet_spectra(
     mask = ((exposure.dq & 1) == 0) & np.isfinite(data) & np.isfinite(error)
     geometry = _nirspec_image(slitlet, slitlet.to_detector)
     rpix, step, rota = geometry
-    aperture = _nirspec_shutters(slitlet)
+    slit_mask = _nirspec_shutters(slitlet)
     trace = _nirspec_trace(
-        slitlet, exposure.data.shape, aperture, *geometry,
+        slitlet, exposure.data.shape, slit_mask, *geometry,
         slitlet.to_detector)
     exposures = (Exposure(),)
     if exposure.meta.cal_step.bkg_subtract == 'COMPLETE':
@@ -377,7 +377,7 @@ def _slitlet_spectra(
         Data(data, mask, error, exposure.meta.bunit_data),
         step=step, rpix=tuple(rpix),
         rval=(slitlet.origin.ra.deg, slitlet.origin.dec.deg), rota=rota)
-    return SlitletSpectra(dataset, trace, aperture, exposures)
+    return SlitletSpectra(dataset, trace, slit_mask, exposures)
 
 
 def _nirspec_image(
@@ -442,7 +442,7 @@ def _along_image(sky: np.ndarray, rota: float) -> np.ndarray:
 def _nirspec_trace(
         slitlet: _NirspecSlitlet,
         shape: tuple[int, int],
-        aperture: SlitMaskShutters,
+        slit_mask: SlitMaskShutters,
         rpix: np.ndarray,
         step: tuple[float, float],
         rota: float,
@@ -451,7 +451,7 @@ def _nirspec_trace(
     """
     Return the trace of a slitlet of NIRSpec on an image of its spectra
     (of the given shape and world coordinates of the undispersed light),
-    through its open shutters (the aperture): the offsets of the light of
+    through its open shutters (the slit mask): the offsets of the light of
     each wavelength at each place of the image, from its place on the sky
     to the slit frame, and from there to the image by to_image (x, y,
     wavelength).
@@ -460,7 +460,7 @@ def _nirspec_trace(
     wave = np.linspace(
         *slitlet.wave, max(4, nx // _NIRSPEC_WAVE_NODE_PIXELS))
     # (the places of the open shutters, and a margin)
-    rectangles = aperture.rectangles()
+    rectangles = slit_mask.rectangles()
     x, y = (
         np.arange(np.floor(rpix[axis] + edges.min() / step[axis])
                   - _NIRSPEC_PLACE_MARGIN,

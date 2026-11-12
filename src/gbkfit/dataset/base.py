@@ -326,7 +326,7 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         Return a copy of it with each spectrum of its data items masked
         whole where they mask any of its values (the union of the masks
         of the channels), as correlated noise needs (see
-        LikelihoodGaussian). The channels they mask in every spectrum
+        LikelihoodGauss). The channels they mask in every spectrum
         (e.g. a plane blank everywhere) are left out of the union: they
         stay masked, and mask no spectrum. The kinds of data with spectra
         on the sky offer it; the others raise ValueError.

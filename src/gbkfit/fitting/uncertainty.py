@@ -336,7 +336,7 @@ def covariance(
     (more residuals than free elements).
 
     The errors of a fitted noise (its scale and jitter, nuisances; see
-    LikelihoodGaussian) are approximate: J^T J of its noise residual is not
+    LikelihoodGauss) are approximate: J^T J of its noise residual is not
     the information of the noise, and makes them larger (by some 30-40%
     in the audit of 2026-10-26). The errors of the other elements do not
     depend on them.

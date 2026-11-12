@@ -35,7 +35,7 @@ __all__ = [
     'DiskSurface',
     'SurfaceComponent',
     'SurfaceExponential',
-    'SurfaceGaussianRing',
+    'SurfaceGaussRing',
     'SurfaceNodewise',
     'disk_surface_parser'
 ]
@@ -56,7 +56,7 @@ _COMPONENT_DEGREE = 8
 _COMPONENT_PANELS = 64
 
 
-# The gravity of thin Gaussian rings (see SurfaceGaussianRing): of their
+# The gravity of thin Gaussian rings (see SurfaceGaussRing): of their
 # surface density within this many dispersions of the peak (beyond, below
 # exp(-50) of it), by Gauss-Legendre quadrature on panels of half a
 # dispersion, and of widths that halve towards each radius (where the
@@ -436,7 +436,7 @@ class SurfaceExponential(DiskSurface):
                 + inner).reshape(R.shape)
 
 
-class SurfaceGaussianRing(DiskSurface):
+class SurfaceGaussRing(DiskSurface):
     """
     A ring whose surface density is a Gaussian of the radius (thin only).
     Of the total mass 10^log_m (Msun), the peak radius r_peak (kpc) and
@@ -451,7 +451,7 @@ class SurfaceGaussianRing(DiskSurface):
 
     @staticmethod
     def type() -> str:
-        return 'gaussian_ring'
+        return 'gauss_ring'
 
     @staticmethod
     def type_title() -> str:
@@ -876,4 +876,4 @@ class SurfaceComponent(DiskSurface):
 disk_surface_parser = TypedParser(DiskSurface, [
     SurfaceExponential,
     SurfaceNodewise,
-    SurfaceGaussianRing], family='disk_surface')
+    SurfaceGaussRing], family='disk_surface')

@@ -22,7 +22,7 @@ from gbkfit.grid import GridData, SpectraData
 from gbkfit.io import Beam
 from gbkfit.model import DataUnit, DepthUnit, Galaxy
 from gbkfit.params import ParamDesc, pdescs_with_units
-from .likelihoods import Likelihood, LikelihoodGaussian
+from .likelihoods import Likelihood, LikelihoodGauss
 from .observables import FluxScale, ObservablePlan
 
 
@@ -118,7 +118,7 @@ class Observation(TypedSerializable, abc.ABC):
         Whether its model can have missing values (NaN) where the data
         have some (e.g. the velocity of a spectrum below its flux_floor):
         the likelihood then needs a residual for them (see
-        LikelihoodGaussian). False by default.
+        LikelihoodGauss). False by default.
 
     Raises
     ------
@@ -126,7 +126,7 @@ class Observation(TypedSerializable, abc.ABC):
         If a name is invalid, there are no galaxies or they repeat, there
         is a likelihood without data, its model can have missing values
         but its likelihood has no residual for them (see
-        LikelihoodGaussian), its likelihood fits a noise but it has no
+        LikelihoodGauss), its likelihood fits a noise but it has no
         name, the noise of an item is correlated where its kind of data
         cannot have it (see Dataset.noise_correlation), or its likelihood
         does not suit it (see Likelihood.check).
@@ -155,7 +155,7 @@ class Observation(TypedSerializable, abc.ABC):
             raise ValueError("a likelihood needs data")
         if data is not None:
             if likelihood is None:
-                likelihood = LikelihoodGaussian()
+                likelihood = LikelihoodGauss()
             for key in keys:
                 # (the correlation of its noise must be one its kind of data
                 # can have)
@@ -175,7 +175,7 @@ class Observation(TypedSerializable, abc.ABC):
                     "where the data have some (e.g. the velocity of a "
                     "spectrum below its flux_floor): its likelihood needs "
                     "the residual of such a value, the option "
-                    "missing_residual (e.g. 3; see LikelihoodGaussian)")
+                    "missing_residual (e.g. 3; see LikelihoodGauss)")
         self._keys = keys
         self._galaxies = galaxies
         self._data = data
@@ -203,7 +203,7 @@ class Observation(TypedSerializable, abc.ABC):
         """
         Return its parameters: here those of the fitted noise of its
         likelihood, e.g. '{name}_noise_scale_{item}' (see
-        LikelihoodGaussian), with the units that its data give them (see
+        LikelihoodGauss), with the units that its data give them (see
         Likelihood.param_units); kinds add their own.
         """
         if self._likelihood is None:
@@ -236,7 +236,7 @@ class Observation(TypedSerializable, abc.ABC):
         """
         Check whether its model can have missing values (NaN) where the
         data have some: the likelihood then needs a residual for them (see
-        LikelihoodGaussian).
+        LikelihoodGauss).
         """
         return self._model_can_have_missing_values
 

@@ -94,9 +94,9 @@ def test_amplitudes_are_migrated_to_a_solved_flux_scale():
         params=dict(properties=dict(vsys=0)))
     migration.migrate(config, 1)
     assert config['observations'][0]['flux_scale'] == 'per_spectrum'
-    assert config['observations'][0]['likelihood'] == dict(type='gaussian')
+    assert config['observations'][0]['likelihood'] == dict(type='gauss')
     assert config['params']['properties']['kmos_flux_scale'] == dict(
-        solve=dict(type='gaussian', mean=1, sigma=0.5, min=0))
+        solve=dict(type='gauss', mean=1, sigma=0.5, min=0))
 
 
 def test_a_project_is_migrated_across_its_pieces(tmp_path):
@@ -345,7 +345,7 @@ def test_ranges_of_pdescs_and_solves_are_migrated_to_min_and_max():
     migration.migrate(config, 2)
     assert config['pdescs']['a'] == dict(type='scalar', min=0, max=1)
     assert config['params']['properties']['a']['solve'] == dict(
-        type='gaussian', mean=1, sigma=0.5, min=0)
+        type='gauss', mean=1, sigma=0.5, min=0)
 
 
 def test_coverages_of_visibilities_are_migrated_to_files():
@@ -1235,3 +1235,231 @@ def test_the_distances_of_tables_and_profiles_are_assumed_distances():
     assert pieces['data'] == [
         dict(type='profile', file='rc.ecsv', assumed_distance=10),
         dict(type='pixel_spectra', data='cube.fits')]
+
+
+def test_gaussians_are_of_the_type_gauss():
+    # Version 9: the likelihoods (of observations and of mock data), the
+    # bootstrap schemes, the solves (of a key, or of each element in a
+    # list) and the Gaussian rings of mass disks; other types stay
+    solve = dict(type='gaussian', mean=1, sigma=0.5, min=0)
+    config = dict(
+        galaxies=[dict(mass=[
+            dict(type='disk', name='ring', surface=dict(
+                type='gaussian_ring')),
+            dict(type='disk', name='disk', surface=dict(
+                type='exponential'))])],
+        observations=[
+            dict(type='sky', likelihood=dict(type='gaussian', weights=2)),
+            dict(type='sky', likelihood=dict(type='user', func='f'))],
+        mock=dict(likelihood=[dict(type='gaussian'), None]),
+        bootstrap=dict(nsamples=10, scheme=[
+            dict(type='gaussian'), dict(type='blocks', size=[3, 3])]),
+        params=dict(properties=dict(
+            a=dict(solve=copy.deepcopy(solve)),
+            b=[1, dict(solve=copy.deepcopy(solve))],
+            c=dict(value=1, min=0, max=2))))
+    changes = migration.migrate(config, 8)
+    mass = config['galaxies'][0]['mass']
+    assert [m['surface']['type'] for m in mass] == [
+        'gauss_ring', 'exponential']
+    assert [o['likelihood']['type'] for o in config['observations']] == [
+        'gauss', 'user']
+    assert config['mock']['likelihood'] == [dict(type='gauss'), None]
+    assert [s['type'] for s in config['bootstrap']['scheme']] == [
+        'gauss', 'blocks']
+    properties = config['params']['properties']
+    assert properties['a']['solve'] == solve | dict(type='gauss')
+    assert properties['b'] == [1, dict(solve=solve | dict(type='gauss'))]
+    assert properties['c'] == dict(value=1, min=0, max=2)
+    assert ['params', 'properties', 'b', 1, 'solve'] in [
+        change.path for change in changes]
+
+
+def test_moments_of_fitted_gaussians_are_of_the_method_gauss_fit():
+    # Version 9: of pixel and region moments; other methods stay
+    config = dict(observations=[
+        dict(type='sky', observable=dict(
+            type='pixel_moments', size=[8, 8], method='gaussian_fit')),
+        dict(type='sky', observable=dict(
+            type='region_moments', method='gaussian_fit', orders=[1, 2])),
+        dict(type='sky', observable=dict(
+            type='pixel_moments', size=[8, 8], method='gauss_hermite'))])
+    changes = migration.migrate(config, 8)
+    assert [o['observable']['method'] for o in config['observations']] == [
+        'gauss_fit', 'gauss_fit', 'gauss_hermite']
+    assert migration.Change(
+        ['observations', 1, 'observable'],
+        "method gaussian_fit -> gauss_fit") in changes
+
+
+def test_the_fitted_noise_of_a_likelihood_is_fitted_noise():
+    # Version 9: of the likelihoods of observations and of mock data
+    noise = dict(moment1=dict(scale=True, scale_min=0.5, jitter=True))
+    config = dict(
+        observations=[dict(type='sky', likelihood=dict(
+            type='gaussian', missing_residual=3,
+            noise=copy.deepcopy(noise), white_floor=0.01))],
+        mock=dict(noise=dict(type='gauss', rms=1), likelihood=dict(
+            type='gaussian', noise=copy.deepcopy(noise))))
+    changes = migration.migrate(config, 8)
+    likelihood = config['observations'][0]['likelihood']
+    assert list(likelihood) == [
+        'type', 'missing_residual', 'fitted_noise', 'white_floor']
+    assert likelihood['fitted_noise'] == noise
+    assert config['mock'] == dict(
+        noise=dict(type='gauss', rms=1),
+        likelihood=dict(type='gauss', fitted_noise=noise))
+    assert migration.Change(
+        ['mock', 'likelihood'], "noise -> fitted_noise") in changes
+
+
+def test_the_mask_of_slitless_spectra_is_a_slit_mask():
+    # Version 9: the option aperture of slitless spectra is slit_mask
+    mask = dict(type='shutters', size=[1, 2], pitch=2.5, count=3)
+    config = dict(observations=[dict(type='sky', observable=dict(
+        type='slitless_spectra', size=[32, 24], aperture=mask,
+        sky_sampling=2))])
+    migration.migrate(config, 8)
+    assert config['observations'][0]['observable'] == dict(
+        type='slitless_spectra', size=[32, 24], slit_mask=mask,
+        sky_sampling=2)
+
+
+def test_slits_are_oriented_by_their_position_angle():
+    # Version 9: the rota r of slit spectra (the position angle of +y,
+    # across the slit) is slit_pa r - 90 (that of +x, along it), of their
+    # observables and their data (in place, or pieces); null stays null
+    # (that of the files), and the grids of other types keep their rota
+    config = dict(observations=[
+        dict(type='sky', observable=dict(
+            type='slit_spectra', size=[40], rota=30, slit_width=1.5)),
+        dict(type='sky', data=dict(
+            type='slit_spectra', data='slit.fits', rota=120.5)),
+        dict(type='sky', data=dict(
+            type='slit_spectra', data='slit.fits', rota=None)),
+        dict(type='sky', observable=dict(type='slit_spectra', size=[40])),
+        dict(type='sky', observable=dict(
+            type='pixel_spectra', size=[4, 4], rota=30))])
+    changes = migration.migrate(config, 8)
+    observations = config['observations']
+    assert observations[0]['observable'] == dict(
+        type='slit_spectra', size=[40], slit_pa=-60, slit_width=1.5)
+    assert observations[1]['data']['slit_pa'] == 30.5
+    assert observations[2]['data'] == dict(
+        type='slit_spectra', data='slit.fits', slit_pa=None)
+    assert observations[3]['observable'] == dict(
+        type='slit_spectra', size=[40])
+    assert observations[4]['observable']['rota'] == 30
+    assert not any(c.message.startswith('by hand') for c in changes)
+    pieces = migration.rules.PiecesView(data=[
+        dict(type='slit_spectra', data='slit.fits', rota=0),
+        dict(type='pixel_spectra', data='cube.fits', rota=0)])
+    migration.v9.SlitPositionAngles().rewrite(pieces)
+    assert pieces['data'] == [
+        dict(type='slit_spectra', data='slit.fits', slit_pa=-90),
+        dict(type='pixel_spectra', data='cube.fits', rota=0)]
+    # (an angle that is not a number is changed by hand)
+    config = dict(observations=[dict(type='sky', observable=dict(
+        type='slit_spectra', size=[40], rota='30'))])
+    changes = migration.migrate(config, 8)
+    assert config['observations'][0]['observable']['rota'] == '30'
+    assert any(c.message.startswith('by hand') for c in changes)
+
+
+def test_the_slit_pa_of_a_migrated_slit_is_the_slit_of_its_rota():
+    # The migrated observable is the slit it was: its grid has the rota of
+    # the configuration of version 8
+    config = dict(observations=[dict(
+        type='sky', line_of_sight=dict(type='flat'), observable=dict(
+            type='slit_spectra', size=[40],
+            spectral=dict(size=5, step=10, convention='relativistic'),
+            rota=30))])
+    migration.migrate(config, 8)
+    observable = observable_parser.load(
+        config['observations'][0]['observable'])
+    assert observable.grid().coords.rota == 30
+    assert observable.slit_pa() == -60
+
+
+def test_the_parameters_of_lens_masses_are_named_as_those_of_disks():
+    # Version 9: x, y and pa of the masses of a lens are xpos, ypos and
+    # posa (of the masses placed by a centre; the shear has only posa, a
+    # deflection map neither), in the properties and modes of the params
+    # and in expressions; the masses without names are prefixed by their
+    # index (none for the first)
+    def observation(name, *masses):
+        return dict(type='sky', name=name, foreground=dict(lens=dict(
+            source_size=[40, 40], source_step=[0.1, 0.1],
+            masses=list(masses))))
+    config = dict(
+        observations=[
+            observation(
+                'hst', dict(type='epl', name='main'),
+                dict(type='shear', name='shear')),
+            observation(
+                'alma', dict(type='sie'), dict(type='multipole', order=4),
+                dict(type='deflection_map', alpha_x='ax.fits',
+                     alpha_y='ay.fits'))],
+        params=dict(
+            properties=dict(
+                xpos=0, hst_lens_main_pa=30, hst_lens_main_x=0,
+                hst_lens_main_y=0, hst_lens_shear_pa=70,
+                hst_lens_shear_gamma=0.05, alma_lens_x=0.1,
+                alma_lens_pa=dict(value=10, min=0, max=180),
+                alma_lens_mass1_pa='alma_lens_pa + 45',
+                alma_lens_mass1_x='alma_lens_x', alma_lens_mass1_y=0,
+                alma_lens_y=0, alma_lens_mass2_scale=1),
+            modes=dict(alma_lens_pa='mean'),
+            derived=dict(offset='hst_lens_main_x - alma_lens_x'),
+            transforms=dict(file='t.py', func='f')))
+    changes = migration.migrate(config, 8)
+    params = config['params']
+    assert list(params['properties']) == [
+        'xpos', 'hst_lens_main_posa', 'hst_lens_main_xpos',
+        'hst_lens_main_ypos', 'hst_lens_shear_posa', 'hst_lens_shear_gamma',
+        'alma_lens_xpos', 'alma_lens_posa', 'alma_lens_mass1_posa',
+        'alma_lens_mass1_xpos', 'alma_lens_mass1_ypos', 'alma_lens_ypos',
+        'alma_lens_mass2_scale']
+    assert params['properties']['alma_lens_mass1_posa'] == \
+        'alma_lens_posa + 45'
+    assert params['properties']['alma_lens_mass1_xpos'] == 'alma_lens_xpos'
+    assert params['modes'] == dict(alma_lens_posa='mean')
+    assert params['derived'] == dict(
+        offset='hst_lens_main_xpos - alma_lens_xpos')
+    assert [c.path for c in changes if c.message.startswith('by hand')] \
+        == [['params', 'transforms']]
+
+
+def test_the_lens_parameters_of_a_project_are_renamed_with_its_pieces(
+        tmp_path):
+    # Of a params piece with an observation piece; of the params of a
+    # setup that names the observation piece; and of a params piece of a
+    # setup with its observation in place
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(dict(format=project.FORMAT, version=8),
+              tmp_path / 'study' / project.MARKER)
+    hst = dict(type='sky', name='hst', foreground=dict(lens=dict(
+        source_size=[40, 40], source_step=[0.1, 0.1],
+        masses=[dict(type='sie')])))
+    yaml.dump(hst, tmp_path / 'study' / 'observations' / 'hst.yaml')
+    yaml.dump(dict(properties=dict(hst_lens_x=0, hst_lens_pa=30)),
+              tmp_path / 'study' / 'params' / 'hst.yaml')
+    yaml.dump(dict(properties=dict(alma_lens_x=0)),
+              tmp_path / 'study' / 'params' / 'alma.yaml')
+    yaml.dump(dict(observations='hst', params=dict(properties=dict(
+        hst_lens_y=0.1))),
+              tmp_path / 'study' / 'setups' / 'named.yaml')
+    yaml.dump(dict(observations=[hst | dict(name='alma')], params='alma'),
+              tmp_path / 'study' / 'setups' / 'inline.yaml')
+    changes = migration.migrate_project(study.path)
+    assert study.piece('params', 'hst') == dict(
+        properties=dict(hst_lens_xpos=0, hst_lens_posa=30))
+    assert study.piece('params', 'alma') == dict(
+        properties=dict(alma_lens_xpos=0))
+    named = yaml.load(tmp_path / 'study' / 'setups' / 'named.yaml')
+    assert named == dict(observations='hst', params=dict(properties=dict(
+        hst_lens_ypos=0.1)))
+    assert study.piece('observations', 'hst') == hst
+    assert 'observations/hst.yaml' not in changes
+    assert yaml.load(tmp_path / 'study' / 'setups' / 'inline.yaml') == dict(
+        observations=[hst | dict(name='alma')], params='alma')

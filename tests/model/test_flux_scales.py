@@ -1,7 +1,7 @@
 """
 Tests of the flux scales of observations (see ObservationSky): of one
 value (e.g. a calibration), per spectrum or per row; fixed, free, or
-solved by the objective under their prior (see SolveGaussian).
+solved by the objective under their prior (see SolveGauss).
 """
 
 import pathlib
@@ -17,10 +17,10 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGaussian, LikelihoodUser, ObservationGroup,
+    FittedNoise, LikelihoodGauss, LikelihoodUser, ObservationGroup,
     ObservationSky, PixelMoments, PixelSpectra, line_of_sight_parser,
     noise_parser)
-from gbkfit.params import ParamSpace, SolveGaussian
+from gbkfit.params import ParamSpace, SolveGauss
 
 
 SIZE = (12, 12, 31)
@@ -37,7 +37,7 @@ GALAXY = dict(components=dict(
 
 # The standard deviation of the prior of the scales, and their solve
 SIGMA = 0.5
-SOLVE = dict(type='gaussian', mean=1, sigma=SIGMA, min=0)
+SOLVE = dict(type='gauss', mean=1, sigma=SIGMA, min=0)
 
 GOLDEN = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
 
@@ -153,7 +153,7 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
                     spectral=SpectralAxis(size=21, step=20, convention='relativistic')),
                 line_of_sight_parser.load(dict(type='flat')), data=dataset,
                 flux_scale='one', name='obs',
-                likelihood=LikelihoodGaussian(missing_residual=3))]
+                likelihood=LikelihoodGauss(missing_residual=3))]
         ).plan(driver)
     blank = moments(np.zeros(SIZE[1::-1]), np.zeros(SIZE[1::-1]))
     model = blank.model_h(ParamSpace.from_properties(
@@ -229,7 +229,8 @@ def test_solved_scales_weigh_the_values_by_their_fitted_noise(driver):
         + rng.normal(0, jitter, spectra.shape)
     obj, params = objective(
         driver, data, error,
-        likelihood=LikelihoodGaussian(noise=dict(spectra=FittedNoise(jitter=True))),
+        likelihood=LikelihoodGauss(
+            fitted_noise=dict(spectra=FittedNoise(jitter=True))),
         obs_noise_jitter_spectra=jitter)
     np.testing.assert_allclose(
         solved(obj, params),
@@ -264,7 +265,7 @@ def test_a_likelihood_of_no_weight_has_no_terms_of_solved_scales(driver):
     spectra = model(driver)
     obj, params = objective(
         driver, spectra, 1e-3 * spectra.max(),
-        likelihood=LikelihoodGaussian(weights=0.0))
+        likelihood=LikelihoodGauss(weights=0.0))
     assert obj.merits(params.evaluate())[:2] == (0.0, 0.0)
 
 
@@ -290,7 +291,7 @@ def test_only_linear_parameters_of_gaussian_likelihoods_are_solved(
     spectra = model(driver)
     plan = group_plan(driver, spectra, 1.0)
     with pytest.raises(ValueError, match="vsys cannot be solved"):
-        Objective(plan, dict(vsys=SolveGaussian(0, 10)))
+        Objective(plan, dict(vsys=SolveGauss(0, 10)))
     (tmp_path / 'like.py').write_text(
         "def like(key, data, model, error, mask, params):\n"
         "    return model - data\n")

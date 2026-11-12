@@ -123,7 +123,7 @@ class Data:
     the field of an IFU, whose corners are blank but were never
     observed): 1 inside, 0 outside, where the values are masked too. Of
     the masked values, those inside are non-detections, which an upper
-    limit of their likelihood takes (see LikelihoodGaussian), and those
+    limit of their likelihood takes (see LikelihoodGauss), and those
     outside say nothing; without a footprint, every masked value is
     inside.
 
@@ -138,7 +138,7 @@ class Data:
     spectral_correlation are in km/s of the spectral axis, not of the
     light as those of the LSF of an instrument (see lsfs): the noise is
     correlated over the channels of the axis. Their likelihood
-    takes it (see LikelihoodGaussian); the kinds of data whose noise can
+    takes it (see LikelihoodGauss); the kinds of data whose noise can
     be correlated say where (see Dataset.noise_correlation).
 
     Parameters

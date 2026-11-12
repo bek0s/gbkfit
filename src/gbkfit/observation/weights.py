@@ -150,7 +150,7 @@ class Weights(Serializable):
     them to a mean square of 1 over the values it compares, so that only
     their shape counts: a fit cannot lower its chi-square by turning the
     disk so that the data fall where the weights are low (see
-    ComparisonGaussian).
+    ComparisonGauss).
 
     Parameters
     ----------

@@ -2,10 +2,10 @@
 The masses of a gravitational lens (see Lens): each deflects the light
 of the source plane, and the deflections of the masses of a lens add up.
 
-The analytic masses are placed by their centre (x, y; arcsec, in the
-frame of the model, as xpos and ypos: the frame of each observation moves
-them too, see ObservationGroup) and oriented by the position angle
-(pa; degrees, north through east, as that of disks) of their major axis
+The analytic masses are placed by their centre (xpos, ypos; arcsec, in
+the frame of the model, as those of disks: the frame of each observation
+moves them too, see ObservationGroup) and oriented by the position angle
+(posa; degrees, north through east, as that of disks) of their major axis
 (u, from +y towards -x; the minor axis v is 90 degrees clockwise of it).
 Their convergence is elliptical in xi = sqrt(q u^2 + v^2 / q), so the
 mass within the ellipse xi of an axis ratio q is that of the circle of
@@ -90,8 +90,8 @@ class LensMass(TypedSerializable, abc.ABC):
 
     def centred(self) -> bool:
         """
-        Check whether it is placed by its centre, its parameters x and y
-        (in the frame of the model, as xpos and ypos); not here.
+        Check whether it is placed by its centre, its parameters xpos and
+        ypos (in the frame of the model, as those of disks); not here.
         """
         return False
 
@@ -297,8 +297,8 @@ class LensSIE(LensMass):
     q = 1); 0 at its centre.
 
     Its parameters (see pdescs): theta_e (arcsec, the Einstein radius of
-    the sphere of the same mass), q (the axis ratio), pa, x and y (see
-    the module).
+    the sphere of the same mass), q (the axis ratio), posa, xpos and ypos
+    (see the module).
 
     Parameters
     ----------
@@ -329,7 +329,7 @@ class LensSIE(LensMass):
         u, v = _on_axes(grid, params)
         alpha_u, alpha_v = sie_deflection(
             u, v, params['theta_e'], params['q'])
-        return _from_axes(alpha_u, alpha_v, params['pa'])
+        return _from_axes(alpha_u, alpha_v, params['posa'])
 
 
 class LensEPL(LensMass):
@@ -352,7 +352,7 @@ class LensEPL(LensMass):
 
     Its parameters (see pdescs): theta_e (arcsec, the Einstein radius of
     the round mass of the same profile), slope (of the density; 1 to 3),
-    q (the axis ratio), pa, x and y (see the module).
+    q (the axis ratio), posa, xpos and ypos (see the module).
 
     Parameters
     ----------
@@ -387,7 +387,7 @@ class LensEPL(LensMass):
         u, v = _on_axes(grid, params)
         alpha_u, alpha_v = epl_deflection(
             u, v, params['theta_e'], params['slope'], params['q'])
-        return _from_axes(alpha_u, alpha_v, params['pa'])
+        return _from_axes(alpha_u, alpha_v, params['posa'])
 
 
 class LensNFW(LensMass):
@@ -409,7 +409,7 @@ class LensNFW(LensMass):
     below 1e-8 from 1e-3 to 1e3 r_s). It is 0 at its centre.
 
     Its parameters (see pdescs): kappa_s, r_s (arcsec, the scale radius),
-    q (the axis ratio), pa, x and y (see the module).
+    q (the axis ratio), posa, xpos and ypos (see the module).
 
     Parameters
     ----------
@@ -448,7 +448,7 @@ class LensNFW(LensMass):
         else:
             alpha_u, alpha_v = elliptical_deflection(
                 u, v, q, lambda xi: kappa_s * nfw_convergence(xi / r_s))
-        return _from_axes(alpha_u, alpha_v, params['pa'])
+        return _from_axes(alpha_u, alpha_v, params['posa'])
 
 
 class LensMultipole(LensMass):
@@ -462,8 +462,8 @@ class LensMultipole(LensMass):
         kappa = theta_e a / (2 r) * cos(m (phi - phi_m))
 
     at the radius r and the angle phi about its centre, with phi_m that
-    of the position angle pa (a maximum of the convergence, for a > 0:
-    with the pa of the major axis of the lens, disky for order 4 and
+    of the position angle posa (a maximum of the convergence, for a > 0:
+    with the posa of the major axis of the lens, disky for order 4 and
     a > 0, boxy for a < 0). Its deflection is that of the potential
 
         psi = theta_e a / (1 - m^2) * r * cos(m (phi - phi_m))
@@ -473,8 +473,8 @@ class LensMultipole(LensMass):
     of the lens it deviates (tied by expressions).
 
     Its parameters (see pdescs): theta_e (arcsec; the scale of a), a (the
-    strength), pa (degrees, of a period of 360 / m: the convergence
-    repeats every 360 / m degrees), x and y (see the module).
+    strength), posa (degrees, of a period of 360 / m: the convergence
+    repeats every 360 / m degrees), xpos and ypos (see the module).
 
     Parameters
     ----------
@@ -519,7 +519,7 @@ class LensMultipole(LensMass):
                 min=0, unit='arcsec', default=1),
             a=ParamScalarDesc(
                 "the strength", title='Strength', unit='', default=0),
-            pa=ParamScalarDesc(
+            posa=ParamScalarDesc(
                 "the position angle", title='Position angle', unit='deg',
                 default=0, period=360 / self._order),
         ) | _centre_pdescs()
@@ -536,7 +536,7 @@ class LensMultipole(LensMass):
         theta_e = params['theta_e']
         strength = theta_e * params['a']
         # (the angle from +x of the position angle is 90 degrees more)
-        angle = m * (np.arctan2(y, x) - math.radians(params['pa'] + 90))
+        angle = m * (np.arctan2(y, x) - math.radians(params['posa'] + 90))
         if m == 1:
             # (no mass is no deflection, whatever the scale of ln r)
             log_r = np.log(r / theta_e) if theta_e > 0 else 0
@@ -553,12 +553,12 @@ class LensMultipole(LensMass):
 class LensShear(LensMass):
     """
     An external shear: the tidal stretch of the masses near a lens, of
-    strength gamma along the position angle pa (degrees, north through
+    strength gamma along the position angle posa (degrees, north through
     east). Its deflection is linear, 0 at the origin of the frame of the
     model (its deflection about another point differs by a constant,
     which moves only the source).
 
-    Its parameters (see pdescs): gamma and pa.
+    Its parameters (see pdescs): gamma and posa.
 
     Parameters
     ----------
@@ -579,7 +579,7 @@ class LensShear(LensMass):
             gamma=ParamScalarDesc(
                 "the strength", title='Shear strength', min=0, unit='',
                 default=0),
-            pa=ParamScalarDesc(
+            posa=ParamScalarDesc(
                 "the position angle", title='Position angle', unit='deg',
                 default=0, period=180))
 
@@ -588,7 +588,7 @@ class LensShear(LensMass):
     ) -> tuple[np.ndarray, np.ndarray]:
         x, y = sky_positions(grid)
         # (the angle from +x of the position angle is 90 degrees more)
-        angle = 2 * math.radians(params['pa'] + 90)
+        angle = 2 * math.radians(params['posa'] + 90)
         gamma1 = params['gamma'] * math.cos(angle)
         gamma2 = params['gamma'] * math.sin(angle)
         return gamma1 * x + gamma2 * y, gamma2 * x - gamma1 * y
@@ -602,10 +602,10 @@ lens_mass_parser = TypedParser(LensMass, [
 def _centre_pdescs() -> dict[str, ParamScalarDesc]:
     """Return the parameters of the centre of a mass."""
     return dict(
-        x=ParamScalarDesc(
+        xpos=ParamScalarDesc(
             "the centre along x", title='Centre (x)', unit='arcsec',
             default=0),
-        y=ParamScalarDesc(
+        ypos=ParamScalarDesc(
             "the centre along y", title='Centre (y)', unit='arcsec',
             default=0))
 
@@ -617,7 +617,7 @@ def _ellipse_pdescs() -> dict[str, ParamScalarDesc]:
         q=ParamScalarDesc(
             "the axis ratio", title='Axis ratio', min=1e-3, max=1, unit='',
             default=0.8),
-        pa=ParamScalarDesc(
+        posa=ParamScalarDesc(
             "the position angle", title='Position angle', unit='deg',
             default=0, period=180),
     ) | _centre_pdescs()
@@ -631,7 +631,7 @@ def _centred(
     mass, along x and y.
     """
     x, y = sky_positions(grid)
-    return x - params['x'], y - params['y']
+    return x - params['xpos'], y - params['ypos']
 
 
 def _on_axes(
@@ -642,19 +642,19 @@ def _on_axes(
     mass, along its major (u) and minor (v) axes (see the module).
     """
     x, y = _centred(grid, params)
-    pa = math.radians(params['pa'])
-    sin_pa, cos_pa = math.sin(pa), math.cos(pa)
+    posa = math.radians(params['posa'])
+    sin_pa, cos_pa = math.sin(posa), math.cos(posa)
     return -sin_pa * x + cos_pa * y, cos_pa * x + sin_pa * y
 
 
 def _from_axes(
-        alpha_u: np.ndarray, alpha_v: np.ndarray, pa: float
+        alpha_u: np.ndarray, alpha_v: np.ndarray, posa: float
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Return a deflection along the axes of a mass of position angle pa
+    Return a deflection along the axes of a mass of position angle posa
     (degrees) along x and y.
     """
-    pa = math.radians(pa)
-    sin_pa, cos_pa = math.sin(pa), math.cos(pa)
+    posa = math.radians(posa)
+    sin_pa, cos_pa = math.sin(posa), math.cos(posa)
     return (-sin_pa * alpha_u + cos_pa * alpha_v,
             cos_pa * alpha_u + sin_pa * alpha_v)

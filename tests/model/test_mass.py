@@ -28,7 +28,7 @@ from gbkfit.model.mass import (
     Overdensity, ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao,
     ProfileEinasto, ProfileNFW, ProfileNodewise, ProfileNodewiseHalo,
     ProfilePseudoIsothermal, ProfileSersic, ProfileTruncatedNFW, ProfileZhao,
-    ShapeFlattened, SurfaceExponential, SurfaceGaussianRing, SurfaceNodewise,
+    ShapeFlattened, SurfaceExponential, SurfaceGaussRing, SurfaceNodewise,
     TracedDisk, VerticalComponent, VerticalExponential, VerticalGauss,
     VerticalSech, VerticalSech2, VerticalThin, mass_component_parser,
     sidm_core)
@@ -405,7 +405,7 @@ def test_gaussian_rings_are_the_pull_of_their_rings(fwhm):
     # Against the pull of the rings of a polynomial of degree 5 on fine
     # panels within 10 dispersions of the peak (thin_disk_gravity); far
     # away, v^2 = G M / R (1 + 3 <a^2> / (4 R^2)), to its next multipole
-    ring = MassDisk('ring', SurfaceGaussianRing(), VerticalThin())
+    ring = MassDisk('ring', SurfaceGaussRing(), VerticalThin())
     params = dict(log_m=10, r_peak=5, fwhm=fwhm)
     sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
     radius = np.concatenate((np.geomspace(0.05, 30, 60), [5.0]))

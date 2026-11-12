@@ -1,6 +1,6 @@
 # two_galaxies: Two named galaxies (their parameters prefixed by their names): a cube of both through radiative transfer, the dust of the one in front (section depth_order) dimming the one behind; and moment maps of the one behind alone (option galaxies).
 # (written by make_golden.py; do not edit)
-version: 8
+version: 9
 driver: {type: host}
 galaxies:
 - name: front
@@ -48,7 +48,7 @@ observations:
     data: observation0_spectra_d.fits
     error: 0.0005
     spectral: {step: 15, rpix: 14.5, rval: 0}
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight:
     type: transfer
     depth: {extent: galaxy, step: null}
@@ -72,11 +72,9 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation1_moment0_d.fits, error: observation1_moment0_e.fits}
-    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits,
-      error: observation1_moment1_e.fits}
-    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits,
-      error: observation1_moment2_e.fits}
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits, error: observation1_moment1_e.fits}
+    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits, error: observation1_moment2_e.fits}
+  likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: null}

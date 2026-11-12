@@ -270,7 +270,7 @@ class Exposure(Serializable):
     ----------
     sky_offset : Sequence of float, optional
         The offset of the sky (x, y; arcsec along the axes of the image):
-        the light of each place of the sky passes the aperture and lands
+        the light of each place of the sky passes the slit mask and lands
         on the detector as that of the place plus the offset.
     image_offset : Sequence of float, optional
         The offset of its image (x, y; arcsec).
@@ -350,14 +350,14 @@ class SlitlessSpectra(Observable):
     detector (see TraceGrismConf). The spectral axis covers the lines; the
     continuum is not modelled.
 
-    An aperture in front of the disperser (e.g. the shutters of JWST
+    A slit mask in front of the disperser (e.g. the shutters of JWST
     NIRSpec; see SlitMask) lets only the light of its open parts
     through: the light of each pixel of the sky, seen through the PSF, is
     clipped to them, and the open parts are dispersed by the trace where
     they are. The light from across a shutter thus lands on the detector
     moved along the dispersion, as that of other wavelengths. The
-    spectrograph after the aperture then blurs the spectra by its own LSF
-    (the instrument's, with an aperture), along the trace.
+    spectrograph after the slit mask then blurs the spectra by its own LSF
+    (the instrument's, with a slit mask), along the trace.
 
     The light within each pixel of the sky is spread evenly over it; the
     sky can be sampled by sky_sampling pixels for each pixel of the image
@@ -395,8 +395,8 @@ class SlitlessSpectra(Observable):
         is the centre by default.
     rota : float, optional
         The rotation of the image on the sky.
-    aperture : SlitMask, optional
-        The aperture in front of the disperser, if any.
+    slit_mask : SlitMask, optional
+        The slit mask in front of the disperser, if any.
     exposures : Exposure or Sequence of Exposure, optional
         The exposures combined into the image; one, of the sky as it is,
         by default.
@@ -435,7 +435,7 @@ class SlitlessSpectra(Observable):
             dataset: DatasetSlitlessSpectra,
             spectral: SpectralAxis,
             trace: Trace,
-            aperture: SlitMask | None = None,
+            slit_mask: SlitMask | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: Annotated[int, Ge(1)] = 1,
             resampled: bool = False
@@ -449,7 +449,7 @@ class SlitlessSpectra(Observable):
             The image.
         spectral, trace :
             As those of SlitlessSpectra.
-        aperture, exposures, sky_sampling, resampled : optional
+        slit_mask, exposures, sky_sampling, resampled : optional
             As those of SlitlessSpectra.
 
         Returns
@@ -467,7 +467,7 @@ class SlitlessSpectra(Observable):
         check_options(SlitlessSpectra.from_data, locals())
         return cls(
             **grid_options(dataset.grid()), spectral=spectral,
-            trace=trace, aperture=aperture,
+            trace=trace, slit_mask=slit_mask,
             exposures=exposures, sky_sampling=sky_sampling,
             resampled=resampled)
 
@@ -479,7 +479,7 @@ class SlitlessSpectra(Observable):
             trace=trace_parser.dump(
                 self._trace, prefix=prefix, dump_path=dump_path,
                 overwrite=overwrite),
-            aperture=slit_mask_parser.dump(self._aperture),
+            slit_mask=slit_mask_parser.dump(self._slit_mask),
             exposures=exposure_parser.dump(list(self._exposures)),
             sky_sampling=self._sky_sampling,
             resampled=self._resampled)
@@ -493,7 +493,7 @@ class SlitlessSpectra(Observable):
             rpix: Rpix | None = None,
             rval: Rval = (0, 0),
             rota: Rota = 0,
-            aperture: SlitMask | None = None,
+            slit_mask: SlitMask | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: Annotated[int, Ge(1)] = 1,
             resampled: bool = False
@@ -514,7 +514,7 @@ class SlitlessSpectra(Observable):
         if not exposures:
             raise ValueError("slitless spectra need at least one exposure")
         self._trace = trace
-        self._aperture = aperture
+        self._slit_mask = slit_mask
         self._exposures = exposures
         self._sky_sampling = sky_sampling
         self._resampled = resampled
@@ -527,9 +527,9 @@ class SlitlessSpectra(Observable):
         """Return the trace of the disperser."""
         return self._trace
 
-    def aperture(self) -> SlitMask | None:
-        """Return the aperture in front of the disperser, if any."""
-        return self._aperture
+    def slit_mask(self) -> SlitMask | None:
+        """Return the slit mask in front of the disperser, if any."""
+        return self._slit_mask
 
     def exposures(self) -> tuple[Exposure, ...]:
         """Return the exposures combined into the image."""
@@ -589,11 +589,11 @@ class SlitlessSpectra(Observable):
         if setup.pixel_weights is not None:
             raise ValueError(
                 "slitless spectra do not support pixel_weights yet")
-        if setup.instrument.lsf() is not None and self._aperture is None:
+        if setup.instrument.lsf() is not None and self._slit_mask is None:
             raise ValueError(
-                "slitless spectra without an aperture have no LSF: the PSF "
+                "slitless spectra without a slit mask have no LSF: the PSF "
                 "along the trace sets their resolution; remove the LSF of "
-                "the instrument, or give the aperture")
+                "the instrument, or give the slit mask")
 
     def plan(
             self,
@@ -654,16 +654,16 @@ class SlitlessSpectra(Observable):
         """
         Return the sky of the cube, the pixels whose light of some channel
         (of the edges of its wavelengths) can land on the image in some
-        exposure, through the aperture if any: its offset from the image
+        exposure, through the slit mask if any: its offset from the image
         (pixels) and its size, and a pixel more each way (of the
         footprints of the pixels; two of resampled pixels).
         """
         los, his = [], []
         for exposure in self._exposures:
             lo, hi = self._reach(edges, self._pixels(exposure.image_offset()))
-            if self._aperture is not None:
+            if self._slit_mask is not None:
                 # (the pixels that overlap its rectangles)
-                rectangles = self._aperture.rectangles()
+                rectangles = self._slit_mask.rectangles()
                 x = self.rpix()[0] + rectangles[:, :2] / self.step()[0]
                 y = self.rpix()[1] + rectangles[:, 2:] / self.step()[1]
                 lo = np.maximum(lo, [x.min() - 0.5, y.min() - 0.5])
@@ -675,7 +675,7 @@ class SlitlessSpectra(Observable):
         if not los:
             raise ValueError(
                 "no light of the sky can land on the image of the slitless "
-                "spectra; check the aperture and the exposures")
+                "spectra; check the slit mask and the exposures")
         margin = 2 if self._resampled else 1
         lo = np.floor(np.min(los, axis=0)) - margin
         hi = np.ceil(np.max(his, axis=0)) + margin
@@ -716,7 +716,7 @@ class SlitlessSpectra(Observable):
         sky of the given size, offset from the image) into the image
         (flattened). For each exposure, the footprint (see
         pixel_footprints) of each pixel of the cube (of each of its parts
-        open in the aperture, if any) at its place in the exposure, moved
+        open in the slit mask, if any) at its place in the exposure, moved
         by the trace there from the start of each channel (of the edges of
         its wavelengths) to its end, and by the offset of the image of the
         exposure; times the weight of the exposure, the area of the part
@@ -754,14 +754,14 @@ class SlitlessSpectra(Observable):
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Return the parts of boxes (of the pixels base, the centres from
-        them and the sizes, in pixels of the image) open in the aperture:
+        them and the sizes, in pixels of the image) open in the slit mask:
         the box of each part, its centre (from its pixel) and its sizes;
-        the whole boxes without an aperture.
+        the whole boxes without a slit mask.
         """
-        if self._aperture is None:
+        if self._slit_mask is None:
             return np.arange(len(base)), centres, sizes
         rpix, step = np.asarray(self.rpix()), np.asarray(self.step())
-        index, parts, part_sizes = self._aperture.clip(
+        index, parts, part_sizes = self._slit_mask.clip(
             (base + centres - rpix) * step, sizes * step, step)
         return index, parts / step + rpix - base[index], part_sizes / step
 

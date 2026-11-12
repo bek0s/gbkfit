@@ -1,5 +1,5 @@
 """
-Tests of correlated noise in cubes (see LikelihoodGaussian): the noise
+Tests of correlated noise in cubes (see LikelihoodGauss): the noise
 correlated on the sky and along the channels at once.
 """
 
@@ -13,7 +13,7 @@ from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    MAX_CORRELATED_PIXELS, LikelihoodGaussian, ObservationGroup,
+    MAX_CORRELATED_PIXELS, LikelihoodGauss, ObservationGroup,
     ObservationSky, PixelSpectra, line_of_sight_parser, whitening)
 from gbkfit.params import ParamSpace
 
@@ -69,7 +69,7 @@ def test_cubes_have_the_chi2_of_the_product_of_their_correlations(
     mask[blank] = 0
     data = noisy_cube(rng, mask)
     obj, params = objective(
-        driver, data, LikelihoodGaussian(white_floor=0.05))
+        driver, data, LikelihoodGauss(white_floor=0.05))
     model = obj.group_plan().model_h(
         params)[0]['spectra'].data.astype(float)
     kept = np.any(mask != 0, axis=0)
@@ -95,13 +95,13 @@ def test_cubes_of_correlated_noise_keep_whole_spectra(driver):
     mask[3, 5, 5] = 0
     data = noisy_cube(rng, mask)
     with pytest.raises(ValueError, match="mask_whole_spectra"):
-        objective(driver, data, LikelihoodGaussian())
+        objective(driver, data, LikelihoodGauss())
     # The option masks the spectrum of the masked value
     whole = DatasetPixelSpectra(data, step=STEP[:2], spectral=SPECTRAL).mask_whole_spectra()
     np.testing.assert_array_equal(
         whole['spectra'].mask()[:, 5, 5], 0)
     assert np.count_nonzero(whole['spectra'].mask() == 0) == SIZE[2]
-    objective(driver, whole['spectra'], LikelihoodGaussian())
+    objective(driver, whole['spectra'], LikelihoodGauss())
 
 
 def test_whole_spectra_leave_out_the_channels_masked_everywhere(driver):
@@ -117,7 +117,7 @@ def test_whole_spectra_leave_out_the_channels_masked_everywhere(driver):
     masked = whole.mask() == 0
     assert np.all(masked[5]) and np.all(masked[:, 5, 5])
     assert np.count_nonzero(masked) == SIZE[0] * SIZE[1] + SIZE[2] - 1
-    objective(driver, whole, LikelihoodGaussian())
+    objective(driver, whole, LikelihoodGauss())
 
 
 def test_noise_correlated_along_the_channels_alone_has_no_limit_of_pixels():
@@ -132,7 +132,7 @@ def test_noise_correlated_along_the_channels_alone_has_no_limit_of_pixels():
 
 
 def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
-    from gbkfit.params import SolveGaussian
+    from gbkfit.params import SolveGauss
     dataset = DatasetPixelSpectra(
         noisy_cube(np.random.default_rng(9), None), step=STEP[:2],
         spectral=SPECTRAL)
@@ -143,4 +143,4 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
             flux_scale='one', name='obs')])
     with pytest.raises(ValueError, match="has correlated noise"):
         Objective(group.plan(driver),
-                  dict(obs_flux_scale=SolveGaussian(1, 0.5, 0)))
+                  dict(obs_flux_scale=SolveGauss(1, 0.5, 0)))

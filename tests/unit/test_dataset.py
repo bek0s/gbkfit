@@ -1,4 +1,5 @@
 
+import copy
 import logging
 
 import astropy.units as u
@@ -190,6 +191,23 @@ def test_dataset_round_trip_keeps_the_footprint(tmp_path):
         Data(np.zeros((8, 20)), footprint=footprint))
     loaded = dataset_parser.load(dataset.dump(prefix=str(tmp_path / '')))
     np.testing.assert_array_equal(loaded['brightness'].footprint(), footprint)
+
+
+def test_a_slit_is_oriented_by_its_position_angle(tmp_path):
+    # Its slit_pa, of its +x axis, is 90 degrees less than the rotation of
+    # its grid (of +y, across it); files of a slit, without axes of the
+    # sky, do not orient it: -90 (the rotation 0) unless given; a dump and
+    # its load keep it
+    spectral = SpectralAxis(step=10, convention='relativistic')
+    slit = DatasetSlitSpectra(
+        Data(np.ones((5, 8))), slit_pa=12.3, spectral=spectral)
+    assert slit.grid().coords.rota == pytest.approx(102.3)
+    info = slit.dump(prefix=str(tmp_path / ''))
+    assert info['slit_pa'] == 12.3 and 'rota' not in info
+    assert dataset_parser.load(copy.deepcopy(info)).slit_pa() == 12.3
+    del info['slit_pa']
+    loaded = dataset_parser.load(info)
+    assert loaded.slit_pa() == -90 and loaded.grid().coords.rota == 0
 
 
 def test_dataset_round_trip_keeps_the_rotation_and_the_velocities(tmp_path):

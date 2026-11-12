@@ -253,12 +253,13 @@ def _user_likelihood(func: str, form: str, *params: str) -> dict[str, Any]:
 _LENS_TRUTH = dict(
     xpos=0.1, ypos=-0.05, posa=40, incl=55, rpt_a=1, rpt_s=0.2,
     hst_lens_main_theta_e=1.0, hst_lens_main_slope=2.1,
-    hst_lens_main_q=0.8, hst_lens_main_pa=30, hst_lens_main_x=0,
-    hst_lens_main_y=0,
+    hst_lens_main_q=0.8, hst_lens_main_posa=30, hst_lens_main_xpos=0,
+    hst_lens_main_ypos=0,
     hst_lens_m4_theta_e='hst_lens_main_theta_e', hst_lens_m4_a=0.02,
-    hst_lens_m4_pa='hst_lens_main_pa', hst_lens_m4_x='hst_lens_main_x',
-    hst_lens_m4_y='hst_lens_main_y',
-    hst_lens_shear_gamma=0.05, hst_lens_shear_pa=70)
+    hst_lens_m4_posa='hst_lens_main_posa',
+    hst_lens_m4_xpos='hst_lens_main_xpos',
+    hst_lens_m4_ypos='hst_lens_main_ypos',
+    hst_lens_shear_gamma=0.05, hst_lens_shear_posa=70)
 
 _LENS_TRIAL = _LENS_TRUTH | dict(
     rpt_s=dict(value=0.22, min=0.05, max=1),
@@ -329,7 +330,7 @@ CASES: list[dict[str, Any]] = [
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.002)],
         likelihoods=[dict(
-            type='gaussian', weights=dict(moment1=2, moment2=0.5),
+            type='gauss', weights=dict(moment1=2, moment2=0.5),
             missing_residual=3)]),
     dict(
         name='log_lambda_cube',
@@ -369,7 +370,7 @@ CASES: list[dict[str, Any]] = [
             dict(
                 type='slit_spectra', size=[40], step=[0.5],
                 spectral=dict(size=40, step=20, convention='relativistic'),
-                rota=30, slit_width=1.5),
+                slit_pa=-60, slit_width=1.5),
             instrument=dict(psf=_PSF, lsf=_LSF))],
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.0005)]),
@@ -383,18 +384,18 @@ CASES: list[dict[str, Any]] = [
             instrument=dict(psf=_PSF), name='grism', flux_scale='per_row')],
         truth=_DISK_TRUTH | dict(grism_flux_scale=1),
         trial=_DISK_TRIAL | dict(grism_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.5, min=0))),
+            type='gauss', mean=1, sigma=0.5, min=0))),
         noises=[_gauss(0.02)]),
     dict(
         name='msa_shutters',
         doc="Slitless spectra behind a slitlet of three MSA shutters: two "
             "nods subtracted (A - B, B - A) and aligned on the sky (sky "
             "and image offsets, weights), blurred by the LSF behind the "
-            "aperture.",
+            "slit mask.",
         galaxies=_DISK,
         observations=[_sky(
             dict(type='slitless_spectra', size=[32, 24], sky_sampling=2,
-                 aperture=dict(
+                 slit_mask=dict(
                      type='shutters', size=[1, 2], pitch=2.5, count=3,
                      centre=[0.5, 0]),
                  exposures=[
@@ -431,7 +432,7 @@ CASES: list[dict[str, Any]] = [
                  instrument=dict(psf=_PSF, lsf=_LSF))],
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.0005), _gauss(0.005)],
-        likelihoods=[dict(type='gaussian', missing_residual=3), None],
+        likelihoods=[dict(type='gauss', missing_residual=3), None],
         prepare=_write_voronoi_bins),
     dict(
         name='stars_regions',
@@ -455,7 +456,7 @@ CASES: list[dict[str, Any]] = [
             lines=['stars'], instrument=dict(psf=_PSF))],
         truth=_STARS_TRUTH, trial=_STARS_TRIAL,
         noises=[_gauss(0.0002)],
-        likelihoods=[dict(type='gaussian', missing_residual=3)],
+        likelihoods=[dict(type='gauss', missing_residual=3)],
         prepare=_write_voronoi_bins),
     dict(
         name='stars_orbits',
@@ -485,10 +486,10 @@ CASES: list[dict[str, Any]] = [
             mass_lum_upsilon=dict(value=1.2e8, min=1e7, max=1e9),
             mass_bh_log_m=dict(value=8.3, min=6, max=10),
             stars_weights=dict(solve=dict(
-                type='gaussian', mean=1, sigma_aicp=[0.1, 100], min=0,
+                type='gauss', mean=1, sigma_aicp=[0.1, 100], min=0,
                 likelihood='profiled'))),
         noises=[_gauss(0.03)],
-        likelihoods=[dict(type='gaussian', missing_residual=3)],
+        likelihoods=[dict(type='gauss', missing_residual=3)],
         prepare=_write_voronoi_bins),
     dict(
         name='visibilities',
@@ -544,7 +545,7 @@ CASES: list[dict[str, Any]] = [
         truth=_named('gas', _DISK_TRUTH),
         trial=_named('gas', _DISK_TRIAL),
         noises=[_gauss(0.0002)],
-        likelihoods=[dict(type='gaussian', missing_residual=3)]),
+        likelihoods=[dict(type='gauss', missing_residual=3)]),
     dict(
         name='upper_limits_fitted_noise',
         doc="The moment maps of a named observation with a flux scale, "
@@ -560,9 +561,9 @@ CASES: list[dict[str, Any]] = [
             halpha_noise_jitter_moment1=dict(value=2.0, min=0, max=20)),
         noises=[dict(type='gauss', error='detected_noise.fits')],
         likelihoods=[dict(
-            type='gaussian', missing_residual=3,
+            type='gauss', missing_residual=3,
             upper_limits=dict(moment0=dict(limit=0.12, error=0.04)),
-            noise=dict(moment1=dict(
+            fitted_noise=dict(moment1=dict(
                 scale=True, scale_min=0.5, jitter=True)))],
         prepare=_write_detection_noise),
     dict(
@@ -626,5 +627,5 @@ CASES: list[dict[str, Any]] = [
             sinfoni_dy=dict(value=0, min=-2, max=2),
             sinfoni_dv=dict(value=0, min=-30, max=30)),
         noises=[_gauss(0.0005), _gauss(0.0005)],
-        likelihoods=[None, dict(type='gaussian', missing_residual=3)]),
+        likelihoods=[None, dict(type='gauss', missing_residual=3)]),
 ]

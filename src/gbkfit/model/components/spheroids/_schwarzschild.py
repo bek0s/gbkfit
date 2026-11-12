@@ -84,7 +84,7 @@ class SchwarzschildKinematics(SpheroidKinematics):
     the parameter 'weights' holds the factor of the share of the light of
     each (2 norbits elements: orbit k at 2k, its twin at 2k + 1), which an
     objective solves (see objective.Objective), e.g. of a solve {type:
-    gaussian, mean: 1, sigma: 1, min: 0, likelihood: profiled}: the
+    gauss, mean: 1, sigma: 1, min: 0, likelihood: profiled}: the
     prior of the factors (mean 1) regularises the weights towards the
     shares of the light (the smaller sigma, the stronger).
 

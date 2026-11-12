@@ -102,13 +102,13 @@ def test_recorded_data_have_the_noise_as_their_error(driver, name):
 def test_setups_mock_observations_under_the_likelihoods_of_the_options(
         driver):
     from gbkfit import Setup
-    from gbkfit.observation import LikelihoodGaussian
+    from gbkfit.observation import LikelihoodGauss
     plan = plan_of(
         driver, dict(type='pixel_brightness') | RECORDED['pixel_brightness'])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)
-    given = LikelihoodGaussian(white_floor=0.2)
-    for likelihood, want in ((None, LikelihoodGaussian()), (given, given)):
+    given = LikelihoodGauss(white_floor=0.2)
+    for likelihood, want in ((None, LikelihoodGauss()), (given, given)):
         options = MockOptions(
             NoiseGauss(rms=0.01), likelihood=likelihood, nmocks=2, seed=1)
         with Setup(
@@ -217,7 +217,7 @@ def test_mocks_refuse_noise_of_a_varying_correlation(driver):
             rms=0.01, spatial_correlation='instrument'), seed=1)
 
 
-@pytest.mark.parametrize('method', ['moments', 'gaussian_fit'])
+@pytest.mark.parametrize('method', ['moments', 'gauss_fit'])
 def test_the_errors_of_moments_are_their_scatter(driver, method):
     # The moments of the spectra of the cube plus noise (a twentieth of
     # its peak): their errors, the scatter of 100 other draws, are the

@@ -16,11 +16,11 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGaussian, LineOfSightFlat, ObservationGroup,
+    FittedNoise, LikelihoodGauss, LineOfSightFlat, ObservationGroup,
     ObservationSky, PixelBrightness, PixelMoments, UpperLimit,
     observable_parser)
 from gbkfit.params import (
-    ParamSpace, SolveGaussian, solve_together, solve_together_rows)
+    ParamSpace, SolveGauss, solve_together, solve_together_rows)
 
 
 GALAXY = dict(components=[dict(
@@ -51,7 +51,7 @@ def test_totals_agree_with_the_residuals(driver):
     rng = np.random.default_rng(1)
     data = Data(rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5))
     objective, params = make_objective(
-        driver, data, LikelihoodGaussian(weights=2.0))
+        driver, data, LikelihoodGauss(weights=2.0))
     residuals = objective.residuals(params)
     assert residuals.dtype == np.float64
     assert objective.chi2(params) == pytest.approx(
@@ -73,7 +73,7 @@ def test_the_log_likelihoods_of_the_points_sum_to_it(driver):
         rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5),
         mask=rng.random((24, 32)) < 0.5)
     objective, params = make_objective(
-        driver, data, LikelihoodGaussian(weights=2.0))
+        driver, data, LikelihoodGauss(weights=2.0))
     pointwise = objective.pointwise_log_likelihood(params)
     assert pointwise.sum() == pytest.approx(
         objective.log_likelihood(params), rel=1e-5)
@@ -86,7 +86,7 @@ def test_the_log_likelihoods_of_the_points_sum_to_it(driver):
     np.testing.assert_allclose(lls[0], pointwise, rtol=1e-6)
     noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1))
     objective, params = make_objective(
-        driver, data, LikelihoodGaussian(noise=noise), 'obs',
+        driver, data, LikelihoodGauss(fitted_noise=noise), 'obs',
         obs_noise_scale_brightness=1.0)
     with pytest.raises(NotImplementedError, match="fitted noise"):
         objective.pointwise_log_likelihood(params)
@@ -220,7 +220,7 @@ def test_masked_values_with_an_upper_limit_are_non_detections(driver):
     data = Data(
         np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5))
     objective, params = make_objective(
-        driver, data, LikelihoodGaussian(
+        driver, data, LikelihoodGauss(
             upper_limits=dict(brightness=UpperLimit(limit=0.01, error=0.2))))
     model = objective.group_plan().model_h(params)[0]['brightness'].data
     residuals = objective.residuals(params).reshape(24, 32)
@@ -248,7 +248,7 @@ def test_upper_limits_count_within_their_footprint(driver):
         np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5),
         footprint=footprint)
     objective, params = make_objective(
-        driver, data, LikelihoodGaussian(upper_limits=limits))
+        driver, data, LikelihoodGauss(upper_limits=limits))
     residuals = objective.residuals(params).reshape(24, 32)
     np.testing.assert_array_equal(residuals[:, :4], 0)
     assert np.all(residuals[:, 4:8] > 0)
@@ -267,7 +267,7 @@ def test_a_fitted_noise_is_exact_to_a_constant(driver):
     data = Data(rng.normal(0.1, 1, (24, 32)), error=error)
     noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1, jitter=True))
     objective, params = make_objective(
-        driver, data, LikelihoodGaussian(noise=noise), 'obs',
+        driver, data, LikelihoodGauss(fitted_noise=noise), 'obs',
         obs_noise_scale_brightness=1.0, obs_noise_jitter_brightness=0.0)
     model = objective.group_plan().model_h(params)[0]['brightness'].data
     offsets = []
@@ -304,12 +304,12 @@ def test_fitted_noise_options_are_checked(noise, name, error, message):
     data = Data(np.ones((24, 32)), error=errors)
     with pytest.raises(ValueError, match=message):
         make_objective(
-            DriverHost(), data, LikelihoodGaussian(noise=noise), name)
+            DriverHost(), data, LikelihoodGauss(fitted_noise=noise), name)
 
 
 def test_a_fitted_noise_has_parameters_of_the_observation():
     noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1, jitter=True))
-    likelihood = LikelihoodGaussian(noise=noise)
+    likelihood = LikelihoodGauss(fitted_noise=noise)
     data = Data(np.ones((24, 32)), error=np.linspace(0.1, 1, 768).reshape(
         24, 32))
     objective, _ = make_objective(
@@ -318,9 +318,9 @@ def test_a_fitted_noise_has_parameters_of_the_observation():
     pdescs = objective.pdescs()
     assert pdescs['obs_noise_scale_brightness'].valid_range().min == 0.1
     assert pdescs['obs_noise_jitter_brightness'].valid_range().min == 0
-    assert likelihood.dump()['noise'] == dict(
+    assert likelihood.dump()['fitted_noise'] == dict(
         brightness=dict(scale=True, scale_min=0.1, jitter=True))
-    assert LikelihoodGaussian.load({
+    assert LikelihoodGauss.load({
         k: v for k, v in likelihood.dump().items() if k != 'type'}).dump() \
         == likelihood.dump()
 
@@ -353,7 +353,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     # its moments 1 and 2 count as misses of 3 errors (they counted 0)
     def group(observable, dataset=None):
         likelihood = None if dataset is None \
-            else LikelihoodGaussian(missing_residual=3)
+            else LikelihoodGauss(missing_residual=3)
         observation = ObservationSky(
             observable, LineOfSightFlat(), data=dataset, likelihood=likelihood)
         return ObservationGroup(
@@ -396,8 +396,8 @@ def test_missing_values_take_the_noise_of_their_error(driver):
     # log(1 / f_min^2), which the scale does not change; the chi-square
     # and -2 log L differ by one constant, however many are missing
     def group(observable, dataset=None):
-        likelihood = None if dataset is None else LikelihoodGaussian(
-            missing_residual=3, noise=dict(
+        likelihood = None if dataset is None else LikelihoodGauss(
+            missing_residual=3, fitted_noise=dict(
                 moment1=FittedNoise(scale=True, scale_min=0.1)))
         observation = ObservationSky(
             observable, LineOfSightFlat(), data=dataset, likelihood=likelihood,
@@ -457,8 +457,8 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
     data = correlated_data(np.random.default_rng(5), PSFGauss(2, 0.5, 20))
     noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1, jitter=True))
     objective, params = make_objective(
-        driver, data, LikelihoodGaussian(
-            weights=2.0, noise=noise, white_floor=0.05), 'obs',
+        driver, data, LikelihoodGauss(
+            weights=2.0, fitted_noise=noise, white_floor=0.05), 'obs',
         obs_noise_scale_brightness=1.3, obs_noise_jitter_brightness=0.2)
     model = objective.group_plan().model_h(params)[0]['brightness'].data
     sigma = np.hypot(1.3 * data.error(), 0.2)
@@ -501,12 +501,12 @@ def test_correlated_noise_goes_without_upper_limits_and_a_floor_of_0():
     from gbkfit.instrument import PSFGauss
     data = correlated_data(np.random.default_rng(6), PSFGauss(4))
     with pytest.raises(ValueError, match="does not go with upper limits"):
-        make_objective(DriverHost(), data, LikelihoodGaussian(
+        make_objective(DriverHost(), data, LikelihoodGauss(
             upper_limits=dict(brightness=UpperLimit(limit=0.01, error=0.2))))
     # (a Gaussian beam of sigma 4 pixels alone is singular on them: its
     # power at the shortest wavelength, of 2 pixels, is exp(-8 pi^2))
     objective, params = make_objective(
-        DriverHost(), data, LikelihoodGaussian(white_floor=0))
+        DriverHost(), data, LikelihoodGauss(white_floor=0))
     with pytest.raises(ValueError, match="singular"):
         objective.chi2(params)
 
@@ -517,7 +517,7 @@ def test_solved_values_are_the_best_and_integrate_out(mean, sigma, minimum):
     # (sums of a value that the data pull below its minimum, one near its
     # mean, and one whose values do not count)
     a, b = np.array([4.0, 9.0, 0.0]), np.array([-3.0, 11.0, 0.0])
-    solution = SolveGaussian(mean, sigma, minimum).solve(a, b)
+    solution = SolveGauss(mean, sigma, minimum).solve(a, b)
     lower = -np.inf if minimum is None else minimum
 
     def chi2(x, k):
@@ -545,7 +545,7 @@ def test_solved_values_are_the_best_and_integrate_out(mean, sigma, minimum):
     free = (b + mean / sigma ** 2) / (a + 1 / sigma ** 2) > lower
     assert solution.m_eff == pytest.approx(
         np.sum(np.where(free, a / (a + 1 / sigma ** 2), 0)))
-    profiled = SolveGaussian(mean, sigma, minimum, 'profiled').solve(a, b)
+    profiled = SolveGauss(mean, sigma, minimum, 'profiled').solve(a, b)
     np.testing.assert_allclose(profiled.values, solution.values)
     assert profiled.log_term == 0
 
@@ -554,7 +554,7 @@ def least_squares_problem(seed):
     """
     The weighted model matrix and data of a linear problem of 3 values on
     40 data values (pieces that overlap, so the values are coupled), and
-    its sums N and b (see SolveGaussian.solve_coupled).
+    its sums N and b (see SolveGauss.solve_coupled).
     """
     rng = np.random.default_rng(seed)
     pieces = np.abs(rng.normal(size=(40, 3))) + 0.2
@@ -583,7 +583,7 @@ def test_values_solved_together_are_the_best_and_integrate_out():
     # (the trace of the hat matrix, by finite differences)
     pieces, data, normal, rhs = least_squares_problem(1)
     mean, sigma = 0.5, 1.5
-    solve = SolveGaussian(mean, sigma)
+    solve = SolveGauss(mean, sigma)
     solution = solve.solve_coupled(normal, rhs)
     rows = np.vstack((pieces, np.eye(3) / sigma))
     target = np.concatenate((data, np.full(3, mean / sigma)))
@@ -612,8 +612,8 @@ def test_values_solved_together_above_a_minimum_are_profiled():
     pieces, data, normal, rhs = least_squares_problem(2)
     mean, sigma, minimum = 0.0, 3.0, 0.0
     with pytest.raises(ValueError, match="'profiled'"):
-        SolveGaussian(mean, sigma, minimum).solve_coupled(normal, rhs)
-    solve = SolveGaussian(mean, sigma, minimum, 'profiled')
+        SolveGauss(mean, sigma, minimum).solve_coupled(normal, rhs)
+    solve = SolveGauss(mean, sigma, minimum, 'profiled')
     solution = solve.solve_coupled(normal, rhs)
     rows = np.vstack((pieces, np.eye(3) / sigma))
     target = np.concatenate((data, np.full(3, mean / sigma)))
@@ -635,8 +635,8 @@ def test_values_solved_on_rows_are_those_of_their_sums(minimum, likelihood):
     rng = np.random.default_rng(4)
     rows = np.abs(rng.normal(size=(30, 12)))
     target = rows @ rng.normal(1, 1, 12) + rng.normal(size=30)
-    solves = [SolveGaussian(0.5, 1.5, minimum, likelihood),
-              SolveGaussian(1.0, 0.3, minimum, likelihood)]
+    solves = [SolveGauss(0.5, 1.5, minimum, likelihood),
+              SolveGauss(1.0, 0.3, minimum, likelihood)]
     expected = solve_together(
         solves, [5, 7], rows.T @ rows, rows.T @ target)
     solution = solve_together_rows(solves, [5, 7], rows, target)
@@ -658,7 +658,7 @@ def test_many_values_solved_on_few_rows_are_the_bounded_least_squares():
     target = rows @ truth + 0.1 * rng.normal(size=100)
     sigma = 2.0
     solution = solve_together_rows(
-        [SolveGaussian(1.0, sigma, 0.0, 'profiled')], [1000], rows, target)
+        [SolveGauss(1.0, sigma, 0.0, 'profiled')], [1000], rows, target)
     stacked = np.vstack((rows, np.eye(1000) / sigma))
     expected = scipy.optimize.lsq_linear(
         stacked, np.concatenate((target, np.full(1000, 1 / sigma))),
@@ -680,10 +680,10 @@ def test_a_sigma_chosen_by_aicp_has_the_least_aicp():
         residuals = rows @ solution.values - target
         return residuals @ residuals + 2 * solution.m_eff
     chosen = solve_together_rows(
-        [SolveGaussian(1.0, min=0.0, likelihood='profiled',
+        [SolveGauss(1.0, min=0.0, likelihood='profiled',
                        sigma_aicp=[0.01, 100])], [300], rows, target)
     grid = [aicp(solve_together_rows(
-        [SolveGaussian(1.0, sigma, 0.0, 'profiled')], [300], rows, target))
+        [SolveGauss(1.0, sigma, 0.0, 'profiled')], [300], rows, target))
         for sigma in np.geomspace(0.01, 100, 81)]
     assert aicp(chosen) <= min(grid) + 1e-3
     assert np.argmin(grid) not in (0, len(grid) - 1)
@@ -697,7 +697,7 @@ def test_a_sigma_chosen_by_aicp_has_the_least_aicp():
 ])
 def test_invalid_sigmas_chosen_by_aicp_are_refused(options, message):
     with pytest.raises(ValueError, match=message):
-        SolveGaussian(1.0, **options)
+        SolveGauss(1.0, **options)
 
 
 @pytest.mark.parametrize('mean, minimum, default', [
@@ -706,7 +706,7 @@ def test_invalid_sigmas_chosen_by_aicp_are_refused(options, message):
 def test_the_value_of_a_solve_without_data_is_its_mean(
         mean, minimum, default, sigma):
     # (at least its minimum, whatever its sigma)
-    solve = SolveGaussian(mean, min=minimum, likelihood='profiled', **sigma)
+    solve = SolveGauss(mean, min=minimum, likelihood='profiled', **sigma)
     assert solve.default() == default
     assert solve.solve(np.zeros(1), np.zeros(1)).values[0] == default
 
@@ -874,7 +874,7 @@ def test_the_pointwise_factors_are_exact_in_float64(driver):
                 error=np.full((24, 32), 2, np.float32))
     noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1))
     objective, params = make_objective(
-        driver, data, LikelihoodGaussian(weights=3.0, noise=noise), 'obs',
+        driver, data, LikelihoodGauss(weights=3.0, fitted_noise=noise), 'obs',
         obs_noise_scale_brightness=1.5)
     (factors,) = objective._comparisons[0].pointwise_factors(
         ['brightness'], params).values()
@@ -891,7 +891,7 @@ def test_the_log_likelihood_of_a_fitted_scale_is_free_of_its_minimum(driver):
     for minimum in (0.1, 0.001):
         noise = dict(brightness=FittedNoise(scale=True, scale_min=minimum))
         objective, params = make_objective(
-            driver, data, LikelihoodGaussian(noise=noise), 'obs',
+            driver, data, LikelihoodGauss(fitted_noise=noise), 'obs',
             obs_noise_scale_brightness=1.5)
         merits.append(objective.merits(params))
     assert merits[0].log_likelihood == pytest.approx(

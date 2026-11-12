@@ -1,6 +1,6 @@
 # equilibrium_heights_mond: A thick gas disk held up by the Jeans vertical equilibrium, rotating at each height in the gravity of its mass (a stellar bulge, and a disk that follows the gas) in MOND (gravity_a0); a small cube.
 # (written by make_golden.py; do not edit)
-version: 8
+version: 9
 driver: {type: host}
 galaxies:
 - components:
@@ -36,7 +36,7 @@ observations:
     spectral: {step: 15.0, rpix: 14.5, rval: 0.0}
     data: observation0_spectra_d.fits
     error: 0.0002
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: null}

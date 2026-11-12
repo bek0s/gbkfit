@@ -1,5 +1,5 @@
 """
-Tests for moment maps measured by Gaussian fits (method gaussian_fit of
+Tests for moment maps measured by Gaussian fits (method gauss_fit of
 mmaps and bmaps), as the maps of data often are.
 """
 
@@ -38,7 +38,7 @@ def evaluate(driver, observable):
     return {key: value.data.copy() for key, value in data.items()}
 
 
-def test_gaussian_fit_recovers_gaussians(driver):
+def test_gauss_fit_recovers_gaussians(driver):
     # Spectra that are Gaussians sampled at the centres of the channels:
     # the fit finds their flux, centre and dispersion
     rng = np.random.default_rng(2)
@@ -53,7 +53,7 @@ def test_gaussian_fit_recovers_gaussians(driver):
     # A spectrum below the cutoff is masked
     cube[:, 0, 0] = 0
     plan = MomentsPlan(
-        driver, (nx, ny), (0, 1, 2), 1e-6, 'gaussian_fit', np.float32)
+        driver, (nx, ny), (0, 1, 2), 1e-6, 'gauss_fit', np.float32)
     maps = plan.evaluate(
         (1, 1, step), (0, 0, zero),
         driver.mem_copy_h2d(cube.astype(np.float32)), None)
@@ -98,7 +98,7 @@ def test_gauss_hermite_fit_recovers_the_series(driver, step):
     np.testing.assert_allclose(maps['h4'], h4, atol=2e-3)
 
 
-def test_gaussian_fit_of_noisy_spectra_stays_on_the_line(driver):
+def test_gauss_fit_of_noisy_spectra_stays_on_the_line(driver):
     # A line of dispersion 1.5 channels at S/N 10 per channel, in 4000
     # spectra: every fit is of the line (from the moments of the whole
     # spectrum alone, some fell on a spike of noise or on the wing of a
@@ -109,7 +109,7 @@ def test_gaussian_fit_of_noisy_spectra_stays_on_the_line(driver):
     line = np.exp(-0.5 * ((channels - 15) / 1.5) ** 2)
     cube = line + rng.standard_normal((nz, ny, nx)) / 10
     plan = MomentsPlan(
-        driver, (nx, ny), (0, 1, 2), 1e-6, 'gaussian_fit', np.float32)
+        driver, (nx, ny), (0, 1, 2), 1e-6, 'gauss_fit', np.float32)
     maps = plan.evaluate(
         (1, 1, 1), (0, 0, 0),
         driver.mem_copy_h2d(cube.astype(np.float32)), None)
@@ -121,7 +121,7 @@ def test_gaussian_fit_of_noisy_spectra_stays_on_the_line(driver):
     np.testing.assert_allclose(sigma, 1.5, rtol=0.6)
 
 
-@pytest.mark.parametrize('method', ['moments', 'gaussian_fit'])
+@pytest.mark.parametrize('method', ['moments', 'gauss_fit'])
 def test_the_flux_floor_is_relative_to_the_brightest_spectrum(
         driver, method):
     # The spectra of a moment 0 not above the floor times the largest are
@@ -140,7 +140,7 @@ def test_the_flux_floor_is_relative_to_the_brightest_spectrum(
         np.testing.assert_array_equal(mask, flux > 1e-3)
 
 
-def test_gaussian_fit_without_beam_smearing_is_the_moments(driver):
+def test_gauss_fit_without_beam_smearing_is_the_moments(driver):
     # Without a psf, each spectrum of a thin disk is one line, whose fit
     # is its moments (up to the channel integration of the model)
     mmaps = dict(
@@ -148,7 +148,7 @@ def test_gaussian_fit_without_beam_smearing_is_the_moments(driver):
         spectral=dict(size=161, step=5, convention='relativistic'),
         orders=[0, 1, 2], flux_floor=1e-4)
     moments = evaluate(driver, mmaps)
-    fitted = evaluate(driver, mmaps | dict(method='gaussian_fit'))
+    fitted = evaluate(driver, mmaps | dict(method='gauss_fit'))
     good = np.isfinite(moments['moment1']) & np.isfinite(fitted['moment1'])
     # Both mask the same spectra (none of the fits fails)
     assert good.sum() == np.isfinite(moments['moment1']).sum() > 200
@@ -160,7 +160,7 @@ def test_gaussian_fit_without_beam_smearing_is_the_moments(driver):
         fitted['moment0'][good], moments['moment0'][good], rtol=1e-2)
 
 
-def test_gaussian_fit_differs_from_the_moments_with_beam_smearing(driver):
+def test_gauss_fit_differs_from_the_moments_with_beam_smearing(driver):
     # A psf mixes the lines of a rotating disk into skewed spectra, whose
     # Gaussian fits and moments differ (e.g. near the centre)
     mmaps = dict(
@@ -168,12 +168,12 @@ def test_gaussian_fit_differs_from_the_moments_with_beam_smearing(driver):
         spectral=dict(size=161, step=5, convention='relativistic'),
         orders=[0, 1, 2], flux_floor=1e-4, psf=dict(type='gauss', sigma=2))
     moments = evaluate(driver, mmaps)
-    fitted = evaluate(driver, mmaps | dict(method='gaussian_fit'))
+    fitted = evaluate(driver, mmaps | dict(method='gauss_fit'))
     good = np.isfinite(moments['moment2']) & np.isfinite(fitted['moment2'])
     assert np.nanmax(np.abs(fitted['moment2'] - moments['moment2'])[good]) > 2
 
 
-def test_gaussian_fit_of_bins(driver):
+def test_gauss_fit_of_bins(driver):
     # The fits of single-pixel bins are those of the maps
     from gbkfit.io import write_data
     write_data(
@@ -181,7 +181,7 @@ def test_gaussian_fit_of_bins(driver):
         Coords((1, 1), (15.5, 20), (0, 0), 0))
     options = dict(
         spectral=dict(size=161, step=5, convention='relativistic'),
-        orders=[1, 2], flux_floor=1e-4, method='gaussian_fit')
+        orders=[1, 2], flux_floor=1e-4, method='gauss_fit')
     mmaps = evaluate(driver, dict(
         type='pixel_moments', size=[32, 41],
         spectral=dict(convention='relativistic')) | options)
@@ -195,7 +195,7 @@ def test_gaussian_fit_of_bins(driver):
 
 @pytest.mark.parametrize('options, error, message', [
     (dict(method='gauss'), ValueError, "'method' must be one of"),
-    (dict(method='gaussian_fit', orders=[1, 3]), ValueError,
+    (dict(method='gauss_fit', orders=[1, 3]), ValueError,
      "between 0 and 2"),
     (dict(method='gauss_hermite', orders=[1, 5]), ValueError,
      "between 0 and 4")])
@@ -210,7 +210,7 @@ def test_method_options_are_checked(options, error, message):
 def test_method_round_trip():
     from gbkfit.observation import observable_parser
     info = dict(
-        type='pixel_moments', size=[8, 8], method='gaussian_fit',
+        type='pixel_moments', size=[8, 8], method='gauss_fit',
         spectral=dict(convention='relativistic'))
     dumped = observable_parser.dump(observable_parser.load(dict(info)))
-    assert dumped['method'] == 'gaussian_fit'
+    assert dumped['method'] == 'gauss_fit'

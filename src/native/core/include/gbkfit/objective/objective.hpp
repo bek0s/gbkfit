@@ -23,7 +23,7 @@ objective_upper_limit_residual(T model, T limit, T error)
 }
 
 // The noise of an error e: e times the scale of the noise, and its jitter,
-// in quadrature, sqrt((scale e)^2 + jitter^2) (see LikelihoodGaussian).
+// in quadrature, sqrt((scale e)^2 + jitter^2) (see LikelihoodGauss).
 // (hypot: errors of tiny numbers, e.g. 1e-20 erg/s/cm^2/A, do not
 // underflow when squared, and the noise of a scale of 1 and no jitter is
 // the error itself)
@@ -115,7 +115,7 @@ objective_amplitude_terms(
 }
 
 // The term of value i in the noise residual of a data item whose noise is
-// fitted (see LikelihoodGaussian): c^2 log(noise^2 / (reference error)^2),
+// fitted (see LikelihoodGauss): c^2 log(noise^2 / (reference error)^2),
 // c the factor of its residual (see objective_residual: the weight, times
 // mdl_w and obs_m), error that of obs_e (1 without errors), and reference
 // scale_minimum, at most 1. It is the share of the value in the

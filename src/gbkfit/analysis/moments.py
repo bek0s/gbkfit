@@ -106,7 +106,7 @@ def moment_maps(
     orders : Sequence of int, optional
         The orders of the maps.
     method : str, optional
-        How the maps are measured: 'moments'; 'gaussian_fit' (the flux,
+        How the maps are measured: 'moments'; 'gauss_fit' (the flux,
         centre and dispersion of a Gaussian fitted to each spectrum, for
         the orders 0 to 2); or 'gauss_hermite' (of a Gauss-Hermite series,
         for the orders 0 to 4: its flux, centre, dispersion, h3 and h4).

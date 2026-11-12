@@ -77,8 +77,8 @@ class ObservationSky(Observation):
     ('per_spectrum'), or one for each line of the image of slitless
     spectra along the dispersion ('per_row', the row amplitudes of geko).
     Its values can be fixed, tied, free or solved (see ParamSpace): e.g.
-    {solve: {type: gaussian, mean: 1, sigma: 0.5, min: 0}} (see
-    SolveGaussian). Scales per spectrum make a fit take the shape of each
+    {solve: {type: gauss, mean: 1, sigma: 0.5, min: 0}} (see
+    SolveGauss). Scales per spectrum make a fit take the shape of each
     spectrum from the model (where its lines are, how wide; with beam
     smearing, also how the light of the model weighs its velocities), and
     its brightness mostly from the data, which suits a model whose light
@@ -171,7 +171,7 @@ class ObservationSky(Observation):
     dtype : str, optional
         The floating type of the model: 'float32' or 'float64'. By default
         float64 if the noise of an item of its data is correlated (see
-        Data): the whitening of its residuals (see LikelihoodGaussian)
+        Data): the whitening of its residuals (see LikelihoodGauss)
         magnifies the rounding of a float32 model enough to stop least
         squares up to about 1 sigma short of the best fit; float32
         otherwise. A copy with other data (see with_data, e.g. mock data)
@@ -205,7 +205,7 @@ class ObservationSky(Observation):
         false, the oversampling is not one integer of at least 1 for each
         axis, there is a likelihood without data, the data are not those of
         the observable, its model can have missing values but its
-        likelihood has no residual for them (see LikelihoodGaussian), its
+        likelihood has no residual for them (see LikelihoodGauss), its
         likelihood fits a noise but it has no name, the noise of an item
         is correlated where its kind of data cannot have it, its
         likelihood does not suit it (see Likelihood.check), the observable
@@ -439,7 +439,7 @@ class ObservationSky(Observation):
         offsets of its frame, if any (see the class), those of its lens,
         '{name}_lens_{parameter}' (see Foreground.pdescs), and those of the
         fitted noise of its likelihood, e.g. '{name}_noise_scale_{item}'
-        (see LikelihoodGaussian).
+        (see LikelihoodGauss).
         """
         flux_scale = {}
         if (scale := self.flux_scale()) is not None:

@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from gbkfit.config import DataFile, check_options
-from gbkfit.grid import SpectralAxis
+from gbkfit.grid import SpectralAxis, x_axis_pa, x_axis_rota
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids
 from .base import DatasetGrid, cleaned
@@ -25,6 +25,11 @@ class DatasetSlitSpectra(DatasetGrid):
     Its configuration has the options of from_files: the files of its one
     data item (data, mask, error) and its world coordinates.
 
+    The slit is oriented on the sky by its position angle, slit_pa: that
+    of its +x axis, the way the positions along it increase, as the PA of
+    a slit is quoted (the rotation of its grid, the position angle of +y,
+    across the slit, is 90 degrees more; see x_axis_rota).
+
     Parameters
     ----------
     spectra : Data
@@ -34,8 +39,10 @@ class DatasetSlitSpectra(DatasetGrid):
         The world coordinates of the axes on the sky (the position along
         the slit; see Coords); their defaults are those of
         make_grid.
-    rota : float, optional
-        The rotation of the grid on the sky (see Coords).
+    slit_pa : float, optional
+        The position angle of the slit (degrees, north through east), of
+        its +x axis; -90 by default (+x to the west, as the x axis of an
+        image of north up and east to the left).
     spectral : SpectralAxis, optional
         The spectral axis (see make_cube_grid): its world
         coordinates, the convention of its velocities, its rest and its
@@ -72,7 +79,7 @@ class DatasetSlitSpectra(DatasetGrid):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            slit_pa: float | None = None,
             spectral: SpectralAxis | None = None,
             outliers: Mapping[str, Any] | None = None,
             error_kind: ErrorKind = 'sigma',
@@ -102,9 +109,11 @@ class DatasetSlitSpectra(DatasetGrid):
             Coords); by default, those of the header. Either rpix
             or rval can be given, and the other comes from the header (see
             coords_from_header).
-        rota : float, optional
-            The rotation of the grid on the sky; by default, that of the
-            header.
+        slit_pa : float, optional
+            The position angle of the slit (see DatasetSlitSpectra); by
+            default, that of the x axis of the header (of files with an
+            axis along the slit and none across it, -90: their world
+            coordinates do not orient the slit on the sky).
         spectral : SpectralAxis, optional
             The world coordinates of the spectral axis, the convention of
             its velocities, its rest and its medium, given instead of
@@ -137,17 +146,25 @@ class DatasetSlitSpectra(DatasetGrid):
             unit, beam, velocity=references['velocity'],
             error_kind=error_kind, mask_kind=mask_kind, footprint=footprint,
             spectral_type=references['spectral_type'])
+        options = _grids.cube_coords(coords, step, None, spectral)
+        # (the slit along the x axis of the files, unless its angle is given)
+        rota = options.pop('rota')
         dataset = cls(
-            item, **_grids.cube_coords(coords, step, rota, spectral))
+            item, **options,
+            slit_pa=x_axis_pa(rota) if slit_pa is None else slit_pa)
         return cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        return _grids.flatten_single_item(
-            _grids.dump_grid_dataset(self, prefix, dump_path, overwrite),
-            'spectra')
+        options = _grids.dump_grid_dataset(
+            self, prefix, dump_path, overwrite)
+        # (oriented by its slit, in place of the rotation of its grid)
+        options = dict(
+            ('slit_pa', self._slit_pa) if key == 'rota' else (key, value)
+            for key, value in options.items())
+        return _grids.flatten_single_item(options, 'spectra')
 
     def __init__(
             self,
@@ -155,9 +172,16 @@ class DatasetSlitSpectra(DatasetGrid):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            slit_pa: float | None = None,
             spectral: SpectralAxis | None = None
     ):
         check_options(DatasetSlitSpectra.__init__, locals())
         super().__init__(
-            dict(spectra=spectra), step, rpix, rval, rota, spectral)
+            dict(spectra=spectra), step, rpix, rval,
+            None if slit_pa is None else x_axis_rota(slit_pa), spectral)
+        self._slit_pa = x_axis_pa(self.grid().coords.rota) \
+            if slit_pa is None else float(slit_pa)
+
+    def slit_pa(self) -> float:
+        """Return the position angle of the slit (see the class)."""
+        return self._slit_pa

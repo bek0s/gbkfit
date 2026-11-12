@@ -20,7 +20,7 @@ from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGaussian, ObservationGroup, ObservationSky,
+    FittedNoise, LikelihoodGauss, ObservationGroup, ObservationSky,
     PixelSpectra, RegionMoments, line_of_sight_parser)
 from gbkfit.observation.orbits import _bins_light
 from gbkfit.observation.observables._orbit_sky import bins_sky_grid
@@ -51,7 +51,7 @@ PROPERTIES = dict(
     mass_light_alpha=1.0, mass_light_beta=4.0, mass_light_gamma=1.0,
     mass_bh_log_m=np.log10(5e8))
 SOLVE = dict(solve=dict(
-    type='gaussian', mean=1, sigma=1, min=0, likelihood='profiled'))
+    type='gauss', mean=1, sigma=1, min=0, likelihood='profiled'))
 
 
 # The data items of the series of the stars, by order (V, sigma, h3, h4)
@@ -93,7 +93,7 @@ def observation(regions, psf=1.0, oversampling=None, data=None):
         instrument=Instrument(psf=None if psf is None else PSFGauss(psf)),
         lines=['stars'], data=dataset, dtype='float64',
         oversampling=oversampling,
-        likelihood=LikelihoodGaussian(missing_residual=3))
+        likelihood=LikelihoodGauss(missing_residual=3))
 
 
 def without_data(obs):
@@ -243,16 +243,18 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
     stars = ObservationSky(
         seen.observable(), seen.line_of_sight(), instrument=seen.instrument(),
         lines=['stars'], data=seen.data(), dtype='float64', name='bins',
-        likelihood=LikelihoodGaussian(
+        likelihood=LikelihoodGauss(
             missing_residual=3,
-            noise=dict(moment1=FittedNoise(scale=True, scale_min=0.5))))
+            fitted_noise=dict(
+                moment1=FittedNoise(scale=True, scale_min=0.5))))
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
     image = ObservationSky(
         PixelBrightness.from_data(dataset),
         line_of_sight_parser.load(dict(type='flat')), data=dataset,
-        name='image', likelihood=LikelihoodGaussian(
-            noise=dict(brightness=FittedNoise(scale=True, scale_min=0.5))))
+        name='image', likelihood=LikelihoodGauss(
+            fitted_noise=dict(
+                brightness=FittedNoise(scale=True, scale_min=0.5))))
     group = ObservationGroup([galaxy()], [stars, image])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=SOLVE, bins_noise_scale_moment1=1.0,
@@ -474,7 +476,7 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     group = ObservationGroup([galaxy()], [obs])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=dict(
-            type='gaussian', mean=1, sigma=1e-6, min=0,
+            type='gauss', mean=1, sigma=1e-6, min=0,
             likelihood='profiled'))))
     objective = Objective(group.plan(driver), params.solves())
     evaluation = objective.evaluate(params.evaluate())
@@ -532,9 +534,9 @@ def test_a_bootstrap_redraws_about_the_model_of_the_objective(driver):
     # The data of the refits of a bootstrap of a fit of the weights are
     # the model that the objective compares with the data plus noise
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
+        BootstrapGauss, BootstrapOptions, fitter_parser, run_bootstrap)
 
-    class KeptModels(BootstrapGaussian):
+    class KeptModels(BootstrapGauss):
         """A Gaussian bootstrap that keeps the models it draws about."""
 
         def __init__(self):
@@ -593,7 +595,7 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
         line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
         instrument=Instrument(psf=PSFGauss(0.5 / np.sqrt(8 * np.log(2)))),
         lines=['stars'], data=dataset,
-        likelihood=LikelihoodGaussian(missing_residual=3))
+        likelihood=LikelihoodGauss(missing_residual=3))
     a = light.a / mock.kpc_per_arcsec()
     sigma, i0 = hernquist_mge(a)
     spheroid = SPHEROID | dict(
@@ -682,11 +684,11 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
             dataset, method='gauss_hermite',
             spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
         los, instrument=instrument, lines=['stars'], data=dataset,
-        likelihood=LikelihoodGaussian(missing_residual=3))
+        likelihood=LikelihoodGauss(missing_residual=3))
     group = ObservationGroup(
         [stars(dict(norbits=1500, turns=30))], [obs])
     solve = dict(solve=dict(
-        type='gaussian', mean=1, sigma=10, min=0, likelihood='profiled'))
+        type='gauss', mean=1, sigma=10, min=0, likelihood='profiled'))
     objective = None
     chi2 = {}
     for factor in (0.8, 1.0, 1.25):

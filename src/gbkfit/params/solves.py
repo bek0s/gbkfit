@@ -30,7 +30,7 @@ __all__ = [
     'LIKELIHOODS',
     'Solution',
     'Solve',
-    'SolveGaussian',
+    'SolveGauss',
     'check_together',
     'solve_parser',
     'solve_together',
@@ -49,7 +49,7 @@ _Likelihood: TypeAlias = Annotated[Literal[LIKELIHOODS], Choices(
 # of its dual below which it is rounding (of sums of many terms)
 _ROWS_MAX_STEPS = 100
 _ROWS_ROUNDING = 1e-14
-# The tolerance of ln(sigma) chosen by AICp (see SolveGaussian)
+# The tolerance of ln(sigma) chosen by AICp (see SolveGauss)
 _AICP_TOLERANCE = 1e-3
 
 
@@ -156,7 +156,7 @@ class Solve(TypedSerializable, abc.ABC):
         return None
 
 
-class SolveGaussian(Solve):
+class SolveGauss(Solve):
     """
     Solved values whose prior is a Gaussian of a mean (mu) and a standard
     deviation (s), cut below a minimum (c), if any. Each value x times the
@@ -220,7 +220,7 @@ class SolveGaussian(Solve):
 
     @staticmethod
     def type() -> str:
-        return 'gaussian'
+        return 'gauss'
 
     @staticmethod
     def type_title() -> str:
@@ -247,7 +247,7 @@ class SolveGaussian(Solve):
             likelihood: _Likelihood = LIKELIHOODS[0],
             sigma_aicp: Sequence[float] | None = None
     ):
-        check_options(SolveGaussian.__init__, locals())
+        check_options(SolveGauss.__init__, locals())
         if (sigma is None) == (sigma_aicp is None):
             raise ValueError(
                 "a Gaussian solve has sigma, or sigma_aicp (a range of sigma "
@@ -362,10 +362,10 @@ def check_together(solves: Sequence[Solve], sizes: Sequence[int]) -> None:
     priors and one likelihood, and 'profiled' if more than one value has
     a minimum (their integral has no exact formula).
     """
-    if not all(isinstance(solve, SolveGaussian) for solve in solves):
+    if not all(isinstance(solve, SolveGauss) for solve in solves):
         raise ValueError(
             "values solved together take Gaussian priors (solves of type "
-            "'gaussian')")
+            "'gauss')")
     likelihoods = {solve.likelihood() for solve in solves}
     if len(likelihoods) > 1:
         raise ValueError(
@@ -401,7 +401,7 @@ def solve_together(
     best values are those of the least squares of N' and b' above it
     (bounded variables), their effective number that trace over those
     above it, and they are profiled (see check_together). One value alone
-    takes the formulas of SolveGaussian.
+    takes the formulas of SolveGauss.
 
     Raises
     ------
@@ -481,7 +481,7 @@ def solve_together_rows(
     keeps it reaches the solution), from the solution without the minimum
     (from the means of the priors, the minimum cuts the steps short, and
     from the solution of similar rows it takes more of them); at the
-    standard deviations that AICp tries (see SolveGaussian), each from the
+    standard deviations that AICp tries (see SolveGauss), each from the
     solution at the last one (see _RowsSolver). Then the
     effective number of the values is n - tr(H^-1), and the integral of
     the likelihood (without a minimum) -log det(H) / 2: those of
@@ -694,7 +694,7 @@ def _chosen_together(
     Return the solution of values solved together, of the function of
     their solution at a standard deviation of their priors (and the
     chi-square of their data): at theirs, or chosen by AICp in their range
-    (see SolveGaussian).
+    (see SolveGauss).
     """
     widths = solves[0].sigma_aicp()
     if widths is None:
@@ -708,7 +708,7 @@ def _chosen(
 ) -> Solution:
     """
     Return the solution of the standard deviation of a prior in a range
-    of the least AICp = chi2 + 2 m_eff of the data (see SolveGaussian), of
+    of the least AICp = chi2 + 2 m_eff of the data (see SolveGauss), of
     the function of the solution at a standard deviation and the
     chi-square of the data: by a bounded minimisation in its ln.
     """
@@ -745,4 +745,4 @@ def _priors(
     return mean, sigma, lower
 
 
-solve_parser = TypedParser(Solve, [SolveGaussian], family='solve')
+solve_parser = TypedParser(Solve, [SolveGauss], family='solve')

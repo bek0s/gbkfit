@@ -37,7 +37,7 @@ __all__ = [
     'MAX_CORRELATED_PIXELS',
     'FittedNoise',
     'Likelihood',
-    'LikelihoodGaussian',
+    'LikelihoodGauss',
     'LikelihoodUser',
     'UpperLimit',
     'Whitening',
@@ -48,14 +48,14 @@ __all__ = [
 
 
 # The most pixels of the sky over which the noise of a data item can be
-# correlated (see LikelihoodGaussian): its dense correlation matrix takes
+# correlated (see LikelihoodGauss): its dense correlation matrix takes
 # 8 n^2 bytes (3.2 GB)
 MAX_CORRELATED_PIXELS = 20000
 
 
 class FittedNoise(NamedTuple):
     """
-    How the noise of a data item is fitted (see LikelihoodGaussian); in a
+    How the noise of a data item is fitted (see LikelihoodGauss); in a
     configuration, a dict of its fields.
 
     Parameters
@@ -77,7 +77,7 @@ class FittedNoise(NamedTuple):
 class UpperLimit(NamedTuple):
     """
     The upper limit of the masked values of a data item (see
-    LikelihoodGaussian); in a configuration, a dict of its fields.
+    LikelihoodGauss); in a configuration, a dict of its fields.
 
     Parameters
     ----------
@@ -163,7 +163,7 @@ class Likelihood(TypedSerializable, abc.ABC):
         """
         Return the noise of the values of the data item of the given name,
         of its errors, at the values of the parameters (e.g. with a fitted
-        noise; see LikelihoodGaussian): the errors here, 1 where it has
+        noise; see LikelihoodGauss): the errors here, 1 where it has
         none.
 
         Parameters
@@ -187,7 +187,7 @@ class Likelihood(TypedSerializable, abc.ABC):
         """
         Check whether it takes the values missing from the model where
         the data have some (e.g. the velocity of a spectrum below the
-        flux_floor of a moment map; see LikelihoodGaussian).
+        flux_floor of a moment map; see LikelihoodGauss).
         """
 
     @abc.abstractmethod
@@ -213,7 +213,7 @@ class Likelihood(TypedSerializable, abc.ABC):
         """
 
 
-class LikelihoodGaussian(Likelihood):
+class LikelihoodGauss(Likelihood):
     """
     Independent Gaussian noise with the errors of the data: the weighted
     chi-squared.
@@ -253,10 +253,10 @@ class LikelihoodGaussian(Likelihood):
     looked, e.g. the field of an IFU, whose corners are blank but were
     never observed; see Data), count nothing.
 
-    With noise, the noise of data items is fitted: the errors e of an item
-    (1 where the data have none) are times a scale f, and a jitter j adds
-    to them in quadrature, so that each value has the noise sigma =
-    sqrt((f e)^2 + j^2) in place of its error. Each is a parameter of the
+    With fitted_noise, the noise of data items is fitted: the errors e of
+    an item (1 where the data have none) are times a scale f, and a jitter
+    j adds to them in quadrature, so that each value has the noise sigma
+    = sqrt((f e)^2 + j^2) in place of its error. Each is a parameter of the
     observation, '{name}_noise_scale_{item}' and
     '{name}_noise_jitter_{item}' (the observation needs a name; see
     Observation). The scale is for errors that are off by a factor (e.g.
@@ -326,7 +326,7 @@ class LikelihoodGaussian(Likelihood):
     upper_limits : Mapping of str to UpperLimit, optional
         The upper limit of the masked values of data items, by name (none
         for the others); see above.
-    noise : Mapping of str to FittedNoise, optional
+    fitted_noise : Mapping of str to FittedNoise, optional
         The fitted noise of data items, by name (none for the others): of
         each, its scale, its jitter, or both; see above.
     white_floor : float, optional
@@ -342,7 +342,7 @@ class LikelihoodGaussian(Likelihood):
 
     @staticmethod
     def type() -> str:
-        return 'gaussian'
+        return 'gauss'
 
     @staticmethod
     def type_title() -> str:
@@ -352,12 +352,13 @@ class LikelihoodGaussian(Likelihood):
         limits = {} if not self._upper_limits else dict(upper_limits={
             key: _record_config(limit)
             for key, limit in self._upper_limits.items()})
-        noise = {} if not self._noise else dict(noise={
-            key: _record_config(item) for key, item in self._noise.items()})
+        fitted = {} if not self._fitted_noise else dict(fitted_noise={
+            key: _record_config(item)
+            for key, item in self._fitted_noise.items()})
         return dict(
             type=self.type(), weights=self._weights,
             missing_residual=self._missing_residual) \
-            | limits | noise \
+            | limits | fitted \
             | dict(white_floor=self._white_floor)
 
     def __init__(
@@ -365,18 +366,18 @@ class LikelihoodGaussian(Likelihood):
             weights: float | Mapping[str, float] = 1.0,
             missing_residual: Annotated[FiniteFloat, Ge(0)] | None = None,
             upper_limits: Mapping[str, UpperLimit] | None = None,
-            noise: Mapping[str, FittedNoise] | None = None,
+            fitted_noise: Mapping[str, FittedNoise] | None = None,
             white_floor: Annotated[float, Ge(0), Lt(1)] = 0.01
     ):
-        check_options(LikelihoodGaussian.__init__, locals())
+        check_options(LikelihoodGauss.__init__, locals())
         self._weights = weights if isinstance(weights, Real) \
             else dict(weights)
         self._missing_residual = None if missing_residual is None \
             else float(missing_residual)
         self._upper_limits = dict(upper_limits or {})
-        for key, item in (noise or {}).items():
+        for key, item in (fitted_noise or {}).items():
             _check_noise(key, item)
-        self._noise = dict(noise or {})
+        self._fitted_noise = dict(fitted_noise or {})
         self._white_floor = float(white_floor)
 
     def pdescs(self) -> dict[str, ParamDesc]:
@@ -385,7 +386,7 @@ class LikelihoodGaussian(Likelihood):
         fitted noise of data items (see the class and with_prefix).
         """
         pdescs = {}
-        for key, noise in self._noise.items():
+        for key, noise in self._fitted_noise.items():
             scale, jitter = self.noise_params(key)
             if scale is not None:
                 pdescs[scale] = ParamScalarDesc(
@@ -408,7 +409,7 @@ class LikelihoodGaussian(Likelihood):
         # of an item without errors (the noise itself); that of errors
         # has none
         units = {}
-        for key in self._noise:
+        for key in self._fitted_noise:
             scale, jitter = self.noise_params(key)
             item = data[key]
             if scale is not None:
@@ -442,13 +443,13 @@ class LikelihoodGaussian(Likelihood):
             limit.
         """
         weights = () if isinstance(self._weights, Real) else self._weights
-        named = {*weights, *self._upper_limits, *self._noise}
+        named = {*weights, *self._upper_limits, *self._fitted_noise}
         if unknown := sorted(named - set(keys)):
             raise ValueError(
                 f"the options of the likelihood name data items that the "
                 f"observation does not have: {unknown}; its items are "
                 f"{list(keys)}")
-        for key, noise in self._noise.items():
+        for key, noise in self._fitted_noise.items():
             if noise.scale and noise.jitter:
                 _check_errors_differ(key, data)
         for key in keys:
@@ -467,7 +468,7 @@ class LikelihoodGaussian(Likelihood):
         of the noise of the data item of the given name, None for those
         that are not fitted.
         """
-        noise = self._noise.get(key)
+        noise = self._fitted_noise.get(key)
         if noise is None:
             return None, None
         return (
@@ -512,8 +513,8 @@ class LikelihoodGaussian(Likelihood):
             self, observation: 'Observation', driver: 'Driver'
     ) -> 'Comparison':
         # (the comparisons import the likelihoods)
-        from .comparisons import ComparisonGaussian
-        return ComparisonGaussian(observation, driver)
+        from .comparisons import ComparisonGauss
+        return ComparisonGauss(observation, driver)
 
     def upper_limit(self, key: str) -> UpperLimit | None:
         """
@@ -527,7 +528,7 @@ class LikelihoodGaussian(Likelihood):
         Return how the noise of data items is fitted, by name, for those
         whose noise is fitted.
         """
-        return dict(self._noise)
+        return dict(self._fitted_noise)
 
     def white_floor(self) -> float:
         """
@@ -541,7 +542,7 @@ class LikelihoodGaussian(Likelihood):
 class Whitening:
     """
     The whitening of the residuals of a data item whose noise is
-    correlated (see LikelihoodGaussian and whitening). Its values are on
+    correlated (see LikelihoodGauss and whitening). Its values are on
     pixels of the sky (the last two axes of its arrays) and, for a cube,
     on channels (its first axis). The residuals of the pixels it keeps,
     as a matrix R of the channels by those pixels (one row for an image),
@@ -636,7 +637,7 @@ def whitening(
 ) -> Whitening:
     """
     Return the whitening of the residuals of a data item whose noise is
-    correlated (see LikelihoodGaussian), of its mask and of the
+    correlated (see LikelihoodGauss), of its mask and of the
     correlation of its noise, with a white floor.
 
     Parameters
@@ -649,7 +650,7 @@ def whitening(
         The correlation of its noise.
     white_floor : float
         The share of the variance of the noise taken as white (see
-        LikelihoodGaussian).
+        LikelihoodGauss).
 
     Returns
     -------
@@ -713,7 +714,7 @@ def _whitening(
     except np.linalg.LinAlgError:
         raise ValueError(
             f"the correlation of the noise of '{key}' is singular with the "
-            f"white floor {white_floor} (see LikelihoodGaussian): raise it"
+            f"white floor {white_floor} (see LikelihoodGauss): raise it"
         ) from None
 
 
@@ -740,11 +741,11 @@ def _check_noise(key: str, noise: FittedNoise) -> None:
     """
     if not (noise.scale or noise.jitter):
         raise ValueError(
-            f"noise of '{key}': fit its scale, its jitter, or both")
+            f"fitted_noise of '{key}': fit its scale, its jitter, or both")
     if noise.scale != (noise.scale_min is not None):
         raise ValueError(
-            f"noise of '{key}': 'scale_min' (the smallest scale of its "
-            f"errors, e.g. 0.01) goes with 'scale', and only with it")
+            f"fitted_noise of '{key}': 'scale_min' (the smallest scale of "
+            f"its errors, e.g. 0.01) goes with 'scale', and only with it")
 
 
 def _record_config(record: NamedTuple) -> dict[str, Any]:
@@ -775,13 +776,13 @@ class LikelihoodUser(Likelihood):
       the data), of the log-likelihood -r^2 / 2 (e.g. (model - data) /
       error for Gaussian noise; sign(x) sqrt(2 log(1 + x^2)) of x = (model
       - data) / s for Cauchy noise of the scale s), which the objective
-      takes as those of LikelihoodGaussian (times the weights of the
+      takes as those of LikelihoodGauss (times the weights of the
       model and of the data mask); every fitter takes them;
     - 'log_likelihood': the log-likelihood of the item (a number, of the
       values its mask keeps); the chi-square of the item is -2 log L, and
       least squares do not take it (they need residuals).
 
-    It has none of the options of LikelihoodGaussian (fitted noise, upper
+    It has none of the options of LikelihoodGauss (fitted noise, upper
     limits, missing_residual; correlated noise is not whitened), and
     solves no flux scales (see ObservationSky): its function does what it
     needs, and takes the values missing from the model.
@@ -971,4 +972,4 @@ class LikelihoodUser(Likelihood):
 
 
 likelihood_parser = TypedParser(
-    Likelihood, [LikelihoodGaussian, LikelihoodUser], family='likelihood')
+    Likelihood, [LikelihoodGauss, LikelihoodUser], family='likelihood')

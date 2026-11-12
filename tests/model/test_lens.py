@@ -65,9 +65,9 @@ def on_axes(grid, params):
     # The positions of the pixels of a grid along the major and minor axes
     # of a mass (see gbkfit.observation.lensing.masses)
     x, y = sky_positions(grid)
-    x = x - params['x']
-    y = y - params['y']
-    pa = np.radians(params['pa'])
+    x = x - params['xpos']
+    y = y - params['ypos']
+    pa = np.radians(params['posa'])
     return (-np.sin(pa) * x + np.cos(pa) * y,
             np.cos(pa) * x + np.sin(pa) * y)
 
@@ -77,7 +77,8 @@ def divergence(mass, grid, params, h=1e-4):
     # alpha with the mass moved by -h
     def alpha(dx, dy):
         return mass.deflection(
-            grid, params | dict(x=params['x'] - dx, y=params['y'] - dy))
+            grid, params | dict(
+                xpos=params['xpos'] - dx, ypos=params['ypos'] - dy))
     return (alpha(h, 0)[0] - alpha(-h, 0)[0]
             + alpha(0, h)[1] - alpha(0, -h)[1]) / (2 * h)
 
@@ -196,7 +197,7 @@ def test_point_mass_makes_an_einstein_ring(driver):
 # The masses: a grid around their centre, and their elliptical radius
 GRID = make_grid((5, 5), 0.37)
 
-ELLIPSE = dict(q=0.6, pa=30, x=0.2, y=-0.1)
+ELLIPSE = dict(q=0.6, posa=30, xpos=0.2, ypos=-0.1)
 
 
 def elliptical_radius(grid, params):
@@ -258,7 +259,7 @@ def test_an_nfw_halo_of_nearly_one_axis_ratio_is_round():
 def test_the_deflection_of_a_multipole_is_that_of_its_convergence(order):
     # kappa = theta_e a / (2 r) cos(m (phi - phi_m)), with phi_m the angle
     # of the position angle
-    params = dict(theta_e=1.3, a=0.05, pa=30, x=0.2, y=-0.1)
+    params = dict(theta_e=1.3, a=0.05, posa=30, xpos=0.2, ypos=-0.1)
     x, y = sky_positions(GRID)
     phi = np.arctan2(y + 0.1, x - 0.2)
     kappa = 1.3 * 0.05 / (2 * np.hypot(x - 0.2, y + 0.1)) * np.cos(
@@ -273,10 +274,10 @@ def test_the_position_angle_of_a_multipole_repeats_every_360_over_m(order):
     # (its period was 360, which gave samplers m modes of one deflection:
     # audit 2026-11-11)
     mass = LensMultipole(order)
-    assert mass.pdescs()['pa'].period() == 360 / order
-    params = dict(theta_e=1.3, a=0.05, pa=30, x=0.2, y=-0.1)
+    assert mass.pdescs()['posa'].period() == 360 / order
+    params = dict(theta_e=1.3, a=0.05, posa=30, xpos=0.2, ypos=-0.1)
     np.testing.assert_allclose(
-        mass.deflection(GRID, params | dict(pa=30 + 360 / order)),
+        mass.deflection(GRID, params | dict(posa=30 + 360 / order)),
         mass.deflection(GRID, params), atol=1e-12)
 
 
@@ -288,7 +289,7 @@ def test_a_shear_stretches_along_its_position_angle():
     for direction, sign in ((along, 1), (across, -1)):
         # (a grid of one pixel at 2 direction)
         point = make_grid((1, 1), rpix=tuple(-2 * direction))
-        alpha = LensShear().deflection(point, dict(gamma=0.1, pa=30))
+        alpha = LensShear().deflection(point, dict(gamma=0.1, posa=30))
         np.testing.assert_allclose(
             np.ravel(alpha), sign * 0.1 * 2 * direction, atol=1e-15)
 
@@ -297,10 +298,10 @@ def test_the_deflections_of_the_masses_of_a_lens_add_up():
     lens = Lens((8, 8), (1, 1), [
         LensSIE(name='main'), LensShear(name='shear')])
     assert list(lens.pdescs()) == [
-        'main_theta_e', 'main_q', 'main_pa', 'main_x', 'main_y',
-        'shear_gamma', 'shear_pa']
+        'main_theta_e', 'main_q', 'main_posa', 'main_xpos', 'main_ypos',
+        'shear_gamma', 'shear_posa']
     sie = ELLIPSE | dict(theta_e=1.3)
-    shear = dict(gamma=0.1, pa=70)
+    shear = dict(gamma=0.1, posa=70)
     total = lens.deflection(GRID, {
         **{f'main_{name}': value for name, value in sie.items()},
         **{f'shear_{name}': value for name, value in shear.items()}})
@@ -318,9 +319,9 @@ def test_masses_of_no_mass_and_no_shear_are_no_lens(driver):
     lens = Foreground(Lens((32, 41), (1, 1), [
         LensSIE(name='sie'), LensEPL(name='epl'), LensShear(name='shear')]))
     params = lens_params(
-        sie_theta_e=0, sie_q=0.7, sie_pa=20, sie_x=0, sie_y=0,
-        epl_theta_e=0, epl_slope=2.2, epl_q=0.7, epl_pa=20, epl_x=0,
-        epl_y=0, shear_gamma=0, shear_pa=0)
+        sie_theta_e=0, sie_q=0.7, sie_posa=20, sie_xpos=0, sie_ypos=0,
+        epl_theta_e=0, epl_slope=2.2, epl_q=0.7, epl_posa=20, epl_xpos=0,
+        epl_ypos=0, shear_gamma=0, shear_posa=0)
     lensed = evaluate(driver, lens, PROPERTIES | params)
     np.testing.assert_allclose(lensed, evaluate(driver), atol=1e-6)
 
@@ -331,7 +332,7 @@ def test_an_isothermal_sphere_makes_an_einstein_ring(driver):
     einstein = 6.0
     lens = Foreground(Lens((80, 80), (0.25, 0.25), LensSIE()))
     properties = PROPERTIES | dict(incl=0, rpt_s=0.8) | lens_params(
-        theta_e=einstein, q=1, pa=0, x=0, y=0)
+        theta_e=einstein, q=1, posa=0, xpos=0, ypos=0)
     image = dict(type='pixel_brightness', size=[64, 64], step=[0.5, 0.5])
     lensed = evaluate(driver, lens, properties, image)
     sky_x, sky_y = sky_positions(make_grid((64, 64), 0.5))
@@ -355,11 +356,11 @@ def test_the_frame_of_an_observation_moves_its_lens(driver):
         name='obs', offsets=dict(position=True))
     plan = ObservationGroup(
         group.galaxies(), [reference, observation]).plan(driver)
-    lens = dict(theta_e=3.0, q=0.8, pa=20, y=0.3)
+    lens = dict(theta_e=3.0, q=0.8, posa=20, ypos=0.3)
     images = []
     for x, offset in ((1.5, 0.0), (0.0, 1.5)):
         properties = PROPERTIES | dict(xpos=x, obs_dx=offset, obs_dy=0) \
-            | lens_params(**lens, x=x)
+            | lens_params(**lens, xpos=x)
         params = gbkfit.params.ParamSpace.from_properties(
             plan.group().pdescs(), properties)
         images.append(plan.model_h(params.evaluate())[1][
@@ -390,7 +391,8 @@ def test_a_lens_is_placed_again_only_for_other_values(driver, monkeypatch):
         name='obs')
     plan = ObservationGroup(group.galaxies(), [observation]).plan(driver)
     cases = [
-        PROPERTIES | lens_params(theta_e=theta_e, q=0.8, pa=20, x=0, y=0)
+        PROPERTIES | lens_params(
+            theta_e=theta_e, q=0.8, posa=20, xpos=0, ypos=0)
         | dict(rpt_s=rpt_s)
         for rpt_s, theta_e in ((2, 3.0), (3, 3.0), (3, 4.0))]
     images = []

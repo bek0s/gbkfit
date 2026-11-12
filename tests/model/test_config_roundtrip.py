@@ -174,7 +174,7 @@ OBSERVABLES = dict(
         smooth_weights=True),
         dict(psf=GAUSS, lsf=GAUSS_LSF), [2, 1, 1]),
     slit_spectra=(dict(
-        size=[20], step=[2], rpix=[3], rval=[1], rota=10,
+        size=[20], step=[2], rpix=[3], rval=[1], slit_pa=-80,
         spectral=dict(
             size=11, step=10, rpix=5, rval=3, convention='log',
             rest='6.56461e-07 m', medium='air'),

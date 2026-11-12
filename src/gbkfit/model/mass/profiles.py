@@ -227,7 +227,7 @@ class ProfileSersic(SpheroidProfile):
                 _numerics.sersic_tables(float(params['n'])))
 
 
-class ProfileGaussian(SpheroidProfile):
+class ProfileGauss(SpheroidProfile):
     """
     A spherical Gaussian of total mass 10^log_m (Msun) and dispersion
     sigma (kpc): the density M / ((2 pi)^(3/2) sigma^3) exp(-r^2 / (2
@@ -240,7 +240,7 @@ class ProfileGaussian(SpheroidProfile):
 
     @staticmethod
     def type() -> str:
-        return 'gaussian'
+        return 'gauss'
 
     @staticmethod
     def type_title() -> str:
