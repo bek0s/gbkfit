@@ -8,7 +8,6 @@ OrbitSeries).
 
 import dataclasses
 import logging
-import math
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -18,9 +17,9 @@ from gbkfit.driver import Driver
 from gbkfit.model import GalaxyState
 from gbkfit.model.components.spheroids import (
     OrbitIntegrator, OrbitLibraryState, SkyGrid, Spheroid)
+from gbkfit.moments import gauss_hermite_norm, moment_item
 from gbkfit.params import ModelEvaluationError, ParamValues
 from .observables import ModelData, ModelItem
-from .observables._moments import moment_item
 from .observables._orbit_sky import bins_sky_grid
 
 if TYPE_CHECKING:
@@ -383,11 +382,11 @@ class OrbitRecording:
 class _BinsData:
     """
     The moments of the bins of an observation that sees stars on orbits
-    (see OrbitRecording): their number, the orders 1 to M, the data of each
-    order (by its key, see moment_item: moment1, moment2, then h3 to hM;
-    NaN where masked), the bins whose V
-    and sigma are not masked (the others have no series: none of their
-    moments), and the normalisation N_b of each.
+    (see OrbitRecording): their number, the orders 1 to M, the data of
+    each order (by its key, see moment_item: moment1, moment2, then h3
+    to hM; NaN where masked), the bins whose V and sigma are not masked
+    (the others have no series: none of their moments), and the
+    normalisation N_b of the series of each (see gauss_hermite_norm).
     """
 
     def __init__(self, observation: 'ObservationSky', index: int):
@@ -415,12 +414,10 @@ class _BinsData:
                 f"the bins of observation {index}, of stars on orbits, have "
                 f"a positive sigma (the series of each bin is about its V "
                 f"and sigma); mask those that do not")
-        # (N_b = 1 + sum over even m >= 4 of h_m sqrt(m!) / m!!)
-        self.norms = np.ones(self.nbins)
-        for m in range(4, self.order + 1, 2):
-            double = math.prod(range(m, 0, -2))
-            self.norms += np.nan_to_num(self.values[self.keys[m]]) \
-                * math.sqrt(math.factorial(m)) / double
+        # (the h_m of the masked bins, NaN, add nothing to their N_b)
+        self.norms = np.broadcast_to(gauss_hermite_norm({
+            m: np.nan_to_num(self.values[self.keys[m]])
+            for m in orders if m >= 3}), self.nbins)
 
     def series(self, vsys: float) -> tuple[np.ndarray, np.ndarray]:
         """

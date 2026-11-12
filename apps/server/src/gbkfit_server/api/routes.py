@@ -20,6 +20,7 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from starlette.requests import HTTPConnection
 
 import gbkfit
+import gbkfit.model
 from gbkfit.grid import SPECTRAL_TYPES, air_refractive_index
 
 from gbkfit_server.services import frames

@@ -14,14 +14,16 @@ from gbkfit.dataset import Data, Dataset, DatasetRegionMoments, Regions
 from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectralAxis
 from gbkfit.model import DataUnit, LightUnit, LineEmission
+from gbkfit.moments import (
+    FluxFloor, Method, MomentsPlan, check_moment_items, check_moment_orders,
+    moment_item, split_moments)
 from . import _model_cube, _moments
 from ._data_units import flux_data_unit
-from ._moments import FluxFloor, Method
 from ._options import Rota, Rpix, Rval, Size, Step
 from ._orbit_moments import OrbitMomentsPlan, check_orbits
 from ._regions import (
     RegionsObservable, RegionsObservablePlan, spatial_options_from_regions)
-from .base import ModelData, ModelItem, ObservablePlan, ObservationSetup
+from .base import ModelData, ObservablePlan, ObservationSetup
 
 if TYPE_CHECKING:
     import scipy.sparse
@@ -54,13 +56,13 @@ class RegionMoments(RegionsObservable):
     (the fit of the spectra took the LSF out), seen through the PSF: the
     instrument of their observation has a PSF and no LSF. The velocities
     of pPXF are c ln(1 + z), the convention 'log' (without a rest: the
-    light of stars has none). Models that predict the
-    mean and the dispersion of the stars, but not the shape of their
-    distribution (e.g. Jeans kinematics, see model.SpheroidKinematics),
-    are fitted to the mean and the dispersion of the series of pPXF (see
-    prep.gauss_hermite_moments), of the method 'moments' (orders 1 and
-    2); models of its shape, to its V, sigma, h3 and h4, of the method
-    'gauss_hermite' (orders 1 to 4).
+    light of stars has none). Models that predict the mean and the
+    dispersion of the stars, but not the shape of their distribution
+    (e.g. Jeans kinematics, see model.SpheroidKinematics), are fitted to
+    the mean and the dispersion of the series of pPXF (see
+    gbkfit.moments.gauss_hermite_moments), of the method 'moments'
+    (orders 1 and 2); models of its shape, to its V, sigma, h3 and h4,
+    of the method 'gauss_hermite' (orders 1 to 4).
 
     Parameters
     ----------
@@ -178,7 +180,7 @@ class RegionMoments(RegionsObservable):
     ):
         check_options(RegionMoments.__init__, locals())
         super().__init__(regions, size, step, rpix, rval, rota)
-        self._orders = _moments.check_moment_orders(orders, method)
+        self._orders = check_moment_orders(orders, method)
         self._spectral = _moments.spectral_axis(spectral)
         self._flux_floor = flux_floor
         self._method = method
@@ -200,7 +202,10 @@ class RegionMoments(RegionsObservable):
         return self._flux_floor
 
     def method(self) -> str:
-        """Return how the moments are measured (see MOMENT_METHODS)."""
+        """
+        Return how the moments are measured (see
+        gbkfit.moments.MOMENT_METHODS).
+        """
         return self._method
 
     def spectral(self) -> SpectralAxis:
@@ -210,12 +215,10 @@ class RegionMoments(RegionsObservable):
         return self._spectral
 
     def keys(self) -> tuple[str, ...]:
-        return tuple(
-            _moments.moment_item(i, self._method) for i in self._orders)
+        return tuple(moment_item(i, self._method) for i in self._orders)
 
     def make_dataset(self, items: Mapping[str, Data]) -> DatasetRegionMoments:
-        moments, hermite = _moments.moment_maps(
-            items, self._orders, self._method)
+        moments, hermite = split_moments(items)
         return DatasetRegionMoments(moments, self.regions(), hermite)
 
     def data_unit(
@@ -243,7 +246,7 @@ class RegionMoments(RegionsObservable):
             check_orbits(self, scene, setup)
 
     def check_dataset(self, dataset: Dataset) -> None:
-        _moments.check_moment_items(dataset, self._method)
+        check_moment_items(dataset, self._method)
         super().check_dataset(dataset)
 
     def output(self, data: np.ndarray) -> GridData | np.ndarray:
@@ -297,16 +300,13 @@ class RegionMomentsPlan(RegionsObservablePlan):
         nchannels, nregions = self._spectra.shape
         # The spectra of the regions, as a cube of one row of regions
         self._spectra_cube = self._spectra.reshape(nchannels, 1, nregions)
-        self._moments = _moments.MomentsPlan(
+        self._moments = MomentsPlan(
             driver, (nregions, 1), moments.orders(), moments.flux_floor(),
             moments.method(), setup.dtype)
 
     def _measure(self) -> ModelData:
         self._sum_regions(self._model_cube_plan.cube())
         grid = self._model_cube.grid()
-        moments = self._moments.evaluate(
-            grid.coords.step, grid.zero(), self._spectra_cube, None)
-        # The moments of the regions are vectors
-        return {
-            key: ModelItem(value.data[0], value.mask[0], value.weights[0])
-            for key, value in moments.items()}
+        return _moments.model_data(self._moments.evaluate(
+            grid.coords.step, grid.zero(), self._spectra_cube, None),
+            regions=True)

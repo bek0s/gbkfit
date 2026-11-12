@@ -2,7 +2,7 @@
 Views of the cubes of files of data of the workspace, to look at them: a
 channel, the spectrum of a pixel, and their quick moment maps, by the
 tools of the library (read_oriented, prep.signal_mask,
-analysis.moment_maps). A cube is read once, in the orientation of the
+moments.moment_maps). A cube is read once, in the orientation of the
 model, and kept for the next views (the latest few cubes). Its spectral
 axis is that of its header, in a unit to read (km/s, GHz or micron),
 whatever the model makes of it: a cube of wavelengths is seen before it
@@ -21,7 +21,7 @@ import astropy.units as u
 import astropy.wcs
 import numpy as np
 
-import gbkfit.analysis
+import gbkfit.moments
 from gbkfit import prep
 from gbkfit.config import ConfigError
 from gbkfit.io import describe_fits, read_oriented
@@ -224,7 +224,7 @@ class Views:
         (see prep.signal_mask; 0: of all of them): measured as moments,
         its flux, velocity, dispersion, skewness and kurtosis; or of a
         Gauss-Hermite series fitted to each spectrum (slower), its h3 and
-        h4 (see gbkfit.analysis.moment_maps). Channels of wavelengths or
+        h4 (see gbkfit.moments.moment_maps). Channels of wavelengths or
         frequencies are of the velocities of a rest, as a dataset of the
         cube with it, the convention of velocities its header leaves
         ambiguous and the type of an axis FITS does not define reads them
@@ -260,7 +260,7 @@ class Views:
             # the pixels with none kept have no moments
             values = np.where(mask, cube.values, 0)
             blank = ~mask.any(axis=0)
-        maps = gbkfit.analysis.moment_maps(
+        maps = gbkfit.moments.moment_maps(
             values, velocities, orders=(0, 1, 2, 3, 4), method=method)
         result = dict(
             flux=maps.data['moment0'], velocity=maps.data['moment1'],

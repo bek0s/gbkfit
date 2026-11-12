@@ -152,7 +152,7 @@ class SpheroidKinematics(TypedSerializable, abc.ABC):
     are not those of the stars (a sigma 5% low, in a test of an isotropic
     Hernquist sphere). Fit their mean and dispersion: observables of
     moments of the method 'moments', with the data of pPXF converted (see
-    prep.gauss_hermite_moments).
+    gbkfit.moments.gauss_hermite_moments).
     """
 
     def dump(self) -> dict[str, Any]:

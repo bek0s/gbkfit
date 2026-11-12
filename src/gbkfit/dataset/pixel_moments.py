@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from gbkfit.config import check_options
+from gbkfit.moments import moment_orders, split_moments
 from . import _detail, _grids
 from .base import DatasetGrid, NoiseCorrelation, cleaned
 from .data import Data, DataFiles
@@ -109,7 +110,7 @@ class DatasetPixelMoments(DatasetGrid):
         items, coords = _detail.read_moments(
             _detail.moment_options(locals()), rpix, rval)
         dataset = cls(
-            *_detail.split_moments(items),
+            *split_moments(items),
             **_grids.grid_coords(coords, step, rota))
         return cleaned(dataset, outliers)
 
@@ -134,7 +135,7 @@ class DatasetPixelMoments(DatasetGrid):
 
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments."""
-        return _detail.moment_orders(self)
+        return moment_orders(self)
 
     def noise_correlation(self, key: str) -> NoiseCorrelation | None:
         """

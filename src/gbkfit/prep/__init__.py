@@ -11,7 +11,6 @@ from .arrays import *
 from .binning import *
 from .kmos3d import *
 from .masks import *
-from .moments import *
 from .muse import *
 from .nirspec import *
 from .resolution import *

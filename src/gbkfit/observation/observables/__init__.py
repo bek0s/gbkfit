@@ -10,10 +10,8 @@ them too.
 """
 
 from . import (
-    _moments, base, pixel_brightness, pixel_moments, pixel_spectra,
-    region_moments, region_spectra, slit_spectra, slitless_spectra,
-    visibilities)
-from ._moments import *
+    base, pixel_brightness, pixel_moments, pixel_spectra, region_moments,
+    region_spectra, slit_spectra, slitless_spectra, visibilities)
 from .base import *
 from .pixel_brightness import *
 from .pixel_moments import *
@@ -26,7 +24,6 @@ from .visibilities import *
 
 
 __all__ = []
-__all__ += _moments.__all__
 __all__ += base.__all__
 __all__ += pixel_brightness.__all__
 __all__ += pixel_moments.__all__

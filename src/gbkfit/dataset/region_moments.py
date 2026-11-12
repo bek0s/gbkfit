@@ -10,6 +10,7 @@ import numpy as np
 
 from gbkfit.config import FilePath, check_options, config_path
 from gbkfit.io import read_table, write_image
+from gbkfit.moments import moment_orders, split_moments
 from . import _detail, _outliers, _tables
 from .base import Dataset, cleaned
 from .data import Data, DataColumns, DataFiles, dump_data, item_filenames
@@ -108,7 +109,7 @@ class DatasetRegionMoments(Dataset):
         """
         check_options(DatasetRegionMoments.from_files, locals())
         items, _ = _detail.read_moments(_detail.moment_options(locals()))
-        moments, hermite = _detail.split_moments(items)
+        moments, hermite = split_moments(items)
         dataset = cls(moments, regions, hermite)
         return cleaned(dataset, outliers)
 
@@ -163,7 +164,7 @@ class DatasetRegionMoments(Dataset):
                 items[name] = _tables.table_item(table, columns)
         if not items:
             raise ValueError("a dataset needs at least one moment")
-        moments, hermite = _detail.split_moments(items)
+        moments, hermite = split_moments(items)
         dataset = cls(moments, regions, hermite)
         return cleaned(dataset, outliers)
 
@@ -204,7 +205,7 @@ class DatasetRegionMoments(Dataset):
 
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments."""
-        return _detail.moment_orders(self)
+        return moment_orders(self)
 
     def screen_outliers(
             self, size: Sequence[float], nsigma: float
