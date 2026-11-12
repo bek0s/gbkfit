@@ -20,25 +20,23 @@ from gbkfit.config import (
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import (
-    Grid, SpectralAxis, make_convention, make_cube_grid, vacuum_wavelength)
+    Grid, SpectralAxis, grid_options, make_convention, make_cube_grid,
+    vacuum_wavelength)
 from gbkfit.instrument import (
-    Instrument, SlitMask, Trace, slit_mask_parser, trace_parser)
+    SlitMask, Trace, slit_mask_parser, trace_parser)
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import iterutils
 from . import _model_cube, _moments
 from ._cube_plan import CubeObservablePlan
 from ._data_units import data_unit
-from ._options import (
-    Rota, Rpix, Rval, Size, Step, dataset_grid_options, grid_options)
+from ._options import Rota, Rpix, Rval, Size, Step
 from ._sparse_sums import SparseSumsPlan
-from .base import FluxScale, HostModelData, ModelData, Observable
+from .base import (
+    FluxScale, HostModelData, ModelData, Observable, ObservationSetup)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
     from ..noise import Noise
-    from ..weights import Weights
 
 
 __all__ = [
@@ -566,7 +564,7 @@ class SlitlessSpectra(Observable):
             self, items: Mapping[str, Data]
     ) -> DatasetSlitlessSpectra:
         return DatasetSlitlessSpectra(
-            items['spectra'], **dataset_grid_options(self.grid()))
+            items['spectra'], **grid_options(self.grid(), sizes=False))
 
     def data_unit(
             self,
@@ -585,16 +583,11 @@ class SlitlessSpectra(Observable):
     def model_can_have_missing_values(self) -> bool:
         return False
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
-        if pixel_weights is not None:
+    def check_observation(self, setup: ObservationSetup) -> None:
+        if setup.pixel_weights is not None:
             raise ValueError(
                 "slitless spectra do not support pixel_weights yet")
-        if instrument.lsf() is not None and self._aperture is None:
+        if setup.instrument.lsf() is not None and self._aperture is None:
             raise ValueError(
                 "slitless spectra without an aperture have no LSF: the PSF "
                 "along the trace sets their resolution; remove the LSF of "
@@ -604,14 +597,7 @@ class SlitlessSpectra(Observable):
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> 'SlitlessSpectraPlan':
         edges = self._channel_edges()
         offset, size = self._sky(edges)
@@ -624,17 +610,16 @@ class SlitlessSpectra(Observable):
                 ((rpix[0] - offset[0] + 0.5) * k - 0.5,
                  (rpix[1] - offset[1] + 0.5) * k - 0.5),
                 self.rval(), self.rota(), self._spectral),
-            oversampling=tuple(oversampling) + (1,),
-            primary_beam=instrument.primary_beam(),
-            psf=instrument.psf(),
-            lsf=instrument.lsf(),
+            oversampling=setup.oversampling + (1,),
+            primary_beam=setup.instrument.primary_beam(),
+            psf=setup.instrument.psf(),
+            lsf=setup.instrument.lsf(),
             smooth_weights=False,
-            dtype=dtype,
-            fft_dtype=fft_dtype)
+            dtype=setup.dtype,
+            fft_dtype=setup.fft_dtype)
         dispersion = self._dispersion(edges, size, offset)
         return SlitlessSpectraPlan(
-            model_cube, dispersion, self.grid(), driver, scene, line_of_sight,
-            foreground, dtype, flux_scale)
+            model_cube, dispersion, self.grid(), driver, scene, setup)
 
     def _channel_edges(self) -> np.ndarray:
         """
@@ -847,14 +832,12 @@ class SlitlessSpectraPlan(CubeObservablePlan):
             grid: Grid,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            dtype: np.dtype,
-            flux_scale: str | None
+            setup: ObservationSetup
     ):
-        super().__init__(
-            model_cube, driver, scene, line_of_sight, foreground, dtype, None,
-            flux_scale)
+        # (without pixel weights, which SlitlessSpectra.check_observation
+        # refuses)
+        super().__init__(model_cube, driver, scene, setup)
+        dtype = setup.dtype
         self._dispersion = SparseSumsPlan(dispersion, driver, dtype)
         size = grid.size
         self._image = driver.mem_alloc_d((1, size[0] * size[1]), dtype)

@@ -15,14 +15,11 @@ from gbkfit.model import Extras, GalaxyState
 from gbkfit.params import ParamValues
 from ..weights import plan_weights
 from ._model_cube import ModelCube, cube_extra
-from .base import HostModelData, ModelData, ObservablePlan
+from .base import HostModelData, ModelData, ObservablePlan, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
     from ..noise import Noise
-    from ..weights import Weights
 
 
 class CubeObservablePlan(ObservablePlan):
@@ -41,6 +38,17 @@ class CubeObservablePlan(ObservablePlan):
     measured from the recorded low-resolution cube plus noise, masked as
     the model.
 
+    Parameters
+    ----------
+    model_cube : ModelCube
+        The cube of the model.
+    driver : Driver
+        The driver it is evaluated on.
+    scene : Scene
+        What is seen.
+    setup : ObservationSetup
+        The setup of the observation (see Observable.plan).
+
     Raises
     ------
     ValueError
@@ -53,35 +61,32 @@ class CubeObservablePlan(ObservablePlan):
             model_cube: ModelCube,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ):
+        dtype = setup.dtype
         self._driver = driver
         self._dtype = dtype
         self._model_cube = model_cube
-        self._flux_param = flux_scale
+        self._flux_scale_param = setup.flux_scale_param
         # (the unit of the light of the model, if known)
         data_unit = scene.data_unit()
         self._light_unit = None if data_unit is None \
             else data_unit.cube_unit()
         self._model_cube_plan = model_cube.plan(
-            driver, has_weights=pixel_weights is not None)
+            driver, has_weights=setup.pixel_weights is not None)
         grid = self._model_grid()
         self._weights_plan = None
-        if pixel_weights is not None:
+        if setup.pixel_weights is not None:
             self._weights_plan = plan_weights(
-                pixel_weights, scene,
+                setup.pixel_weights, scene,
                 self._model_cube_plan.high_res_grid().spatial(), driver,
                 dtype)
         # With a lens, the model is evaluated on the source plane, into a
         # cube of its own, which is lensed into the high-resolution cube
         self._lens_plan = None
         self._source_cube = None
-        if foreground.lens() is not None:
-            self._lens_plan = foreground.plan_lens(
+        if setup.foreground.lens() is not None:
+            self._lens_plan = setup.foreground.plan_lens(
                 driver, self._model_cube_plan.high_res_grid(), dtype)
             grid = self._lens_plan.source_grid(grid)
             nz = self._model_cube_plan.high_res_cube().shape[0]
@@ -91,7 +96,7 @@ class CubeObservablePlan(ObservablePlan):
         # an image has none)
         smoothing = None if grid.spectral_axis is None \
             else model_cube.spectral_smoothing()
-        self._model_plan = line_of_sight.plan_scene(
+        self._model_plan = setup.line_of_sight.plan_scene(
             scene, driver, grid, dtype, smoothing)
 
     def _model_grid(self) -> Grid:
@@ -195,8 +200,8 @@ class CubeObservablePlan(ObservablePlan):
 
     def _flux_scale(self, params: ParamValues) -> float | None:
         """Return the flux scale of the observation, if one value."""
-        return None if self._flux_param is None \
-            else params[self._flux_param]
+        return None if self._flux_scale_param is None \
+            else params[self._flux_scale_param]
 
     def _evaluate_model(
             self,

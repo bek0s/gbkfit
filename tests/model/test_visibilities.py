@@ -121,10 +121,12 @@ def test_a_point_source_is_its_flux_at_its_phase(driver):
 
 def test_visibilities_have_no_psf():
     from gbkfit.instrument import Instrument, PSFGauss
-    from gbkfit.observation import Visibilities
+    from gbkfit.observation import (
+        LineOfSightFlat, ObservationSky, Visibilities)
     with pytest.raises(ValueError, match="no PSF"):
-        Visibilities(COVERAGE, 8).check_observation(
-            Instrument(psf=PSFGauss(sigma=1)), (1, 1, 1), None)
+        ObservationSky(
+            Visibilities(COVERAGE, 8), LineOfSightFlat(),
+            instrument=Instrument(psf=PSFGauss(sigma=1)))
 
 
 def test_the_pixels_of_visibilities_are_not_oversampled(driver):

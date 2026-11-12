@@ -10,7 +10,7 @@ pixels_on).
 
 import numbers
 from collections.abc import Sequence
-from typing import NamedTuple, TypeVar
+from typing import Any, NamedTuple, TypeVar
 
 import astropy.units
 import numpy as np
@@ -27,6 +27,7 @@ __all__ = [
     'SpectraData',
     'check_overlap',
     'frame_to_pixels',
+    'grid_options',
     'make_cube_grid',
     'make_grid',
     'per_axis',
@@ -326,6 +327,46 @@ def make_cube_grid(
         coords.rval + (0.0 if spectral.rval() is None else spectral.rval(),),
         coords.rota, len(size), spectral.rest(), spectral.medium(),
         spectral.convention(), spectral.frame())
+
+
+def grid_options(grid: Grid, sizes: bool = True) -> dict[str, Any]:
+    """
+    Return the options that make a grid: those of make_grid of a grid
+    without a spectral axis, or of make_cube_grid of one with a spectral
+    axis after its axes on the sky.
+
+    Parameters
+    ----------
+    grid : Grid
+        The grid.
+    sizes : bool, optional
+        Whether the options have the numbers of pixels of its axes (size,
+        and that of the spectral axis): not for data, which give them.
+
+    Returns
+    -------
+    dict
+        The options: size (if sizes), step, rpix and rval, each of the
+        axes on the sky (before the spectral axis), rota and, of a grid
+        with a spectral axis, spectral, its SpectralAxis.
+    """
+    coords = grid.coords
+    axis = grid.spectral_axis
+    # (the axes on the sky: all of them without a spectral axis)
+    sky = slice(axis)
+    options = dict(
+        size=grid.size[sky], step=coords.step[sky], rpix=coords.rpix[sky],
+        rval=coords.rval[sky], rota=coords.rota)
+    if not sizes:
+        del options['size']
+    if axis is not None:
+        spectral = SpectralAxis.of(grid)
+        if not sizes:
+            spectral = SpectralAxis(**{
+                key: value for key, value in spectral.dump().items()
+                if key != 'size'})
+        options.update(spectral=spectral)
+    return options
 
 
 def sky_positions(grid: Grid) -> tuple[np.ndarray, np.ndarray]:

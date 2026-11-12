@@ -33,12 +33,6 @@ _PerAxis: TypeAlias = float | Sequence[float] | None
 _Angle: TypeAlias = Annotated[float, Unit('deg')]
 
 
-def _per_axis(value: _PerAxis) -> list[float] | None:
-    """Return one value of a world coordinate per axis, x and y."""
-    return [value] * 2 if isinstance(value, int | float) \
-        else None if value is None else list(value)
-
-
 class Regions(TypedSerializable, abc.ABC):
     """
     The regions of the sky in which data were measured, each the weighted
@@ -146,8 +140,8 @@ class RegionsBins(Regions):
             The bins.
         """
         check_options(RegionsBins.from_file, locals())
-        index, coords = read_data(
-            file, rpix=_per_axis(rpix), rval=_per_axis(rval))
+        # (read_data takes one value for both axes, or one for each)
+        index, coords = read_data(file, rpix=rpix, rval=rval)
         if valid is not None:
             valid, _ = read_data(valid)
         return cls(

@@ -2,7 +2,7 @@
 The observable of spectra on a grid of pixels: a spectral cube.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -10,23 +10,19 @@ import numpy as np
 from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelSpectra
 from gbkfit.driver import Driver
-from gbkfit.grid import SpectralAxis
-from gbkfit.instrument import Instrument
+from gbkfit.grid import SpectralAxis, grid_options
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from . import _model_cube
 from ._cube_plan import CubeObservablePlan
 from ._data_units import data_unit
 from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size,
-    dataset_grid_options, grid_options, warn_unsmoothed_weights)
-from .base import FluxScale, ModelData, Observable
+    warn_unsmoothed_weights)
+from .base import FluxScale, ModelData, Observable, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
     from ..noise import Noise
-    from ..weights import Weights
 
 
 __all__ = [
@@ -149,7 +145,7 @@ class PixelSpectra(Observable):
 
     def make_dataset(self, items: Mapping[str, Data]) -> DatasetPixelSpectra:
         return DatasetPixelSpectra(
-            items['spectra'], **dataset_grid_options(self.grid()))
+            items['spectra'], **grid_options(self.grid(), sizes=False))
 
     def data_unit(
             self,
@@ -177,40 +173,26 @@ class PixelSpectra(Observable):
     def model_can_have_missing_values(self) -> bool:
         return False
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
-        warn_unsmoothed_weights(self._smooth_weights, instrument)
+    def check_observation(self, setup: ObservationSetup) -> None:
+        warn_unsmoothed_weights(self._smooth_weights, setup.instrument)
 
     def plan(
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> 'PixelSpectraPlan':
         model_cube = _model_cube.ModelCube(
             self.grid(),
-            oversampling=tuple(oversampling),
-            primary_beam=instrument.primary_beam(),
-            psf=instrument.psf(),
-            lsf=instrument.lsf(),
+            oversampling=setup.oversampling,
+            primary_beam=setup.instrument.primary_beam(),
+            psf=setup.instrument.psf(),
+            lsf=setup.instrument.lsf(),
             smooth_weights=self._smooth_weights,
-            dtype=dtype,
-            fft_dtype=fft_dtype,
+            dtype=setup.dtype,
+            fft_dtype=setup.fft_dtype,
             median_size=self._median_size)
-        return PixelSpectraPlan(
-            model_cube, driver, scene, line_of_sight, foreground, dtype,
-            pixel_weights, flux_scale)
+        return PixelSpectraPlan(model_cube, driver, scene, setup)
 
 
 class PixelSpectraPlan(CubeObservablePlan):

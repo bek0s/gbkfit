@@ -41,6 +41,7 @@ __all__ = [
     'ModelData',
     'Observable',
     'ObservablePlan',
+    'ObservationSetup',
     'observable_parser'
 ]
 
@@ -66,6 +67,49 @@ class FluxScale(NamedTuple):
     items: tuple[str, ...]
     axis: int | None
     size: int
+
+
+class ObservationSetup(NamedTuple):
+    """
+    How an observation on the sky (see ObservationSky) sees what it sees
+    as its observable: the options of the observation that the checks and
+    the plans of the observable take (see Observable.check_observation,
+    check_scene and plan), made once by the observation.
+
+    Attributes
+    ----------
+    line_of_sight : LineOfSight
+        The line of sight, along which the plan of an observable plans
+        the scene (see LineOfSight.plan_scene).
+    foreground : Foreground
+        What the light meets before the telescope (e.g. a lens).
+    instrument : Instrument
+        The telescope and the instrument.
+    oversampling : tuple of int
+        How many times the model is oversampled along each axis of the
+        data.
+    dtype : np.dtype
+        The floating type of the model.
+    fft_dtype : np.dtype
+        The floating type of the FFT convolutions of the model (at least
+        as precise as dtype).
+    pixel_weights : Weights or None
+        The pixel weights of the data, if any.
+    flux_scale_param : str or None
+        The name of the parameter of the flux scale of the observation, if
+        it is one value (the flux scale 'one'), which scales the flux of
+        the model where the observable records it. A flux scale of
+        several values multiplies the items of light of the model instead
+        (see ObservationSky), and is not here.
+    """
+    line_of_sight: 'LineOfSight'
+    foreground: 'Foreground'
+    instrument: Instrument
+    oversampling: tuple[int, ...]
+    dtype: np.dtype
+    fft_dtype: np.dtype
+    pixel_weights: 'Weights | None'
+    flux_scale_param: str | None
 
 
 class Observable(TypedSerializable, abc.ABC):
@@ -399,16 +443,12 @@ class Observable(TypedSerializable, abc.ABC):
         items = self.light_items()
         return {} if not items else dict(one=FluxScale(items, None, 1))
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
+    def check_observation(self, setup: ObservationSetup) -> None:
         """
-        Check the options of the observation of the observable: the
-        instrument it is seen through, the oversampling of its model and
-        its pixel weights, if any (see ObservationSky), before any plan.
+        Check the setup of an observation of the observable (see
+        ObservationSky): e.g. the instrument it is seen through, the
+        oversampling of its model and its pixel weights, if any, before any
+        plan.
 
         It warns about the options of the observable that the instrument
         makes useless (see warn). Here, every observation suits;
@@ -416,12 +456,8 @@ class Observable(TypedSerializable, abc.ABC):
 
         Parameters
         ----------
-        instrument : Instrument
-            The instrument.
-        oversampling : Sequence of int
-            The oversampling of each axis of the model.
-        pixel_weights : Weights, optional
-            The pixel weights.
+        setup : ObservationSetup
+            The setup of the observation.
 
         Raises
         ------
@@ -430,20 +466,22 @@ class Observable(TypedSerializable, abc.ABC):
         """
         pass
 
-    def check_scene(
-            self,
-            scene: 'Scene',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            flux_scale: str | None
-    ) -> None:
+    def check_scene(self, scene: 'Scene', setup: ObservationSetup) -> None:
         """
-        Check that the observable can see a scene (see make_scene), through
-        the foreground and the instrument, with the given flux scale of one
-        value (its parameter), if any, before any plan: here, that it sees
-        the stars on orbits whose weights are solved, if any (see
-        orbit_stars); the observables of moments also check that they
-        see one line (see _moments.check_one_line), and RegionMoments more.
+        Check that the observable can see a scene (see make_scene) as an
+        observation of the given setup sees it: through its foreground and
+        its instrument, with its flux scale of one value, if any, before
+        any plan. Here, that it sees the stars on orbits whose weights are
+        solved, if any (see orbit_stars); the observables of moments also
+        check that they see one line (see _moments.check_one_line), and
+        RegionMoments more.
+
+        Parameters
+        ----------
+        scene : Scene
+            What is seen.
+        setup : ObservationSetup
+            The setup of the observation.
 
         Raises
         ------
@@ -594,14 +632,7 @@ class Observable(TypedSerializable, abc.ABC):
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> 'ObservablePlan':
         """
         Plan the evaluation of a scene (what an observation sees) as this
@@ -614,27 +645,12 @@ class Observable(TypedSerializable, abc.ABC):
         scene : Scene
             What is seen: the galaxies, and the components of each whose
             light is seen.
-        line_of_sight : LineOfSight
-            The line of sight of the observation, along which it plans the
-            scene (see LineOfSight.plan_scene).
-        foreground : Foreground
-            What the light meets before the telescope.
-        instrument : Instrument
-            The instrument.
-        oversampling : Sequence of int
-            How many times the model is oversampled along each axis of the
-            data.
-        dtype : np.dtype
-            The floating type of the model.
-        fft_dtype : np.dtype
-            The floating type of the FFT convolutions of the model (at
-            least as precise as dtype).
-        pixel_weights : Weights, optional
-            The pixel weights of the data.
-        flux_scale : str, optional
-            The name of the parameter that scales the flux of the model, if
-            one value (the flux scale 'one' of the observation; see
-            ObservationSky).
+        setup : ObservationSetup
+            The setup of the observation: its line of sight, along which it
+            plans the scene (see LineOfSight.plan_scene), its foreground,
+            its instrument, the oversampling and the floating types of its
+            model, its pixel weights and its flux scale of one value, if
+            any.
 
         Returns
         -------

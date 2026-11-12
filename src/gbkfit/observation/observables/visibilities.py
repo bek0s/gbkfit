@@ -15,7 +15,6 @@ from gbkfit.config import Choices, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
-from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.params import ParamValues
 from . import _model_cube
@@ -23,14 +22,11 @@ from ._cube_plan import CubeObservablePlan
 from ._data_units import flux_data_unit
 from ._options import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
-from .base import HostModelData, ModelData, Observable
+from .base import HostModelData, ModelData, Observable, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
-    from ..foreground import Foreground
     from ..noise import Noise
-    from ..weights import Weights
 
 
 __all__ = [
@@ -313,25 +309,20 @@ class Visibilities(Observable):
     def model_can_have_missing_values(self) -> bool:
         return False
 
-    def check_observation(
-            self,
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            pixel_weights: 'Weights | None'
-    ) -> None:
-        if instrument.psf() is not None:
+    def check_observation(self, setup: ObservationSetup) -> None:
+        if setup.instrument.psf() is not None:
             raise ValueError(
                 "visibilities have no PSF: their baselines sample the "
                 "transform of the sky itself (the dirty beam is their "
                 "sampling); remove the psf of the instrument")
-        if tuple(oversampling[:2]) != (1, 1):
+        if setup.oversampling[:2] != (1, 1):
             raise ValueError(
                 f"the pixels of visibilities are the points of their "
                 f"transform, not oversampled (the means of their subpixels "
                 f"would damp the long baselines): give a smaller step "
                 f"instead; the spatial oversampling is "
-                f"{tuple(oversampling[:2])}")
-        if pixel_weights is not None:
+                f"{setup.oversampling[:2]}")
+        if setup.pixel_weights is not None:
             raise ValueError(
                 "pixel_weights do not apply to visibilities, which are not "
                 "on pixels")
@@ -406,37 +397,23 @@ class Visibilities(Observable):
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None
+            setup: ObservationSetup
     ) -> 'VisibilitiesPlan':
-        args = (driver, scene, line_of_sight, foreground, instrument,
-                oversampling, dtype, fft_dtype, pixel_weights, flux_scale)
         # (of the same field at half the step, with the same reference
         # point, for the check of the first evaluation)
         refined = Visibilities(
             self._coverage, self._fov, tuple(x / 2 for x in self.step()[:2]),
             tuple(2 * x + 0.5 for x in self.rpix()[:2]), self.rval()[:2],
             self.rota(), self._transform, self._eps)
-        return self._plan(*args, lambda: refined._plan(*args, None))
+        return self._plan(
+            driver, scene, setup,
+            lambda: refined._plan(driver, scene, setup, None))
 
     def _plan(
             self,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            instrument: Instrument,
-            oversampling: Sequence[int],
-            dtype: np.dtype,
-            fft_dtype: np.dtype,
-            pixel_weights: 'Weights | None',
-            flux_scale: str | None,
+            setup: ObservationSetup,
             refinement: Callable[[], 'VisibilitiesPlan'] | None
     ) -> 'VisibilitiesPlan':
         """
@@ -445,19 +422,19 @@ class Visibilities(Observable):
         """
         model_cube = _model_cube.ModelCube(
             self._grid,
-            oversampling=tuple(oversampling),
-            primary_beam=instrument.primary_beam(),
+            oversampling=setup.oversampling,
+            primary_beam=setup.instrument.primary_beam(),
             psf=None,
-            lsf=instrument.lsf(),
+            lsf=setup.instrument.lsf(),
             smooth_weights=False,
-            dtype=dtype,
-            fft_dtype=fft_dtype)
+            dtype=setup.dtype,
+            fft_dtype=setup.fft_dtype)
         transform, increasing_frequency = self._make_transform(
-            driver, dtype)
+            driver, setup.dtype)
         return VisibilitiesPlan(
             transform, abs(self.step()[0] * self.step()[1]),
-            increasing_frequency, model_cube, driver, scene, line_of_sight,
-            foreground, dtype, flux_scale, refinement)
+            increasing_frequency, model_cube, driver, scene, setup,
+            refinement)
 
     def _make_transform(
             self, driver: Driver, dtype: np.dtype
@@ -508,15 +485,12 @@ class VisibilitiesPlan(CubeObservablePlan):
             model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
-            line_of_sight: 'LineOfSight',
-            foreground: 'Foreground',
-            dtype: np.dtype,
-            flux_scale: str | None,
+            setup: ObservationSetup,
             refinement: Callable[[], 'VisibilitiesPlan'] | None = None
     ):
-        super().__init__(
-            model_cube, driver, scene, line_of_sight, foreground, dtype, None,
-            flux_scale)
+        # (without pixel weights, which Visibilities.check_observation
+        # refuses)
+        super().__init__(model_cube, driver, scene, setup)
         self._refinement = refinement
         self._transform = transform
         self._area = area
@@ -527,8 +501,8 @@ class VisibilitiesPlan(CubeObservablePlan):
             shape[::-1], (1, spectral.step[0]), (0, 0), (0, spectral.rval[0]),
             spectral_axis=1, rest=spectral.rest)
         self._visibilities = driver.mem_alloc_d(shape, np.complex128)
-        self._re = driver.mem_alloc_d(shape, dtype)
-        self._im = driver.mem_alloc_d(shape, dtype)
+        self._re = driver.mem_alloc_d(shape, setup.dtype)
+        self._im = driver.mem_alloc_d(shape, setup.dtype)
 
     def evaluate(
             self,

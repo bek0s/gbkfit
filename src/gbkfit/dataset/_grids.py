@@ -12,8 +12,8 @@ import numpy as np
 
 from gbkfit.config import warn
 from gbkfit.grid import (
-    Coords, Grid, SpectralAxis, make_cube_grid, make_grid, per_axis,
-    rest_of_convention)
+    Coords, Grid, SpectralAxis, grid_options, make_cube_grid, make_grid,
+    per_axis, rest_of_convention)
 from gbkfit.instrument import Channel
 from gbkfit.io import write_data
 from .data import dump_data, item_filenames
@@ -191,20 +191,11 @@ def dump_grid_dataset(
     (with their world coordinates).
     """
     grid = dataset.grid()
-    coords = grid.coords
-    axes = slice(None) if grid.spectral_axis is None \
-        else slice(grid.spectral_axis)
-    info = dict(
-        type=dataset.type(),
-        step=coords.step[axes],
-        rpix=coords.rpix[axes],
-        rval=coords.rval[axes],
-        rota=coords.rota)
-    if grid.spectral_axis is not None:
-        spectral = SpectralAxis.of(grid).dump()
-        info.update(spectral={
-            key: value for key, value in spectral.items()
-            if key not in ('size', 'convention')})
+    info = dict(type=dataset.type(), **grid_options(grid, sizes=False))
+    if 'spectral' in info:
+        info['spectral'] = {
+            key: value for key, value in info['spectral'].dump().items()
+            if key != 'convention'}
 
     def write(filename: str, array: np.ndarray) -> None:
         write_data(

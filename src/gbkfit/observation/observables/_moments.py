@@ -18,7 +18,7 @@ from gbkfit.model import STARS, LineEmission, StarsEmission
 from gbkfit.params import ModelEvaluationError
 from gbkfit.utils import numutils
 from . import _model_cube
-from .base import ModelData
+from .base import ModelData, ObservationSetup
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -227,15 +227,13 @@ def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
 
 def spectra_model_cube(
         observable: 'PixelMoments | RegionMoments',
-        oversampling: Sequence[int],
-        instrument: Instrument,
-        dtype: np.dtype,
-        fft_dtype: np.dtype,
+        setup: ObservationSetup,
         median_size: int | None = None
 ) -> _model_cube.ModelCube:
     """
     Return the ModelCube of the spectra that the moments of an observable are
-    measured from: on its spatial grid and its spectral axis (see
+    measured from, as an observation of the given setup sees them (see
+    ObservationSetup): on its spatial grid and its spectral axis (see
     spectral_axis), smoothed by the median filter of median_size (if
     given; see ModelCube).
     """
@@ -245,13 +243,13 @@ def spectra_model_cube(
         make_cube_grid(
             grid.size, coords.step, coords.rpix, coords.rval, coords.rota,
             observable.spectral()),
-        oversampling=tuple(oversampling) + (1,),
-        primary_beam=instrument.primary_beam(),
-        psf=instrument.psf(),
-        lsf=instrument.lsf(),
+        oversampling=setup.oversampling + (1,),
+        primary_beam=setup.instrument.primary_beam(),
+        psf=setup.instrument.psf(),
+        lsf=setup.instrument.lsf(),
         smooth_weights=False,
-        dtype=dtype,
-        fft_dtype=fft_dtype,
+        dtype=setup.dtype,
+        fft_dtype=setup.fft_dtype,
         median_size=median_size)
 
 
