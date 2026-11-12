@@ -7,9 +7,9 @@ import re
 from collections.abc import Mapping, MutableMapping
 from typing import Any
 
+import astropy.cosmology
 from ruamel.yaml.comments import CommentedMap
 
-import gbkfit.cosmology
 from gbkfit.config import ConfigError
 from .rules import (
     EXPRESSIONS, Change, PiecesView, Rule, components, items, rename,
@@ -589,8 +589,7 @@ class Cosmologies(Rule):
                 changes.append(Change(path, "type direct -> parameter"))
             elif kind == 'redshift' and 'redshift' in distance:
                 redshift = distance.pop('redshift')
-                value = gbkfit.cosmology.CosmologyPublished(
-                    name).angular_diameter_distance(redshift)
+                value = _angular_diameter_distance(name, redshift)
                 distance['type'] = 'parameter'
                 prefix = f"{galaxy['name']}_" if 'name' in galaxy else ''
                 additions[prefix] = (dict(distance=round(value, 6)), (
@@ -608,6 +607,29 @@ class Cosmologies(Rule):
                 changes += _added_names(params, params_path, additions)
         changes += _setup_cosmology(config, cosmologies)
         return changes
+
+
+def _angular_diameter_distance(name: str, redshift: float) -> float:
+    """
+    Return the angular diameter distance (Mpc) of a redshift in a
+    published cosmology of version 7, a realization of astropy by its
+    name.
+
+    Raises
+    ------
+    ValueError
+        If the name is not that of a realization.
+    """
+    # (the realizations of astropy themselves, not gbkfit.cosmology: a
+    # rule must not change with the library)
+    available = astropy.cosmology.realizations.available
+    if name not in available:
+        choices = ', '.join(repr(x) for x in available)
+        raise ValueError(
+            f"option 'name' must be one of {choices}; it is {name!r}")
+    cosmology = getattr(astropy.cosmology.realizations, name)
+    return float(
+        cosmology.angular_diameter_distance(redshift).to_value('Mpc'))
 
 
 def _setup_cosmology(

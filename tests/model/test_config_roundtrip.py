@@ -19,7 +19,6 @@ import ruamel.yaml
 
 import gbkfit
 import gbkfit.dataset
-import gbkfit.region
 import gbkfit.driver
 import gbkfit.model
 import gbkfit.observation
@@ -93,7 +92,7 @@ OTHER_PARSERS = dict(
     line_of_sight=gbkfit.observation.line_of_sight_parser,
     psf=gbkfit.instrument.psf_parser,
     lsf=gbkfit.instrument.lsf_parser,
-    aperture=gbkfit.region.aperture_parser,
+    aperture=gbkfit.dataset.aperture_parser,
     primary_beam=gbkfit.instrument.primary_beam_parser,
     param_mode=gbkfit.params.param_mode_parser,
     driver=gbkfit.driver.driver_parser)

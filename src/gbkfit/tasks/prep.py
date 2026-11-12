@@ -539,7 +539,7 @@ def prep_region_spectra(
     with its errors added in quadrature (prep_<cube>_error.fits), and
     which pixels are valid in each channel (prep_<cube>_valid.fits: 1 or
     0, on the pixels of the cube), with which the model sums the same
-    pixels (the option valid of the bins, see region.RegionsBins). With
+    pixels (the option valid of the bins, see dataset.RegionsBins). With
     a unit (BUNIT), the sums are fluxes, in their unit: the values of
     pixels per solid angle or per beam become the fluxes of the pixels
     (see prep.pixel_fluxes).

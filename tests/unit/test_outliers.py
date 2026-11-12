@@ -9,10 +9,9 @@ import pytest
 from astropy.io import fits
 
 from gbkfit.dataset import (
-    Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
-    DatasetRegionMoments, DatasetRegionSpectra)
-from gbkfit.region import (
-    ApertureCircle, AperturePolygon, ApertureRectangle, RegionsApertures,
+    ApertureCircle, AperturePolygon, ApertureRectangle, Data,
+    DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
+    DatasetRegionMoments, DatasetRegionSpectra, RegionsApertures,
     RegionsBins)
 
 

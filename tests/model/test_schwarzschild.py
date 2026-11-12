@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
-from gbkfit.dataset import Data, DatasetRegionMoments
+from gbkfit.dataset import Data, DatasetRegionMoments, RegionsBins
 from gbkfit.grid import SpectralAxis, sky_positions
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
@@ -25,7 +25,6 @@ from gbkfit.observation import (
 from gbkfit.observation.orbits import _bins_light
 from gbkfit.observation.observables._orbit_sky import bins_sky_grid
 from gbkfit.params import ParamSpace
-from gbkfit.region import RegionsBins
 from test_spheroids import hernquist_mge
 
 

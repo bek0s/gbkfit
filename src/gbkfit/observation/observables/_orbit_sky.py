@@ -12,10 +12,10 @@ import numpy as np
 import scipy.signal
 import scipy.sparse
 
+from gbkfit.dataset import Regions
 from gbkfit.grid import Grid, sky_to_pixel
 from gbkfit.instrument import Instrument
 from gbkfit.model.components.spheroids import SkyGrid
-from gbkfit.region import Regions
 
 
 __all__ = [

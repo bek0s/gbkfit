@@ -986,7 +986,7 @@ def test_voronoi_bins_are_the_regions_of_spectra():
     # with its spatial coordinates: the bins of region spectra, of every
     # pixel
     import gbkfit.prep
-    from gbkfit.region.regions import RegionsBins
+    from gbkfit.dataset import RegionsBins
     write_cube('cube.fits', {k: v for k, v in HEADER.items() if k != 'BUNIT'})
     cube = fits.getdata('cube.fits')[0].astype(float)
     signal = cube.sum(axis=0)
