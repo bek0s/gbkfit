@@ -5,8 +5,6 @@ The dataset of spectra on a grid of pixels: a spectral cube.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import numpy as np
-
 from gbkfit.config import DataFile, check_options
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSF, PSF
@@ -179,12 +177,8 @@ class DatasetPixelSpectra(DatasetGrid):
         where it masks any of its channels, but for the channels it masks
         in every spectrum (see Dataset.mask_whole_spectra).
         """
-        cube = self['spectra']
-        kept = cube.mask() != 0
-        channels = np.any(kept, axis=(1, 2))
-        whole = np.all(kept[channels], axis=0)
         return self.with_data(dict(
-            spectra=np.where(whole, cube.data(), np.nan)))
+            spectra=_grids.whole_spectra(self['spectra'])))
 
     def noise_correlation(self, key: str) -> NoiseCorrelation | None:
         """

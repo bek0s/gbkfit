@@ -327,7 +327,7 @@ class ArrayInfo(BaseModel):
     whether its velocities are radio or optical (a dataset of it gives
     their convention), what a dataset of it refuses or needs given, and
     what its values are as errors, if its header states it ('sigma',
-    'variance' or 'inverse_variance'; see gbkfit's HDUDescription.holds),
+    'variance' or 'inverse_variance'; see gbkfit's HDUDescription.error_kind),
     and the type its header gives a spectral axis that FITS does not
     define (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see
     gbkfit's HDUDescription.nonstandard_type), and the rest of its

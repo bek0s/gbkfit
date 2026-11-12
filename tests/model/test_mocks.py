@@ -84,6 +84,21 @@ def test_poisson_mocks_have_the_errors_of_their_signal(driver, name):
         assert np.isnan(mock[key].error()[~bright]).all()
 
 
+@pytest.mark.parametrize('name', ['pixel_brightness', 'pixel_spectra'])
+def test_poisson_mocks_over_a_background_keep_the_empty_sky(driver, name):
+    # Their errors are the dispersion of the counts of the model and the
+    # background, sqrt((model + b) gain) / gain, at every value (the empty
+    # sky was missing without one: audit 2026-11-11 d)
+    plan = plan_of(driver, dict(type=name) | RECORDED[name])
+    model, _, params = evaluate(plan)
+    [mock] = mock_data(
+        plan, params, NoisePoisson(gain=1e4, background=0.01), seed=1)
+    for key, value in model.items():
+        np.testing.assert_allclose(
+            mock[key].error(), np.sqrt((value + 0.01) * 1e4) / 1e4,
+            rtol=1e-5)
+
+
 @pytest.mark.parametrize('name', list(RECORDED))
 def test_recorded_data_have_the_noise_as_their_error(driver, name):
     plan = plan_of(driver, dict(type=name) | RECORDED[name])
@@ -96,7 +111,8 @@ def test_recorded_data_have_the_noise_as_their_error(driver, name):
         assert not np.array_equal(mocks[0][key].data(), mocks[1][key].data())
     again = mock_data(plan, params, NoiseGauss(rms=0.01), nmocks=1, seed=1)
     for key in model:
-        np.testing.assert_array_equal(again[0][key].data(), mocks[0][key].data())
+        np.testing.assert_array_equal(
+            again[0][key].data(), mocks[0][key].data())
 
 
 def test_setups_mock_observations_under_the_likelihoods_of_the_options(

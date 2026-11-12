@@ -183,7 +183,7 @@ def test_region_spectra_objective_residual(driver):
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
     residual = Objective(group.plan(driver)).residual_nddata_h(
-        params.evaluate(), False)
+        params.evaluate())
     # Without the instrument, the model differs from the data
     assert not np.allclose(residual[0]['spectra'], -0.5)
     observation = ObservationSky(
@@ -193,7 +193,7 @@ def test_region_spectra_objective_residual(driver):
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     residual = Objective(group.plan(driver)).residual_nddata_h(
-        params.evaluate(), False)
+        params.evaluate())
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
 
 

@@ -18,7 +18,7 @@ from gbkfit.dataset import Data, Dataset, dataset_parser
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import GridData, SpectraData, VelocityConvention
 from gbkfit.instrument import PSF, Instrument, PSFGauss, instrument_parser
-from gbkfit.io import Beam
+from gbkfit.io import Beam, beam_area
 from gbkfit.model import (
     Band, BandEmission, DataUnit, Extras, GalaxyState, LightUnit,
     Scene, band_parser)
@@ -150,8 +150,9 @@ class ObservationSky(Observation):
         north), and 'velocity' adds '{name}_dv' (km/s); its name is then
         required. They move what it sees: the centres (xpos, ypos) and
         systemic velocities (vsys) of all the components of the galaxies
-        it sees. None by default; a galaxy needs an observation without
-        them (see ObservationGroup).
+        it sees, and the masses of its lens (deflection maps if shifted,
+        see LensDeflectionMap). None by default; a galaxy needs an
+        observation without them (see ObservationGroup).
     data : Dataset, optional
         The data, of the dataset class of the observable.
     likelihood : Likelihood, optional
@@ -487,13 +488,14 @@ class ObservationSky(Observation):
         fits (see the class), the frame of rest of its velocities that of
         its spectral axis (see SpectralAxis), if it has one that gives it,
         and what it adds the masses of its lens (see
-        Foreground.centre_params).
+        Foreground.centre_params and Foreground.shift_params).
         """
         spectral = self._observable.spectral()
+        foreground = self._setup.foreground
         return SkyFrame(
             self._observable.sky_rval(), self._offset_params(),
             None if spectral is None else spectral.frame(),
-            self._setup.foreground.centre_params())
+            foreground.centre_params(), foreground.shift_params())
 
     def flux_scale(self) -> tuple[str, FluxScale] | None:
         """
@@ -752,8 +754,8 @@ def _psf_beam(psf: PSF) -> Beam:
     """
     if isinstance(psf, PSFGauss):
         return psf.beam()
-    # (the solid angle of a Gaussian beam is pi / (4 ln 2) bmaj bmin)
-    fwhm = float(np.sqrt(4 * np.log(2) / np.pi * psf.beam_area()))
+    # (the solid angle of a round Gaussian beam is beam_area(1, 1) fwhm^2)
+    fwhm = float(np.sqrt(psf.beam_area() / beam_area(1, 1)))
     return Beam(fwhm, fwhm)
 
 

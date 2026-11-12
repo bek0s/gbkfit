@@ -5,6 +5,7 @@ from typing import Any, TypeAlias
 
 import astropy.units as u
 import numpy as np
+from astropy.stats import gaussian_fwhm_to_sigma
 
 from gbkfit.grid import Grid, GridData, VelocityConvention
 import gbkfit.units
@@ -175,7 +176,7 @@ def _equivalent_dispersion(lsf: ChannelLSF, step: float) -> float:
         k_in, k_out = kernel[inside], kernel[outside]
         return inside + (outside - inside) * (k_in - half) / (k_in - k_out)
     fwhm = (crossing(hi, hi + 1) - crossing(lo, lo - 1)) * fine
-    return fwhm / (2 * np.sqrt(2 * np.log(2)))
+    return fwhm * gaussian_fwhm_to_sigma
 
 
 def _separable_kernels(

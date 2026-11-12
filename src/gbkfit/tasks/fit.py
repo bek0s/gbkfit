@@ -252,7 +252,8 @@ def _bootstrap(
     or None if it was stopped.
     """
     _log.info(
-        f"bootstrap started ({setup.bootstrap_options.nsamples()} refits)")
+        f"bootstrap started ({setup.bootstrap_options().nsamples()} "
+        f"refits)")
     begin = time.perf_counter()
     try:
         boot = setup.bootstrap(start, control, log)
@@ -303,7 +304,7 @@ def _fit(
     Fit the setup of a configuration, and bootstrap it if it asks for it,
     with the logs, if given, and write the outputs to its run (see fit).
     """
-    params = setup.params
+    params = setup.params()
     _log.info("model-fitting started")
 
     def write_best(free: dict[str, float]) -> None:
@@ -330,7 +331,7 @@ def _fit(
     _write_config(
         run, 'fit/restart.yaml', 'restart_config', cfg, root, params,
         result.best().elements)
-    if setup.bootstrap_options is not None:
+    if setup.bootstrap_options() is not None:
         if bootstrap_log is not None:
             run.record(_BOOTSTRAP_LOG, 'bootstrap_log', 'jsonl')
         control = StopControl()

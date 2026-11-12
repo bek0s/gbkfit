@@ -19,6 +19,7 @@ import numpy.typing as npt
 import scipy.interpolate
 import scipy.special
 from annotated_types import Gt
+from astropy.stats import gaussian_fwhm_to_sigma
 
 from gbkfit.config import (
     TypedParser, TypedSerializable, Unit, check_name,
@@ -536,7 +537,7 @@ class SurfaceGaussRing(DiskSurface):
     @staticmethod
     def _sigma(params: ParamValues) -> float:
         """Return its dispersion s (kpc)."""
-        return params['fwhm'] / (2 * np.sqrt(2 * np.log(2)))
+        return params['fwhm'] * gaussian_fwhm_to_sigma
 
 
 class SurfaceNodewise(DiskSurface):

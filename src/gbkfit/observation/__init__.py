@@ -8,14 +8,13 @@ see gbkfit.observation.lensing) and an instrument; an observation of
 profiles (ObservationProfile) gives values of functions of a galaxy at
 radii. Observations are evaluated in groups (see ObservationGroup and
 GroupPlan), compared with their data under their likelihoods (see
-Likelihood and Comparison), and draw mock data (see draw_mocks).
+Likelihood; the comparisons are those of gbkfit.objective), and draw
+mock data (see draw_mocks).
 """
 
 from . import (
-    comparisons, foreground, group, group_plan, lensing, likelihoods,
-    line_of_sight, mocks, noise, observables, observation, profile, sky,
-    weights)
-from .comparisons import *
+    foreground, group, group_plan, lensing, likelihoods, line_of_sight,
+    mocks, noise, observables, observation, profile, sky, weights)
 from .foreground import *
 from .group import *
 from .group_plan import *
@@ -32,7 +31,6 @@ from .weights import *
 
 
 __all__ = []
-__all__ += comparisons.__all__
 __all__ += foreground.__all__
 __all__ += group.__all__
 __all__ += group_plan.__all__

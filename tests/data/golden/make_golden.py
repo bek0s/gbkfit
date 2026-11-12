@@ -253,7 +253,7 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
             galaxies=case.mock_galaxies or case.galaxies,
             observations=case.observations,
             params=dict(properties=case.truth)), folder, 'host')
-    group_plan, params = setup.group_plan, setup.params
+    group_plan, params = setup.group_plan(), setup.params()
     likelihoods = case.likelihoods or [None] * len(case.observations)
     # (their files, e.g. error maps or the modules of user likelihoods,
     # are in the folder of the case)
@@ -363,10 +363,10 @@ def golden_values(
             else obs | dict(dtype=dtype, fft_dtype=dtype)
             for obs in config['observations']])
     setup = _load(config, pathlib.Path(file.root), driver)
-    group_plan, params = setup.group_plan, setup.params
+    group_plan, params = setup.group_plan(), setup.params()
     values = params.evaluate()
     with setup:
-        objective = setup.objective
+        objective = setup.objective()
         evaluation = objective.evaluate(values)
         chi2, log_likelihood, _ = evaluation.merits
         models = group_plan.model_h(params.evaluate(
@@ -386,7 +386,7 @@ def golden_values(
             # (of each observation: those of a user likelihood of the
             # log-likelihood are 0, and the objective has no residuals)
             residuals=[
-                summary(r) for r in objective.residual_vector_h(values, True)],
+                summary(r) for r in objective.residual_vector_h(values)],
             solved=summary(list(evaluation.solved.values()))
             if params.solves() else None)
         derived = params.derived_values(values, group_plan.functions())

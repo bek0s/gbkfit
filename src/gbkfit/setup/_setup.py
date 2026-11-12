@@ -147,39 +147,39 @@ class Setup:
         self._pool = None if workers is None or self._objective is None \
             else workers.start(self._objective)
 
-    @property
+    def group(self) -> ObservationGroup:
+        """Return the group: the galaxies and their observations."""
+        return self._group_plan.group()
+
     def group_plan(self) -> GroupPlan:
-        """The plan of the group."""
+        """Return the plan of the group."""
         return self._group_plan
 
-    @property
     def params(self) -> ParamSpace:
-        """The parameters."""
+        """Return the parameters."""
         return self._params
 
-    @property
     def objective(self) -> Objective | None:
-        """The objective, or None if an observation has no data."""
+        """Return the objective, or None if an observation has no data."""
         return self._objective
 
-    @property
     def fitter(self) -> Fitter | None:
-        """The fitter, if given."""
+        """Return the fitter, if given."""
         return self._fitter
 
-    @property
     def pool(self) -> WorkerPool | None:
-        """The workers of copies of the objective, if given and it has one."""
+        """
+        Return the workers of copies of the objective, if given and it has
+        one.
+        """
         return self._pool
 
-    @property
     def mock_options(self) -> MockOptions | None:
-        """The options of mock data, if given."""
+        """Return the options of mock data, if given."""
         return self._mock_options
 
-    @property
     def bootstrap_options(self) -> BootstrapOptions | None:
-        """The options of a bootstrap, if given."""
+        """Return the options of a bootstrap, if given."""
         return self._bootstrap_options
 
     def evaluate(
@@ -208,12 +208,12 @@ class Setup:
         ParamEvaluationError
             If the parameters cannot be evaluated there.
         """
-        values = self.params.evaluate(free)
-        if self.objective is None:
+        values = self._params.evaluate(free)
+        if self._objective is None:
             return SetupEvaluation(values, None)
-        evaluation = self.objective.evaluate(values)
+        evaluation = self._objective.evaluate(values)
         return SetupEvaluation(
-            self.params.evaluate(free, evaluation.solved), evaluation)
+            self._params.evaluate(free, evaluation.solved), evaluation)
 
     def outputs(
             self,
@@ -242,14 +242,15 @@ class Setup:
         dict
             The outputs: the models ('model', and their images,
             'model_image'), and of an evaluation of the objective the
-            residuals too ('residual', 'wresidual' and 'residual_image').
+            residuals too ('residual', 'wresidual', 'chi2_residual' and
+            'residual_image'; see evaluation_outputs).
         """
         residuals = evaluation.objective is not None
         outputs = evaluation_outputs(
-            self.group_plan, self.objective, evaluation.values, True,
+            self._group_plan, self._objective, evaluation.values, True,
             residuals, extra)
         if data:
-            outputs |= data_outputs(self.group_plan)
+            outputs |= data_outputs(self._group_plan)
         return outputs
 
     def fit(
@@ -284,12 +285,13 @@ class Setup:
             If it has no fitter, or no objective (an observation has no
             data), or the fit cannot start (see Fitter.fit).
         """
-        if self.fitter is None:
+        if self._fitter is None:
             raise ValueError("a fit needs a fitter (section 'fitter')")
-        if self.objective is None:
+        if self._objective is None:
             raise ValueError("a fit needs data for every observation")
-        return self.fitter.fit(
-            self.objective, self.params, observers, control, log, self.pool)
+        return self._fitter.fit(
+            self._objective, self._params, observers, control, log,
+            self._pool)
 
     def bootstrap(
             self,
@@ -327,19 +329,19 @@ class Setup:
         Stopped
             If it was asked to stop (see control).
         """
-        options = self.bootstrap_options
+        options = self._bootstrap_options
         if options is None:
             raise ValueError(
                 "a bootstrap needs its options (section 'bootstrap')")
-        if self.objective is None:
+        if self._objective is None:
             raise ValueError("a bootstrap needs data for every observation")
-        if self.fitter is None and options.fitter() is None:
+        if self._fitter is None and options.fitter() is None:
             raise ValueError(
                 "a bootstrap needs a fitter (section 'fitter', or its "
                 "option 'fitter')")
         return run_bootstrap(
-            self.objective, self.params, start, self.fitter, options,
-            self.pool, control, log)
+            self._objective, self._params, start, self._fitter, options,
+            self._pool, control, log)
 
     def mock(self, values: ParamValues) -> list[list[Observation]]:
         """
@@ -365,16 +367,16 @@ class Setup:
             If it has no options of mock data, or the data cannot be drawn
             (see draw_mocks).
         """
-        options = self.mock_options
+        options = self._mock_options
         if options is None:
             raise ValueError("mock data need their options (section 'mock')")
-        group = self.group_plan.group()
+        group = self.group()
         _, likelihoods = options.per_observation(group.nobservations())
         return [
             [observation.with_data(dataset, likelihood)
              for observation, dataset, likelihood in zip(
                  group.observations(), datasets, likelihoods)]
-            for datasets in draw_mocks(self.group_plan, values, options)]
+            for datasets in draw_mocks(self._group_plan, values, options)]
 
     def close(self) -> None:
         """
@@ -382,11 +384,11 @@ class Setup:
         their next evaluation; see Objective.close and GroupPlan.close),
         and stop its workers.
         """
-        if self.pool is not None:
-            self.pool.close()
-        if self.objective is not None:
-            self.objective.close()
-        self.group_plan.close()
+        if self._pool is not None:
+            self._pool.close()
+        if self._objective is not None:
+            self._objective.close()
+        self._group_plan.close()
 
     def __enter__(self) -> Self:
         return self

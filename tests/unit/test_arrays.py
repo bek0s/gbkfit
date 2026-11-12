@@ -9,9 +9,8 @@ import pytest
 from astropy.io import fits
 
 from gbkfit.config import ConfigError
-from gbkfit.dataset import describe_fits
 from gbkfit.io import (
-    coords_from_header, read_arrays, read_data, read_oriented)
+    coords_from_header, describe_fits, read_arrays, read_data, read_oriented)
 
 
 # A cube of 5 channels of radio velocities that decrease along the file,

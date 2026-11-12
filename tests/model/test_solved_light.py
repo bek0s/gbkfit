@@ -15,7 +15,7 @@ import scipy.optimize
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective
+from gbkfit.objective import Objective, comparison_of
 from gbkfit.observation import (
     LikelihoodGauss, ObservationGroup, ObservationSky, PixelBrightness,
     line_of_sight_parser)
@@ -196,7 +196,7 @@ def test_the_pieces_of_a_model_are_its_parts_and_are_weighed(driver):
             driver, [(32, 32)], with_amplitudes(TRUTH, np.eye(3)[k]))[0],
             atol=atol)
     obs = group.observations()[0]
-    comparison_ = obs.likelihood().comparison(obs, driver)
+    comparison_ = comparison_of(obs, driver)
     comparison_.prepare()
     rows = driver.mem_alloc_d((2, image.size), np.float64)
     comparison_.weighted_pieces(pieces, TRUTH, rows)

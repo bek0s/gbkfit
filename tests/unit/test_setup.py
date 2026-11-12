@@ -56,7 +56,7 @@ def test_a_configuration_with_data_sets_up_its_objective(tmp_path):
     with gbkfit.load(config) as loaded:
         evaluation = loaded.evaluate()
         assert evaluation.objective.merits.chi2 > 0
-        assert loaded.fitter is None and loaded.pool is None
+        assert loaded.fitter() is None and loaded.pool() is None
         outputs = loaded.outputs(evaluation, data=True)
         assert {'model', 'residual', 'wresidual', 'data'} <= {
             output.kind for output in outputs.values()}
@@ -115,8 +115,8 @@ def test_a_configuration_without_data_cannot_fit():
     loaded = gbkfit.load(dict(
         version=VERSION, galaxies=[GALAXY], observations=[observation()],
         params=PARAMS))
-    assert loaded.objective is None
-    model = loaded.group_plan.model_h(loaded.evaluate().values)[0]
+    assert loaded.objective() is None
+    model = loaded.group_plan().model_h(loaded.evaluate().values)[0]
     assert model['brightness'].data.sum() > 0
     with pytest.raises(ValueError, match="a fit needs a fitter"):
         loaded.fit()
@@ -127,7 +127,7 @@ def test_a_configuration_without_data_cannot_fit():
         version=VERSION, galaxies=[GALAXY], observations=[observation()],
         params=PARAMS, fitter=dict(type='scipy.least_squares'),
         workers=dict(type='mpi')))
-    assert loaded.objective is None and loaded.pool is None
+    assert loaded.objective() is None and loaded.pool() is None
     loaded.evaluate()
     with pytest.raises(ValueError, match="a fit needs data"):
         loaded.fit()
@@ -141,7 +141,7 @@ def test_the_drivers_given_replace_those_of_the_configuration():
              observations=[observation()], params=PARAMS,
              driver=dict(type='cuda')),
         drivers={None: driver})
-    assert loaded.group_plan.observation_drivers() == (driver,)
+    assert loaded.group_plan().observation_drivers() == (driver,)
 
 
 def test_configs_resolve_relative_paths_against_their_root(tmp_path):
@@ -276,11 +276,11 @@ def test_workers_are_on_drivers_of_the_configuration(tmp_path):
         params=PARAMS)
     workers = dict(type='threads', drivers=['cpu1', 'cpu2'])
     with gbkfit.load(config | dict(workers=workers)) as loaded:
-        values = loaded.params.evaluate()
-        assert loaded.pool.size() == 2
-        assert loaded.pool.map(Objective.chi2, [values] * 3) == \
-            pytest.approx([loaded.objective.chi2(values)] * 3, rel=1e-12)
-    assert gbkfit.load(config).pool is None
+        values = loaded.params().evaluate()
+        assert loaded.pool().size() == 2
+        assert loaded.pool().map(Objective.chi2, [values] * 3) == \
+            pytest.approx([loaded.objective().chi2(values)] * 3, rel=1e-12)
+    assert gbkfit.load(config).pool() is None
     workers = dict(type='threads', drivers=['gpu'])
     with pytest.raises(ConfigError, match="unknown driver 'gpu'"):
         gbkfit.load(config | dict(workers=workers))
@@ -358,7 +358,7 @@ def test_configurations_in_python_take_quantities_and_numpy_values():
     assert plain['lines']['line'] == 6563 * u.AA
     assert plain['observations'][0]['observable']['size'] == [8, 8]
     with gbkfit.load(config) as loaded:
-        model = loaded.group_plan.model_h(loaded.evaluate().values)[0]
+        model = loaded.group_plan().model_h(loaded.evaluate().values)[0]
         assert model['brightness'].data.shape == (8, 8)
 
 
@@ -372,7 +372,7 @@ def test_the_units_of_a_configuration_are_read_as_fits_reads_them(tmp_path):
         observations=[data], params=PARAMS)
     data['data']['unit'] = 'erg/s/cm2/Angstrom'
     with gbkfit.load(config) as loaded:
-        dataset = loaded.group_plan.group().observations()[0].data()
+        dataset = loaded.group().observations()[0].data()
         assert next(iter(dataset.values())).unit() == (
             u.erg / u.s / u.cm ** 2 / u.Angstrom)
     data['data']['unit'] = 'ERG/S'

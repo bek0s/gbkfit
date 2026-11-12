@@ -88,6 +88,84 @@ def test_poisson_noise_counts_the_signal():
     assert noise_parser.dump(noise_parser.load(dict(info))) == info
 
 
+def test_poisson_noise_over_a_background():
+    # The background b (e.g. of the sky) is counted with the signal: the
+    # data are Poisson draws of (s + b) 4, divided by 4, less b, of the
+    # dispersion sqrt(4 (s + b)) / 4, so that the data without signal have
+    # errors too (they had none, and were left out of fits: audit
+    # 2026-11-11 d)
+    rng = np.random.default_rng(5)
+    signal = np.broadcast_to(np.linspace(0, 50, 128), (64, 128, 128))
+    noise = NoisePoisson(gain=4, background=10)
+    data = signal + noise.draw(rng, GRID, None, signal)
+    counts = (data + 10) * 4
+    np.testing.assert_allclose(counts, np.round(counts), atol=1e-9)
+    sigma = noise.sigma(GRID, signal)
+    np.testing.assert_allclose(
+        sigma[0, 0], np.sqrt(4 * (signal[0, 0] + 10)) / 4)
+    assert sigma.min() == pytest.approx(np.sqrt(40) / 4)
+    np.testing.assert_allclose(data.std(axis=(0, 1)), sigma[0, 0], rtol=0.03)
+    # (within 5 standard errors of the mean of the draws of each value)
+    np.testing.assert_allclose(
+        data.mean(axis=(0, 1)), signal[0, 0], rtol=0, atol=0.25)
+    info = dict(type='poisson', gain=4, background=10)
+    assert noise_parser.dump(noise_parser.load(dict(info))) == info
+    assert NoisePoisson().background() == 0
+    with pytest.raises(ValueError, match="background"):
+        NoisePoisson(background=-1)
+
+
+# The sky of GRID, of an error map of one value per pixel
+SKY = GRID.spatial()
+
+
+def write_error(path, error, coords):
+    """Write an error map with world coordinates; return its filename."""
+    from gbkfit.io import write_data
+    filename = str(path / 'error.fits')
+    write_data(filename, error, coords, 2 if error.ndim == 3 else None)
+    return filename
+
+
+@pytest.mark.parametrize('kind', [NoiseGauss, NoiseStudentT])
+def test_an_error_map_is_drawn_on_the_pixels_of_its_file(tmp_path, kind):
+    # Its world coordinates must put its pixels on those of the data on
+    # the sky (an error map of another field of the same shape was drawn
+    # there: audit 2026-11-11 d#10), and do so again once dumped
+    error = np.tile(np.linspace(1, 3, 128), (128, 1))
+    filename = write_error(tmp_path, error, SKY.coords)
+    noise = kind.from_file(error=filename) if kind is NoiseGauss \
+        else kind.from_file(5, filename)
+    np.testing.assert_array_equal(
+        noise.sigma(GRID, SIGNAL), np.broadcast_to(error, SIGNAL.shape))
+    loaded = noise_parser.load(
+        noise_parser.dump(noise, prefix=f'{tmp_path}/d_'))
+    for other in (
+            GRID._replace(coords=GRID.coords._replace(rval=(0.01, 0, 0))),
+            GRID._replace(coords=GRID.coords._replace(step=(4, 4, 10))),
+            GRID._replace(coords=GRID.coords._replace(rota=10))):
+        for each in (noise, loaded):
+            with pytest.raises(ValueError, match="not on the pixels"):
+                each.sigma(other, SIGNAL)
+    # (on the sky alone: not on visibilities, whatever their shape)
+    rows = make_grid((128, 128), (1, 10), (0, 0), (0, 0), 0, 1)
+    with pytest.raises(ValueError, match="the data are not on the sky"):
+        noise.sigma(rows, SIGNAL[0])
+
+
+def test_an_error_cube_is_drawn_on_the_pixels_of_its_file(tmp_path):
+    # (its spectral axis kept, once dumped)
+    error = np.broadcast_to(np.linspace(1, 3, 128), (64, 128, 128))
+    noise = NoiseGauss.from_file(write_error(tmp_path, error, GRID.coords))
+    np.testing.assert_array_equal(noise.sigma(GRID, SIGNAL), error)
+    loaded = noise_parser.load(
+        noise_parser.dump(noise, prefix=f'{tmp_path}/d_'))
+    np.testing.assert_array_equal(loaded.sigma(GRID, SIGNAL), error)
+    moved = GRID._replace(coords=GRID.coords._replace(rpix=(64, 63.5, 31.5)))
+    with pytest.raises(ValueError, match="not on the pixels"):
+        loaded.sigma(moved, SIGNAL)
+
+
 def test_the_beam_is_the_correlation_of_the_noise():
     # The noise of a radio cube: the correlation of two pixels half a
     # FWHM apart is half, as the beam there (not that of the beam

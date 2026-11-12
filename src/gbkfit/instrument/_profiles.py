@@ -1,25 +1,10 @@
 """
 The profiles of the analytic PSFs and LSFs: their 1d forms, and their
-scales of a full width at half maximum.
+scales of a full width at half maximum (but the Gaussian's, which is
+astropy.stats.gaussian_fwhm_to_sigma).
 """
 
 import numpy as np
-
-
-def gauss_fwhm_to_sigma(fwhm: float) -> float:
-    """
-    Return the standard deviation of a Gaussian of the given full width
-    at half maximum.
-    """
-    return fwhm / np.sqrt(8 * np.log(2))
-
-
-def gauss_sigma_to_fwhm(sigma: float) -> float:
-    """
-    Return the full width at half maximum of a Gaussian of the given
-    standard deviation.
-    """
-    return sigma * np.sqrt(8 * np.log(2))
 
 
 def ggauss_fwhm_to_alpha(fwhm: float, beta: float) -> float:

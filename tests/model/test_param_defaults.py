@@ -30,7 +30,7 @@ def test_models_evaluate_at_the_defaults(path):
             if pdesc.default() is None] \
         == USER_PARAMS.get(path.parent.name, [])
     with load(str(path)) as setup:
-        models = setup.group_plan.model_h(default_values(pdescs))
+        models = setup.group_plan().model_h(default_values(pdescs))
         arrays = [
             array for observation in models for item in observation.values()
             for array in item if array is not None]

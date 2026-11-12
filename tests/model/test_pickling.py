@@ -49,11 +49,11 @@ def merits(
     ids=lambda path: path.parent.name)
 def test_copies_in_other_processes_evaluate_as_the_originals(executor, path):
     with load(str(path)) as setup:
-        if setup.objective is None:
+        if setup.objective() is None:
             pytest.skip("no data")
-        here = merits(setup.objective, setup.params)
+        here = merits(setup.objective(), setup.params())
         there = executor.submit(
-            merits, setup.objective, setup.params).result()
+            merits, setup.objective(), setup.params()).result()
     # (to the rounding of sums in parallel, whose order varies)
     assert there[0] == pytest.approx(here[0], rel=1e-12)
     assert there[1] == pytest.approx(here[1], rel=1e-12)

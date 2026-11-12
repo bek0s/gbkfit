@@ -77,11 +77,17 @@ class SkyFrame(NamedTuple):
         observation adds to the galaxies it sees in the frame of the model
         (e.g. the masses of its lens), which the frame moves as the
         centres of their components (see ObservationGroup).
+    shift_params : tuple of tuple of str
+        The names of the parameters of the shifts (x and y) of what the
+        observation adds that is placed by its RA and Dec (e.g. shifted
+        deflection maps of its lens), which only the offsets of the frame
+        move: the RA and Dec place it in each frame.
     """
     origin: tuple[float, float]
     offsets: tuple[str | None, str | None, str | None]
     velocity_frame: str | None
     centre_params: tuple[tuple[str, str], ...]
+    shift_params: tuple[tuple[str, str], ...]
 
 
 class Observation(TypedSerializable, abc.ABC):

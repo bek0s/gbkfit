@@ -158,7 +158,7 @@ def test_slitless_spectra_objective_residual(driver):
     objective = Objective(group.plan(driver))
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
-    residual = objective.residual_nddata_h(params.evaluate(), False)
+    residual = objective.residual_nddata_h(params.evaluate())
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
 
 

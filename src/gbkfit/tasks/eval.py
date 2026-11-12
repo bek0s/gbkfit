@@ -128,8 +128,8 @@ def _eval(
     Evaluate the setup of a configuration, and write the outputs (see
     eval_).
     """
-    group_plan, params = setup.group_plan, setup.params
-    objective = setup.objective if mode == 'objective' else None
+    group_plan, params = setup.group_plan(), setup.params()
+    objective = setup.objective() if mode == 'objective' else None
     if mode == 'objective' and objective is None:
         raise ConfigError(
             "the mode 'objective' needs data for every observation")
@@ -160,7 +160,7 @@ def _eval(
     gbkfit.outputs.write_outputs(run, outputs)
     if mode == 'mock':
         _log.info(
-            f"drawing {setup.mock_options.nmocks()} mock datasets...")
+            f"drawing {setup.mock_options().nmocks()} mock datasets...")
         _write_mocks(cfg, root, setup, param_values, run)
 
     if profile_iters > 0:
@@ -208,7 +208,7 @@ def _write_mocks(
     values (see Setup.mock), and write their files and configurations
     (see eval_).
     """
-    group = setup.group_plan.group()
+    group = setup.group()
     with config_path('mock'):
         mocks = setup.mock(values)
     sections = {k: v for k, v in cfg.items() if k != 'mock'}

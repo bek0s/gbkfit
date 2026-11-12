@@ -122,7 +122,7 @@ def test_slit_spectra_objective_residual(driver):
     objective = Objective(group.plan(driver))
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
-    residual = objective.residual_nddata_h(params.evaluate(), False)
+    residual = objective.residual_nddata_h(params.evaluate())
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
     # The chi-squared is the sum of their squares, and the log-likelihood
     # -1/2 of it

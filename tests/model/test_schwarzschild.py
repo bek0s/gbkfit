@@ -367,7 +367,7 @@ def test_an_objective_models_the_bins_of_stars_on_orbits(driver):
     residuals = objective.residuals(params.evaluate())
     assert chi2 == pytest.approx(np.sum(residuals ** 2))
     bins_residuals = objective.residual_vector_h(
-        params.evaluate(), True)[0].reshape(4, -1)
+        params.evaluate())[0].reshape(4, -1)
     np.testing.assert_allclose(bins_residuals[[0, 2]], 0, atol=1e-6)
     assert np.all(np.isfinite(bins_residuals))
     weights = np.array(list(evaluation.solved.values()))
@@ -482,7 +482,7 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     evaluation = objective.evaluate(params.evaluate())
     np.testing.assert_allclose(
         list(evaluation.solved.values()), 1, rtol=1e-6)
-    residuals = objective.residual_nddata_h(params.evaluate(), False)[0]
+    residuals = objective.residual_nddata_h(params.evaluate())[0]
     errors = {key: obs.data()[key].error() for key in residuals}
     assert np.abs(data[4]).max() > 0.08
     np.testing.assert_allclose(
@@ -501,7 +501,7 @@ def compared_model(objective, params):
     at the values of the parameters: the data plus the residuals times the
     errors, by key.
     """
-    residuals = objective.residual_nddata_h(params, False)[0]
+    residuals = objective.residual_nddata_h(params)[0]
     dataset = objective.datasets()[0]
     return {key: dataset[key].data() + residual * dataset[key].error()
             for key, residual in residuals.items()}
@@ -619,7 +619,7 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
                 mass_bh_log_m=np.log10(bh_mass)))
             if objective is None:
                 objective = Objective(group.plan(driver), params.solves())
-            residuals = objective.residual_vector_h(params.evaluate(), True)
+            residuals = objective.residual_vector_h(params.evaluate())
             chi2[bh_mass, factor] = float(np.sum(residuals[0] ** 2))
     assert min(chi2, key=chi2.get) == (bh, 1.0)
     # (about one per residual)
@@ -696,7 +696,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
             mass_stars_upsilon=1e8 * factor, stars_weights=solve))
         if objective is None:
             objective = Objective(group.plan(driver), params.solves())
-        residuals = objective.residual_nddata_h(params.evaluate(), True)[0]
+        residuals = objective.residual_nddata_h(params.evaluate())[0]
         chi2[factor] = sum(float(np.sum(r ** 2)) for r in residuals.values())
         if factor == 1.0:
             assert np.sum(residuals['moment1'] ** 2) < regions.nregions()

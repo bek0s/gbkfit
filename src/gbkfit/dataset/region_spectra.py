@@ -10,10 +10,11 @@ import numpy as np
 
 from gbkfit.config import DataFile, check_options
 from gbkfit.grid import Grid, SpectralAxis, make_cube_grid
+from gbkfit.instrument import LSF
 from gbkfit.io import ErrorKind, MaskKind, write_spectra
 from gbkfit.region import Regions, regions_parser
 from . import _grids, _outliers
-from .base import Dataset, cleaned
+from .base import Dataset, NoiseCorrelation, cleaned
 from .data import Data, dump_data, item_filenames
 
 
@@ -31,6 +32,10 @@ class DatasetRegionSpectra(Dataset):
     Its configuration has the regions, and the options of from_files: the
     files of its one data item (data, mask, error) and the world
     coordinates of its spectral axis.
+
+    Its noise can be correlated along the spectral axis (e.g. by the
+    resampling of the spectra), not between regions (see
+    noise_correlation).
 
     Parameters
     ----------
@@ -82,7 +87,9 @@ class DatasetRegionSpectra(Dataset):
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
             spectral: SpectralAxis | None = None,
+            spectral_correlation: LSF | None = None,
             outliers: Mapping[str, Any] | None = None,
+            mask_whole_spectra: bool = False,
             error_kind: ErrorKind = 'sigma',
             mask_kind: MaskKind = 'valid'
     ) -> 'DatasetRegionSpectra':
@@ -113,9 +120,16 @@ class DatasetRegionSpectra(Dataset):
             those of the header (either rpix or rval can be given, and the
             other comes from the header; see coords_from_header); not its
             size, which the data give.
+        spectral_correlation : LSF, optional
+            The correlation of the noise along the spectral axis (see
+            Data).
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma
             (see screen_outliers), which are masked.
+        mask_whole_spectra : bool, optional
+            Whether every spectrum with a masked value is masked whole,
+            but for the channels masked in every spectrum (see
+            mask_whole_spectra), after the outliers.
         error_kind : str, optional
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
@@ -134,13 +148,13 @@ class DatasetRegionSpectra(Dataset):
         spectra, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
-            unit, beam, velocity=references['velocity'],
-            error_kind=error_kind, mask_kind=mask_kind,
-            spectral_type=references['spectral_type'])
+            unit, beam, spectral_correlation=spectral_correlation,
+            velocity=references['velocity'], error_kind=error_kind,
+            mask_kind=mask_kind, spectral_type=references['spectral_type'])
         dataset = cls(
             spectra, regions,
             _grids.cube_coords(coords, None, None, spectral)['spectral'])
-        return cleaned(dataset, outliers)
+        return cleaned(dataset, outliers, mask_whole_spectra)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -194,6 +208,24 @@ class DatasetRegionSpectra(Dataset):
     def spectral_grid(self) -> Grid:
         """Return the grid of the spectral axis (one axis)."""
         return self._spectral_grid
+
+    def mask_whole_spectra(self) -> 'DatasetRegionSpectra':
+        """
+        Return a copy of it with the spectrum of each region masked whole
+        where it masks any of its channels, but for the channels it masks
+        in every region (see Dataset.mask_whole_spectra).
+        """
+        return self.with_data(dict(
+            spectra=_grids.whole_spectra(self['spectra'])))
+
+    def noise_correlation(self, key: str) -> NoiseCorrelation | None:
+        """
+        Return the correlation of the noise of a data item on the
+        separations of its channels (see Dataset.noise_correlation): its
+        regions, which are not pixels of the sky, have none.
+        """
+        return _grids.spectra_noise_correlation(
+            self, key, self._spectral_grid)
 
     def screen_outliers(
             self, size: Sequence[float], nsigma: float

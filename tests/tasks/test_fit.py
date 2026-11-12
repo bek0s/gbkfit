@@ -129,7 +129,7 @@ def test_the_best_fit_so_far_starts_at_it(tmp_path):
     run = outputs.open(tmp_path / 'fit')
     progress = pathlib.Path(run.filename(run.product('progress')))
     best = json.loads(progress.read_text().splitlines()[-1])['best']
-    params = gbkfit.load(run.filename(run.product('best_config'))).params
+    params = gbkfit.load(run.filename(run.product('best_config'))).params()
     assert params.element_values(params.evaluate()) == pytest.approx(
         params.element_values(params.evaluate(best)))
 
