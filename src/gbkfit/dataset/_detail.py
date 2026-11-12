@@ -1,33 +1,21 @@
 """
 Helpers of the datasets of moments (see DatasetPixelMoments and
-DatasetRegionMoments): the names, orders and units of their data items,
-and the reading of their files.
+DatasetRegionMoments): the options and units of their data items, and
+the reading of their files (their names and orders are those of
+gbkfit.moments).
 """
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import astropy.units
 import numpy as np
 
 import gbkfit.units
 from gbkfit.grid import Coords, Grid, make_grid, pixels_on
+from gbkfit.moments import HERMITE_ORDERS, MOMENT_ITEMS, MOMENT_ORDERS
 from .data import Data, DataFiles
 
-if TYPE_CHECKING:
-    from .base import Dataset
-
-
-# The data items of moments (and the options of their files): the central
-# moments of the orders 0 to 7 (moment0, the flux; moment1, the mean
-# velocity; moment2, the dispersion; moment3 and up, in (km/s)^k), and the
-# coefficients h3 and h4 of a Gauss-Hermite series (dimensionless, as pPXF
-# names them: not central moments)
-_ORDERS = range(8)
-_HERMITE_ORDERS = (3, 4)
-MOMENTS = tuple(f'moment{order}' for order in _ORDERS)
-HERMITE = tuple(f'h{order}' for order in _HERMITE_ORDERS)
-MOMENT_ITEMS = MOMENTS + HERMITE
 
 # How far (in pixels) the world coordinates of the maps of moments may put
 # their pixels from those of the first (as those of the errors and masks of
@@ -45,23 +33,6 @@ def moment_options(values: Mapping[str, Any]) -> dict[str, Any]:
         if values[name] is not None}
 
 
-def split_moments(
-        items: Mapping[str, Any]
-) -> tuple[dict[int, Any], dict[int, Any]]:
-    """
-    Return the central moments and the Gauss-Hermite coefficients among
-    items by name (see MOMENT_ITEMS), by order, as datasets of moments take
-    them.
-    """
-    moments = {
-        int(name.removeprefix('moment')): item
-        for name, item in items.items() if name in MOMENTS}
-    hermite = {
-        int(name.removeprefix('h')): item
-        for name, item in items.items() if name in HERMITE}
-    return moments, hermite
-
-
 def moment_items(
         moments: Mapping[int, Data],
         hermite: Mapping[int, Data] | None = None
@@ -74,10 +45,10 @@ def moment_items(
     dimensionless. Raise ValueError for other orders, or units.
     """
     hermite = hermite or {}
-    if invalid := sorted(set(moments) - set(_ORDERS), key=str):
+    if invalid := sorted(set(moments) - set(MOMENT_ORDERS), key=str):
         raise ValueError(
             f"the orders of the moments are 0 to 7; they include {invalid}")
-    if invalid := sorted(set(hermite) - set(_HERMITE_ORDERS), key=str):
+    if invalid := sorted(set(hermite) - set(HERMITE_ORDERS), key=str):
         raise ValueError(
             f"the coefficients of a Gauss-Hermite series are h3 and h4; "
             f"they include the orders {invalid}")
@@ -107,7 +78,7 @@ def _in_kms(data: Data, order: int) -> Data:
     kms = (astropy.units.km / astropy.units.s) ** power
     if not unit.is_equivalent(kms):
         hermite = f" (h{order} of a Gauss-Hermite series is the item " \
-            f"h{order})" if order in _HERMITE_ORDERS and unit.is_equivalent(
+            f"h{order})" if order in HERMITE_ORDERS and unit.is_equivalent(
                 astropy.units.dimensionless_unscaled) else ""
         raise ValueError(
             f"moment {order} is in {gbkfit.units.format_unit(unit)!r}, "
@@ -132,15 +103,6 @@ def _dimensionless(data: Data, order: int) -> Data:
     dimensionless = astropy.units.dimensionless_unscaled
     return data if unit.to(dimensionless) == 1 \
         else data.to_unit(dimensionless)
-
-
-def moment_orders(dataset: 'Dataset') -> tuple[int, ...]:
-    """
-    Return the orders of the moments of a dataset, central moments and
-    coefficients of a Gauss-Hermite series (see moment_items).
-    """
-    return tuple(sorted(
-        int(key.removeprefix('moment').removeprefix('h')) for key in dataset))
 
 
 def read_moments(

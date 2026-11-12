@@ -11,10 +11,12 @@ from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis, grid_options
 from gbkfit.model import DataUnit, LightUnit, LineEmission
+from gbkfit.moments import (
+    FluxFloor, Method, MomentsPlan, check_moment_items, check_moment_orders,
+    moment_item, split_moments)
 from . import _model_cube, _moments
 from ._cube_plan import CubeObservablePlan
 from ._data_units import data_unit
-from ._moments import FluxFloor, Method
 from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size)
 from .base import ModelData, Observable, ObservationSetup
@@ -33,7 +35,7 @@ class PixelMoments(Observable):
     Moments of the spectra on a grid of pixels: moment maps of a spectral
     cube of the model, seen through the instrument. The maps are of some
     orders (0 to 7), as the data items moment0 to moment7, but h3 and h4
-    of the method gauss_hermite (see _moments.moment_item).
+    of the method gauss_hermite (see gbkfit.moments.moment_item).
 
     The moments are measured from a spectral cube with the spatial axes
     of the maps, and a spectral axis (spectral; see _moments.spectral_axis
@@ -185,20 +187,17 @@ class PixelMoments(Observable):
         super().__init__(size, step, rpix, rval, rota)
         check_median_size(median_size)
         self._median_size = median_size
-        self._orders = _moments.check_moment_orders(orders, method)
+        self._orders = check_moment_orders(orders, method)
         self._spectral = _moments.spectral_axis(spectral)
         self._flux_floor = flux_floor
         self._method = method
 
     def keys(self) -> tuple[str, ...]:
-        return tuple(
-            _moments.moment_item(i, self._method) for i in self._orders)
+        return tuple(moment_item(i, self._method) for i in self._orders)
 
     def make_dataset(self, items: Mapping[str, Data]) -> DatasetPixelMoments:
-        moments, hermite = _moments.moment_maps(
-            items, self._orders, self._method)
         return DatasetPixelMoments(
-            moments, hermite, **grid_options(self.grid(), sizes=False))
+            *split_moments(items), **grid_options(self.grid(), sizes=False))
 
     def data_unit(
             self,
@@ -228,7 +227,10 @@ class PixelMoments(Observable):
         return self._flux_floor
 
     def method(self) -> str:
-        """Return how the moments are measured (see MOMENT_METHODS)."""
+        """
+        Return how the moments are measured (see
+        gbkfit.moments.MOMENT_METHODS).
+        """
         return self._method
 
     def spectral(self) -> SpectralAxis:
@@ -249,7 +251,7 @@ class PixelMoments(Observable):
         super().check_scene(scene, setup)
 
     def check_dataset(self, dataset: Dataset) -> None:
-        _moments.check_moment_items(dataset, self._method)
+        check_moment_items(dataset, self._method)
         super().check_dataset(dataset)
 
     def plan(
@@ -274,14 +276,13 @@ class PixelMomentsPlan(CubeObservablePlan):
             setup: ObservationSetup
     ):
         super().__init__(model_cube, driver, scene, setup)
-        self._moments = _moments.MomentsPlan(
+        self._moments = MomentsPlan(
             driver, moments.size(), moments.orders(), moments.flux_floor(),
             moments.method(), setup.dtype)
 
     def _measure(self) -> ModelData:
-        # The moment maps, one mask shared by all of them, and the weight
-        # map of each moment
+        # The moment maps, with the mask and the weight map they share
         plan = self._model_cube_plan
         grid = self._model_cube.grid()
-        return self._moments.evaluate(
-            grid.coords.step, grid.zero(), plan.cube(), plan.weights())
+        return _moments.model_data(self._moments.evaluate(
+            grid.coords.step, grid.zero(), plan.cube(), plan.weights()))

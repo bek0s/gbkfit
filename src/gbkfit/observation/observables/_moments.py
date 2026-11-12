@@ -1,21 +1,20 @@
 """
-Helpers shared by the observables of moments.
+Helpers shared by the observables of moments: what needs their scene,
+instrument or model cube (the moments themselves, their names and their
+measurement, are those of gbkfit.moments).
 """
 
 import logging
-from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
+from typing import TYPE_CHECKING
 
 import numpy as np
-from annotated_types import Ge, Lt
 
-from gbkfit.config import Choices, warn
+from gbkfit.config import warn
 from gbkfit.grid import SpectralAxis, check_convention, make_cube_grid
-from gbkfit.dataset import Data, Dataset
-from gbkfit.driver import DeviceArray, Driver
+from gbkfit.dataset import Dataset
 from gbkfit.instrument import Instrument
 from gbkfit.model import STARS, LineEmission, StarsEmission
-from gbkfit.params import ModelEvaluationError
+from gbkfit.moments import DeviceMomentMaps
 from gbkfit.utils import numutils
 from . import _model_cube
 from .base import ModelData, ModelItem, ObservationSetup
@@ -26,13 +25,6 @@ if TYPE_CHECKING:
     from .region_moments import RegionMoments
 
 
-__all__ = [
-    'MOMENT_METHODS',
-    'MomentsPlan',
-    'check_moment_orders'
-]
-
-
 _log = logging.getLogger(__name__)
 
 
@@ -40,22 +32,6 @@ _log = logging.getLogger(__name__)
 # moments are computed from, and its default span (km/s)
 SPEC_STEP = 1
 SPEC_RANGE = 1000
-
-# How the moment maps are measured from the spectra of a cube: their
-# moments, the moments of a Gaussian fitted to them (its flux, centre and
-# dispersion), or a Gauss-Hermite series fitted to them (its flux, centre,
-# dispersion, h3 and h4)
-MOMENT_METHODS = ('moments', 'gauss_fit', 'gauss_hermite')
-Method: TypeAlias = Annotated[Literal[MOMENT_METHODS], Choices(
-    moments='Moments', gauss_fit='Gaussian fit',
-    gauss_hermite='Gauss-Hermite fit')]
-
-# The flux floor of the moments: a fraction of the flux of the brightest
-# spectrum (see PixelMoments)
-FluxFloor: TypeAlias = Annotated[float, Ge(0), Lt(1)]
-
-# The highest order of the maps of each method
-_MAX_ORDERS = dict(moments=7, gauss_fit=2, gauss_hermite=4)
 
 # The smallest dispersion (km/s) a spectral axis derived from the data
 # leaves room for (see spectral_axis)
@@ -141,92 +117,6 @@ def spectral_axis(
         size=size, step=step, rpix=rpix, rval=rval))
 
 
-def check_moment_orders(
-        orders: Sequence[int],
-        method: str
-) -> tuple[int, ...]:
-    """
-    Return the moment orders, sorted and unique.
-
-    Parameters
-    ----------
-    orders : Sequence of int
-        The orders.
-    method : str
-        The method that measures them (see MOMENT_METHODS).
-
-    Returns
-    -------
-    tuple of int
-        The orders, sorted and unique.
-
-    Raises
-    ------
-    ValueError
-        If there are none, or they are not valid for the method (a
-        Gaussian has moments 0 to 2, a Gauss-Hermite series 0 to 4).
-    """
-    max_order = _MAX_ORDERS[method]
-    orders = tuple(sorted(set(orders)))
-    if not orders:
-        raise ValueError("at least one moment order is required")
-    if any(order < 0 or order > max_order for order in orders):
-        raise ValueError(
-            f"the moment orders of the method {method} must be between 0 "
-            f"and {max_order}")
-    return orders
-
-
-def moment_item(order: int, method: str) -> str:
-    """
-    Return the name of the data item of the moment of an order measured by
-    a method (see MOMENT_METHODS): moment0 to moment7, the central moments (the
-    flux, the mean velocity, the dispersion, and above in (km/s)^k), but
-    the coefficients h3 and h4 of a Gauss-Hermite series (gauss_hermite;
-    dimensionless, as pPXF names them).
-    """
-    if method == 'gauss_hermite' and order > 2:
-        return f'h{order}'
-    return f'moment{order}'
-
-
-def moment_maps(
-        items: Mapping[str, Data], orders: Sequence[int], method: str
-) -> tuple[dict[int, Data], dict[int, Data]]:
-    """
-    Return the data items of the moments of the orders measured by a method
-    (see moment_item), as datasets of moments take them: the central
-    moments, and the coefficients of a Gauss-Hermite series, by order.
-    """
-    moments, hermite = {}, {}
-    for order in orders:
-        name = moment_item(order, method)
-        (hermite if name.startswith('h') else moments)[order] = items[name]
-    return moments, hermite
-
-
-def check_moment_items(dataset: Dataset, method: str) -> None:
-    """
-    Raise ValueError if a dataset has moments that a method does not
-    measure: the coefficients h3 and h4 of a Gauss-Hermite series without
-    the method gauss_hermite, or central moments of the orders 3 and 4 with
-    it (see moment_item: of the same order, they are other numbers).
-    """
-    hermite = method == 'gauss_hermite'
-    for key in dataset:
-        if key.startswith('h') and not hermite:
-            raise ValueError(
-                f"{key}, a coefficient of a Gauss-Hermite series, is "
-                f"measured by the method gauss_hermite; the method is "
-                f"{method}")
-        if hermite and key in ('moment3', 'moment4'):
-            raise ValueError(
-                f"{key} is a central moment, in (km/s)^{key[-1]}; the method "
-                f"gauss_hermite measures h{key[-1]}, a coefficient of a "
-                f"Gauss-Hermite series (name the data h{key[-1]}, if they "
-                f"are)")
-
-
 def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
     """
     Warn if the flux floor of moments is 0 with a PSF or an LSF, whose
@@ -302,171 +192,18 @@ def check_one_line(scene: 'Scene') -> None:
             f"option lines (e.g. lines: [{named[0]!r}])")
 
 
-class MomentsPlan:
+def model_data(maps: DeviceMomentMaps, regions: bool = False) -> ModelData:
     """
-    The moments of the given orders of the spectra of cubes (nz, ny, nx)
-    on a driver, measured with the given method (see MOMENT_METHODS): a map
-    (ny, nx) for each order, one mask shared by them (the spectra whose
-    moment 0 is not above flux_floor times the largest of the map, in
-    absolute value, and those whose fit fails), and one weight map shared
-    by them (with the method moments). To evaluate, a cube whose moment
-    0 is not a number (NaN) somewhere is a model that failed there, not
-    one without flux there; measure takes cubes of data, with channels
-    without a value (see measure).
-
-    Parameters
-    ----------
-    driver : Driver
-        The driver of the cubes.
-    size : Sequence of int
-        The size of the maps (nx, ny).
-    orders : Sequence of int
-        The orders of the moments (see check_moment_orders).
-    flux_floor : float
-        The share of the largest moment 0 of the map (in absolute value)
-        that the moment 0 of a spectrum must be above.
-    method : str
-        The method (see MOMENT_METHODS).
-    dtype : np.dtype
-        The floating type of the cubes.
+    Return the model data of moment maps measured on a driver (see
+    MomentsPlan): the model item of each, with the mask and the weights
+    that they share. The moments of regions are measured from a cube of
+    one row of their spectra (see RegionMomentsPlan): their items are
+    the vectors of that row.
     """
-
-    def __init__(
-            self,
-            driver: Driver,
-            size: Sequence[int],
-            orders: Sequence[int],
-            flux_floor: float,
-            method: str,
-            dtype: np.dtype
-    ):
-        size_all = tuple(size) + (len(orders),)
-        self._orders = orders
-        self._flux_floor = flux_floor
-        self._method = method
-        self._mmaps_o = driver.mem_alloc_d(len(orders), np.int32)
-        self._mmaps_d = driver.mem_alloc_d(size_all[::-1], dtype)
-        self._mmaps_m = driver.mem_alloc_d(tuple(size)[::-1], dtype)
-        self._mmaps_w = driver.mem_alloc_d(tuple(size)[::-1], dtype)
-        driver.mem_copy_h2d(np.array(orders, dtype=np.int32), self._mmaps_o)
-        driver.mem_fill(self._mmaps_d, np.nan)
-        driver.mem_fill(self._mmaps_m, 0)
-        driver.mem_fill(self._mmaps_w, 1)
-        # (the map of moment 0 that gives the floor: its own order, mask
-        # and weights)
-        self._flux_o = driver.mem_alloc_d(1, np.int32)
-        self._flux_d = driver.mem_alloc_d((1,) + tuple(size)[::-1], dtype)
-        self._flux_m = driver.mem_alloc_d(tuple(size)[::-1], dtype)
-        self._flux_w = driver.mem_alloc_d(tuple(size)[::-1], dtype)
-        driver.mem_copy_h2d(np.zeros(1, dtype=np.int32), self._flux_o)
-        self._driver = driver
-        self._backend = driver.native_class('DModel', dtype)()
-
-    def evaluate(
-            self,
-            step: Sequence[float],
-            zero: Sequence[float],
-            cube: DeviceArray,
-            wcube: DeviceArray | None
-    ) -> ModelData:
-        """
-        Return the moments of cube (and its weights, wcube, if any), whose
-        world coordinates are step and zero (see Grid): for each order,
-        its map, the mask and its weights (see ModelItem).
-
-        Parameters
-        ----------
-        step, zero : Sequence of float
-            The step of each axis of the cube, and the world position of
-            its first pixel (see Grid.zero).
-        cube : DeviceArray
-            The cube (nz, ny, nx).
-        wcube : DeviceArray or None
-            Its weights, if any.
-
-        Returns
-        -------
-        ModelData
-            The model item of each moment, by the name of its data item
-            (see moment_item).
-
-        Raises
-        ------
-        ModelEvaluationError
-            If the moment 0 of a spectrum of the cube is not a number.
-        """
-        # TODO: unexplained, not investigated. Where the model has almost
-        # no flux (moment 0 ~1e-4 of its peak), its moments are noise, and
-        # a step of 3e-4 in any parameter switches pixels between masked
-        # and not (probably moment 0 crossing the floor): the chi-square
-        # jumps by 1e3-2e4 and least squares rejects every step (M83 of
-        # LVHIS, tilted rings, a brightness falling to 0 at the edge of
-        # the data). A guess: the round-off of the float32 FFT convolution
-        # (moment 0 had pixels of -3.5e-8, though the brightness is >= 0).
-        # Workaround: a disk bright beyond the data.
-        flux = self._flux(step, zero, cube)
-        failed = np.count_nonzero(np.isnan(flux))
-        if failed:
-            raise ModelEvaluationError(
-                f"the model has no flux (NaN) in {failed} of its spectra: it "
-                f"cannot be evaluated there (e.g. a rotation or a dispersion "
-                f"without a solution)")
-        cutoff = self._flux_floor * float(np.max(np.abs(flux), initial=0))
-        return self.measure(step, zero, cube, wcube, cutoff)
-
-    def measure(
-            self,
-            step: Sequence[float],
-            zero: Sequence[float],
-            cube: DeviceArray,
-            wcube: DeviceArray | None,
-            cutoff: float
-    ) -> ModelData:
-        """
-        Return the moments of cube, as evaluate, but with the spectra
-        whose moment 0 is not above cutoff (in absolute value) masked.
-        The fits of the methods gauss_fit and gauss_hermite leave the
-        channels without a value (NaN) out; the moments of a spectrum
-        with one are not numbers.
-
-        Parameters
-        ----------
-        step, zero, cube, wcube
-            As those of evaluate.
-        cutoff : float
-            The moment 0 that a spectrum must be above (in absolute
-            value).
-
-        Returns
-        -------
-        ModelData
-            The model item of each moment, as evaluate.
-        """
-        if self._method in ('gauss_fit', 'gauss_hermite'):
-            self._backend.mmaps_gaussian(
-                step, zero, cube, cutoff, self._mmaps_o,
-                self._mmaps_d, self._mmaps_m,
-                hermite=self._method == 'gauss_hermite')
-        else:
-            self._backend.mmaps_moments(
-                step, zero, cube, wcube, cutoff, self._mmaps_o,
-                self._mmaps_d, self._mmaps_m, self._mmaps_w)
-        return {
-            moment_item(order, self._method): ModelItem(
-                self._mmaps_d[i], self._mmaps_m, self._mmaps_w)
-            for i, order in enumerate(self._orders)}
-
-    def _flux(
-            self,
-            step: Sequence[float],
-            zero: Sequence[float],
-            cube: DeviceArray
-    ) -> np.ndarray:
-        """
-        Return the map of the moment 0 of the spectra of cube, measured
-        with nothing masked (a cutoff below 0), on the host.
-        """
-        self._backend.mmaps_moments(
-            step, zero, cube, None, -1, self._flux_o, self._flux_d,
-            self._flux_m, self._flux_w)
-        return self._driver.mem_copy_d2h(self._flux_d)
+    if regions:
+        maps = DeviceMomentMaps(
+            {key: data[0] for key, data in maps.data.items()},
+            maps.mask[0], maps.weights[0])
+    return {
+        key: ModelItem(data, maps.mask, maps.weights)
+        for key, data in maps.data.items()}

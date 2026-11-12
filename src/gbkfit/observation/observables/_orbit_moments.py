@@ -13,6 +13,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Coords, Grid, GridData
 from gbkfit.model import Extras, GalaxyState
 from gbkfit.model.components.spheroids import OrbitIntegrator
+from gbkfit.moments import MomentsPlan
 from gbkfit.params import ParamValues
 from . import _moments, _orbit_outputs
 from ._orbit_sky import PixelCube, bins_sky_grid
@@ -157,7 +158,7 @@ class OrbitMomentsPlan(ObservablePlan):
         self._zero = spectral.rval() - spectral.rpix() * self._step
         self._spectra = driver.mem_alloc_d(
             (self._nchannels, 1, nregions), dtype)
-        self._moments = _moments.MomentsPlan(
+        self._moments = MomentsPlan(
             driver, (nregions, 1), moments.orders(), moments.flux_floor(),
             moments.method(), dtype)
         self._integrator: OrbitIntegrator | None = None
@@ -183,7 +184,7 @@ class OrbitMomentsPlan(ObservablePlan):
         self._flux_floor = moments.flux_floor()
         self._method = moments.method()
         self._outputs: tuple[
-            OrbitIntegrator, _moments.MomentsPlan] | None = None
+            OrbitIntegrator, MomentsPlan] | None = None
 
     def evaluate(
             self,
@@ -247,17 +248,13 @@ class OrbitMomentsPlan(ObservablePlan):
         self._driver.mem_copy_h2d(
             np.ascontiguousarray(spectra[:, None, :], self._dtype),
             self._spectra)
-        moments = self._moments.evaluate(
+        return _moments.model_data(self._moments.evaluate(
             (1.0, 1.0, self._step), (0.0, 0.0, self._zero), self._spectra,
-            None)
-        # The moments of the regions are vectors
-        return {
-            key: ModelItem(value.data[0], value.mask[0], value.weights[0])
-            for key, value in moments.items()}
+            None), regions=True)
 
     def _outputs_of(
             self, state: 'OrbitLibraryState'
-    ) -> tuple[OrbitIntegrator, _moments.MomentsPlan]:
+    ) -> tuple[OrbitIntegrator, MomentsPlan]:
         """
         Return the integrator of the extra outputs (of the bins, the pixels
         and the cells; made once) and the moments of the pixels.
@@ -270,7 +267,7 @@ class OrbitMomentsPlan(ObservablePlan):
                 cells=state.cell_light.shape,
                 sky=[self._grid, self._pixels.grid],
                 nchannels=self._nchannels, cell_moments=True)
-            moments = _moments.MomentsPlan(
+            moments = MomentsPlan(
                 self._driver, self._pixels.shape[::-1], self._orders,
                 self._flux_floor, self._method, self._dtype)
             self._outputs = integrator, moments
@@ -302,9 +299,9 @@ class OrbitMomentsPlan(ObservablePlan):
             np.ascontiguousarray(cube, self._dtype))
         measured = moments.evaluate(
             (1.0, 1.0, self._step), (0.0, 0.0, self._zero), d_cube, None)
-        for key, value in measured.items():
-            image = self._driver.mem_copy_d2h(value.data).astype(float)
-            mask = self._driver.mem_copy_d2h(value.mask)
+        mask = self._driver.mem_copy_d2h(measured.mask)
+        for key, value in measured.data.items():
+            image = self._driver.mem_copy_d2h(value).astype(float)
             image[mask == 0] = np.nan
             out_extra.add(
                 f'unbinned_{key}',

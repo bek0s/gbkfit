@@ -382,7 +382,7 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
     # the orbits; the tables have a row per cell, shell and orbit (and its
     # twin, of the opposite angular momentum)
     from gbkfit.model import Extras
-    from gbkfit.observation.observables import _moments
+    from gbkfit.moments import MomentsPlan
     obs = without_data(observation(bins()))
     moments = obs.observable()
     extras = Extras()
@@ -393,7 +393,7 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
     spectra = np.stack(
         [cube[:, index == b].sum(axis=1) for b in range(index.max() + 1)],
         axis=1)
-    plan = _moments.MomentsPlan(
+    plan = MomentsPlan(
         driver, (spectra.shape[1], 1), moments.orders(),
         moments.flux_floor(), moments.method(), np.float64)
     spectral = moments.spectral()
@@ -402,9 +402,9 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
     measured = plan.evaluate(
         (1.0, 1.0, step), (0.0, 0.0, zero),
         driver.mem_copy_h2d(np.ascontiguousarray(spectra[:, None, :])), None)
-    for key, value in measured.items():
+    for key, value in measured.data.items():
         np.testing.assert_allclose(
-            driver.mem_copy_d2h(value.data)[0], model[key].data,
+            driver.mem_copy_d2h(value)[0], model[key].data,
             rtol=1e-6, atol=1e-6)
     assert extras.get('unbinned_moment2').data.shape == index.shape
     cells = extras.get('orbit_cells', component='stars')

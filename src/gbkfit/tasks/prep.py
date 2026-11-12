@@ -31,6 +31,7 @@ from gbkfit.instrument import psf_parser
 from gbkfit.io import (
     ErrorKind, MaskKind, casa_beam_table, read_column, read_header,
     read_table, spectra_header, write_image)
+import gbkfit.moments
 import gbkfit.outputs
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
@@ -604,7 +605,7 @@ def prep_gauss_hermite_moments(
     table of stellar kinematics (e.g. the V, sigma, h3 and h4 of the bins
     of pPXF, one row per bin), for models that predict those and not the
     shape of the distribution of velocities (see
-    gbkfit.prep.gauss_hermite_moments): a table (prep_<name>.ecsv) of the
+    gbkfit.moments.gauss_hermite_moments): a table (prep_<name>.ecsv) of the
     columns mean and dispersion, in the unit of the velocities, with
     mean_error and dispersion_error if the errors are given.
 
@@ -636,7 +637,7 @@ def prep_gauss_hermite_moments(
         return value.value
 
     kinds = (True, True, False, False)
-    moments = prep.gauss_hermite_moments(
+    moments = gbkfit.moments.gauss_hermite_moments(
         *(values(name, kind) for name, kind in zip(columns, kinds)),
         *(values(name, kind) for name, kind in zip(errors or (), kinds)))
     output = astropy.table.QTable(dict(

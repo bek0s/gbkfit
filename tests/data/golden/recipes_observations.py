@@ -439,8 +439,9 @@ CASES: list[dict[str, Any]] = [
         doc="The kinematics of the stars of a flattened Sersic spheroid in "
             "Voronoi bins, as pPXF gives them (log velocities, a PSF and no "
             "LSF), as Jeans models are fitted to them: the mean and the "
-            "dispersion of each bin (see prep.gauss_hermite_moments). Its "
-            "Jeans kinematics in the gravity of its light and an NFW halo.",
+            "dispersion of each bin (see "
+            "gbkfit.moments.gauss_hermite_moments). Its Jeans kinematics "
+            "in the gravity of its light and an NFW halo.",
         galaxies=[dict(
             components=[_STARS],
             mass=[dict(type='traced_spheroid', name='lum', component='stars'),

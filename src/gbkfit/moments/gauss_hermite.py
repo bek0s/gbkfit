@@ -1,9 +1,11 @@
 """
-The moments of distributions of velocities given by Gauss-Hermite
-series (e.g. of the bins of pPXF), for the datasets of moments.
+The algebra of Gauss-Hermite series of distributions of velocities (e.g.
+of the bins of pPXF): their normalisation, and their mean and dispersion.
 """
 
 import dataclasses
+import math
+from collections.abc import Mapping
 
 import numpy as np
 import numpy.typing as npt
@@ -11,8 +13,47 @@ import numpy.typing as npt
 
 __all__ = [
     'GaussHermiteMoments',
-    'gauss_hermite_moments'
+    'gauss_hermite_moments',
+    'gauss_hermite_norm'
 ]
+
+
+def _norm_term(order: int) -> float:
+    """
+    Return the share of the normalisation of a Gauss-Hermite series that
+    its coefficient h_m of an even order m adds for each unit of it (see
+    gauss_hermite_norm): sqrt(m!) / m!!.
+    """
+    double_factorial = math.prod(range(order, 0, -2))
+    return math.sqrt(math.factorial(order)) / double_factorial
+
+
+def gauss_hermite_norm(hermite: Mapping[int, npt.ArrayLike]) -> np.ndarray:
+    """
+    Return the normalisation N of Gauss-Hermite series of the given
+    coefficients h_m (by order m, from 3): the integral of the series
+    exp(-w^2 / 2) (1 + sum of h_m H_m(w)) over that of its Gaussian,
+    with H_m of van der Marel & Franx (1993). It is 1 + sum over the
+    even m of h_m sqrt(m!) / m!! (the odd H_m integrate to 0): of a
+    series to h4, as pPXF fits, N = 1 + sqrt(6) / 4 h4.
+
+    Parameters
+    ----------
+    hermite : Mapping of int to array_like
+        The coefficients of each order, of the same shape (or
+        broadcastable).
+
+    Returns
+    -------
+    np.ndarray
+        The normalisation, of the shape of the coefficients (1 without
+        an even order).
+    """
+    norm = np.asarray(1.0)
+    for order, value in hermite.items():
+        if order % 2 == 0:
+            norm = norm + _norm_term(order) * np.asarray(value, dtype=float)
+    return norm
 
 
 @dataclasses.dataclass(frozen=True)
@@ -46,17 +87,18 @@ def gauss_hermite_moments(
     The series is exp(-w^2 / 2) (1 + h3 H3(w) + h4 H4(w)), w = (v - V) /
     sigma, with H3 and H4 of van der Marel & Franx (1993), as pPXF and
     the method gauss_hermite of the observables of moments take it. Of
-    the normalisation N = 1 + sqrt(6) / 4 h4, its mean is V + sqrt(3)
-    sigma h3 / N, and its dispersion sigma sqrt((1 + 27 / sqrt(24) h4) / N
-    - 3 h3^2 / N^2) (about sigma (1 + sqrt(6) h4) for small h4). V and
-    sigma are not those: e.g. the dispersion of a series of h4 = -0.02 is
-    5% below sigma. Models whose stars have a Gaussian distribution of
-    velocities at each point (e.g. Jeans kinematics) predict the mean and
-    the dispersion of a line of sight, not the shape of its distribution,
-    and so not V, sigma, h3 and h4: they are fitted to these. They are
-    those of the series; those of the distribution it was fitted to
-    differ by its terms beyond h4 (e.g. 0.2% in the dispersion of an
-    isotropic Hernquist sphere).
+    the normalisation N = 1 + sqrt(6) / 4 h4 (see gauss_hermite_norm),
+    its mean is V + sqrt(3) sigma h3 / N, and its dispersion sigma
+    sqrt((1 + 27 / sqrt(24) h4) / N - 3 h3^2 / N^2) (about sigma (1 +
+    sqrt(6) h4) for small h4). V and sigma are not those: e.g. the
+    dispersion of a series of h4 = -0.02 is 5% below sigma. Models whose
+    stars have a Gaussian distribution of velocities at each point (e.g.
+    Jeans kinematics) predict the mean and the dispersion of a line of
+    sight, not the shape of its distribution, and so not V, sigma, h3
+    and h4: they are fitted to these. They are those of the series;
+    those of the distribution it was fitted to differ by its terms
+    beyond h4 (e.g. 0.2% in the dispersion of an isotropic Hernquist
+    sphere).
 
     Parameters
     ----------
@@ -78,9 +120,10 @@ def gauss_hermite_moments(
     v, sigma, h3, h4 = (
         np.asarray(value, dtype=float) for value in (v, sigma, h3, h4))
     a = 27 / np.sqrt(24)
-    b = np.sqrt(6) / 4
+    # (the derivative of the normalisation by h4)
+    b = _norm_term(4)
     c = np.sqrt(3)
-    norm = 1 + b * h4
+    norm = gauss_hermite_norm({4: h4})
     with np.errstate(invalid='ignore', divide='ignore'):
         q = (1 + a * h4) / norm - 3 * h3 ** 2 / norm ** 2
         root = np.sqrt(q)

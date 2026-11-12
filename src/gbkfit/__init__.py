@@ -23,6 +23,8 @@ Shared basics
     io           files of data (FITS, ASDF, measurement sets, tables)
     driver       the devices that evaluate models: the CPU or a GPU
     params       parameters: fixed, tied, free or solved; their priors
+    moments      the moments of spectra: their names, their measurement,
+                 and the algebra of Gauss-Hermite series
     relations    scaling relations that parameter expressions can call
     cosmology    the cosmology of a setup (distances from redshifts)
 The data side (never imports the model)
