@@ -10,10 +10,10 @@ import numpy as np
 
 from gbkfit.config import FilePath, check_options, config_path
 from gbkfit.io import read_table, write_image
-from gbkfit.region import Regions, regions_parser
 from . import _detail, _outliers, _tables
 from .base import Dataset, cleaned
 from .data import Data, DataColumns, DataFiles, dump_data, item_filenames
+from .regions import Regions, regions_parser
 
 
 __all__ = [

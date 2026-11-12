@@ -9,8 +9,7 @@ import pytest
 from gbkfit.dataset import (
     Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
     DatasetRegionMoments, DatasetRegionSpectra, DatasetSlitlessSpectra,
-    DatasetSlitSpectra, DatasetVisibilities, UVCoverage)
-from gbkfit.region import RegionsBins
+    DatasetSlitSpectra, DatasetVisibilities, RegionsBins, UVCoverage)
 
 
 # A grid of 7 x 5 pixels of 1 arcsec, centred on its middle pixel

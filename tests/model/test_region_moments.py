@@ -15,9 +15,7 @@ import pytest
 from astropy.table import Table
 from modelutils import group_plan
 
-from gbkfit.dataset import Data
-from gbkfit.dataset import DatasetRegionMoments
-from gbkfit.region import RegionsBins
+from gbkfit.dataset import Data, DatasetRegionMoments, RegionsBins
 
 
 GALAXY = dict(components=[dict(

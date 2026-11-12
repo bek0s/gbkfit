@@ -2,10 +2,10 @@ import numpy as np
 import pytest
 import scipy.sparse
 
-from gbkfit.grid import make_grid
-from gbkfit.region import (
+from gbkfit.dataset import (
     ApertureCircle, ApertureEllipse, ApertureField, AperturePolygon,
     ApertureRectangle, RegionsApertures, RegionsBins, regions_parser)
+from gbkfit.grid import make_grid
 from gbkfit.math import overlap
 
 

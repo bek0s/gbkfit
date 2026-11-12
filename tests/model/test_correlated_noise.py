@@ -220,9 +220,8 @@ def test_slit_spectra_have_the_chi2_of_their_spectral_correlation(
 def test_region_spectra_have_the_chi2_of_their_spectral_correlation(
         driver, blank):
     # (regions, which are not pixels of the sky, are not correlated)
-    from gbkfit.dataset import DatasetRegionSpectra
+    from gbkfit.dataset import DatasetRegionSpectra, regions_parser
     from gbkfit.observation import RegionSpectra
-    from gbkfit.region import regions_parser
     regions = regions_parser.load(dict(type='apertures', apertures=[
         dict(type='circle', x=x, y=y, radius=1.5)
         for x, y in ((0, 0), (3, 1), (-3, -1), (1, -3), (-2, 3), (3, -3))]))

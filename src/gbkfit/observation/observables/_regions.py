@@ -7,10 +7,9 @@ from typing import TYPE_CHECKING, Any
 
 import scipy.sparse
 
-from gbkfit.dataset import Dataset
+from gbkfit.dataset import Dataset, Regions, regions_parser
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid, SpectralAxis, grid_options, make_grid, per_axis
-from gbkfit.region import Regions, regions_parser
 from ._cube_plan import CubeObservablePlan
 from ._model_cube import ModelCube
 from ._options import (

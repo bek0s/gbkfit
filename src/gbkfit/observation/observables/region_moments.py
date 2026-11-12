@@ -10,11 +10,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from gbkfit.config import check_options
-from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
+from gbkfit.dataset import Data, Dataset, DatasetRegionMoments, Regions
 from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectralAxis
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from gbkfit.region import Regions
 from . import _model_cube, _moments
 from ._data_units import flux_data_unit
 from ._moments import FluxFloor, Method

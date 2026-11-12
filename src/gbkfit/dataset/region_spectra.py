@@ -12,10 +12,10 @@ from gbkfit.config import DataFile, check_options
 from gbkfit.grid import Grid, SpectralAxis, make_cube_grid
 from gbkfit.instrument import LSF
 from gbkfit.io import ErrorKind, MaskKind, write_spectra
-from gbkfit.region import Regions, regions_parser
 from . import _grids, _outliers
 from .base import Dataset, NoiseCorrelation, cleaned
 from .data import Data, dump_data, item_filenames
+from .regions import Regions, regions_parser
 
 
 __all__ = [
