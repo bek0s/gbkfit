@@ -78,9 +78,10 @@ class Setup:
     driver : Driver, optional
         The driver of the galaxies and the observations; the host by
         default.
-    drivers : Mapping of str to Driver, optional
-        Other drivers of some of them, by their labels (see
-        ObservationGroup.plan).
+    placement : Mapping of str to Driver, optional
+        Other drivers of some of them, by their labels; the galaxies
+        without mass that it leaves out follow the observations that see
+        them (see ObservationGroup.drivers).
     workers : Workers, optional
         The workers of copies of the objective, which evaluate the batches
         of points of fits at once (see Workers.start).
@@ -115,7 +116,7 @@ class Setup:
             params: ParamSpace,
             fitter: Fitter | None = None,
             driver: Driver | None = None,
-            drivers: Mapping[str, Driver] | None = None,
+            placement: Mapping[str, Driver] | None = None,
             workers: Workers | None = None,
             mock_options: MockOptions | None = None,
             bootstrap_options: BootstrapOptions | None = None
@@ -135,17 +136,25 @@ class Setup:
             mock_options.check(group)
         if bootstrap_options is not None and group.has_data():
             bootstrap_options.check(group, params)
-        self._group_plan = group.plan(driver, drivers)
+        self._group_plan = group.plan(driver, placement)
         self._params = params
         self._objective = None
-        if group.has_data():
-            _log.info("setting up objective...")
-            self._objective = Objective(self._group_plan, params.solves())
         self._fitter = fitter
         self._mock_options = mock_options
         self._bootstrap_options = bootstrap_options
-        self._pool = None if workers is None or self._objective is None \
-            else workers.start(self._objective)
+        self._pool = None
+        try:
+            if group.has_data():
+                _log.info("setting up objective...")
+                self._objective = Objective(
+                    self._group_plan, params.solves())
+            if workers is not None and self._objective is not None:
+                self._pool = workers.start(self._objective)
+        # (of any kind, e.g. an interrupt: no one can close a setup that
+        # was not made, and the plan holds the memory of devices)
+        except BaseException:
+            self.close()
+            raise
 
     def group(self) -> ObservationGroup:
         """Return the group: the galaxies and their observations."""

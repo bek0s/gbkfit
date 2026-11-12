@@ -171,6 +171,20 @@ def test_dump_gives_prior_objects_as_configurations():
     assert loaded.dump() == info
 
 
+def test_the_schema_of_configurations_has_the_options_that_load_reads():
+    # (the schema of the section 'params' was kept apart, in setup)
+    import inspect
+    from gbkfit.params import ParamSpaceConfig
+    given = {'pdescs', 'constants', 'function_names'}
+    options = inspect.signature(ParamSpace.from_properties).parameters
+    assert set(ParamSpaceConfig._fields) == set(options) - given
+    pdescs = make_pdescs(a=S, v=2)
+    info = dict(properties=dict(a=1, v=2), modes=dict(v=dict(
+        type='offsets')), priors=[], derived=dict(d='a + 1'))
+    assert set(param_space_parser.load(info, pdescs=pdescs).dump()) <= set(
+        ParamSpaceConfig._fields)
+
+
 def test_element_values():
     pdescs = make_pdescs(a=S, v=2)
     params = load_params(pdescs, {'a': 1, 'v': 'a + np.arange(2)'})

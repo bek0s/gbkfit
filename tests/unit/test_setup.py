@@ -250,6 +250,47 @@ def test_galaxies_without_mass_follow_their_observations():
     assert galaxy not in plan.observation_drivers()
 
 
+def test_a_setup_in_python_places_its_galaxies_as_its_configuration():
+    # (the rule of the galaxies without mass was the loader's alone: in
+    # Python, one went on the host while its observation ran on another
+    # driver, a copy at every evaluation; audit 2026-11-11 g#1)
+    from gbkfit.driver.drivers.host import DriverHost
+    from gbkfit.params import ParamSpace
+    cpu1, cpu2 = DriverHost(), DriverHost()
+    mass = dict(mass=MASSIVE['mass'], distance=MASSIVE['distance'])
+    config = dict(
+        version=VERSION, drivers=dict(cpu1=HOST, cpu2=HOST),
+        galaxies=[
+            # (with mass: its own driver; without: that of the
+            # observations that see it, if they share one, else the host)
+            GALAXY | mass | dict(name='m', driver='cpu2'),
+            GALAXY | dict(name='a'),
+            GALAXY | dict(name='b'),
+            GALAXY | dict(name='c', driver='cpu2')],
+        observations=[
+            observation(name='o1', galaxies=['m', 'a', 'b'], driver='cpu1'),
+            observation(name='o2', galaxies=['b', 'c'], driver='cpu2')])
+    group = _config._load_observation_group(config)
+    properties = dict.fromkeys(group.pdescs(), 1.0)
+    names = {id(cpu1): 'cpu1', id(cpu2): 'cpu2'}
+
+    def placed(setup):
+        plan = setup.group_plan()
+        return [
+            [names.get(id(driver), driver.type()) for driver in drivers]
+            for drivers in (plan.galaxy_drivers(), plan.observation_drivers())]
+    with gbkfit.load(
+            config | dict(params=dict(properties=properties)),
+            drivers=dict(cpu1=cpu1, cpu2=cpu2)) as loaded:
+        from_config = placed(loaded)
+    with gbkfit.Setup(
+            group, ParamSpace.from_properties(group.pdescs(), properties),
+            placement=dict(o1=cpu1, o2=cpu2, m=cpu2, c=cpu2)) as built:
+        in_python = placed(built)
+    assert from_config == in_python == [
+        ['cpu2', 'cpu1', 'host', 'cpu2'], ['cpu1', 'cpu2']]
+
+
 @pytest.mark.parametrize('sections, message', [
     (dict(drivers=dict(cpu1=HOST, cpu2=HOST), observations=[observation()]),
      "must name its driver"),
@@ -332,6 +373,61 @@ def test_describe_checks_the_rules_of_a_fit():
         params=params, fitter=dict(type='scipy.least_squares')))
     errors = [p for p in description.problems if p.severity == 'error']
     assert len(errors) == 1 and "needs option 'value'" in errors[0].message
+
+
+@pytest.mark.parametrize('properties, path, message', [
+    # (of the fitter: at the root in describe, and with no path at load,
+    # which checked it in Setup; audit 2026-11-11 g#5)
+    (dict(rpt_a=dict(solve=dict(
+        type='gauss', mean=1, sigma_aicp=[0.1, 10], likelihood='profiled'))),
+     ['fitter'], "need a fit that minimises the aicp"),
+    # (of the parameters)
+    (dict(rpt_s=dict(min=1, max=4)),
+     ['params', 'properties', 'rpt_s'], "needs option 'value'"),
+])
+def test_the_rules_of_a_fit_are_at_the_options_they_are_about(
+        properties, path, message):
+    # The same in describe and at load: of options that are invalid
+    # together, ValueErrors (see ConfigError)
+    from gbkfit.config import error_location
+    config = dict(
+        version=VERSION, galaxies=[GALAXY], observations=[observation()],
+        params=dict(properties=PARAMS['properties'] | properties),
+        fitter=dict(type='scipy.least_squares'))
+    (problem,) = gbkfit.describe(config).problems
+    assert problem.path == path and message in problem.message
+    with pytest.raises(ValueError, match=message) as error:
+        gbkfit.load(config)
+    assert error_location(error.value)[0] == path
+
+
+def test_a_setup_that_fails_closes_what_it_made(tmp_path, monkeypatch):
+    # (its plan and its objective, which hold the memory of devices: close
+    # never runs for a setup that was not made)
+    from gbkfit.observation import GroupPlan
+    from gbkfit.parallel import WorkersThreads
+    closed = []
+    for cls in (GroupPlan, Objective):
+        def close(self, close=cls.close):
+            closed.append(type(self))
+            close(self)
+        monkeypatch.setattr(cls, 'close', close)
+
+    def fail(*args):
+        raise RuntimeError("no device")
+    config = dict(
+        version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
+        observations=[image(tmp_path / 'image.fits')], params=PARAMS)
+    monkeypatch.setattr(WorkersThreads, 'start', fail)
+    with pytest.raises(RuntimeError, match="no device"):
+        gbkfit.load(config | dict(workers=dict(
+            type='threads', drivers=[HOST])))
+    assert set(closed) == {Objective, GroupPlan}
+    closed.clear()
+    monkeypatch.setattr(gbkfit.setup._setup, 'Objective', fail)
+    with pytest.raises(RuntimeError, match="no device"):
+        gbkfit.load(config)
+    assert set(closed) == {GroupPlan}
 
 
 def test_describe_checks_the_names_of_the_drivers():

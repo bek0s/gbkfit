@@ -14,15 +14,16 @@ import logging
 import numbers
 import typing
 from collections.abc import Callable, Collection, Mapping, Sequence
-from typing import Any, TypeAlias
+from typing import Any, NamedTuple, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
 
 import gbkfit.units
 from gbkfit.config import (
-    BasicParser, ConfigError, Serializable, config_path, describe_unknown,
-    load_option, parse_options, parse_options_for_callable, resolve_path)
+    BasicParser, ConfigError, FilePath, Serializable, config_path,
+    describe_unknown, load_option, parse_options, parse_options_for_callable,
+    resolve_path)
 from gbkfit.params._errors import ParamEvaluationError
 from gbkfit.params._expressions import (
     Expression, InvalidExpressionError, check_name)
@@ -47,6 +48,7 @@ __all__ = [
     'ParamFunctions',
     'ParamKind',
     'ParamSpace',
+    'ParamSpaceConfig',
     'ParamValues',
     'Transforms',
     'param_space_parser'
@@ -107,9 +109,58 @@ class _Assignment:
     expression: Expression
 
 
+class _FunctionFile(NamedTuple):
+    """
+    A function of a Python file.
+
+    Parameters
+    ----------
+    file : str
+        The file.
+    func : str
+        The name of the function, defined at the top level of the file.
+    """
+
+    file: FilePath
+    func: str
+
+
+class ParamSpaceConfig(NamedTuple):
+    """
+    The configuration of parameters, as ParamSpace.load reads it (e.g.
+    the section 'params' of setups): the schema of its options (see
+    gbkfit.schema). Its fields are the parameters of from_properties
+    that configurations give (all but pdescs, constants and
+    function_names), in their forms in configurations.
+
+    Parameters
+    ----------
+    properties : Mapping
+        The property of each parameter, or of some of its elements, by
+        its name (with a subscript of its elements, e.g. 'v[0]').
+    modes : Mapping, optional
+        The modes of vector parameters, by name (see ParamMode).
+    transforms : dict, optional
+        The function that sets the elements whose property is null.
+    priors : Sequence, optional
+        The priors on several parameters at once (see JointPrior).
+    derived : Mapping, optional
+        The derived values, by name: the expression of each, or {expr,
+        unit}.
+    """
+
+    properties: Mapping[str, Property]
+    modes: Mapping[str, ParamMode] | None = None
+    transforms: _FunctionFile | None = None
+    # (by its path, which the schema resolves: joint_priors imports this
+    # module)
+    priors: 'Sequence[gbkfit.params.joint_priors.JointPrior] | None' = None
+    derived: Mapping[str, str | Mapping[str, str]] | None = None
+
+
 def _load_transforms(info: dict[str, Any]) -> Transforms:
     """Load a transforms function from its file: info is {file, func}."""
-    opts = parse_options(info, {'file', 'func'})
+    opts = parse_options(info, _FunctionFile._fields)
     return funcutils.load_function_from_file(
         resolve_path(opts['file']), opts['func'])
 
@@ -235,7 +286,8 @@ class ParamSpace(Serializable):
         """
         Load the parameters from their configuration: their properties,
         modes, transforms function ({file, func}), priors and derived
-        values (see from_properties).
+        values (see from_properties, and ParamSpaceConfig, of their
+        schema).
 
         Parameters
         ----------

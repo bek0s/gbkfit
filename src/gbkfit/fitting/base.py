@@ -405,15 +405,20 @@ class Fitter(TypedSerializable, abc.ABC):
             i for i, observation in enumerate(group.observations())
             if observation.likelihood() is not None
             and not observation.likelihood().gives_residuals()]
-        if 'residuals' in self.info.needs and without:
-            raise ValueError(
-                f"the likelihood of observation {without[0]} is a function "
-                f"of the log-likelihood, which has no residuals (e.g. for "
-                f"least squares); give the residuals instead (form "
-                f"'residuals'), or use another fitter")
-        _check_valid_ranges(fit_params, params.free_valid_ranges())
-        self._check_merit(params)
-        self._fit_uncertainty(not without)
+        # (each rule at the options it is about, as describe and load
+        # report it)
+        with config_path('fitter'):
+            if 'residuals' in self.info.needs and without:
+                raise ValueError(
+                    f"the likelihood of observation {without[0]} is a "
+                    f"function of the log-likelihood, which has no residuals "
+                    f"(e.g. for least squares); give the residuals instead "
+                    f"(form 'residuals'), or use another fitter")
+        with config_path('params', 'properties'):
+            _check_valid_ranges(fit_params, params.free_valid_ranges())
+        with config_path('fitter'):
+            self._check_merit(params)
+            self._fit_uncertainty(not without)
         return fit_params
 
     def _check_merit(self, params: ParamSpace) -> None:
