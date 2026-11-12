@@ -1,6 +1,6 @@
 # user_likelihoods: Three observations of user likelihoods of parameters: a cube and moment maps of residuals (Cauchy and Student's t noise), and moment maps of a log-likelihood (Gaussian noise of a free jitter).
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - components:
@@ -24,12 +24,6 @@ observations:
     spectral: {step: 20.0, rpix: 19.5, rval: 0.0}
     data: cube_spectra_d.fits
     error: 0.0005
-  likelihood:
-    type: user
-    file: user_likelihoods.py
-    func: cauchy_residuals
-    form: residuals
-    params: [s]
   dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -51,12 +45,6 @@ observations:
     moment0: {data: maps_moment0_d.fits, error: maps_moment0_e.fits}
     moment1: {data: maps_moment1_d.fits, mask: maps_moment1_m.fits, error: maps_moment1_e.fits}
     moment2: {data: maps_moment2_d.fits, mask: maps_moment2_m.fits, error: maps_moment2_e.fits}
-  likelihood:
-    type: user
-    file: user_likelihoods.py
-    func: student_residuals
-    form: residuals
-    params: [nu]
   dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -83,12 +71,6 @@ observations:
     moment0: {data: jittered_moment0_d.fits, error: jittered_moment0_e.fits}
     moment1: {data: jittered_moment1_d.fits, mask: jittered_moment1_m.fits, error: jittered_moment1_e.fits}
     moment2: {data: jittered_moment2_d.fits, mask: jittered_moment2_m.fits, error: jittered_moment2_e.fits}
-  likelihood:
-    type: user
-    file: user_likelihoods.py
-    func: jitter_log_likelihood
-    form: log_likelihood
-    params: [jitter]
   dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -104,6 +86,25 @@ observations:
     median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
+likelihoods:
+  cube:
+    type: user
+    file: user_likelihoods.py
+    func: cauchy_residuals
+    form: residuals
+    params: [s]
+  maps:
+    type: user
+    file: user_likelihoods.py
+    func: student_residuals
+    form: residuals
+    params: [nu]
+  jittered:
+    type: user
+    file: user_likelihoods.py
+    func: jitter_log_likelihood
+    form: log_likelihood
+    params: [jitter]
 params:
   properties:
     xpos: 0.2

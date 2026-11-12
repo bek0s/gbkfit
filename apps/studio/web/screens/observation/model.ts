@@ -12,13 +12,12 @@ export const STAGES = [
   { key: 'instrument', title: 'Instrument', section: 'ob-instrument' },
   { key: 'observable', title: 'Observable', section: 'ob-observable' },
   { key: 'data', title: 'Data', section: 'ob-data' },
-  { key: 'likelihood', title: 'Likelihood', section: 'ob-likelihood' },
 ] as const;
 
 // The options of a sky observation that its sections set by hand; the
 // others are in its forms of more options
 export const LIGHT_KEYS = ['galaxies', 'components', 'lines', 'band'];
-export const HANDLED_KEYS = ['type', 'data', 'observable', 'instrument', 'line_of_sight', 'likelihood', ...LIGHT_KEYS];
+export const HANDLED_KEYS = ['type', 'data', 'observable', 'instrument', 'line_of_sight', ...LIGHT_KEYS];
 
 // The observables (and datasets) whose data have a spectral axis
 const SPECTRAL = ['pixel_spectra', 'pixel_moments', 'slit_spectra', 'slitless_spectra', 'region_spectra', 'region_moments', 'visibilities'];
@@ -66,10 +65,7 @@ export function glanceOf(key: (typeof STAGES)[number]['key'], options: Options, 
     return parts.join(' · ') || 'A perfect one';
   }
   if (key === 'observable') return titleOf('observable', objectAt(options, 'observable').type);
-  if (key === 'data') return typeof options.data === 'string' ? options.data : options.data ? 'Given in place' : 'None: a model';
-  const likelihood = options.likelihood;
-  if (likelihood == null) return options.data ? 'Gaussian' : '—';
-  return titleOf('likelihood', (likelihood as Options).type);
+  return typeof options.data === 'string' ? options.data : options.data ? 'Given in place' : 'None: a model';
 }
 
 // The ellipse of a PSF or a beam at half its maximum: the FWHM of its

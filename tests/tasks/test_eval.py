@@ -102,7 +102,7 @@ def test_objective_residuals(tmp_path):
     observation['data'] = dict(
         data=str(tmp_path / 'data.fits'), error=2.0) \
         | data_grid(observation['observable'])
-    observation['likelihood'] = dict(type='gauss', weights=0.5)
+    config['likelihoods'] = dict(type='gauss', weights=0.5)
     # (a configuration of a fit evaluates too: its fitter is left)
     config['fitter'] = dict(type='scipy.least_squares')
     run = run_eval('objective', config, tmp_path / 'objective')
@@ -145,12 +145,13 @@ def test_profiling_writes_the_timings(tmp_path, mode):
 
 def test_mock_data_and_their_configuration(tmp_path):
     # Two mocks of noise of rms 0.01: the model plus the noise, with the
-    # rms as their errors, and a configuration of each that fits it: at
-    # the parameters of the model, its residuals are of one standard
-    # deviation
+    # rms as their errors, and a configuration of each that fits it, under
+    # the likelihoods of the setup of the mocks: at the parameters of the
+    # model, its residuals are of one standard deviation
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     config['mock'] = dict(
         noise=dict(type='gauss', rms=0.01), nmocks=2, seed=3)
+    config['likelihoods'] = dict(type='gauss', white_floor=0.2)
     run = run_eval('mock', config, tmp_path / 'mock')
     (filename, data0, error0), (_, data1, _) = (
         mock_data(run, k) for k in ('0', '1'))
@@ -159,6 +160,9 @@ def test_mock_data_and_their_configuration(tmp_path):
     np.testing.assert_array_equal(error0, np.float32(0.01))
     assert not np.array_equal(data0, data1)
     assert len(run.products('mock_data', mock='0')) == 3
+    mock_config = yaml.load(filename)
+    assert mock_config['likelihoods'] == config['likelihoods']
+    assert 'mock' not in mock_config
     fit = run_eval('objective', filename, tmp_path / 'fit')
     assert array(fit, 'wresidual').std() == pytest.approx(1, rel=0.01)
 

@@ -1,6 +1,6 @@
 # disk_cone_lines: A disk and an outflow cone, each emitting Halpha and [NII] 6583 (a ratio each), in a cube of a spectral axis of velocities of Halpha, with a solved flux scale for each spectrum.
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - components:
@@ -39,11 +39,9 @@ observations:
     rpix: [11.5, 11.5]
     rval: [0, 0]
     rota: 0
-    spectral: {step: 50.0, rpix: 19.5, rval: 450.0, rest: 6.562800000000002e-07
-        m, medium: vacuum}
+    spectral: {step: 50.0, rpix: 19.5, rval: 450.0, rest: 6.562800000000002e-07 m, medium: vacuum}
     data: cube_spectra_d.fits
     error: 0.00015
-  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   dtype: float64
   line_of_sight:
     type: grid
@@ -56,6 +54,7 @@ observations:
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   fft_dtype: float64
+likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
 params:
   properties:
     disk_xpos: 0.21

@@ -1,6 +1,6 @@
 # mass_rotation_pressure: A gas disk that rotates in its mass (a thick disk that follows its light, and an NFW halo; a distance parameter), with the Jeans pressure support of an anisotropic dispersion (sigma_R, sigma_phi, sigma_z); moment maps; a derived vcirc at 2.2 scale lengths, and priors on it and on sigma_phi / sigma_R.
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - components:
@@ -35,11 +35,8 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
-      error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
-      error: observation0_moment2_e.fits}
-  likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
   dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -55,6 +52,7 @@ observations:
     median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
+likelihoods: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
 params:
   properties:
     gas_xpos: 0.3

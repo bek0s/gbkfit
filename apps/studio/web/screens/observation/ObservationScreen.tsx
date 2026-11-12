@@ -14,7 +14,7 @@ import { BlockLinks } from '../../shell/BlockLinks';
 import { arraysOf, draftOfDataset, EMPTY_ITEM, kept, KINDS, kindOfType } from '../dataset/model';
 import { SaveActions, useEditedBlock } from '../editing';
 import { checksOf, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, objectAt, psfEllipse, textAt } from './model';
-import { DataFields, InstrumentFields, LightFields, LikelihoodFields, LineOfSightFields, ObservableFields, OptionFields } from './Sections';
+import { DataFields, InstrumentFields, LightFields, LineOfSightFields, ObservableFields, OptionFields } from './Sections';
 import { Checks, Resolution, Sky, Stages, type SkyData } from './View';
 import { SheetLayout } from '../../components/ui/sheet';
 
@@ -112,7 +112,7 @@ export function ObservationScreen({ name }: { name: string }) {
           width={400}
           picture={
             <div className="ob-view">
-              <Stages options={options} titleOf={title} withData={withData} />
+              <Stages options={options} titleOf={title} />
               <div className="ob-figures">
                 <Sky data={skyData} grid={grid} psf={psf} beam={beam} />
                 <div className="ob-side">
@@ -136,11 +136,6 @@ export function ObservationScreen({ name }: { name: string }) {
               <DockSection id="ob-sight" title="Line of sight" needed={needed('ob-sight')}>
                 <LineOfSightFields {...common} titleOf={title} />
               </DockSection>
-              {withData && (
-                <DockSection id="ob-likelihood" title="Likelihood">
-                  <LikelihoodFields {...common} titleOf={title} />
-                </DockSection>
-              )}
               <DockSection id="ob-light" title="Galaxies and light" note={setCount(options, LIGHT_KEYS)}>
                 <LightFields {...common} />
               </DockSection>

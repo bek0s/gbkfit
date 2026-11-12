@@ -18,7 +18,7 @@ import threadpoolctl
 from gbkfit.control import StopControl, StopFlag
 from gbkfit.driver import Driver, driver_parser
 from gbkfit.objective import Objective
-from gbkfit.observation import GroupPlan, ObservationGroup
+from gbkfit.observation import GroupPlan, Likelihoods
 from gbkfit.params import Solve
 
 if typing.TYPE_CHECKING:
@@ -129,12 +129,12 @@ class ActorCopy:
 
     def __init__(
             self,
-            group: ObservationGroup,
+            likelihoods: Likelihoods,
             solves: Mapping[str, Solve],
             placement: Drivers,
             threads: int | None
     ):
-        self._copy = Objective(GroupPlan(group, *placement), solves)
+        self._copy = objective_on(likelihoods, solves, placement)
         self._flag = threading.Event()
         if threads is not None:
             threadpoolctl.threadpool_limits(threads)
@@ -170,6 +170,21 @@ def cores() -> int:
     if hasattr(os, 'sched_getaffinity'):
         return len(os.sched_getaffinity(0))
     return os.cpu_count() or 1
+
+
+def objective_on(
+        likelihoods: Likelihoods,
+        solves: Mapping[str, Solve],
+        placement: Drivers
+) -> Objective:
+    """
+    Return a copy of an objective on the drivers of a placement, of its
+    likelihoods (see Objective.likelihoods), whose group it plans, and its
+    solves: what a worker makes of an objective (sent to it pickled, as
+    the group and the likelihoods of its observations, which share it).
+    """
+    return Objective(
+        GroupPlan(likelihoods.group(), *placement), likelihoods, solves)
 
 
 def own_placement(objective: Objective) -> Drivers:

@@ -15,7 +15,7 @@ from gbkfit.driver import Driver
 from gbkfit.model import Extra, Extras
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    GroupPlan, HostModelData, ModelItem, Observation, ObservationGroup)
+    GroupPlan, HostModelData, Likelihood, ModelItem, Observation)
 from gbkfit.outputs import Output, product_extension
 from gbkfit.params import ParamValues
 
@@ -113,11 +113,13 @@ def evaluation_outputs(
     Return the outputs of an evaluation of a plan of a group, by path, in
     the form the observations give them (their images made on their
     drivers), in observations/<observation>/<kind>/<item> of each data
-    item: the models (kind 'model'; 'model_mask' and 'model_weight'), and
-    the residuals: data - model ('residual', in the unit of the data),
-    over the noise of the data ('wresidual'), and the residuals of the
-    fit, where they differ ('chi2_residual'; see _residual_outputs).
-    These need the objective; the values of the parameters must have
+    item: the models of every observation (kind 'model'; 'model_mask' and
+    'model_weight'), and the residuals of those that the objective
+    compares (those with data): data - model ('residual', in the unit of
+    the data), over the noise of the data ('wresidual'), and the
+    residuals of the fit, where they differ ('chi2_residual'; see
+    _residual_outputs). These need the objective; the values of the
+    parameters must have
     those of the solved elements that it solves (see Setup.evaluate),
     which the models take. With the models, a flux scale of several
     values of an observation (see ObservationSky) is 'flux_scale'
@@ -187,38 +189,39 @@ def evaluation_outputs(
                     f'observations/{name}/flux_scale.fits', 'flux_scale',
                     scale, dict(observation=name)))
     if residuals:
-        outputs += _residual_outputs(group, objective, values, models)
+        outputs += _residual_outputs(objective, values, models)
     outputs += [_extra_output(x) for x in extras or ()]
     return {output.path: output for output in outputs}
 
 
 def _residual_outputs(
-        group: ObservationGroup,
         objective: Objective,
         values: ParamValues,
         models: Sequence[HostModelData]
 ) -> list[Output]:
     """
-    Return the residuals of the data items of the observations of a group
-    (see evaluation_outputs), of their models at the values of the
-    parameters: data - model ('residual', in the unit of the data); over
-    the noise of the data ('wresidual': the errors, with the fitted noise
-    of the likelihood, if any, see Likelihood.noise; NaN where masked);
+    Return the residuals of the data items of the observations that an
+    objective compares (see evaluation_outputs), of their models (those of
+    each observation of the group) at the values of the parameters: data -
+    model ('residual', in the unit of the data); over the noise of the
+    data ('wresidual': the errors, with the fitted noise of the
+    likelihood, if any, see Likelihood.noise; NaN where masked);
     and, of the items whose fit takes other residuals (see
     _fit_residual_differs), those of the fit, whose squares sum to its
     chi-square ('chi2_residual': whitened where the noise is correlated,
     times the weights; see Objective.residual_nddata_h), as data - model
     (0 where nothing counts).
     """
+    group = objective.group()
     outputs = []
     # (the residuals of the fit, of one evaluation of the objective, if an
     # item needs them; each is read once, into an output of its own)
     fit = None
-    for i, (observation, model) in enumerate(
-            zip(group.observations(), models)):
+    for k, i in enumerate(objective.observations()):
+        observation, model = group.observations()[i], models[i]
         name = group.observation_label(i)
         dataset = observation.data()
-        likelihood = observation.likelihood()
+        likelihood = objective.likelihoods().of(i)
         for key, item in model.items():
             data = dataset[key]
             residual = data.data() - item.data
@@ -230,29 +233,34 @@ def _residual_outputs(
                 _observation_output(
                     name, 'wresidual', key,
                     observation.output(residual / noise))]
-            if _fit_residual_differs(observation, key, item):
+            if _fit_residual_differs(
+                    observation, likelihood, key, item):
                 if fit is None:
                     fit = objective.residual_nddata_h(values)
                 # (the fit takes model - data)
                 outputs.append(_observation_output(
                     name, 'chi2_residual', key,
-                    observation.output(-fit[i][key])))
+                    observation.output(-fit[k][key])))
     return outputs
 
 
 def _fit_residual_differs(
-        observation: Observation, key: str, model: ModelItem[np.ndarray]
+        observation: Observation,
+        likelihood: Likelihood,
+        key: str,
+        model: ModelItem[np.ndarray]
 ) -> bool:
     """
-    Return whether the fit of a data item of an observation takes
-    residuals of its own (see Likelihood.gives_residuals), other than its
-    wresidual (see _residual_outputs): those of noise correlated in the
-    data, whitened, or of a model with pixel weights, times them.
+    Return whether the fit of a data item of an observation under its
+    likelihood takes residuals of its own (see
+    Likelihood.gives_residuals), other than its wresidual (see
+    _residual_outputs): those of noise correlated in the data, whitened,
+    or of a model with pixel weights, times them.
     """
     item = observation.data()[key]
     correlated = item.spatial_correlation() is not None \
         or item.spectral_correlation() is not None
-    return observation.likelihood().gives_residuals() \
+    return likelihood.gives_residuals() \
         and (correlated or model.weights is not None)
 
 

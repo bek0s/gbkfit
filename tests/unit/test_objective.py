@@ -16,9 +16,9 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, LineOfSightFlat, ObservationGroup,
-    ObservationSky, PixelBrightness, PixelMoments, UpperLimit,
-    observable_parser)
+    FittedNoise, LikelihoodGauss, Likelihoods, LineOfSightFlat,
+    ObservationGroup, ObservationSky, PixelBrightness, PixelMoments,
+    UpperLimit, observable_parser)
 from gbkfit.params import (
     ParamSpace, SolveGauss, solve_together, solve_together_rows)
 
@@ -34,17 +34,19 @@ PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, rpt_a=1, rpt_s=2)
 
 def make_objective(driver, data, likelihood=None, name=None, **values):
     """
-    The objective of an observation of the given name, and the values of
-    the parameters (PROPERTIES and the given values).
+    The objective of an observation of the given name under a likelihood
+    (Gaussian by default), and the values of the parameters (PROPERTIES
+    and the given values).
     """
     dataset = DatasetPixelBrightness(data)
     observation = ObservationSky(
         PixelBrightness.from_data(dataset), LineOfSightFlat(), data=dataset,
-        likelihood=likelihood, name=name)
+        name=name)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
+    likelihoods = Likelihoods(group, likelihood)
     params = ParamSpace.from_properties(
-        group.pdescs(), PROPERTIES | values).evaluate()
-    return Objective(group.plan(driver)), params
+        group.pdescs() | likelihoods.pdescs(), PROPERTIES | values).evaluate()
+    return Objective(group.plan(driver), likelihoods), params
 
 
 def test_totals_agree_with_the_residuals(driver):
@@ -194,7 +196,9 @@ def test_copies_with_other_data_evaluate_in_two_threads_at_once(driver):
 def test_a_copy_on_another_driver_gives_the_same_values(driver):
     data = Data(np.random.default_rng(3).normal(0.1, 1, (24, 32)))
     objective, params = make_objective(DriverHost(), data)
-    copy = Objective(objective.group().plan(driver), objective.solves())
+    copy = Objective(
+        objective.group().plan(driver), objective.likelihoods(),
+        objective.solves())
     assert copy.group_plan().observation_drivers() == (driver,)
     assert copy.datasets()[0] is objective.datasets()[0]
     assert copy.chi2(params) == pytest.approx(
@@ -325,13 +329,45 @@ def test_a_fitted_noise_has_parameters_of_the_observation():
         == likelihood.dump()
 
 
-def test_an_observation_without_data_is_an_error(driver):
+def test_an_objective_needs_an_observation_with_data(driver):
     dataset = DatasetPixelBrightness(Data(np.ones((24, 32))))
     observation = ObservationSky(
         PixelBrightness.from_data(dataset), LineOfSightFlat())
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
-    with pytest.raises(ValueError, match="needs data"):
+    with pytest.raises(ValueError, match="no observation has data"):
         Objective(group.plan(driver))
+
+
+def test_an_objective_compares_the_observations_with_data(driver):
+    # (and evaluates the others alongside: their models are those of the
+    # same values, but compare nothing)
+    rng = np.random.default_rng(2)
+    data = Data(rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5))
+    dataset = DatasetPixelBrightness(data)
+    observable = PixelBrightness.from_data(dataset)
+    observations = [
+        ObservationSky(observable, LineOfSightFlat(), name='band'),
+        ObservationSky(
+            observable, LineOfSightFlat(), data=dataset, name='image')]
+    group = ObservationGroup(galaxy_parser.load(GALAXY), observations)
+    alone, params = make_objective(driver, data, name='image')
+    objective = Objective(group.plan(driver))
+    assert group.observed() == objective.observations() == (1,)
+    assert objective.datasets() == (dataset,)
+    assert objective.chi2(params) == pytest.approx(
+        alone.chi2(params), rel=1e-6)
+    np.testing.assert_array_equal(
+        objective.residuals(params), alone.residuals(params))
+    models = objective.group_plan().model_h(params)
+    np.testing.assert_array_equal(
+        models[0]['brightness'].data, models[1]['brightness'].data)
+    # (its copies with other data take data of those it compares)
+    other = dataset.with_data(dict(brightness=rng.normal(0, 1, (24, 32))))
+    copy = objective.with_data([other])
+    assert copy.group().observations()[0].data() is None
+    assert copy.datasets() == (other,)
+    with pytest.raises(ValueError, match="one dataset for each"):
+        objective.with_data([other, other])
 
 
 KINEMATICS = dict(components=[dict(
@@ -352,10 +388,8 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     # no velocity) where the data have some: its moment 0 there is 0, and
     # its moments 1 and 2 count as misses of 3 errors (they counted 0)
     def group(observable, dataset=None):
-        likelihood = None if dataset is None \
-            else LikelihoodGauss(missing_residual=3)
         observation = ObservationSky(
-            observable, LineOfSightFlat(), data=dataset, likelihood=likelihood)
+            observable, LineOfSightFlat(), data=dataset)
         return ObservationGroup(
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
@@ -370,7 +404,9 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
         for order in (0, 1, 2)})
     observable = PixelMoments.from_data(
         dataset, spectral=SpectralAxis(convention='relativistic'))
-    objective = Objective(group(observable, dataset))
+    plan = group(observable, dataset)
+    objective = Objective(plan, Likelihoods(
+        plan.group(), LikelihoodGauss(missing_residual=3)))
     truth = ParamSpace.from_properties(objective.pdescs(), DISK).evaluate()
     compact = ParamSpace.from_properties(
         objective.pdescs(), DISK | dict(rpt_s=0.1)).evaluate()
@@ -396,12 +432,8 @@ def test_missing_values_take_the_noise_of_their_error(driver):
     # log(1 / f_min^2), which the scale does not change; the chi-square
     # and -2 log L differ by one constant, however many are missing
     def group(observable, dataset=None):
-        likelihood = None if dataset is None else LikelihoodGauss(
-            missing_residual=3, fitted_noise=dict(
-                moment1=FittedNoise(scale=True, scale_min=0.1)))
         observation = ObservationSky(
-            observable, LineOfSightFlat(), data=dataset, likelihood=likelihood,
-            name='obs')
+            observable, LineOfSightFlat(), data=dataset, name='obs')
         return ObservationGroup(
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
@@ -414,7 +446,10 @@ def test_missing_values_take_the_noise_of_their_error(driver):
         for order in (0, 1)})
     observable = PixelMoments.from_data(
         dataset, spectral=SpectralAxis(convention='relativistic'))
-    objective = Objective(group(observable, dataset))
+    plan = group(observable, dataset)
+    objective = Objective(plan, Likelihoods(plan.group(), LikelihoodGauss(
+        missing_residual=3, fitted_noise=dict(
+            moment1=FittedNoise(scale=True, scale_min=0.1)))))
     compact = ParamSpace.from_properties(objective.pdescs(), DISK | dict(
         rpt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()
     moment1 = objective.group_plan().model_h(compact)[0]['moment1'].data
@@ -831,7 +866,7 @@ def test_copies_with_other_data_share_the_plans_of_the_models(driver):
     group_plan = objective.group_plan()
     other = objective.datasets()[0].with_data(
         dict(brightness=rng.normal(0, 1, (24, 32))))
-    copy = group_plan.with_data([other])
+    copy = group_plan.with_data({0: other})
     assert copy._plans[0] is group_plan._plans[0]
     np.testing.assert_array_equal(
         copy.model_h(params)[0]['brightness'].data,

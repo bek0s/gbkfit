@@ -20,11 +20,11 @@ from gbkfit.config import check_options
 from gbkfit.control import StopControl
 from gbkfit.driver import Driver
 from gbkfit.objective import Objective
-from gbkfit.observation import GroupPlan, ObservationGroup
+from gbkfit.observation import Likelihoods
 from gbkfit.params import Solve
 from ._detail import (
     Drivers, Item, PolledFlag, Result, Worker, dump_placements,
-    own_placement, placement_drivers)
+    objective_on, own_placement, placement_drivers)
 from .pool import Placement, Workers
 
 
@@ -123,7 +123,7 @@ class WorkersMPI(Workers):
         key = next(_mpi_pools)
         return [
             _MPIWorker(
-                MPI.COMM_WORLD, rank, key, objective.group(),
+                MPI.COMM_WORLD, rank, key, objective.likelihoods(),
                 objective.solves(), placement, self._threads)
             for rank, placement in enumerate(placements, 1)]
 
@@ -174,7 +174,7 @@ class _MPIWorker(Worker):
             comm: Any,
             rank: int,
             key: int,
-            group: ObservationGroup,
+            likelihoods: Likelihoods,
             solves: Mapping[str, Solve],
             placement: Drivers,
             threads: int | None
@@ -184,7 +184,7 @@ class _MPIWorker(Worker):
         self._key = key
         self._executor = concurrent.futures.ThreadPoolExecutor(
             1, thread_name_prefix='gbkfit-mpi')
-        self._send(('start', key, group, solves, placement, threads))
+        self._send(('start', key, likelihoods, solves, placement, threads))
 
     def submit(
             self,
@@ -256,9 +256,9 @@ def _serve_mpi(comm: Any) -> None:
         if kind == 'exit':
             return
         if kind == 'start':
-            key, group, solves, placement, threads = args
+            key, likelihoods, solves, placement, threads = args
             try:
-                copies[key] = Objective(GroupPlan(group, *placement), solves)
+                copies[key] = objective_on(likelihoods, solves, placement)
             except Exception as e:
                 copies[key] = e
             if threads is not None:

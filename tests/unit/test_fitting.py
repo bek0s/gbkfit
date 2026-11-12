@@ -26,8 +26,8 @@ from gbkfit.model import galaxy_parser
 from gbkfit.objective import Merits, Objective
 from gbkfit.parallel import WorkersProcesses, WorkersThreads
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, LikelihoodUser, LineOfSightFlat,
-    ObservationGroup, ObservationSky, PixelBrightness)
+    FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods,
+    LineOfSightFlat, ObservationGroup, ObservationSky, PixelBrightness)
 from gbkfit.params import (
     FreeElement, ParamEvaluationError, ParamScalarDesc, ParamSpace,
     PriorGauss, PriorGaussTrunc,
@@ -59,11 +59,11 @@ def mock_objective(
     times it, under a likelihood, of an observation of a name and a flux
     scale (with nothing solved).
     """
-    def group(dataset, likelihood=None, flux_scale=None):
+    def group(dataset, flux_scale=None):
         observation = ObservationSky(
             PixelBrightness.from_data(dataset), LineOfSightFlat(),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset,
-            likelihood=likelihood, flux_scale=flux_scale, name=name)
+            flux_scale=flux_scale, name=name)
         return ObservationGroup(
             galaxy_parser.load(GALAXY), observation).plan(driver)
     shape = (32, 32)
@@ -75,7 +75,8 @@ def mock_objective(
     noise = np.random.default_rng(seed).normal(0, sigma, shape)
     dataset = DatasetPixelBrightness(
         Data(model + noise, error=np.full(shape, error_scale * sigma)))
-    return Objective(group(dataset, likelihood, flux_scale))
+    plan = group(dataset, flux_scale)
+    return Objective(plan, Likelihoods(plan.group(), likelihood))
 
 
 def bounded_properties():
@@ -378,7 +379,7 @@ def test_a_prior_chosen_by_the_aicp_needs_fits_of_the_aicp():
             obs_flux_scale=dict(solve=dict(
             type='gauss', mean=1, sigma_aicp=[0.1, 10], min=0,
             likelihood='profiled'))))
-    objective = Objective(plan, params.solves())
+    objective = Objective(plan, solves=params.solves())
     with pytest.raises(ValueError, match="minimises the aicp"):
         fitter_parser.load(dict(type='cmaes')).fit(objective, params)
     result = fitter_parser.load(dict(
@@ -398,7 +399,7 @@ def test_the_reduced_chi2_is_of_the_data_alone():
         plan.group().pdescs(), bounded_properties() | dict(
             rpt_a=TRUE['rpt_a'], obs_flux_scale=dict(solve=dict(
             type='gauss', mean=1.5, sigma=0.05, min=0))))
-    objective = Objective(plan, params.solves())
+    objective = Objective(plan, solves=params.solves())
     best = FitterScipyLeastSquares().fit(objective, params).best()
     residuals = objective.residuals(params.evaluate(list(best.free.values())))
     data_chi2 = float(np.sum(residuals[:objective.nresiduals()] ** 2))
@@ -417,7 +418,7 @@ def test_a_fit_of_solved_values_has_a_covariance():
         plan.group().pdescs(), bounded_properties() | dict(
             rpt_a=TRUE['rpt_a'], obs_flux_scale=dict(solve=dict(
             type='gauss', mean=1, sigma=1e8, min=0))))
-    objective = Objective(plan, params.solves())
+    objective = Objective(plan, solves=params.solves())
     result = FitterScipyLeastSquares().fit(objective, params)
     best = result.best()
     assert 'uncertainty_errors' not in result.diagnostics
@@ -936,7 +937,7 @@ def test_optimizers_of_the_aicp_minimise_it():
         obs_flux_scale=dict(solve=dict(
             type='gauss', mean=1, sigma=0.1, min=0)),
         posa=dict(min=36, max=44, n=5)))
-    objective = Objective(plan, params.solves())
+    objective = Objective(plan, solves=params.solves())
     reports = []
     result = FitterGrid(merit='aicp').fit(objective, params, [reports.append])
     # (its progress reports its cost, not a chi-square)
@@ -1254,7 +1255,7 @@ def test_a_bootstrap_refits_fits_of_solved_values():
         plan.group().pdescs(), bounded_properties() | dict(
             obs_flux_scale=dict(solve=dict(
             type='gauss', mean=1, sigma=0.1, min=0))))
-    objective = Objective(plan, params.solves())
+    objective = Objective(plan, solves=params.solves())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     result = fitter.fit(objective, params)
     boot = run_bootstrap(
@@ -1263,20 +1264,41 @@ def test_a_bootstrap_refits_fits_of_solved_values():
     assert len(boot.samples) == 3 and not boot.failures
 
 
-@pytest.mark.parametrize('scheme, message', [
-    ([dict(type='blocks', size=[4, 4])] * 2, 'one for each of the 1 obs'),
-    (dict(type='blocks', size=[4, 4, 2]), 'for each of x and y'),
-    (dict(type='blocks', size=[4, 0]), 'of positive numbers'),
+@pytest.mark.parametrize('name, scheme, message', [
+    (None, dict(mock=dict(type='blocks', size=[4, 4])), 'have no name'),
+    ('mock', dict(other=dict(type='blocks', size=[4, 4])),
+     r"names unknown observations \['other'\]"),
+    ('mock', {}, r"needs a value for each observation; these have none: "
+                 r"\['mock'\]"),
+    (None, dict(type='blocks', size=[4, 4, 2]), 'for each of x and y'),
+    ('mock', dict(mock=dict(type='blocks', size=[4, 4, 2])),
+     'for each of x and y'),
+    (None, dict(type='blocks', size=[4, 0]), 'of positive numbers'),
 ])
-def test_bootstrap_options_that_do_not_suit_the_fit_refused(scheme, message):
+def test_bootstrap_options_that_do_not_suit_the_fit_refused(
+        name, scheme, message):
+    # (one scheme for all, or by observation name)
     from gbkfit.fitting import BootstrapOptions, fitter_parser, run_bootstrap
-    objective = mock_objective(DriverHost())
+    objective = mock_objective(DriverHost(), name=name)
     params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     with pytest.raises(ValueError, match=message):
         run_bootstrap(objective, params, TRUE, fitter, BootstrapOptions.load(
             dict(nsamples=5, scheme=scheme)))
+
+
+def test_bootstrap_schemes_by_name_are_of_the_observations_with_data():
+    # (and those of the observations without data, which it does not
+    # refit, are taken as given: e.g. of the fit a mock setup prepares)
+    from gbkfit.fitting import BootstrapGauss, BootstrapOptions
+    objective = mock_objective(DriverHost(), name='mock')
+    group = objective.group()
+    options = BootstrapOptions.load(dict(nsamples=5, scheme=dict(
+        mock=dict(type='gauss'))))
+    assert options.schemes(group) == {0: options.schemes(group)[0]}
+    assert isinstance(options.schemes(group)[0], BootstrapGauss)
+    assert options.dump()['scheme'] == dict(mock=dict(type='gauss'))
 
 
 @pytest.mark.parametrize('fitter', [
@@ -1623,7 +1645,7 @@ def test_a_nested_evidence_of_profiled_solves_says_it_is_not_one(caplog):
         obs_flux_scale=dict(solve=dict(
             type='gauss', mean=1, sigma=0.5, min=0,
             likelihood='profiled'))))
-    objective = Objective(plan, params.solves())
+    objective = Objective(plan, solves=params.solves())
     result = FitterDynestyStatic(nlive=20, dlogz=10).fit(objective, params)
     assert "['obs_flux_scale']" in result.diagnostics['evidence_note']
     assert any('is not one' in r.message for r in caplog.records)
@@ -1865,7 +1887,7 @@ def test_the_information_criteria_take_solved_values_by_their_likelihood():
                 likelihood=likelihood)),
             posa=dict(min=36, max=44, n=3)))
         best[likelihood] = FitterGrid().fit(
-            Objective(plan, params.solves()), params).best()
+            Objective(plan, solves=params.solves()), params).best()
     integrated, profiled = best['integrated'], best['profiled']
     ln_n = np.log(integrated.nresiduals)
     assert integrated.aic == pytest.approx(-2 * integrated.log_likelihood + 2)

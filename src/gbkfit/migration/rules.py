@@ -17,6 +17,7 @@ __all__ = [
     'Change',
     'PiecesView',
     'Rule',
+    'ViewedPiece',
     'components',
     'flow',
     'insert_first',
@@ -51,6 +52,27 @@ class PiecesView(dict):
     (e.g. its cosmology, from those of its galaxies) leaves it to the
     setups, which it sees with their galaxies.
     """
+
+
+class ViewedPiece(dict):
+    """
+    A copy of a piece that a setup names, as rules see it in the setup
+    (see migrate_project): as it was, for what the setup takes of it
+    (e.g. the parameters of a galaxy, or the likelihood of an
+    observation). What rules change in it is not kept: the piece is
+    rewritten with the other pieces, once for all the setups.
+
+    Parameters
+    ----------
+    piece : str
+        The name of the piece.
+    content : Mapping
+        The piece.
+    """
+
+    def __init__(self, piece: str, content: Mapping[str, Any]):
+        super().__init__(content)
+        self.piece = piece
 
 
 class Rule(abc.ABC):

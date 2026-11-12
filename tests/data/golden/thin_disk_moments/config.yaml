@@ -1,6 +1,6 @@
 # thin_disk_moments: The moment maps of a thin disk, float32 (the default dtype), with weights of the items and a residual for missing values.
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - components:
@@ -21,15 +21,8 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
-      error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
-      error: observation0_moment2_e.fits}
-  likelihood:
-    type: gauss
-    weights: {moment1: 2, moment2: 0.5}
-    missing_residual: 3.0
-    white_floor: 0.01
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
   dtype: float32
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -45,6 +38,11 @@ observations:
     median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
+likelihoods:
+  type: gauss
+  weights: {moment1: 2, moment2: 0.5}
+  missing_residual: 3.0
+  white_floor: 0.01
 params:
   properties:
     xpos: 0.2

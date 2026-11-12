@@ -1,6 +1,6 @@
 """
-The objective: the comparison of the models of a group of observations
-with their data (see Objective), and its evaluations and merits.
+The objective: the comparison of the models of the observations of a
+group with their data (see Objective), and its evaluations and merits.
 """
 
 import dataclasses
@@ -12,7 +12,8 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray
 from gbkfit.model import Extras
-from gbkfit.observation import GroupPlan, ModelData, ObservationGroup
+from gbkfit.observation import (
+    GroupPlan, Likelihoods, ModelData, ObservationGroup)
 from gbkfit.params import (
     ParamDesc, ParamValues, Solution, Solve, with_elements)
 from gbkfit.utils import threadutils
@@ -102,15 +103,18 @@ class ObjectiveEvaluation:
 
 class Objective:
     """
-    The comparison of the models of a group of observations with their
-    data, each under its likelihood, on the drivers of a plan of the
-    group (see ObservationGroup.plan).
+    The comparison of the models of the observations of a group with
+    their data, each under its likelihood (see Likelihoods), on the
+    drivers of a plan of the group (see ObservationGroup.plan).
 
-    Each observation has a comparison of its kind of likelihood (see
-    Comparison and comparison_of): its residuals, of each value of its
-    data, and the terms of the chi-square beyond them (e.g. the noise
-    residuals of a fitted noise; see LikelihoodGauss). The objective sums
-    them.
+    It compares the observations with data (see observations): each has
+    a comparison of its kind of likelihood (see Comparison and
+    comparison_of), its residuals, of each value of its data, and the
+    terms of the chi-square beyond them (e.g. the noise residuals of a
+    fitted noise; see LikelihoodGauss). The objective sums them. The
+    models of the observations without data are evaluated alongside (e.g.
+    a prediction of a band without data, at the values a fit finds; see
+    GroupPlan.model_d), and compare nothing.
 
     The elements of parameters can be solved at each evaluation, rather
     than fitted (see Solve and ParamSpace): those that the models are
@@ -129,13 +133,14 @@ class Objective:
     of the same observation (the model is then not linear in both). The
     weights of the orbits of the stars of a spheroid (see
     Component.orbit_weights; OrbitBlock): the models of the observations
-    that see the stars are linear in them (the orbits in the series of
-    their data, see OrbitRecording), and the models are evaluated at their
-    values. The priors of the solved values add residuals after those of
-    the data; the log-likelihood has the values integrated out, or at
-    their best values (see Solve). They are nuisance parameters (see
-    ObjectiveEvaluation.nnuisance); an evaluation gives their values (see
-    evaluate).
+    with data that see the stars are linear in them (the orbits in the
+    series of their data, see OrbitRecording), and the models are
+    evaluated at their values. The values are solved from the
+    observations with data alone. The priors of the solved values add
+    residuals after those of the data; the log-likelihood has the values
+    integrated out, or at their best values (see Solve). They are
+    nuisance parameters (see ObjectiveEvaluation.nnuisance); an
+    evaluation gives their values (see evaluate).
 
     Its memory on the devices (and the host) is allocated on the first
     evaluation, and released by close, or when Python collects it. An
@@ -147,13 +152,16 @@ class Objective:
 
     The methods for fitters return totals over all observations and new
     arrays (chi2, log_likelihood, aicp, merits, residuals). The others
-    return a value or the arrays of each observation, which are
-    overwritten by the next evaluation.
+    return a value or the arrays of each observation it compares (see
+    observations), which are overwritten by the next evaluation.
 
     Parameters
     ----------
     group_plan : GroupPlan
-        The plan of the observations, each with data.
+        The plan of the observations, of which at least one has data.
+    likelihoods : Likelihoods, optional
+        The likelihoods of the observations, of the group of the plan;
+        Gaussian by default (see Likelihoods).
     solves : Mapping, optional
         The solve of each solved element of the parameters, by element
         name (see ParamSpace.solves); none by default.
@@ -161,30 +169,48 @@ class Objective:
     Raises
     ------
     ValueError
-        If an observation has no data, its comparison cannot be made (see
-        Comparison), or a solved element is neither of the flux scale of an
-        observation whose comparison can solve it (see
+        If no observation has data, the likelihoods are of another group,
+        the comparison of an observation cannot be made (see Comparison),
+        or a solved element is neither of the flux scale of an observation
+        with data whose comparison can solve it (see
         Comparison.pointwise_form), nor an amplitude of the light that the
-        models are linear in (see Component.light_amplitudes,
-        Observable.linear_in_light and Comparison.linear_form), nor a
-        weight of orbits; or the weights of the orbits of stars that
-        observations see are not solved (see OrbitBlock).
+        models of observations with data are linear in (see
+        Component.light_amplitudes, Observable.linear_in_light and
+        Comparison.linear_form), nor a weight of orbits; or the weights of
+        the orbits of stars that observations with data see are not solved
+        (see OrbitBlock).
     """
 
     def __init__(
             self,
             group_plan: GroupPlan,
+            likelihoods: Likelihoods | None = None,
             solves: Mapping[str, Solve] | None = None
     ):
         group = group_plan.group()
+        if likelihoods is None:
+            likelihoods = Likelihoods(group)
+        elif likelihoods.group() is not group:
+            raise ValueError(
+                "the likelihoods are of another group than that of the plan "
+                "(see Likelihoods.with_group)")
+        if not likelihoods.observations():
+            raise ValueError(
+                "an objective compares observations with their data, and no "
+                "observation has data")
         observations = group.observations()
-        group.require_data()
+        drivers = group_plan.observation_drivers()
         self._group_plan = group_plan
         self._group = group
-        self._datasets = tuple(obs.data() for obs in observations)
-        self._comparisons = tuple(
-            comparison_of(obs, driver) for obs, driver in zip(
-                observations, group_plan.observation_drivers()))
+        self._likelihoods = likelihoods
+        # The observations it compares, by index, their data, and the
+        # comparison of each, by index
+        self._observed = likelihoods.observations()
+        self._datasets = tuple(
+            observations[i].data() for i in self._observed)
+        self._comparisons = {
+            i: comparison_of(observations[i], likelihood, drivers[i])
+            for i, likelihood in likelihoods.items()}
         self._solves = dict(solves or {})
         # The blocks of each kind, each of the solves left by the others
         self._orbit_blocks = orbit_blocks(
@@ -210,7 +236,7 @@ class Objective:
         Drop its memory (see prepare and close): the next evaluation
         allocates it again.
         """
-        for comparison_ in self._comparisons:
+        for comparison_ in self._comparisons.values():
             comparison_.close()
         for block in self._blocks:
             block.close()
@@ -225,15 +251,23 @@ class Objective:
 
     def __reduce__(self) -> tuple[type, tuple]:
         # (copies make their memory again)
-        return Objective, (self._group_plan, self._solves)
+        return Objective, (self._group_plan, self._likelihoods, self._solves)
 
-    def nobservations(self) -> int:
-        """Return the number of observations."""
-        return self._group.nobservations()
+    def observations(self) -> tuple[int, ...]:
+        """
+        Return the observations it compares, those with data, by their
+        index in the group: those of the arrays of each observation that
+        its methods return.
+        """
+        return self._observed
 
     def datasets(self) -> tuple[Dataset, ...]:
-        """Return the data of each observation."""
+        """Return the data of each observation it compares."""
         return self._datasets
+
+    def likelihoods(self) -> Likelihoods:
+        """Return the likelihoods of the observations."""
+        return self._likelihoods
 
     def group(self) -> ObservationGroup:
         """Return the observations."""
@@ -245,16 +279,29 @@ class Objective:
 
     def with_data(self, datasets: Sequence[Dataset]) -> 'Objective':
         """
-        Return a copy of it with other data of its observations (e.g. those
-        of a bootstrap), whose plan shares what it can with its own (see
-        GroupPlan.with_data). The comparisons of the copy share what they
-        can with its own (see Comparison.share): e.g. the refits of a
-        bootstrap work out the whitening of correlated noise once.
+        Return a copy of it with other data of the observations it compares
+        (e.g. those of a bootstrap): one dataset for each, in the order of
+        observations. Its plan shares what it can with its own (see
+        GroupPlan.with_data), and its comparisons share what they can with
+        its own (see Comparison.share): e.g. the refits of a bootstrap work
+        out the whitening of correlated noise once.
+
+        Raises
+        ------
+        ValueError
+            If there is not one dataset for each observation it compares,
+            or a dataset does not suit its observation or its likelihood.
         """
+        if len(datasets) != len(self._observed):
+            raise ValueError(
+                f"the copy takes one dataset for each observation the "
+                f"objective compares ({len(self._observed)}); there are "
+                f"{len(datasets)}")
+        plan = self._group_plan.with_data(dict(zip(self._observed, datasets)))
         objective = Objective(
-            self._group_plan.with_data(datasets), self._solves)
-        for new, old in zip(objective._comparisons, self._comparisons):
-            new.share(old)
+            plan, self._likelihoods.with_group(plan.group()), self._solves)
+        for i, comparison_ in objective._comparisons.items():
+            comparison_.share(self._comparisons[i])
         return objective
 
     def close(self) -> None:
@@ -275,8 +322,11 @@ class Objective:
         self.close()
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        """Return the parameters of the models, by name (prefixed)."""
-        return self._group.pdescs()
+        """
+        Return the parameters of the models and of the likelihoods, by
+        name (prefixed; see Likelihoods.pdescs).
+        """
+        return self._group.pdescs() | self._likelihoods.pdescs()
 
     def constants(self) -> dict[str, Any]:
         """Return the constants of the models, by name (prefixed)."""
@@ -291,14 +341,14 @@ class Objective:
         """
         if self._prepared:
             return
-        for comparison_ in self._comparisons:
+        for comparison_ in self._comparisons.values():
             comparison_.prepare()
         for i in self._scaled_observations:
             observation = self._group.observations()[i]
             _, scale = observation.flux_scale()
             shape = tuple(
                 1 if scale.axis in (None, k) else n
-                for k, n in enumerate(self._datasets[i].shape()))
+                for k, n in enumerate(observation.data().shape()))
             driver = self._group_plan.observation_drivers()[i]
             (self._h_scales[i],
              self._d_scales[i]) = driver.mem_alloc_s(
@@ -426,15 +476,16 @@ class Objective:
         Return the evaluation of the residuals last evaluated (see
         evaluate).
         """
+        comparisons = self._comparisons.values()
         with self._group_plan.timers().measure('objective_residual_sum_eval'):
             data_chi2 = float(sum(
-                comparison_.chi2() for comparison_ in self._comparisons))
+                comparison_.chi2() for comparison_ in comparisons))
         prior_chi2 = float(sum(
             np.sum(residuals ** 2) for residuals in self._solve_residuals()))
         chi2 = data_chi2 + prior_chi2
         # (the noise residuals of fitted scales hold a constant of their
         # scale_min, which the log-likelihood and the AICp leave out)
-        constant = float(sum(c.noise_constant() for c in self._comparisons))
+        constant = float(sum(c.noise_constant() for c in comparisons))
         log_likelihood = -0.5 * (chi2 + constant) + float(sum(
             solution.log_term for solution in self._solutions.values()))
         nnuisance = self._nnuisance()
@@ -485,7 +536,7 @@ class Objective:
         """
         self.require_residuals()
         vectors = self.residual_vector_h(params, out_extra)
-        noise = [c.noise_residuals() for c in self._comparisons]
+        noise = [c.noise_residuals() for c in self._comparisons.values()]
         return np.concatenate(
             [*vectors, *self._solve_residuals(), *noise], dtype=np.float64)
 
@@ -543,13 +594,13 @@ class Objective:
         ValueError
             If an observation gives no residuals (see require_residuals).
         """
-        if self._blocks or any(
-                c.noise_residuals().size for c in self._comparisons):
+        comparisons = self._comparisons.values()
+        if self._blocks or any(c.noise_residuals().size for c in comparisons):
             raise NotImplementedError(
                 "the log-likelihood of each point is not given with a fitted "
                 "noise or solved values (e.g. flux scales): their terms are "
                 "sums over many points")
-        counted = np.concatenate([c.counted() for c in self._comparisons])
+        counted = np.concatenate([c.counted() for c in comparisons])
         return -0.5 * self.residuals(params)[counted] ** 2
 
     def _noise_chi2(self) -> float:
@@ -558,7 +609,8 @@ class Objective:
         (see LikelihoodGauss), of the last evaluation.
         """
         return float(sum(
-            np.sum(c.noise_residuals() ** 2) for c in self._comparisons))
+            np.sum(c.noise_residuals() ** 2)
+            for c in self._comparisons.values()))
 
     def solves(self) -> dict[str, Solve]:
         """Return the solve of each solved element, by element name."""
@@ -598,7 +650,7 @@ class Objective:
         the noise residuals (see LikelihoodGauss), which are not of the
         data.
         """
-        return sum(c.nresiduals() for c in self._comparisons)
+        return sum(c.nresiduals() for c in self._comparisons.values())
 
     def nindependent(self) -> float:
         """
@@ -610,21 +662,22 @@ class Objective:
         out the whitening of the residuals, if not yet (see prepare).
         """
         self.prepare()
-        return sum(c.nindependent() for c in self._comparisons)
+        return sum(c.nindependent() for c in self._comparisons.values())
 
     def ncensored(self) -> int:
         """
         Return the number of the residuals of censored values (see
         Comparison.censored_chi2), among nresiduals.
         """
-        return sum(c.ncensored() for c in self._comparisons)
+        return sum(c.ncensored() for c in self._comparisons.values())
 
     def censored_chi2(self) -> float:
         """
         Return the part of the chi-square of the data of the last
         evaluation of censored values (see Comparison.censored_chi2).
         """
-        return float(sum(c.censored_chi2() for c in self._comparisons))
+        return float(sum(
+            c.censored_chi2() for c in self._comparisons.values()))
 
     def _solve_residuals(self) -> list[np.ndarray]:
         """
@@ -639,7 +692,7 @@ class Objective:
         residuals (see Comparison.gives_residuals), which least squares
         and covariances need.
         """
-        return all(c.gives_residuals() for c in self._comparisons)
+        return all(c.gives_residuals() for c in self._comparisons.values())
 
     def require_residuals(self) -> None:
         """
@@ -652,10 +705,11 @@ class Objective:
         ValueError
             If an observation gives no residuals.
         """
-        for i, comparison_ in enumerate(self._comparisons):
+        for i, comparison_ in self._comparisons.items():
             if not comparison_.gives_residuals():
                 raise ValueError(
-                    f"the likelihood of observation {i} is a function of "
+                    f"the likelihood of observation "
+                    f"{self._group.observation_label(i)} is a function of "
                     f"the log-likelihood, which has no residuals (e.g. for "
                     f"least squares); give the residuals instead "
                     f"(form 'residuals'), or use another fitter")
@@ -666,9 +720,10 @@ class Objective:
             out_extra: Extras | None = None
     ) -> list[np.ndarray]:
         """
-        Return the residuals of each observation, on the host: its data
-        items one after the other, in one array that the next evaluation
-        overwrites (without its noise residuals; see residuals). They are
+        Return the residuals of each observation it compares (see
+        observations), on the host: its data items one after the other, in
+        one array that the next evaluation overwrites (without its noise
+        residuals; see residuals). They are
         the residuals of its comparison, whose squares sum to its
         chi-square (see Comparison): weighted, and whitened where the
         noise is correlated.
@@ -686,7 +741,7 @@ class Objective:
             The residuals of each observation.
         """
         self._update_residual_h(params, out_extra)
-        return [c.residual_vector_h() for c in self._comparisons]
+        return [c.residual_vector_h() for c in self._comparisons.values()]
 
     def residual_vector_d(
             self,
@@ -698,7 +753,7 @@ class Objective:
         residual_vector_h).
         """
         self._update_residual_d(params, out_extra)
-        return [c.residual_vector_d() for c in self._comparisons]
+        return [c.residual_vector_d() for c in self._comparisons.values()]
 
     def residual_nddata_h(
             self,
@@ -706,12 +761,12 @@ class Objective:
             out_extra: Extras | None = None
     ) -> list[dict[str, np.ndarray]]:
         """
-        Return the residuals of each data item of each observation, on the
-        host, as arrays of the shape of the data, which the next
-        evaluation overwrites (see residual_vector_h).
+        Return the residuals of each data item of each observation it
+        compares, on the host, as arrays of the shape of the data, which
+        the next evaluation overwrites (see residual_vector_h).
         """
         self._update_residual_h(params, out_extra)
-        return [c.residual_nddata_h() for c in self._comparisons]
+        return [c.residual_nddata_h() for c in self._comparisons.values()]
 
     def residual_nddata_d(
             self,
@@ -719,11 +774,11 @@ class Objective:
             out_extra: Extras | None = None
     ) -> list[dict[str, DeviceArray]]:
         """
-        Return the residuals of each data item of each observation, on its
-        device (see residual_nddata_h).
+        Return the residuals of each data item of each observation it
+        compares, on its device (see residual_nddata_h).
         """
         self._update_residual_d(params, out_extra)
-        return [c.residual_nddata_d() for c in self._comparisons]
+        return [c.residual_nddata_d() for c in self._comparisons.values()]
 
     def _update_residual_h(
             self,
@@ -733,7 +788,7 @@ class Objective:
         """Evaluate the residuals, and copy them to the host."""
         self._update_residual_d(params, out_extra)
         with self._group_plan.timers().measure('objective_residual_d2h'):
-            for comparison_ in self._comparisons:
+            for comparison_ in self._comparisons.values():
                 comparison_.copy_to_host()
 
     def _update_residual_d(
@@ -765,9 +820,8 @@ class Objective:
             models = group_plan.model_d(values, out_extra)
             with group_plan.timers().measure('objective_residual_eval'):
                 scales = self._solve_scales(models, values, solutions)
-                for comparison_, model, scales_ in zip(
-                        self._comparisons, models, scales):
-                    comparison_.evaluate(model, values, scales_)
+                for i, comparison_ in self._comparisons.items():
+                    comparison_.evaluate(models[i], values, scales.get(i, {}))
         self._solutions = solutions
 
     def _solve_orbits(
@@ -805,14 +859,14 @@ class Objective:
             models: Sequence[ModelData],
             params: ParamValues,
             solutions: dict[Block, Solution]
-    ) -> list[dict[str, DeviceArray]]:
+    ) -> dict[int, dict[str, DeviceArray]]:
         """
         Solve the elements of the flux scales from the models (see
         ScaleBlock) into the solutions, and return the scales of the data
-        items of each observation, on its device, by name.
+        items of each observation with solved scales, by index, on its
+        device, by name.
         """
-        scales: list[dict[str, DeviceArray]] = [
-            {} for _ in range(self.nobservations())]
+        scales: dict[int, dict[str, DeviceArray]] = {}
         for i in self._scaled_observations:
             self._h_scales[i][...] = 1
         for block in self._scale_blocks:

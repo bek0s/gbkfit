@@ -94,7 +94,7 @@ def test_amplitudes_are_migrated_to_a_solved_flux_scale():
         params=dict(properties=dict(vsys=0)))
     migration.migrate(config, 1)
     assert config['observations'][0]['flux_scale'] == 'per_spectrum'
-    assert config['observations'][0]['likelihood'] == dict(type='gauss')
+    assert config['likelihoods'] == dict(type='gauss')
     assert config['params']['properties']['kmos_flux_scale'] == dict(
         solve=dict(type='gauss', mean=1, sigma=0.5, min=0))
 
@@ -1240,7 +1240,9 @@ def test_the_distances_of_tables_and_profiles_are_assumed_distances():
 def test_gaussians_are_of_the_type_gauss():
     # Version 9: the likelihoods (of observations and of mock data), the
     # bootstrap schemes, the solves (of a key, or of each element in a
-    # list) and the Gaussian rings of mass disks; other types stay
+    # list) and the Gaussian rings of mass disks; other types stay (the
+    # likelihoods and the schemes of each observation are then by
+    # observation name, of version 10)
     solve = dict(type='gaussian', mean=1, sigma=0.5, min=0)
     config = dict(
         galaxies=[dict(mass=[
@@ -1262,10 +1264,10 @@ def test_gaussians_are_of_the_type_gauss():
     mass = config['galaxies'][0]['mass']
     assert [m['surface']['type'] for m in mass] == [
         'gauss_ring', 'exponential']
-    assert [o['likelihood']['type'] for o in config['observations']] == [
-        'gauss', 'user']
-    assert config['mock']['likelihood'] == [dict(type='gauss'), None]
-    assert [s['type'] for s in config['bootstrap']['scheme']] == [
+    assert [likelihood['type'] for likelihood in config[
+        'likelihoods'].values()] == ['gauss', 'user']
+    assert 'likelihood' not in config['mock']
+    assert [s['type'] for s in config['bootstrap']['scheme'].values()] == [
         'gauss', 'blocks']
     properties = config['params']['properties']
     assert properties['a']['solve'] == solve | dict(type='gauss')
@@ -1302,15 +1304,19 @@ def test_the_fitted_noise_of_a_likelihood_is_fitted_noise():
         mock=dict(noise=dict(type='gauss', rms=1), likelihood=dict(
             type='gaussian', noise=copy.deepcopy(noise))))
     changes = migration.migrate(config, 8)
-    likelihood = config['observations'][0]['likelihood']
+    likelihood = config['likelihoods']
     assert list(likelihood) == [
         'type', 'missing_residual', 'fitted_noise', 'white_floor']
     assert likelihood['fitted_noise'] == noise
-    assert config['mock'] == dict(
-        noise=dict(type='gauss', rms=1),
-        likelihood=dict(type='gauss', fitted_noise=noise))
     assert migration.Change(
         ['mock', 'likelihood'], "noise -> fitted_noise") in changes
+    # (of version 10: the mock likelihood, unlike that of the fit, is to
+    # be given by hand)
+    assert config['mock'] == dict(noise=dict(type='gauss', rms=1))
+    assert any(
+        change.path == ['mock', 'likelihood']
+        and change.message.startswith("by hand: dropped")
+        for change in changes)
 
 
 def test_the_mask_of_slitless_spectra_is_a_slit_mask():
@@ -1463,3 +1469,232 @@ def test_the_lens_parameters_of_a_project_are_renamed_with_its_pieces(
     assert 'observations/hst.yaml' not in changes
     assert yaml.load(tmp_path / 'study' / 'setups' / 'inline.yaml') == dict(
         observations=[hst | dict(name='alma')], params='alma')
+
+
+def with_data(name=None, **options):
+    """The configuration of an observation with data (of version 9)."""
+    named = {} if name is None else dict(name=name)
+    return named | dict(type='sky', data=dict(type='pixel_brightness',
+                                             data='image.fits')) | options
+
+
+def without_data(name=None, **options):
+    """The configuration of an observation without data."""
+    named = {} if name is None else dict(name=name)
+    return named | dict(type='sky', observable=dict(
+        type='pixel_brightness', size=[8, 8])) | options
+
+
+MOMENTS = dict(type='gauss', missing_residual=3)
+
+
+def test_the_likelihoods_leave_the_observations_for_their_setup():
+    # Version 10: one for every observation, if those with data have the
+    # same; the default of the others, the Gaussian, counts as theirs
+    config = dict(observations=[
+        with_data(likelihood=MOMENTS), with_data(likelihood=MOMENTS),
+        without_data()])
+    changes = migration.migrate(config, 9)
+    assert config['likelihoods'] == MOMENTS
+    assert list(config) == ['version', 'observations', 'likelihoods']
+    assert all('likelihood' not in o for o in config['observations'])
+    assert migration.Change(
+        ['observations', 1, 'likelihood'], "-> section likelihoods") \
+        in changes
+    assert migration.Change(
+        ['likelihoods'], "one likelihood for every observation") in changes
+    # (none given: none, the default)
+    config = dict(observations=[with_data(), without_data()])
+    migration.migrate(config, 9)
+    assert 'likelihoods' not in config
+    # (a default and another: by name, of those given)
+    config = dict(observations=[
+        with_data('hi', likelihood=dict(type='gauss')),
+        with_data('ha', likelihood=MOMENTS), with_data('co')])
+    migration.migrate(config, 9)
+    assert config['likelihoods'] == dict(hi=dict(type='gauss'), ha=MOMENTS)
+
+
+def test_observations_without_names_are_named_by_their_labels():
+    # (likelihoods by name need names, which are all or none: every
+    # observation is named, by its label, the id of its outputs)
+    config = dict(observations=[
+        with_data(likelihood=MOMENTS), with_data(), without_data()])
+    changes = migration.migrate(config, 9)
+    assert [o['name'] for o in config['observations']] == [
+        'observation0', 'observation1', 'observation2']
+    assert list(config['observations'][0])[0] == 'name'
+    assert config['likelihoods'] == dict(observation0=MOMENTS)
+    assert migration.Change(['observations', 2], (
+        "name observation2 (its label, the id of its outputs), for the "
+        "likelihood given by observation name")) in changes
+    # (which the configuration then loads)
+    from gbkfit.setup import _config
+    likelihoods = _config._load_likelihoods(
+        config, _group_of(config['observations']))
+    assert list(likelihoods.given()) == ['observation0']
+    assert likelihoods.given()['observation0'].missing_residual() == 3
+
+
+def _group_of(observations):
+    """
+    A group of a disk and images without data, of the names of the
+    configurations of observations.
+    """
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import (
+        LineOfSightFlat, ObservationGroup, ObservationSky, PixelBrightness)
+    galaxy = galaxy_parser.load(dict(components=[dict(
+        type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+        emission=dict(type='band'))]))
+    return ObservationGroup(galaxy, [
+        ObservationSky(
+            PixelBrightness(size=(8, 8)), LineOfSightFlat(),
+            name=observation.get('name'))
+        for observation in observations])
+
+
+def test_the_mock_likelihood_of_a_setup_without_data_is_its_likelihoods():
+    # (that of the fits of the mocks it draws; null: the default)
+    config = dict(
+        observations=[without_data(), without_data()],
+        mock=dict(noise=dict(type='gauss', rms=1), likelihood=MOMENTS))
+    changes = migration.migrate(config, 9)
+    assert config['likelihoods'] == MOMENTS
+    assert 'likelihood' not in config['mock']
+    assert migration.Change(['mock', 'likelihood'], (
+        "-> section likelihoods (of the fits of the mock data, which the "
+        "setup prepares)")) in changes
+    config = dict(
+        observations=[without_data('hi'), without_data('ha')],
+        mock=dict(noise=dict(type='gauss', rms=1),
+                  likelihood=[None, MOMENTS]))
+    migration.migrate(config, 9)
+    assert config['likelihoods'] == dict(ha=MOMENTS)
+    config = dict(
+        observations=[without_data('hi')],
+        mock=dict(noise=dict(type='gauss', rms=1), likelihood=[None]))
+    changes = migration.migrate(config, 9)
+    assert 'likelihoods' not in config
+    assert migration.Change(
+        ['mock', 'likelihood'], "dropped: the default (Gaussian)") in changes
+
+
+@pytest.mark.parametrize('observations, mock, by_hand', [
+    # (the same as the fit: dropped)
+    ([with_data(likelihood=MOMENTS)], MOMENTS, False),
+    ([with_data(likelihood=MOMENTS)], [None], False),
+    ([with_data()], dict(type='gauss'), False),
+    # (another: dropped, by hand)
+    ([with_data(likelihood=MOMENTS)], dict(type='gauss'), True),
+    ([with_data('a'), without_data('b')], [None, MOMENTS], True),
+    ([with_data()], [MOMENTS, MOMENTS], True)])
+def test_the_mock_likelihood_of_a_setup_with_data_is_dropped(
+        observations, mock, by_hand):
+    # (the fits of the mocks take the likelihoods of the setup, which are
+    # those of its data)
+    config = dict(observations=observations, mock=dict(
+        noise=dict(type='gauss', rms=1), likelihood=mock))
+    changes = migration.migrate(config, 9)
+    assert 'likelihood' not in config['mock']
+    [change] = [c for c in changes if c.path == ['mock', 'likelihood']]
+    assert change.message.startswith("by hand: dropped") == by_hand
+
+
+@pytest.mark.parametrize('section, option', [
+    ('mock', 'noise'), ('bootstrap', 'scheme')])
+def test_options_of_each_observation_are_by_observation_name(
+        section, option):
+    # Version 10: one for all if they are all the same, or else by name,
+    # of the observations named by their labels if they have none
+    first, second = dict(type='gauss', rms=1), dict(type='gauss', rms=2)
+    config = {
+        'observations': [with_data('hi'), with_data('ha')],
+        section: {option: [first, first]}}
+    changes = migration.migrate(config, 9)
+    assert config[section][option] == first
+    assert migration.Change(
+        [section, option], "one for every observation") in changes
+    config = {
+        'observations': [with_data(), with_data()],
+        section: {option: [first, second]}}
+    changes = migration.migrate(config, 9)
+    assert config[section][option] == dict(
+        observation0=first, observation1=second)
+    assert migration.Change(
+        [section, option], "by observation name, not by position") \
+        in changes
+    assert config['observations'][1]['name'] == 'observation1'
+    # (a list of another length is refused, to rewrite by hand)
+    config = {
+        'observations': [with_data('hi')],
+        section: {option: [first, second]}}
+    [change] = [
+        c for c in migration.migrate(config, 9) if c.path[0] == section]
+    assert change.message.startswith("by hand: a list of 2 for 1")
+    assert config[section][option] == [first, second]
+
+
+def test_a_migrated_file_has_its_likelihoods_after_its_observations(
+        tmp_path):
+    path = tmp_path / 'fit.yaml'
+    path.write_text(
+        "version: 9\n"
+        "# the observations\n"
+        "observations:\n"
+        "- type: sky\n"
+        "  name: hi\n"
+        "  data: {type: pixel_brightness, data: hi.fits}\n"
+        "  likelihood: {type: gauss, missing_residual: 3}\n"
+        "params: {properties: {a: 1}}  # the parameters\n")
+    migration.migrate_file(str(path))
+    assert path.read_text() == (
+        "version: 10\n"
+        "# the observations\n"
+        "observations:\n"
+        "- type: sky\n"
+        "  name: hi\n"
+        "  data: {type: pixel_brightness, data: hi.fits}\n"
+        "likelihoods: {type: gauss, missing_residual: 3}\n"
+        "params: {properties: {a: 1}}  # the parameters\n")
+
+
+def test_the_likelihoods_of_observation_pieces_move_into_their_setups(
+        tmp_path):
+    # Of the observation pieces, which lose them, into each setup that
+    # names them (as the piece was); a piece without a name, which one
+    # needs, is named by hand
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(dict(format=project.FORMAT, version=9),
+              tmp_path / 'study' / project.MARKER)
+    pieces = tmp_path / 'study' / 'observations'
+    yaml.dump(with_data('hi', likelihood=MOMENTS), pieces / 'hi.yaml')
+    yaml.dump(with_data(likelihood=MOMENTS), pieces / 'unnamed.yaml')
+    setups = tmp_path / 'study' / 'setups'
+    yaml.dump(dict(observations=['hi', with_data('ha')], mock=dict(
+        noise=[dict(type='gauss', rms=1), dict(type='gauss', rms=2)])),
+        setups / 'joint.yaml')
+    yaml.dump(dict(observations=['hi']), setups / 'alone.yaml')
+    yaml.dump(dict(observations=[
+        'unnamed', with_data(likelihood=dict(type='gauss'))]),
+        setups / 'by_hand.yaml')
+    changes = migration.migrate_project(study.path)
+    assert study.piece('observations', 'hi') == with_data('hi')
+    assert changes['observations/hi.yaml'] == [migration.Change(
+        ['likelihood'],
+        "-> the section likelihoods of the setups that name the piece")]
+    joint = yaml.load(setups / 'joint.yaml')
+    assert joint == dict(
+        observations=['hi', with_data('ha')],
+        likelihoods=dict(hi=MOMENTS),
+        mock=dict(noise=dict(
+            hi=dict(type='gauss', rms=1), ha=dict(type='gauss', rms=2))))
+    assert yaml.load(setups / 'alone.yaml') == dict(
+        observations=['hi'], likelihoods=MOMENTS)
+    by_hand = yaml.load(setups / 'by_hand.yaml')
+    assert by_hand['observations'][1]['name'] == 'observation1'
+    assert by_hand['likelihoods'] == dict(observation1=dict(type='gauss'))
+    assert migration.Change(['likelihoods'], (
+        "by hand: name the observation piece 'unnamed' (e.g. "
+        "'observation0'), and give its likelihood by that name")) \
+        in changes['setups/by_hand.yaml']

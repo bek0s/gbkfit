@@ -302,7 +302,7 @@ def test_slitless_spectra_have_flux_scales_per_row(driver):
         group.pdescs(), PROPERTIES | dict(
             grism_flux_scale=dict(solve=dict(
             type='gauss', mean=1, sigma=0.5, min=0))))
-    objective = Objective(group.plan(driver), params.solves())
+    objective = Objective(group.plan(driver), solves=params.solves())
     found = np.array(list(
         objective.evaluate(params.evaluate()).solved.values()))
     a = (model ** 2).sum(axis=1) / error ** 2 + 1 / 0.5 ** 2

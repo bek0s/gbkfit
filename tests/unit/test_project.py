@@ -85,22 +85,32 @@ def test_observations_name_their_parts_and_mock_data_their_noise(study):
     write(path / 'noise/radio.yaml', NOISE)
     write(path / 'observations/named.yaml', dict(
         data='ngc1313/hi', instrument=dict(psf='beam', lsf=LSF)))
+    in_place = dict(type='gauss', rms=0.5)
     setup = dict(
         observations=['named', 'ngc1313/hi'],
-        mock=dict(noise=['radio', None], seed=1))
+        mock=dict(noise=dict(named='radio', hi=in_place), seed=1))
     filename = os.path.join(study.path, 'setups/mock.yaml')
     config, sources = project.resolve(setup, filename, study)
     assert config == dict(
         observations=[
             dict(data=DATASET, instrument=dict(psf=PSF, lsf=LSF)),
             OBSERVATION],
-        mock=dict(noise=[NOISE, None], seed=1))
+        mock=dict(noise=dict(named=NOISE, hi=in_place), seed=1))
     # (the parts in place are from the files of their observations)
     assert sources['data'] == [
         'datasets/ngc1313/hi.yaml', 'observations/ngc1313/hi.yaml']
     assert sources['psf'] == ['psfs/beam.yaml', None]
     assert sources['lsf'] == ['observations/named.yaml', None]
-    assert sources['noise'] == ['noise/radio.yaml', None]
+    # (a noise for each observation, by observation name; or one for all)
+    assert sources['noise'] == dict(
+        named='noise/radio.yaml', hi='setups/mock.yaml')
+    config, sources = project.resolve(
+        dict(setup, mock=dict(noise='radio')), filename, study)
+    assert config['mock'] == dict(noise=NOISE)
+    assert sources['noise'] == 'noise/radio.yaml'
+    config, _ = project.resolve(
+        dict(setup, mock=dict(noise=in_place)), filename, study)
+    assert config['mock'] == dict(noise=in_place)
 
 
 def test_a_layer_replaces_all_the_properties_of_a_parameter():
@@ -183,7 +193,11 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
         "- ngc1313/hi\n"
         "- {data: ngc1313/hi, instrument: {psf: beam}}\n"
         "params: [bounds, ngc1313]\n"
-        "fitter: nautilus\n")
+        "fitter: nautilus\n"
+        "mock:\n"
+        "  noise:\n"
+        "    hi: radio\n"
+        "    other: {type: gauss, rms: 1}\n")
     assert study.references('datasets', 'ngc1313/hi') == [
         ('observations', 'ngc1313/hi'), ('setups', 'fit')]
     assert study.references('psfs', 'beam') == [
@@ -200,7 +214,8 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
         (('setups', 'fit'), ('params', 'ngc1313')),
         (('setups', 'fit'), ('datasets', 'ngc1313/hi')),
         (('setups', 'fit'), ('psfs', 'beam')),
-        (('setups', 'fit'), ('fitters', 'nautilus'))]
+        (('setups', 'fit'), ('fitters', 'nautilus')),
+        (('setups', 'fit'), ('noise', 'radio'))]
     # (renamed, the names of it follow; comments and layout stay)
     target = study.rename_piece('datasets', 'ngc1313/hi', 'hi')
     assert target == str(path / 'datasets/hi.yaml')
@@ -214,6 +229,11 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
         'ngc1313/hi', dict(data='hi', instrument=dict(psf='beam'))]
     study.rename_piece('observations', 'ngc1313/hi', 'hi')
     assert yaml.load(path / 'setups/fit.yaml')['observations'][0] == 'hi'
+    # (and of the noises of mock data by observation name)
+    write(path / 'noise/radio.yaml', NOISE)
+    study.rename_piece('noise', 'radio', 'beam_noise')
+    assert yaml.load(path / 'setups/fit.yaml')['mock']['noise'] == dict(
+        hi='beam_noise', other=dict(type='gauss', rms=1))
     with pytest.raises(FileExistsError):
         study.rename_piece('galaxies', 'arctan', 'arctan')
     with pytest.raises(FileNotFoundError):

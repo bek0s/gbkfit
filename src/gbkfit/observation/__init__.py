@@ -7,9 +7,9 @@ along a line of sight, through a foreground (e.g. a gravitational lens;
 see gbkfit.observation.lensing) and an instrument; an observation of
 profiles (ObservationProfile) gives values of functions of a galaxy at
 radii. Observations are evaluated in groups (see ObservationGroup and
-GroupPlan), compared with their data under their likelihoods (see
-Likelihood; the comparisons are those of gbkfit.objective), and draw
-mock data (see draw_mocks).
+GroupPlan), those with data compared with them under the likelihoods
+that their setup gives them (see Likelihoods; the comparisons are those
+of gbkfit.objective), and draw mock data (see draw_mocks).
 """
 
 from . import (

@@ -59,12 +59,21 @@ class Comparison(abc.ABC):
     ----------
     observation : Observation
         The observation, with data.
+    likelihood : Likelihood
+        Its likelihood, with the names of its parameters (see
+        Likelihoods.of).
     driver : Driver
         The driver of its model.
     """
 
-    def __init__(self, observation: Observation, driver: Driver):
+    def __init__(
+            self,
+            observation: Observation,
+            likelihood: Likelihood,
+            driver: Driver
+    ):
         self._observation = observation
+        self._likelihood = likelihood
         self._driver = driver
         self._dataset = observation.data()
         # The number of values of each data item that the data do not mask
@@ -99,6 +108,10 @@ class Comparison(abc.ABC):
     def observation(self) -> Observation:
         """Return the observation."""
         return self._observation
+
+    def likelihood(self) -> Likelihood:
+        """Return the likelihood of the observation."""
+        return self._likelihood
 
     def nresiduals(self) -> int:
         """Return the number of residuals that count (see counted)."""
@@ -221,7 +234,7 @@ class Comparison(abc.ABC):
         """
         return (
             f"the likelihood of the observation, "
-            f"{self._observation.likelihood().type()}, is not known to be "
+            f"{self._likelihood.type()}, is not known to be "
             f"linear in the model")
 
     def pointwise_form(self, keys: Collection[str]) -> str | None:
@@ -475,14 +488,20 @@ class ComparisonGauss(Comparison):
     Parameters
     ----------
     observation : Observation
-        The observation, with data, of a Gaussian likelihood.
+        The observation, with data.
+    likelihood : LikelihoodGauss
+        Its likelihood (see Comparison).
     driver : Driver
         The driver of its model.
     """
 
-    def __init__(self, observation: Observation, driver: Driver):
-        super().__init__(observation, driver)
-        likelihood = observation.likelihood()
+    def __init__(
+            self,
+            observation: Observation,
+            likelihood: LikelihoodGauss,
+            driver: Driver
+    ):
+        super().__init__(observation, likelihood, driver)
         keys = observation.keys()
         # The weight of each data item, and the residual of the values the
         # model does not have: NaN where the model cannot have missing
@@ -761,7 +780,7 @@ class ComparisonGauss(Comparison):
         the weight of the item times the mask, over the noise of the value
         (see LikelihoodGauss.noise); 0 where the data mask it.
         """
-        likelihood = self._observation.likelihood()
+        likelihood = self._likelihood
         factors = {}
         for key in keys:
             item = self._dataset[key]
@@ -944,14 +963,20 @@ class ComparisonUser(Comparison):
     Parameters
     ----------
     observation : Observation
-        The observation, with data, of a user likelihood.
+        The observation, with data.
+    likelihood : LikelihoodUser
+        Its likelihood (see Comparison).
     driver : Driver
         The driver of its model.
     """
 
-    def __init__(self, observation: Observation, driver: Driver):
-        super().__init__(observation, driver)
-        self._likelihood: LikelihoodUser = observation.likelihood()
+    def __init__(
+            self,
+            observation: Observation,
+            likelihood: LikelihoodUser,
+            driver: Driver
+    ):
+        super().__init__(observation, likelihood, driver)
         # The data, errors and mask of each data item that its function
         # takes, by name: read-only views, so that it cannot change the
         # dataset (e.g. by 'data -= 1')
@@ -1005,16 +1030,21 @@ _COMPARISONS: dict[type[Likelihood], type[Comparison]] = {
 }
 
 
-def comparison_of(observation: Observation, driver: Driver) -> Comparison:
+def comparison_of(
+        observation: Observation, likelihood: Likelihood, driver: Driver
+) -> Comparison:
     """
-    Return the comparison of an observation with its data, of the kind of
-    its likelihood (that of the nearest base class of the likelihood that
-    has one), on the driver of its model.
+    Return the comparison of an observation with its data under a
+    likelihood, of the kind of the likelihood (that of the nearest base
+    class of the likelihood that has one), on the driver of its model.
 
     Parameters
     ----------
     observation : Observation
         The observation, with data.
+    likelihood : Likelihood
+        Its likelihood, with the names of its parameters (see
+        Likelihoods.of).
     driver : Driver
         The driver of its model.
 
@@ -1028,10 +1058,9 @@ def comparison_of(observation: Observation, driver: Driver) -> Comparison:
     ValueError
         If no comparison is of its kind of likelihood.
     """
-    likelihood = observation.likelihood()
     for kind in type(likelihood).__mro__:
         if kind in _COMPARISONS:
-            return _COMPARISONS[kind](observation, driver)
+            return _COMPARISONS[kind](observation, likelihood, driver)
     raise ValueError(
         f"no comparison is of the likelihood {likelihood.type()!r}")
 

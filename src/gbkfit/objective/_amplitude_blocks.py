@@ -63,9 +63,10 @@ class AmplitudeBlock(Block):
         The runs of the elements of one solve: the solve, and the number
         of its elements.
     observations : Sequence of int
-        The observations whose models take them, by index.
-    comparisons : Sequence of Comparison
-        The comparison of each observation of the group.
+        The observations with data whose models take them, by index.
+    comparisons : Mapping of int to Comparison
+        The comparison of each observation with data of the group, by
+        index.
     drivers : Sequence of Driver
         The driver of each observation of the group.
     """
@@ -75,7 +76,7 @@ class AmplitudeBlock(Block):
             amplitudes: Sequence[tuple[str, int | None]],
             runs: Sequence[tuple[Solve, int]],
             observations: Sequence[int],
-            comparisons: Sequence[Comparison],
+            comparisons: Mapping[int, Comparison],
             drivers: Sequence[Driver]
     ):
         self._amplitudes = tuple(amplitudes)
@@ -95,7 +96,10 @@ class AmplitudeBlock(Block):
         return self._amplitudes
 
     def observations(self) -> tuple[int, ...]:
-        """Return the observations whose models take them, by index."""
+        """
+        Return the observations with data whose models take them, by
+        index.
+        """
         return self._observations
 
     def elements(self) -> tuple[str, ...]:
@@ -160,18 +164,20 @@ class AmplitudeBlock(Block):
 
 def amplitude_blocks(
         group: ObservationGroup,
-        comparisons: Sequence[Comparison],
+        comparisons: Mapping[int, Comparison],
         drivers: Sequence[Driver],
         solves: Mapping[str, Solve],
         scaled_observations: Collection[int]
 ) -> tuple[AmplitudeBlock, ...]:
     """
     Return the solves of the amplitudes of the light of a group (see
-    AmplitudeBlock), of the comparison and the driver of each observation,
-    the solve of each solved element (by element name; all must be
-    amplitudes of the light) and the observations with solved flux scales
-    (by index): those of parameters whose models fall on the same
-    observations together.
+    AmplitudeBlock), of the comparison of each observation with data (by
+    index) and the driver of each observation, the solve of each solved
+    element (by element name; all must be amplitudes of the light) and the
+    observations with solved flux scales (by index): those of parameters
+    whose models fall on the same observations together. They are solved
+    from the observations with data alone; those without data take their
+    values.
 
     Raises
     ------
@@ -186,11 +192,11 @@ def amplitude_blocks(
     if not solves:
         return ()
     pdescs = group.pdescs()
-    # The observations that take each amplitude of the light, and why
-    # their models are not linear in it, if not
+    # The observations with data that take each amplitude of the light, and
+    # why their models are not linear in it, if not
     takers: dict[str, list[int]] = {}
     reasons: dict[str, str] = {}
-    for i in range(group.nobservations()):
+    for i in comparisons:
         for param, reason in group.light_amplitudes(i).items():
             takers.setdefault(param, []).append(i)
             if reason is not None:
@@ -210,8 +216,8 @@ def amplitude_blocks(
             raise ValueError(
                 f"{param} cannot be solved: only the flux scales of "
                 f"observations and the amplitudes of the light of components "
-                f"seen by observations can be solved (the model is linear "
-                f"in them)")
+                f"seen by observations with data can be solved (the model is "
+                f"linear in them)")
         if param in reasons:
             raise ValueError(
                 f"{param} cannot be solved: {reasons[param]}, so the model "

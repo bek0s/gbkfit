@@ -2,14 +2,16 @@
 The likelihoods: how the model of an observation is compared with its
 data, the noise model of the data (see Likelihood): Gaussian (with
 fitted noise, upper limits and correlated noise), or a Python function
-of the user.
+of the user; and the likelihoods of the observations of a group, which
+setups give (see Likelihoods).
 """
 
 import abc
 import copy
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from numbers import Real
-from typing import Annotated, Any, Literal, NamedTuple, Self, TypeAlias
+from typing import (
+    TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self, TypeAlias)
 
 import astropy.units
 import numpy as np
@@ -18,10 +20,15 @@ from pydantic import FiniteFloat
 
 from gbkfit.config import (
     Choices, FilePath, TypedParser, TypedSerializable, check_name,
-    check_options)
+    check_options, config_path)
 from gbkfit.dataset import Dataset
-from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
+from gbkfit.params import (
+    ParamDesc, ParamScalarDesc, ParamValues, pdescs_with_units)
 from gbkfit.utils import funcutils
+
+if TYPE_CHECKING:
+    from .group import ObservationGroup
+    from .observation import Observation
 
 
 __all__ = [
@@ -30,6 +37,7 @@ __all__ = [
     'Likelihood',
     'LikelihoodGauss',
     'LikelihoodUser',
+    'Likelihoods',
     'UpperLimit',
     'channel_mask',
     'correlated_pixels',
@@ -85,7 +93,8 @@ class Likelihood(TypedSerializable, abc.ABC):
     """
     How the model of an observation is compared with its data: the noise
     model of the data. It can have parameters of its own, whose names
-    start with its prefix (see with_prefix).
+    start with its prefix (see with_prefix): that of its observation (see
+    Likelihoods).
     """
 
     # (the start of the names of its parameters)
@@ -125,17 +134,18 @@ class Likelihood(TypedSerializable, abc.ABC):
         """
         return True
 
-    def check(self, keys: Sequence[str], data: Dataset) -> None:
+    def check(self, keys: Sequence[str], data: Dataset | None) -> None:
         """
         Check that it suits an observation of the given data items, of the
-        given data.
+        given data; without data, as far as their items tell (e.g. the
+        likelihood of the fit that a setup of mock data prepares).
 
         Parameters
         ----------
         keys : Sequence of str
             The names of the data items of the observation.
-        data : Dataset
-            The data.
+        data : Dataset or None
+            The data, if any.
 
         Raises
         ------
@@ -227,7 +237,7 @@ class LikelihoodGauss(Likelihood):
     = sqrt((f e)^2 + j^2) in place of its error. Each is a parameter of the
     observation, '{name}_noise_scale_{item}' and
     '{name}_noise_jitter_{item}' (the observation needs a name; see
-    Observation). The scale is for errors that are off by a factor (e.g.
+    Likelihoods). The scale is for errors that are off by a factor (e.g.
     too small, from noise correlated within the beam), and without errors
     it is the noise itself, in the unit of the data; the jitter, in the
     unit of the data, is for scatter that the model cannot make (e.g.
@@ -389,17 +399,17 @@ class LikelihoodGauss(Likelihood):
                 units[jitter] = item.unit()
         return units
 
-    def check(self, keys: Sequence[str], data: Dataset) -> None:
+    def check(self, keys: Sequence[str], data: Dataset | None) -> None:
         """
         Check that it suits an observation of the given data items, of the
-        given data.
+        given data; without data, only that its options name its items.
 
         Parameters
         ----------
         keys : Sequence of str
             The names of the data items of the observation.
-        data : Dataset
-            The data.
+        data : Dataset or None
+            The data, if any.
 
         Raises
         ------
@@ -419,6 +429,8 @@ class LikelihoodGauss(Likelihood):
                 f"the options of the likelihood name data items that the "
                 f"observation does not have: {unknown}; its items are "
                 f"{list(keys)}")
+        if data is None:
+            return
         for key, noise in self._fitted_noise.items():
             if noise.scale and noise.jitter:
                 _check_errors_differ(key, data)
@@ -817,3 +829,204 @@ class LikelihoodUser(Likelihood):
 
 likelihood_parser = TypedParser(
     Likelihood, [LikelihoodGauss, LikelihoodUser], family='likelihood')
+
+
+class Likelihoods:
+    """
+    The likelihoods of the observations of a group (see ObservationGroup):
+    how an objective compares the model of each observation with data
+    with them (see Objective). In configurations, the section
+    'likelihoods' of a setup.
+
+    They are one likelihood for every observation, or likelihoods by
+    observation name, which need a name of each observation with data (a
+    position would change with the order of the observations): those of
+    the observations with data that they leave out are Gaussian
+    (LikelihoodGauss()), as are all of them by default. In a
+    configuration, one likelihood is a dictionary with its type, and
+    likelihoods by name a dictionary of them (see the examples).
+
+    The likelihood of each observation with data is checked against its
+    data (see Likelihood.check), and so is one given for an observation
+    without data (e.g. that of the fit a setup of mock data prepares; see
+    MockOptions), as far as its data items tell: it compares nothing
+    until the observation has data. The parameters of the likelihood of
+    an observation (e.g. those of a fitted noise, see LikelihoodGauss)
+    are named after it, '{name}_noise_scale_{item}' (see
+    Likelihood.with_prefix; the observation then needs a name), in the
+    units of its data (see pdescs).
+
+    Parameters
+    ----------
+    group : ObservationGroup
+        The group.
+    likelihoods : Likelihood or Mapping of str to Likelihood, optional
+        One likelihood for every observation, or likelihoods by
+        observation name; Gaussian by default.
+
+    Raises
+    ------
+    ValueError
+        If the likelihoods by name name unknown observations, or an
+        observation with data has no name; or a likelihood has parameters
+        but its observation no name, does not suit its observation (see
+        Likelihood.check), takes no values missing from a model that can
+        have them (see Observation.model_can_have_missing_values; e.g. a
+        Gaussian without missing_residual), or has parameters of the names
+        of parameters of the group.
+
+    Examples
+    --------
+    One likelihood for every observation:
+
+    .. code-block:: yaml
+
+        likelihoods:
+          type: gauss
+          missing_residual: 3
+
+    Likelihoods by observation name (the observations left out are
+    Gaussian):
+
+    .. code-block:: yaml
+
+        likelihoods:
+          halpha:
+            type: gauss
+            missing_residual: 3
+            fitted_noise:
+              moment1:
+                jitter: true
+          hi:
+            type: gauss
+            weights: 2
+    """
+
+    def __init__(
+            self,
+            group: 'ObservationGroup',
+            likelihoods: Likelihood | Mapping[str, Likelihood] | None = None
+    ):
+        observations = group.observations()
+        by_name = isinstance(likelihoods, Mapping)
+        given = {} if likelihoods is None else group.per_observation(
+            likelihoods, 'likelihoods', group.observed(), complete=False)
+        self._group = group
+        self._given = dict(likelihoods) if by_name else likelihoods
+        # The likelihood of each observation with data, by index, with the
+        # names of its parameters (see with_prefix)
+        self._likelihoods: dict[int, Likelihood] = {}
+        for i, observation in enumerate(observations):
+            if i not in given and observation.data() is None:
+                continue
+            # (the errors of one given by name are at its name; those of
+            # the others name their observation)
+            named = by_name and i in given
+            with config_path(*((observation.name(),) if named else ())):
+                likelihood = _bound(
+                    given.get(i, LikelihoodGauss()), observation,
+                    None if named else i)
+            if observation.data() is not None:
+                self._likelihoods[i] = likelihood
+        if repeated := sorted(self.pdescs().keys() & group.pdescs().keys()):
+            raise ValueError(
+                f"the parameters of the likelihoods have the names of "
+                f"parameters of the group: {repeated}; rename the "
+                f"observations")
+
+    def group(self) -> 'ObservationGroup':
+        """Return the group."""
+        return self._group
+
+    def given(self) -> Likelihood | dict[str, Likelihood] | None:
+        """
+        Return the likelihoods as given: one for every observation, by
+        observation name, or None (the Gaussian for all).
+        """
+        return self._given
+
+    def observations(self) -> tuple[int, ...]:
+        """
+        Return the observations with data, by index: those whose models
+        an objective compares with their data.
+        """
+        return tuple(self._likelihoods)
+
+    def of(self, index: int) -> Likelihood:
+        """
+        Return the likelihood of the observation of the given index, with
+        the names of its parameters (see Likelihood.with_prefix).
+
+        Raises
+        ------
+        KeyError
+            If the observation has no data.
+        """
+        return self._likelihoods[index]
+
+    def items(self) -> Iterator[tuple[int, Likelihood]]:
+        """
+        Yield the likelihood of each observation with data, with its index
+        (see of).
+        """
+        yield from self._likelihoods.items()
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """
+        Return the parameters of the likelihoods of the observations with
+        data (e.g. '{name}_noise_scale_{item}' of a fitted noise, see
+        LikelihoodGauss), with the units that their data give them (see
+        Likelihood.param_units).
+        """
+        observations = self._group.observations()
+        pdescs = {}
+        for i, likelihood in self._likelihoods.items():
+            pdescs |= pdescs_with_units(
+                likelihood.pdescs(),
+                likelihood.param_units(observations[i].data()))
+        return pdescs
+
+    def with_group(self, group: 'ObservationGroup') -> 'Likelihoods':
+        """
+        Return the likelihoods as given of another group of the same
+        observations (e.g. with other data, see ObservationGroup.with_data),
+        checked against it.
+        """
+        return Likelihoods(group, self._given)
+
+
+def _bound(
+        likelihood: Likelihood,
+        observation: 'Observation',
+        index: int | None
+) -> Likelihood:
+    """
+    Return the likelihood of an observation checked against it (see
+    Likelihoods), with the names of its parameters, of the name of the
+    observation (see Likelihood.with_prefix). The errors name the
+    observation, of the given index, if given (e.g. of one likelihood for
+    every observation; those given by name are at its name in the
+    configuration).
+    """
+    name = observation.name()
+    try:
+        likelihood.check(observation.keys(), observation.data())
+        if name is None and likelihood.pdescs():
+            raise ValueError(
+                "a likelihood with parameters (e.g. a fitted noise) needs a "
+                "name of its observation, which names them (e.g. "
+                "'{name}_noise_scale_moment1')")
+        if observation.model_can_have_missing_values() \
+                and not likelihood.takes_missing_values():
+            raise ValueError(
+                "the model of the observation can have missing values where "
+                "the data have some (e.g. the velocity of a spectrum below "
+                "the flux_floor): its likelihood needs the residual of such "
+                "a value, the option missing_residual (e.g. 3; see "
+                "LikelihoodGauss)")
+    except ValueError as e:
+        if index is None:
+            raise
+        which = index if name is None else repr(name)
+        raise ValueError(f"observation {which}: {e}") from e
+    return likelihood.with_prefix('' if name is None else f'{name}_')

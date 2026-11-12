@@ -33,7 +33,7 @@ from gbkfit.params import (
     joint_prior_residuals)
 
 if TYPE_CHECKING:
-    from gbkfit.observation import ObservationGroup
+    from gbkfit.observation import Likelihoods
     from gbkfit.parallel import WorkerPool
 
 
@@ -347,7 +347,7 @@ class Fitter(TypedSerializable, abc.ABC):
             If the fitter finds no point with a finite chi-square (or the
             fit was stopped before).
         """
-        fit_params = self.check(params, objective.group())
+        fit_params = self.check(params, objective.likelihoods())
         if not fit_params:
             raise ValueError("no parameter is free")
         if pool is not None and pool.size() > 1 and not self.info.batches:
@@ -365,20 +365,21 @@ class Fitter(TypedSerializable, abc.ABC):
             problem.close()
 
     def check(
-            self, params: ParamSpace, group: 'ObservationGroup'
+            self, params: ParamSpace, likelihoods: 'Likelihoods'
     ) -> dict[str, FitParam]:
         """
         Check that it can fit the parameters of the observations of a
-        group, as far as their descriptions tell (without devices): the
-        rules of the start of a fit (see fit), which describe and load
-        check too (see gbkfit.setup).
+        group under their likelihoods, as far as their descriptions tell
+        (without devices): the rules of the start of a fit (see fit), which
+        describe and load check too (see gbkfit.setup).
 
         Parameters
         ----------
         params : ParamSpace
             The parameters.
-        group : ObservationGroup
-            The galaxies and their observations.
+        likelihoods : Likelihoods
+            The likelihoods of the observations with data, which a fit
+            compares with their models.
 
         Returns
         -------
@@ -402,9 +403,9 @@ class Fitter(TypedSerializable, abc.ABC):
             joint_prior_residuals(params)
         # (of the observations with data: the others are not fitted)
         without = [
-            i for i, observation in enumerate(group.observations())
-            if observation.likelihood() is not None
-            and not observation.likelihood().gives_residuals()]
+            likelihoods.group().observation_label(i)
+            for i, likelihood in likelihoods.items()
+            if not likelihood.gives_residuals()]
         # (each rule at the options it is about, as describe and load
         # report it)
         with config_path('fitter'):

@@ -115,25 +115,31 @@ def test_recorded_data_have_the_noise_as_their_error(driver, name):
             again[0][key].data(), mocks[0][key].data())
 
 
-def test_setups_mock_observations_under_the_likelihoods_of_the_options(
+def test_setups_mock_observations_for_fits_under_their_likelihoods(
         driver):
+    # (the likelihoods of a setup without data are those of the fits of
+    # its mocks, as a configuration of them takes them)
     from gbkfit import Setup
-    from gbkfit.observation import LikelihoodGauss
+    from gbkfit.observation import (
+        LikelihoodGauss, Likelihoods, ObservationGroup)
     plan = plan_of(
         driver, dict(type='pixel_brightness') | RECORDED['pixel_brightness'])
+    group = plan.group()
     params = gbkfit.params.ParamSpace.from_properties(
-        plan.group().pdescs(), PROPERTIES)
-    given = LikelihoodGauss(white_floor=0.2)
-    for likelihood, want in ((None, LikelihoodGauss()), (given, given)):
-        options = MockOptions(
-            NoiseGauss(rms=0.01), likelihood=likelihood, nmocks=2, seed=1)
-        with Setup(
-                plan.group(), params, driver=driver,
-                mock_options=options) as setup:
-            mocks = setup.mock(params.evaluate())
-        assert [len(mock) for mock in mocks] == [1, 1]
-        for [mock] in mocks:
-            assert mock.likelihood().dump() == want.dump()
+        group.pdescs(), PROPERTIES)
+    likelihoods = Likelihoods(group, LikelihoodGauss(white_floor=0.2))
+    options = MockOptions(NoiseGauss(rms=0.01), nmocks=2, seed=1)
+    with Setup(
+            group, params, likelihoods, driver=driver,
+            mock_options=options) as setup:
+        mocks = setup.mock(params.evaluate())
+    assert [len(mock) for mock in mocks] == [1, 1]
+    for [mock] in mocks:
+        assert mock.data() is not None
+        fitted = likelihoods.with_group(
+            ObservationGroup(group.galaxies(), [mock]))
+        assert fitted.observations() == (0,)
+        assert fitted.of(0).white_floor() == 0.2
 
 
 def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
@@ -150,7 +156,7 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
     data = observation.make_dataset({'spectra': Data(
         model['spectra'], error=np.full_like(model['spectra'], 0.01),
         unit='Jy/beam', beam=dict(bmaj=4, bmin=3, bpa=10))})
-    plan = plan.with_data([data])
+    plan = plan.with_data({0: data})
     [mock] = mock_data(
         plan, params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
         seed=1)
@@ -158,7 +164,7 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
     assert mock['spectra'].beam() == data['spectra'].beam()
     assert mock['spectra'].spatial_correlation() \
         == observation.instrument().psf()
-    with Objective(plan.with_data([mock])) as objective:
+    with Objective(plan.with_data({0: mock})) as objective:
         assert objective.nindependent() < objective.nresiduals()
 
 
@@ -212,7 +218,7 @@ def test_mocks_of_correlated_noise_have_float64_models(driver):
     [mock] = mock_data(
         plan, params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
         seed=1)
-    mocked = evaluate(plan.with_data([mock]))[0]['spectra']
+    mocked = evaluate(plan.with_data({0: mock}))[0]['spectra']
     assert mocked.dtype == np.float64
     np.testing.assert_allclose(
         mocked, model['spectra'], rtol=1e-5,
@@ -291,36 +297,57 @@ def test_mocks_of_moments_miss_the_spectra_the_noise_blanks(driver, method):
     (dict(nmocks='2'), "option 'nmocks' must be of type int; it is '2'"),
     (dict(nmocks=0), "option 'nmocks' must be at least 1; it is 0"),
     (dict(nsamples=1), "option 'nsamples' must be at least 2; it is 1"),
-    (dict(likelihood=[None, None]),
-     "option 'likelihood' is one, or a list of one for each of the 3 "
-     "observations; it is a list of 2")])
+    (dict(likelihood=dict(type='gauss')),
+     "unknown options: 'likelihood'")])
 def test_mock_options_are_checked_as_they_load(options, message):
     # (they were checked only by the task eval, after it evaluated the
-    # model: audit 2026-10-31 #42)
+    # model: audit 2026-10-31 #42; the fits of mocks take the likelihoods
+    # of the setup)
     with pytest.raises((ConfigError, ValueError)) as error:
-        MockOptions.load(
-            dict(noise=dict(type='gauss', rms=1)) | options).per_observation(3)
-    assert str(error.value) == message
+        MockOptions.load(dict(noise=dict(type='gauss', rms=1)) | options)
+    assert str(error.value).startswith(message)
+
+
+def named_images(*names):
+    """A group of a disk and images of it of the given names."""
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import ObservationGroup, observation_parser
+    return ObservationGroup(
+        galaxy_parser.load(dict(components=[disk('band')])),
+        observation_parser.load([
+            dict(type='sky', name=name, line_of_sight=dict(type='flat'),
+                 observable=dict(type='pixel_brightness', size=[4, 4]))
+            for name in names]))
 
 
 def test_mock_options_are_checked_against_the_group(driver):
+    # (a noise for all, or by observation name: of each observation)
     plan = plan_of(driver, dict(type='pixel_brightness', size=[16, 17]))
-    noise = NoiseGauss(rms=0.01)
-    MockOptions([noise]).check(plan.group())
-    with pytest.raises(ValueError, match="a list of 2"):
-        MockOptions([noise, noise]).check(plan.group())
+    noise, other = NoiseGauss(rms=0.01), NoiseGauss(rms=0.02)
+    MockOptions(noise).check(plan.group())
+    with pytest.raises(ValueError, match=r"observations \[0\] have no name"):
+        MockOptions(dict(image=noise)).check(plan.group())
+    group = named_images('hi', 'ha')
+    assert MockOptions(dict(hi=noise, ha=other)).noises(group) == [
+        noise, other]
+    with pytest.raises(ValueError, match=r"these have none: \['ha'\]"):
+        MockOptions(dict(hi=noise)).check(group)
+    with pytest.raises(ValueError, match=r"unknown observations \['co'\]"):
+        MockOptions(dict(hi=noise, ha=other, co=noise)).check(group)
 
 
 def test_mock_options_dump_the_noise_of_each_observation(tmp_path):
-    # Its error map in a file of its own, named after the position of its
-    # observation, which loads again (they were all noise_error.fits, in
-    # the working directory, and the second was refused: audit 2026-11-11)
+    # Its error map in a file of its own, named after its observation,
+    # which loads again (they were all noise_error.fits, in the working
+    # directory, and the second was refused: audit 2026-11-11)
     errors = [np.ones((4, 4)), np.full((4, 4), 2.0)]
     prefix = str(tmp_path / 'mock_')
-    info = MockOptions([NoiseGauss(error=error) for error in errors]).dump(
-        prefix)
-    assert [noise['error'] for noise in info['noise']] == [
-        f'{prefix}observation{i}_noise_error.fits' for i in range(2)]
-    noises, _ = MockOptions.load(info).per_observation(2)
+    info = MockOptions({
+        name: NoiseGauss(error=error)
+        for name, error in zip(('hi', 'ha'), errors)}).dump(prefix)
+    assert {name: noise['error'] for name, noise in info['noise'].items()} \
+        == dict(hi=f'{prefix}hi_noise_error.fits',
+                ha=f'{prefix}ha_noise_error.fits')
+    noises = MockOptions.load(info).noises(named_images('hi', 'ha'))
     for noise, error in zip(noises, errors):
         np.testing.assert_array_equal(noise.error(), error)

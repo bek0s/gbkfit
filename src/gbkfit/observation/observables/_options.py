@@ -9,10 +9,12 @@ from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 
 from annotated_types import Ge
 
-from gbkfit.config import ConfigError, Unit, make_typed_desc, warn
+from gbkfit.config import (
+    ConfigError, Unit, make_typed_desc, parse_options_for_callable, warn)
 from gbkfit.dataset import Dataset
 from gbkfit.grid import Grid, grid_options
 from gbkfit.instrument import Instrument
+from gbkfit.utils import funcutils
 
 if TYPE_CHECKING:
     from .base import Observable
@@ -45,21 +47,52 @@ def dump_grid(grid: Grid) -> dict[str, Any]:
     return options
 
 
-def check_no_options_from_data(
+def options_given_with_data(
         cls: type['Observable'], info: dict[str, Any], dataset: Dataset
-) -> None:
+) -> list[str]:
     """
-    Raise ConfigError if the options of an observable of class cls (info)
-    have one that its data give (see Observable.options_from_data).
+    Return the options of an observable of class cls (info) that its data
+    give too (see Observable.options_from_data).
     """
-    given = [
+    return [
         key for key in cls.options_from_data(dataset)
         if info.get(key) is not None]
-    if given:
-        desc = make_typed_desc(cls, 'observable')
+
+
+def check_options_given_with_data(
+        cls: type['Observable'],
+        info: dict[str, Any],
+        given: Sequence[str],
+        dataset: Dataset
+) -> None:
+    """
+    Raise ConfigError unless the options of an observable of class cls
+    (info) that its data give too (given, see options_given_with_data;
+    e.g. its grid) are those of the data: with them, the options must be
+    those of the observable without data (e.g. of mock data of it), whose
+    observable must hold the data (see Observable.check_dataset).
+    """
+    desc = make_typed_desc(cls, 'observable')
+    # (of the options of __init__ alone: the others are reported by the
+    # load from the data, see Observable.load)
+    required, optional = funcutils.parameter_names(cls.__init__)
+    options = {k: v for k, v in info.items() if k in {*required, *optional}}
+    try:
+        observable = cls(**parse_options_for_callable(options, cls.__init__))
+    except ConfigError as e:
         raise ConfigError(
-            f"the data of {desc} give its options {given}; remove them (the "
-            f"world coordinates of data can be set in the data options)")
+            f"{desc} gives the options {given}, which its data give too, "
+            f"but not all those it needs without data ({e}): give them all, "
+            f"as without data (they are then checked against the data), or "
+            f"none of them") from e
+    try:
+        observable.check_dataset(dataset)
+    except ValueError as e:
+        raise ConfigError(
+            f"{desc} gives the options {given}, which its data give too, "
+            f"and they are not those of the data: {e}; give those of the "
+            f"data (the world coordinates of data can be set in the data "
+            f"options), or none of them") from e
 
 
 def without_options_from_data(

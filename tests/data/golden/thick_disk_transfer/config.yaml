@@ -1,6 +1,6 @@
 # thick_disk_transfer: A thick disk of gas and one of dust, seen in two cubes: on a grid (the dust dims the light behind it) and through radiative transfer (the march along each line of sight).
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - components:
@@ -33,7 +33,6 @@ observations:
     spectral: {step: 20.0, rpix: 15.5, rval: 0.0}
     data: observation0_spectra_d.fits
     error: 0.00015
-  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   dtype: float64
   line_of_sight:
     type: grid
@@ -56,7 +55,6 @@ observations:
     spectral: {step: 20.0, rpix: 15.5, rval: 0.0}
     data: observation1_spectra_d.fits
     error: 0.00015
-  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   dtype: float64
   line_of_sight:
     type: transfer
@@ -71,6 +69,7 @@ observations:
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   fft_dtype: float64
+likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
 params:
   properties:
     gas_xpos: 0.21

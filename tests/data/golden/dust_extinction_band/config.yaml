@@ -1,6 +1,6 @@
 # dust_extinction_band: An image in the band sdss_r of a thick disk of stars whose light is in MJy/sr (as the galaxy at z = 0.25 emits it), seen in data in uJy/arcsec2, dimmed by a thick disk of dust of the extinction law of Cardelli et al.
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - redshift: 0.25
@@ -38,7 +38,6 @@ observations:
     data: observation0_brightness_d.fits
     error: 0.01
     unit: uJy/arcsec2
-  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   dtype: float64
   line_of_sight:
     type: grid
@@ -51,6 +50,7 @@ observations:
   observable: {type: pixel_brightness, median_size: null}
   oversampling: [1, 1]
   fft_dtype: float64
+likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
 params:
   properties:
     stars_xpos: 0.27

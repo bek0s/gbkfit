@@ -5,7 +5,7 @@ its model per item, spectrum or row (see FluxScale): the model at scale 1
 is their piece, and the sums of its comparison solve each alone.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -118,20 +118,22 @@ class ScaleBlock(Block):
 
 def scale_blocks(
         group: ObservationGroup,
-        comparisons: Sequence[Comparison],
+        comparisons: Mapping[int, Comparison],
         solves: Mapping[str, Solve]
 ) -> tuple[ScaleBlock, ...]:
     """
     Return the solves of the solved elements of the flux scales of the
-    observations of a group, of the comparison of each observation and the
-    solve of each solved element (by element name; those of other
-    parameters are left): those of one parameter and one solve together.
+    observations of a group, of the comparison of each observation with
+    data (by index) and the solve of each solved element (by element name;
+    those of other parameters are left): those of one parameter and one
+    solve together.
 
     Raises
     ------
     ValueError
-        If the weighted residuals of the comparison of an observation are
-        not pointwise (see Comparison.pointwise_form).
+        If an observation without data has solved elements of its flux
+        scale, or the weighted residuals of the comparison of an
+        observation are not pointwise (see Comparison.pointwise_form).
     """
     pdescs = group.pdescs()
     result = []
@@ -146,6 +148,10 @@ def scale_blocks(
         for k, name in enumerate(names):
             if name in solves:
                 indices_of.setdefault(id(solves[name]), []).append(k)
+        if indices_of and i not in comparisons:
+            raise ValueError(
+                f"the flux scale of observation {i} ({param}) cannot be "
+                f"solved: the observation has no data to solve it from")
         if indices_of and (
                 reason := comparisons[i].pointwise_form(scale.items)):
             raise ValueError(

@@ -11,7 +11,7 @@ import contextvars
 import copy
 import functools
 import threading
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
 from gbkfit.config import config_path
@@ -258,10 +258,11 @@ class GroupPlan:
         """
         return self._lock
 
-    def with_data(self, datasets: Sequence[Dataset]) -> Self:
+    def with_data(self, datasets: Mapping[int, Dataset]) -> Self:
         """
-        Return a plan of the group with other data (see
-        ObservationGroup.with_data), on the same drivers.
+        Return a plan of the group with other data of some of its
+        observations (see ObservationGroup.with_data), on the same
+        drivers.
 
         The plans of the observations take little from their data (their
         unit and the floating type of their models, which the data can
@@ -274,14 +275,13 @@ class GroupPlan:
         ObservationGroup.plan). They share their last evaluations too (see
         model_d), but those of the observations that its recordings of
         orbits model (see orbit_series): the copy has recordings of its
-        own, in the series of its data. A copy whose observations have
-        other parameters (e.g. a likelihood of data that they had none of;
-        see ObservationGroup.same_params) has plans of its own.
+        own, in the series of its data.
 
         Parameters
         ----------
-        datasets : Sequence of Dataset
-            The data, one dataset for each observation, in their order.
+        datasets : Mapping of int to Dataset
+            The data of each observation that takes some, by index; the
+            others keep theirs, or have none.
 
         Returns
         -------
@@ -291,13 +291,10 @@ class GroupPlan:
         Raises
         ------
         ValueError
-            If there is not one dataset per observation, or a dataset does
+            If an index is not that of an observation, or a dataset does
             not suit its observation.
         """
         group = self._group.with_data(datasets)
-        if not group.same_params(self._group):
-            return type(self)(
-                group, self._galaxy_drivers, self._observation_drivers)
         olds, news = self._group.observations(), group.observations()
         copied = copy.copy(self)
         copied._group = group

@@ -1,6 +1,6 @@
 # warped_disk: A loose and tilted disk (centre, systemic velocity, position angle and inclination of each ring), with a radial harmonic flow, a vertical flow and an anisotropic dispersion, in Gauss-Hermite maps (h3, h4); the disk fills the maps (fits of spectra of noise alone are wild).
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - components:
@@ -31,7 +31,6 @@ observations:
     moment2: {data: observation0_moment2_d.fits, error: observation0_moment2_e.fits}
     h3: {data: observation0_h3_d.fits, error: observation0_h3_e.fits}
     h4: {data: observation0_h4_d.fits, error: observation0_h4_e.fits}
-  likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -47,6 +46,7 @@ observations:
     median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
+likelihoods: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
 params:
   properties:
     xpos: [0.27, 0.27, 0.32, 0.38, 0.47]

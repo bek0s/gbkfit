@@ -6,7 +6,7 @@ through each other along the line of sight (see DepthGroup).
 
 import copy
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any, NamedTuple, Self
 
 from astropy.coordinates import SkyCoord
@@ -152,7 +152,14 @@ class ObservationGroup:
     The group describes the galaxies and the observations; its
     evaluation is planned on devices by plan (see GroupPlan), where the
     stage of each galaxy is evaluated once for all the observations of
-    it.
+    it. An objective compares the models of the observations with data
+    with them (see Objective), and evaluates those of the others
+    alongside (e.g. a prediction of a band without data).
+
+    Options of setups that are given by observation (e.g. their
+    likelihoods, see Likelihoods, or the noise of their mock data, see
+    MockOptions) are one value for all of them, or values by observation
+    name (see per_observation).
 
     Parameters
     ----------
@@ -213,15 +220,12 @@ class ObservationGroup:
             raise ValueError(
                 f"the galaxies and the observations must have different "
                 f"names; repeated: {repeated}")
-        # (as given, for copies; see with_data)
         self._cosmology = DEFAULT if cosmology is None else cosmology
-        self._given_depth_order = \
-            None if depth_order is None else tuple(depth_order)
         self._depth_order = _depth_order(
             depth_order, galaxy_names, observation_names)
         # The parameters of the galaxies (and of their separations), to
-        # which those of the observations are added (see with_data)
-        self._galaxy_pdescs, self._mappings = iterutils.merge_with_prefixes(
+        # which those of the observations are added
+        galaxy_pdescs, self._mappings = iterutils.merge_with_prefixes(
             [galaxy.pdescs() for galaxy in self._galaxies], self._prefixes)
         # The separations of the galaxies of groups, by galaxy
         self._separations = {
@@ -229,12 +233,12 @@ class ObservationGroup:
             for name, members in self._depth_order or ()
             if name is not None for g in members[1:]}
         if taken := sorted(
-                set(self._separations.values()) & self._galaxy_pdescs.keys()):
+                set(self._separations.values()) & galaxy_pdescs.keys()):
             raise ValueError(
                 f"the parameters of the separations of galaxies have the "
                 f"names of parameters of the galaxies: {taken}; rename their "
                 f"components")
-        self._galaxy_pdescs |= {
+        galaxy_pdescs |= {
             separation: ParamScalarDesc(
                 title='Separation along the line of sight',
                 desc="the position of the galaxy along the line of sight "
@@ -242,7 +246,7 @@ class ObservationGroup:
                 unit='arcsec', default=0)
             for separation in self._separations.values()}
         self._pdescs = _with_observation_pdescs(
-            self._galaxy_pdescs, observations)
+            galaxy_pdescs, observations)
         self._constants, _ = iterutils.merge_with_prefixes(
             [galaxy.constants() for galaxy in self._galaxies], self._prefixes)
         # The ids of the galaxies and of the observations in the extra
@@ -356,26 +360,83 @@ class ObservationGroup:
             (None, None, None) if frame is None else frame.offsets,
             tuple(x for x, _ in shifted), tuple(y for _, y in shifted))
 
-    def has_data(self) -> bool:
+    def observed(self) -> tuple[int, ...]:
         """
-        Check whether every observation has data (as those of an
-        objective, see Objective).
+        Return the observations with data, by index: those whose models an
+        objective compares with their data (see Objective).
         """
-        return all(
-            member.observation.data() is not None
-            for member in self._members)
+        return tuple(
+            i for i, member in enumerate(self._members)
+            if member.observation.data() is not None)
 
-    def require_data(self) -> None:
+    def per_observation[T](
+            self,
+            values: T | Mapping[str, T],
+            option: str,
+            indices: Collection[int] | None = None,
+            complete: bool = True
+    ) -> dict[int, T]:
         """
-        Raise ValueError unless every observation has data (e.g. those of
-        an objective, see Objective).
+        Return the values of an option of setups that is given by
+        observation (e.g. the noise of mock data, see MockOptions), by the
+        index of the observation: one value for all the observations, or
+        values by observation name (a Mapping).
+
+        Values by name can be of any observation (they have names, or none
+        has; see the class). Each of the observations of the given indices
+        then needs a name (a position, the label of an observation without
+        one, would change with the order of the observations), and a value
+        unless they need not be complete.
+
+        Parameters
+        ----------
+        values : Any or Mapping of str to Any
+            One value for all, or values by observation name.
+        option : str
+            The name of the option, for the errors.
+        indices : Collection of int, optional
+            The observations that need a value (or a name), by index; all
+            by default.
+        complete : bool, optional
+            Whether each of those needs a value by name.
+
+        Returns
+        -------
+        dict
+            The values, by index: of every observation for one value, or
+            else of those named.
+
+        Raises
+        ------
+        ValueError
+            If the values by name name unknown observations, or an
+            observation of the given indices has no name, or no value
+            while they need to be complete.
         """
-        if missing := [
-                i for i, member in enumerate(self._members)
-                if member.observation.data() is None]:
+        observations = self.observations()
+        if not isinstance(values, Mapping):
+            return dict.fromkeys(range(len(observations)), values)
+        indices = range(len(observations)) if indices is None else indices
+        if unnamed := [i for i in indices if observations[i].name() is None]:
             raise ValueError(
-                f"every observation of an objective needs data; these have "
-                f"none: {missing}")
+                f"option '{option}' is given by observation name, but "
+                f"observations {unnamed} have no name: name them, or give "
+                f"one value for all")
+        names = {
+            observation.name(): i
+            for i, observation in enumerate(observations)
+            if observation.name() is not None}
+        if unknown := sorted(set(values) - set(names)):
+            raise ValueError(
+                f"option '{option}' names unknown observations {unknown}; "
+                f"those with names are {list(names)}")
+        if complete and (missing := [
+                observations[i].name() for i in indices
+                if observations[i].name() not in values]):
+            raise ValueError(
+                f"option '{option}' is given by observation name, and needs "
+                f"a value for each observation; these have none: {missing}")
+        return {names[name]: value for name, value in values.items()}
 
     def seen_by(self, index: int) -> SeenGalaxies:
         """
@@ -497,20 +558,17 @@ class ObservationGroup:
         """
         return self._galaxies[index].mass_model() is None
 
-    def with_data(self, datasets: Sequence[Dataset]) -> Self:
+    def with_data(self, datasets: Mapping[int, Dataset]) -> Self:
         """
-        Return a group of the same galaxies and observations, with other
-        data: one dataset for each observation (e.g. those of a bootstrap;
-        see Observation.with_data), under its likelihood. A group whose
-        observations keep their parameters (see same_params) is a copy of
-        this one, with the parameters in the units of the new data; one
-        whose observations have other parameters (e.g. a likelihood of
-        data that they had none of) is made again.
+        Return a copy of the group with other data of some of its
+        observations (e.g. those of a bootstrap, or mock data; see
+        Observation.with_data): the others keep theirs, or have none. Its
+        parameters are those of this one (the data do not change them).
 
         Parameters
         ----------
-        datasets : Sequence of Dataset
-            The data, one dataset for each observation, in their order.
+        datasets : Mapping of int to Dataset
+            The data of each observation that takes some, by index.
 
         Returns
         -------
@@ -520,43 +578,24 @@ class ObservationGroup:
         Raises
         ------
         ValueError
-            If there is not one dataset per observation, a dataset does
-            not suit its observation, or an observation with its new data
+            If an index is not that of an observation, a dataset does not
+            suit its observation, or an observation with its new data
             cannot see its galaxies (see Observation.check).
         """
-        if len(datasets) != len(self._members):
+        if unknown := sorted(set(datasets) - set(range(len(self._members)))):
             raise ValueError(
-                f"there are {len(self._members)} observations, but "
-                f"{len(datasets)} datasets")
-        observations = [
-            member.observation.with_data(data)
-            for member, data in zip(self._members, datasets)]
-        if not _same_params(self.observations(), observations):
-            return type(self)(
-                self._galaxies, observations, self._given_depth_order,
-                self._cosmology)
+                f"there are {len(self._members)} observations; there are no "
+                f"observations {unknown}")
         group = copy.copy(self)
         group._members = tuple(
-            member._replace(observation=observation)
-            for member, observation in zip(self._members, observations))
+            member if i not in datasets else member._replace(
+                observation=member.observation.with_data(datasets[i]))
+            for i, member in enumerate(self._members))
         # (what an observation can see may depend on its data: e.g. the
         # radii of a profile are those of its data, and radii in angles
         # need a galaxy with a distance)
         group._check_observations()
-        # (of the same names, but in the units of the new data: e.g. those
-        # of a fitted noise, see Likelihood.param_units)
-        group._pdescs = _with_observation_pdescs(
-            self._galaxy_pdescs, observations)
         return group
-
-    def same_params(self, other: 'ObservationGroup') -> bool:
-        """
-        Check whether each observation has the parameters, by name, of
-        that of another group of the same observations (e.g. a group with
-        other data; see with_data, which copies the group then rather than
-        make it again).
-        """
-        return _same_params(other.observations(), self.observations())
 
     def galaxies(self) -> tuple[Galaxy, ...]:
         """Return the galaxies."""
@@ -581,7 +620,9 @@ class ObservationGroup:
     def pdescs(self) -> dict[str, ParamDesc]:
         """
         Return the parameters of the galaxies, prefixed, and those of the
-        observations (see Observation.pdescs).
+        observations (see Observation.pdescs): those of their models (the
+        likelihoods, which compare them with the data, add their own; see
+        Likelihoods.pdescs).
         """
         return self._pdescs
 
@@ -691,20 +732,15 @@ class ObservationGroup:
         """
         Return the names of the parameters that the model of the
         observation of the given index reads: those of the galaxies it
-        sees and their separations (see DepthGroup), and its own but those
-        of its likelihood, which only the comparison with its data reads
-        (e.g. those of a fitted noise; see Likelihood.pdescs).
+        sees and their separations (see DepthGroup), and its own.
         """
         member = self._members[index]
-        likelihood = member.observation.likelihood()
-        own = member.observation.pdescs().keys() - (
-            set() if likelihood is None else likelihood.pdescs().keys())
         return (
             tuple(name for g in member.seen
                   for name in self._mappings[g].values())
             + tuple(self._separations[g] for g in member.seen
                     if g in self._separations)
-            + tuple(sorted(own)))
+            + tuple(sorted(member.observation.pdescs())))
 
 
 # Warn of observations whose origins are further apart on the sky (deg),
@@ -713,26 +749,13 @@ _ALIGNMENT_SEPARATION_WARNING = 1.0
 _ALIGNMENT_ROTATION_WARNING = 0.1
 
 
-def _same_params(
-        olds: Sequence[Observation], news: Sequence[Observation]
-) -> bool:
-    """
-    Return whether each of the new observations has the parameters, by
-    name, of the old one in its place (see ObservationGroup.same_params).
-    """
-    return all(
-        new.pdescs().keys() == old.pdescs().keys()
-        for new, old in zip(news, olds))
-
-
 def _with_observation_pdescs(
         pdescs: Mapping[str, ParamDesc],
         observations: Sequence[Observation]
 ) -> dict[str, ParamDesc]:
     """
     Return the parameters of the galaxies of a group (and of their
-    separations) with those of its observations (e.g. their flux scales,
-    or the fitted noise of their likelihoods, in the units of their data;
+    separations) with those of its observations (e.g. their flux scales;
     see Observation.pdescs). Raise ValueError if those of an observation
     have the names of others.
     """

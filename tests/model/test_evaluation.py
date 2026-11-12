@@ -311,14 +311,14 @@ def test_mocks_and_plans_with_other_data_evaluate_again(driver):
     noise = NoiseGauss(rms=1.0)
     [mocks] = draw_mocks(
         two_observations(driver), TWO_PARAMS, MockOptions(noise, seed=1))
-    first = two_observations(driver).with_data(mocks)
+    first = two_observations(driver).with_data(dict(enumerate(mocks)))
     counts = counted(first)
     models = spectra(first.model_h(TWO_PARAMS))
     [mocks] = draw_mocks(first, TWO_PARAMS, MockOptions(noise, seed=2))
     for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):
         np.testing.assert_array_equal(got, want)
     assert counts == dict(a=2, b=2)
-    second = first.with_data(mocks)
+    second = first.with_data(dict(enumerate(mocks)))
     assert second._plans == first._plans
     second.model_h(TWO_PARAMS | dict(vpt_vt=100))
     for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):

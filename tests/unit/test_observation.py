@@ -1,6 +1,7 @@
 """
-Tests for the making of observations: their observables from data, and
-the checks of their options.
+Tests for the making of observations: their observables from data, the
+checks of their options, and the likelihoods of the observations of a
+group (see Likelihoods).
 """
 
 import astropy.units as u
@@ -12,8 +13,9 @@ from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
-    LikelihoodGauss, LineOfSightFlat, ObservationSky, PixelBrightness,
-    PixelMoments, UpperLimit, observable_parser, observation_parser)
+    FittedNoise, LikelihoodGauss, Likelihoods, LineOfSightFlat,
+    ObservationGroup, ObservationSky, PixelBrightness, PixelMoments,
+    UpperLimit, observable_parser, observation_parser)
 
 
 def test_observable_from_data():
@@ -27,9 +29,7 @@ def test_observable_from_data():
     assert observable.grid() == data.grid()
     assert observable.orders() == (0, 1)
     assert observable.spectral().rval() == 1500
-    ObservationSky(
-        observable, LineOfSightFlat(), data=data,
-        likelihood=LikelihoodGauss(missing_residual=3))
+    ObservationSky(observable, LineOfSightFlat(), data=data)
 
 
 @pytest.mark.parametrize('dataset_class, observable_class, shape', [
@@ -49,15 +49,41 @@ def test_spectra_keep_the_convention_of_their_data(
     assert observable.grid().coords.convention == 'log'
 
 
-def test_a_model_that_can_have_missing_values_needs_their_residual():
-    # A velocity map: the model has no velocity where its flux is below
-    # the mask cutoff, and the residual there is the user's choice
-    data = DatasetPixelMoments(
+def moments_group(names=('maps',), data=True):
+    """
+    A group of a disk and observations of moment maps of it of the given
+    names (with or without data).
+    """
+    from gbkfit.model import galaxy_parser
+    galaxy = galaxy_parser.load(dict(components=[dict(
+        type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'), emission=dict(type='lines'))]))
+    dataset = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
     observable = PixelMoments.from_data(
-        data, spectral=SpectralAxis(step=5, convention='relativistic'))
+        dataset, spectral=SpectralAxis(step=5, convention='relativistic'))
+    return ObservationGroup(galaxy, [
+        ObservationSky(
+            observable, LineOfSightFlat(), name=name,
+            data=dataset if data else None)
+        for name in names])
+
+
+def test_a_model_that_can_have_missing_values_needs_their_residual():
+    # A velocity map: the model has no velocity where its flux is below
+    # the mask cutoff, and the residual there is the user's choice; the
+    # default likelihood has none
+    group = moments_group()
     with pytest.raises(ValueError, match="option missing_residual"):
-        ObservationSky(observable, LineOfSightFlat(), data=data)
+        Likelihoods(group)
+    Likelihoods(group, LikelihoodGauss(missing_residual=3))
+    # (without data, only a likelihood given is checked: e.g. that of the
+    # fit that a setup of mock data prepares)
+    group = moments_group(data=False)
+    assert Likelihoods(group).observations() == ()
+    with pytest.raises(ValueError, match="option missing_residual"):
+        Likelihoods(group, LikelihoodGauss())
 
 
 def test_observable_options_are_checked():
@@ -152,47 +178,144 @@ def test_the_data_choose_the_dtype_unless_it_is_given():
     assert given.dump()['dtype'] == 'float32'
 
 
-def test_a_group_with_other_data_has_the_units_they_give():
-    # The parameters of a fitted noise are in the units of the data (see
-    # Likelihood.param_units): a group with data of another unit has its
-    # parameters in it (it kept the old: audit 2026-11-11)
+def image_group(*names, data=(True,)):
+    """
+    A group of a disk and images of it of the given names (one without a
+    name by default), each with data (in Jy) or not.
+    """
     from gbkfit.model import galaxy_parser
-    from gbkfit.observation import FittedNoise, ObservationGroup
     galaxy = galaxy_parser.load(dict(components=[dict(
         type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
         emission=dict(type='band'))]))
-    data = brightness('Jy')
-    observation = ObservationSky(
-        PixelBrightness.from_data(data), LineOfSightFlat(), data=data,
-        likelihood=LikelihoodGauss(fitted_noise=dict(
-            brightness=FittedNoise(jitter=True))), name='obs')
-    group = ObservationGroup([galaxy], [observation])
+    dataset = brightness('Jy')
+    observable = PixelBrightness.from_data(dataset)
+    names = names or (None,) * len(data)
+    return ObservationGroup([galaxy], [
+        ObservationSky(
+            observable, LineOfSightFlat(), name=name,
+            data=dataset if with_data else None)
+        for name, with_data in zip(names, data, strict=True)])
+
+
+def test_the_parameters_of_likelihoods_have_the_units_of_their_data():
+    # The parameters of a fitted noise are in the units of the data (see
+    # Likelihood.param_units): those of a group with data of another unit
+    # are in it (it kept the old: audit 2026-11-11), and not those of the
+    # group, whose models do not read them
+    group = image_group('obs')
+    likelihoods = Likelihoods(group, LikelihoodGauss(fitted_noise=dict(
+        brightness=FittedNoise(jitter=True))))
     jitter = 'obs_noise_jitter_brightness'
-    assert group.pdescs()[jitter].unit() == u.Jy
-    assert group.with_data([brightness('mJy')]).pdescs()[jitter].unit() \
-        == u.mJy
+    assert jitter not in group.pdescs()
+    assert likelihoods.pdescs()[jitter].unit() == u.Jy
+    other = likelihoods.with_group(group.with_data({0: brightness('mJy')}))
+    assert other.pdescs()[jitter].unit() == u.mJy
+    assert other.of(0).noise_params('brightness') == (None, jitter)
 
 
 def test_a_group_with_other_data_is_a_copy_of_the_same_parameters():
-    # (the group and its plan ask one question, see same_params: a copy
-    # shares what the group made of each observation; a group of other
-    # parameters is made again)
-    from gbkfit.model import galaxy_parser
-    from gbkfit.observation import FittedNoise, ObservationGroup
-    galaxy = galaxy_parser.load(dict(components=[dict(
-        type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
-        emission=dict(type='band'))]))
-    data = brightness('Jy')
-    plain = ObservationSky(
-        PixelBrightness.from_data(data), LineOfSightFlat(), data=data,
-        name='obs')
-    fitted = plain.with_data(data, LikelihoodGauss(fitted_noise=dict(
-        brightness=FittedNoise(jitter=True))))
-    group = ObservationGroup([galaxy], [plain])
-    copied = group.with_data([brightness('Jy')])
-    assert copied.same_params(group)
+    # (a copy shares what the group made of each observation, and its
+    # parameters, which the data do not change; the observations it gives
+    # no data keep theirs)
+    group = image_group('a', 'b', data=(True, False))
+    copied = group.with_data({0: brightness('mJy')})
     assert copied.seen_by(0) is group.seen_by(0)
-    assert not ObservationGroup([galaxy], [fitted]).same_params(group)
+    assert copied.pdescs() == group.pdescs()
+    assert copied.observations()[1] is group.observations()[1]
+    assert copied.observations()[0].data()['brightness'].unit() == u.mJy
+    assert group.with_data({1: brightness()}).observed() == (0, 1)
+    with pytest.raises(ValueError, match="no observations \\[2\\]"):
+        group.with_data({2: brightness()})
+
+
+def test_likelihoods_are_one_for_all_or_by_observation_name():
+    # (one for every observation; by name, the Gaussian for those left
+    # out; the parameters are named after their observations)
+    fitted = LikelihoodGauss(
+        weights=2.0, fitted_noise=dict(brightness=FittedNoise(jitter=True)))
+    group = image_group('a', 'b', 'c', data=(True, True, False))
+    one = Likelihoods(group, fitted)
+    assert one.observations() == group.observed() == (0, 1)
+    assert set(one.pdescs()) == {
+        'a_noise_jitter_brightness', 'b_noise_jitter_brightness'}
+    assert one.given() is fitted
+    by_name = Likelihoods(group, dict(b=fitted))
+    assert by_name.of(0).weight('brightness') == 1.0
+    assert by_name.of(1).weight('brightness') == 2.0
+    assert set(by_name.pdescs()) == {'b_noise_jitter_brightness'}
+    with pytest.raises(KeyError):
+        by_name.of(2)
+    # (a likelihood of an observation without data is checked against
+    # its items, for the fit it prepares, and compares nothing)
+    assert Likelihoods(group, dict(c=fitted)).observations() == (0, 1)
+    with pytest.raises(ValueError, match=r"does not have: \['spectra'\]"):
+        Likelihoods(group, dict(c=LikelihoodGauss(weights=dict(spectra=2))))
+
+
+@pytest.mark.parametrize('names, data, given, message', [
+    (('a', 'b'), (True, True), dict(d=LikelihoodGauss()),
+     r"names unknown observations \['d'\]; those with names are \['a', "
+     r"'b'\]"),
+    ((None, None), (True, True), dict(observation0=LikelihoodGauss()),
+     r"observations \[0, 1\] have no name: name them, or give one value "
+     r"for all"),
+    ((None, None), (False, False), dict(observation0=LikelihoodGauss()),
+     r"unknown observations \['observation0'\]; those with names are"),
+    ((None,), (True,), LikelihoodGauss(fitted_noise=dict(
+        brightness=FittedNoise(jitter=True))),
+     "observation 0: a likelihood with parameters"),
+    (('a',), (True,), LikelihoodGauss(upper_limits=dict(
+        bright=UpperLimit(limit=0.1, error=0.1))),
+     r"observation 'a': the options of the likelihood name data items"),
+])
+def test_likelihoods_are_checked_against_their_observations(
+        names, data, given, message):
+    # (by name, each observation with data needs a name: the label of one
+    # without, its position, would change with the order)
+    with pytest.raises(ValueError, match=message):
+        Likelihoods(image_group(*names, data=data), given)
+
+
+def test_the_errors_of_likelihoods_by_name_are_at_their_names():
+    with pytest.raises(ValueError) as info, config_path('likelihoods'):
+        Likelihoods(image_group('a', 'b', data=(True, True)), dict(
+            b=LikelihoodGauss(weights=dict(moment1=2))))
+    assert info.value.config_path == ['likelihoods', 'b']
+
+
+def test_likelihoods_have_parameters_of_names_of_their_own():
+    # (the parameters of a likelihood must not be those of the group: e.g.
+    # of a component of the name of the observation)
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import LikelihoodUser
+    likelihood = LikelihoodUser(lambda *args: 0.0, 'log_likelihood', ['s'])
+    assert set(Likelihoods(image_group('a'), likelihood).pdescs()) == {'a_s'}
+    galaxy = galaxy_parser.load(dict(components=[dict(
+        type='thin_disk', name='disk', rnodes=[0, 1, 2],
+        rptraits=dict(type='exponential'), emission=dict(type='band'))]))
+    dataset = brightness()
+    group = ObservationGroup(galaxy, ObservationSky(
+        PixelBrightness.from_data(dataset), LineOfSightFlat(), data=dataset,
+        name='disk'))
+    clash = LikelihoodUser(lambda *args: 0.0, 'log_likelihood', ['rpt_a'])
+    with pytest.raises(ValueError, match=r"names of parameters of the group:"
+                                         r" \['disk_rpt_a'\]"):
+        Likelihoods(group, clash)
+
+
+def test_options_by_observation_are_one_for_all_or_by_name():
+    group = image_group('a', 'b', 'c', data=(True, False, False))
+    assert group.per_observation(5, 'noise') == {0: 5, 1: 5, 2: 5}
+    assert group.per_observation(
+        dict(a=1, b=2), 'noise', [0, 1]) == {0: 1, 1: 2}
+    assert group.per_observation(
+        dict(b=2), 'scheme', [1], complete=False) == {1: 2}
+    with pytest.raises(ValueError, match=r"these have none: \['c'\]"):
+        group.per_observation(dict(a=1, b=2), 'noise')
+    unnamed = image_group(data=(True, False))
+    assert unnamed.per_observation(5, 'noise') == {0: 5, 1: 5}
+    with pytest.raises(ValueError, match=r"observations \[0, 1\] have no"):
+        unnamed.per_observation({}, 'noise')
 
 
 @pytest.mark.parametrize('options, message', [
@@ -202,14 +325,9 @@ def test_a_group_with_other_data_is_a_copy_of_the_same_parameters():
 def test_likelihoods_name_items_of_their_observation(options, message):
     # A typo in the name of an item of the options of a likelihood would
     # leave the option out without a word
-    data = DatasetPixelMoments(
-        {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
     with pytest.raises(ValueError, match=message):
-        ObservationSky(
-            PixelMoments.from_data(
-                data, spectral=SpectralAxis(step=5, convention='relativistic')),
-            LineOfSightFlat(), data=data,
-            likelihood=LikelihoodGauss(missing_residual=3, **options))
+        Likelihoods(moments_group(), LikelihoodGauss(
+            missing_residual=3, **options))
 
 
 def test_residuals_of_upper_limits_are_not_linear_in_the_model():
@@ -222,10 +340,10 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
         Data(np.ones((10, 4, 4))),
         spectral=SpectralAxis(convention='relativistic'))
     observation = ObservationSky(
-        PixelSpectra.from_data(data), LineOfSightFlat(), data=data,
-        likelihood=LikelihoodGauss(
-            upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))))
-    comparison_ = comparison_of(observation, DriverHost())
+        PixelSpectra.from_data(data), LineOfSightFlat(), data=data)
+    comparison_ = comparison_of(observation, LikelihoodGauss(
+        upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))),
+        DriverHost())
     for form in (comparison_.linear_form, comparison_.pointwise_form):
         assert "has an upper limit" in form(['spectra'])
 
