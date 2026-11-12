@@ -24,7 +24,6 @@ from gbkfit.fitting.result import Bootstrap
 from gbkfit.objective import Objective
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues
-from gbkfit.utils import iterutils
 
 if TYPE_CHECKING:
     from gbkfit.parallel import WorkerPool
@@ -225,9 +224,10 @@ class BootstrapOptions(Serializable):
     ----------
     nsamples : int
         The number of refits.
-    scheme : BootstrapScheme or Sequence of BootstrapScheme
-        How the residuals of the data of every observation are redrawn,
-        or of each.
+    scheme : BootstrapScheme or Mapping of str to BootstrapScheme
+        How the residuals of the data of every observation with data are
+        redrawn, or of each, by observation name (see
+        ObservationGroup.per_observation, and the examples).
     fitter : Fitter, optional
         The fitter of the refits; by default, that of the fit. The refits
         work out no uncertainty.
@@ -239,12 +239,42 @@ class BootstrapOptions(Serializable):
     ------
     ValueError
         If nsamples is below 2.
+
+    Examples
+    --------
+    One scheme for every observation:
+
+    .. code-block:: yaml
+
+        bootstrap:
+          nsamples: 100
+          scheme:
+            type: gauss
+
+    A scheme for each observation with data, by name:
+
+    .. code-block:: yaml
+
+        bootstrap:
+          nsamples: 100
+          scheme:
+            hi:
+              type: blocks
+              size:
+                - 4
+                - 4
+                - 2
+            halpha:
+              type: gauss
     """
 
     def dump(self) -> dict[str, Any]:
-        info: dict[str, Any] = dict(
-            nsamples=self._nsamples,
-            scheme=bootstrap_scheme_parser.dump(self._scheme))
+        scheme = {
+            name: bootstrap_scheme_parser.dump(item)
+            for name, item in self._scheme.items()} \
+            if isinstance(self._scheme, dict) \
+            else bootstrap_scheme_parser.dump(self._scheme)
+        info: dict[str, Any] = dict(nsamples=self._nsamples, scheme=scheme)
         if self._fitter is not None:
             info['fitter'] = self._fitter.dump()
         if self._seed is not None:
@@ -254,13 +284,13 @@ class BootstrapOptions(Serializable):
     def __init__(
             self,
             nsamples: Annotated[int, Ge(2)],
-            scheme: BootstrapScheme | Sequence[BootstrapScheme],
+            scheme: BootstrapScheme | Mapping[str, BootstrapScheme],
             fitter: Fitter | None = None,
             seed: int | None = None
     ):
         check_options(BootstrapOptions.__init__, locals())
         self._nsamples = nsamples
-        self._scheme = list(scheme) if iterutils.is_sequence(scheme) \
+        self._scheme = dict(scheme) if isinstance(scheme, Mapping) \
             else scheme
         self._fitter = fitter
         self._seed = seed
@@ -277,35 +307,36 @@ class BootstrapOptions(Serializable):
         """Return the seed of the redrawn residuals, if given."""
         return self._seed
 
-    def schemes(self, nobservations: int) -> list[BootstrapScheme]:
+    def schemes(self, group: ObservationGroup) -> dict[int, BootstrapScheme]:
         """
-        Return the scheme of each of a number of observations. Raise
-        ValueError unless there is one scheme, or one per observation.
+        Return the scheme of each observation with data of a group (those
+        a bootstrap refits), by index.
+
+        Raises
+        ------
+        ValueError
+            If the schemes are given by name, and do not name each
+            observation with data (see ObservationGroup.per_observation).
         """
-        if not isinstance(self._scheme, list):
-            return [self._scheme] * nobservations
-        if len(self._scheme) != nobservations:
-            raise ValueError(
-                f"the scheme is one, or a list of one for each of the "
-                f"{nobservations} observations; it is a list of "
-                f"{len(self._scheme)}")
-        return self._scheme
+        observed = group.observed()
+        schemes = group.per_observation(self._scheme, 'scheme', observed)
+        return {i: schemes[i] for i in observed}
 
     def check(self, group: ObservationGroup, params: ParamSpace) -> None:
         """
-        Raise ValueError unless the options suit the observations of a
-        group and its parameters: their schemes their data (see
+        Raise ValueError unless the options suit the observations with
+        data of a group and its parameters: their schemes their data (see
         BootstrapScheme.check), and the free properties of the parameters
         the fitter of the refits, if given (see Fitter.load_fit_params).
         """
         observations = group.observations()
-        schemes = self.schemes(len(observations))
-        for i, (scheme, observation) in enumerate(
-                zip(schemes, observations)):
-            dataset = observation.data()
-            index = [i] if isinstance(self._scheme, list) else []
-            with config_path('scheme', *index):
-                scheme.check(dataset, params)
+        with config_path('scheme'):
+            schemes = self.schemes(group)
+        for i, scheme in schemes.items():
+            name = [observations[i].name()] \
+                if isinstance(self._scheme, dict) else []
+            with config_path('scheme', *name):
+                scheme.check(observations[i].data(), params)
         if self._fitter is not None:
             with config_path('fitter'):
                 self._fitter.load_fit_params(params)
@@ -332,13 +363,14 @@ def run_bootstrap(
     fit (with the values of its solved elements; see Objective), the noise
     sigma of each value (its error, or its fitted noise; see
     Likelihood.noise), and the residuals in units of it, r = (d - m) /
-    sigma, redrawn by the scheme of each observation (see
-    BootstrapScheme): a residual moved from a noisy value to a quiet one
-    takes the noise of the latter. The values without a residual keep
-    their data (the masked values stay masked, and those missing from
-    the model keep theirs). Each refit starts at the best fit (see
-    ParamSpace.with_values), with the fitter of the options, or else that
-    of the fit, which works out no uncertainty. The refits that fail (the
+    sigma, redrawn by the scheme of each observation with data (see
+    BootstrapScheme; those without data have none): a residual moved from
+    a noisy value to a quiet one takes the noise of the latter. The
+    values without a residual keep their data (the masked values stay
+    masked, and those missing from the model keep theirs). Each refit
+    starts at the best fit (see ParamSpace.with_values), with the fitter
+    of the options, or else that of the fit, which works out no
+    uncertainty. The refits that fail (the
     fitter finds no point, or the parameters cannot be evaluated) are
     counted and left out; those whose fitter reports no success (e.g.
     stopped by its budget of evaluations) are kept, and flagged (see
@@ -412,15 +444,19 @@ def run_bootstrap(
     # values of the solved elements that it solves there)
     evaluation = objective.evaluate(start_params.evaluate())
     values = start_params.evaluate(solved=evaluation.solved)
-    group = objective.group()
-    schemes = options.schemes(group.nobservations())
+    # (of the observations that the objective compares, those with data)
+    observed = objective.observations()
+    by_index = options.schemes(objective.group())
+    schemes = [by_index[i] for i in observed]
+    model_data = objective.group_plan().model_h(values)
     models = [
-        {key: item.data.copy() for key, item in model.items()}
-        for model in objective.group_plan().model_h(values)]
+        {key: item.data.copy() for key, item in model_data[i].items()}
+        for i in observed]
+    likelihoods = objective.likelihoods()
     noises = [
-        {key: obs.likelihood().noise(key, dataset[key].error(), values)
+        {key: likelihoods.of(i).noise(key, dataset[key].error(), values)
          for key in dataset}
-        for obs, dataset in zip(group.observations(), objective.datasets())]
+        for i, dataset in zip(observed, objective.datasets())]
     residuals = [
         {key: (dataset[key].data() - model[key]) / noise[key]
          for key in dataset}

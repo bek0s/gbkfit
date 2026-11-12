@@ -20,8 +20,8 @@ from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, ObservationGroup, ObservationSky,
-    PixelSpectra, RegionMoments, line_of_sight_parser)
+    FittedNoise, LikelihoodGauss, Likelihoods, ObservationGroup,
+    ObservationSky, PixelSpectra, RegionMoments, line_of_sight_parser)
 from gbkfit.observation.orbits import _bins_light
 from gbkfit.observation.observables._orbit_sky import bins_sky_grid
 from gbkfit.params import ParamSpace
@@ -91,8 +91,16 @@ def observation(regions, psf=1.0, oversampling=None, data=None):
         line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
         instrument=Instrument(psf=None if psf is None else PSFGauss(psf)),
         lines=['stars'], data=dataset, dtype='float64',
-        oversampling=oversampling,
-        likelihood=LikelihoodGauss(missing_residual=3))
+        oversampling=oversampling)
+
+
+def likelihoods_of(group):
+    """
+    The likelihoods of the observations of a group of moments of bins (and
+    others): Gaussian, with the residual of a value missing from a model
+    (see LikelihoodGauss).
+    """
+    return Likelihoods(group, LikelihoodGauss(missing_residual=3))
 
 
 def without_data(obs):
@@ -201,8 +209,7 @@ def test_orbits_are_seen_without_what_their_recording_ignores(driver):
         seen.observable(), seen.line_of_sight(),
         instrument=Instrument(
             psf=PSFGauss(1.0), lsf=LSFGauss(20.0 * u.km / u.s)),
-        lines=['stars'], data=seen.data(), dtype='float64',
-        likelihood=seen.likelihood())
+        lines=['stars'], data=seen.data(), dtype='float64')
     with pytest.raises(ValueError, match="without an LSF"):
         ObservationGroup([galaxy()], [with_lsf]).plan(driver)
 
@@ -219,7 +226,8 @@ def test_an_image_sees_the_light_of_stars_on_orbits(driver):
     group = ObservationGroup([galaxy()], [observation(bins()), image])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
-    objective = Objective(group.plan(driver), params.solves())
+    objective = Objective(
+        group.plan(driver), likelihoods_of(group), params.solves())
     assert np.isfinite(objective.chi2(params.evaluate()))
 
 
@@ -241,24 +249,27 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
     seen = observation(bins())
     stars = ObservationSky(
         seen.observable(), seen.line_of_sight(), instrument=seen.instrument(),
-        lines=['stars'], data=seen.data(), dtype='float64', name='bins',
-        likelihood=LikelihoodGauss(
-            missing_residual=3,
-            fitted_noise=dict(
-                moment1=FittedNoise(scale=True, scale_min=0.5))))
+        lines=['stars'], data=seen.data(), dtype='float64', name='bins')
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
     image = ObservationSky(
         PixelBrightness.from_data(dataset),
         line_of_sight_parser.load(dict(type='flat')), data=dataset,
-        name='image', likelihood=LikelihoodGauss(
-            fitted_noise=dict(
-                brightness=FittedNoise(scale=True, scale_min=0.5))))
+        name='image')
     group = ObservationGroup([galaxy()], [stars, image])
-    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
+    likelihoods = Likelihoods(group, dict(
+        bins=LikelihoodGauss(
+            missing_residual=3,
+            fitted_noise=dict(
+                moment1=FittedNoise(scale=True, scale_min=0.5))),
+        image=LikelihoodGauss(
+            fitted_noise=dict(
+                brightness=FittedNoise(scale=True, scale_min=0.5)))))
+    params = ParamSpace.from_properties(
+        group.pdescs() | likelihoods.pdescs(), PROPERTIES | dict(
         stars_weights=SOLVE, bins_noise_scale_moment1=1.0,
         image_noise_scale_brightness=1.0))
-    objective = Objective(group.plan(driver), params.solves())
+    objective = Objective(group.plan(driver), likelihoods, params.solves())
     values = params.evaluate()
     first = objective.evaluate(values).solved
     kept = objective.evaluate(
@@ -279,7 +290,8 @@ def test_bins_of_stars_on_orbits_have_a_positive_sigma(driver):
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
     with pytest.raises(ValueError, match="have a positive sigma"):
-        Objective(group.plan(driver), params.solves())
+        Objective(
+            group.plan(driver), likelihoods_of(group), params.solves())
 
 
 def test_orbits_cut_by_the_most_steps_are_warned_of(
@@ -290,7 +302,8 @@ def test_orbits_cut_by_the_most_steps_are_warned_of(
     group = ObservationGroup([galaxy()], [observation(bins())])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
-    objective = Objective(group.plan(driver), params.solves())
+    objective = Objective(
+        group.plan(driver), likelihoods_of(group), params.solves())
     objective.chi2(params.evaluate())
     assert any('took the most steps' in r.message for r in caplog.records)
 
@@ -300,7 +313,8 @@ def test_the_weights_of_the_orbits_are_solved(driver):
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=[1.0] * 400))
     with pytest.raises(ValueError, match="give them a solve"):
-        Objective(group.plan(driver), params.solves())
+        Objective(
+            group.plan(driver), likelihoods_of(group), params.solves())
 
 
 @pytest.mark.parametrize('rota, oversampling', [(0, None), (30, (2, 2))])
@@ -360,7 +374,8 @@ def test_an_objective_models_the_bins_of_stars_on_orbits(driver):
     group = ObservationGroup([galaxy()], [observation(bins())])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=SOLVE))
-    objective = Objective(group.plan(driver), params.solves())
+    objective = Objective(
+        group.plan(driver), likelihoods_of(group), params.solves())
     evaluation = objective.evaluate(params.evaluate())
     chi2 = evaluation.merits.chi2
     residuals = objective.residuals(params.evaluate())
@@ -448,7 +463,7 @@ def test_mock_data_of_orbits_are_the_model_plus_noise(driver):
     model = plan.model_h(values, extras)[0]
     rms = extras.get('cube').data.max()
     [[dataset]] = draw_mocks(plan, values, MockOptions(
-        [noise_parser.load(dict(type='gauss', rms=rms))], nsamples=30,
+        noise_parser.load(dict(type='gauss', rms=rms)), nsamples=30,
         seed=1))
     z = np.concatenate([
         (dataset[key].data() - model[key].data) / dataset[key].error()
@@ -477,7 +492,8 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
         stars_weights=dict(solve=dict(
             type='gauss', mean=1, sigma=1e-6, min=0,
             likelihood='profiled'))))
-    objective = Objective(group.plan(driver), params.solves())
+    objective = Objective(
+        group.plan(driver), likelihoods_of(group), params.solves())
     evaluation = objective.evaluate(params.evaluate())
     np.testing.assert_allclose(
         list(evaluation.solved.values()), 1, rtol=1e-6)
@@ -516,7 +532,8 @@ def test_the_model_of_bins_with_data_is_that_of_the_objective(driver):
     group = ObservationGroup([galaxy()], [obs])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=SOLVE))
-    objective = Objective(group.plan(driver), params.solves())
+    objective = Objective(
+        group.plan(driver), likelihoods_of(group), params.solves())
     evaluation = objective.evaluate(params.evaluate())
     values = params.evaluate(solved=evaluation.solved)
     model = objective.group_plan().model_h(values)[0]
@@ -550,7 +567,8 @@ def test_a_bootstrap_redraws_about_the_model_of_the_objective(driver):
     group = ObservationGroup([galaxy()], [observation(bins())])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_vsys=dict(value=0, min=-50, max=50), stars_weights=SOLVE))
-    objective = Objective(group.plan(driver), params.solves())
+    objective = Objective(
+        group.plan(driver), likelihoods_of(group), params.solves())
     scheme = KeptModels()
     boot = run_bootstrap(
         objective, params, dict(stars_vsys=0.0),
@@ -593,8 +611,7 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
             spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
         line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
         instrument=Instrument(psf=PSFGauss(0.5 / np.sqrt(8 * np.log(2)))),
-        lines=['stars'], data=dataset,
-        likelihood=LikelihoodGauss(missing_residual=3))
+        lines=['stars'], data=dataset)
     a = light.a / mock.kpc_per_arcsec()
     sigma, i0 = hernquist_mge(a)
     spheroid = SPHEROID | dict(
@@ -617,7 +634,9 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
                 mass_light_log_rho=log_rho + np.log10(factor),
                 mass_bh_log_m=np.log10(bh_mass)))
             if objective is None:
-                objective = Objective(group.plan(driver), params.solves())
+                objective = Objective(
+                    group.plan(driver), likelihoods_of(group),
+                    params.solves())
             residuals = objective.residual_vector_h(params.evaluate())
             chi2[bh_mass, factor] = float(np.sum(residuals[0] ** 2))
     assert min(chi2, key=chi2.get) == (bh, 1.0)
@@ -682,8 +701,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
         RegionMoments.from_data(
             dataset, method='gauss_hermite',
             spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
-        los, instrument=instrument, lines=['stars'], data=dataset,
-        likelihood=LikelihoodGauss(missing_residual=3))
+        los, instrument=instrument, lines=['stars'], data=dataset)
     group = ObservationGroup(
         [stars(dict(norbits=1500, turns=30))], [obs])
     solve = dict(solve=dict(
@@ -694,7 +712,8 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
         params = ParamSpace.from_properties(group.pdescs(), truth | dict(
             mass_stars_upsilon=1e8 * factor, stars_weights=solve))
         if objective is None:
-            objective = Objective(group.plan(driver), params.solves())
+            objective = Objective(
+                group.plan(driver), likelihoods_of(group), params.solves())
         residuals = objective.residual_nddata_h(params.evaluate())[0]
         chi2[factor] = sum(float(np.sum(r ** 2)) for r in residuals.values())
         if factor == 1.0:

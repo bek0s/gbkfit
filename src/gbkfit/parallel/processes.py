@@ -14,11 +14,11 @@ from gbkfit.config import check_options
 from gbkfit.control import StopControl, StopFlag
 from gbkfit.driver import Driver
 from gbkfit.objective import Objective
-from gbkfit.observation import GroupPlan, ObservationGroup
+from gbkfit.observation import Likelihoods
 from gbkfit.params import Solve
 from ._detail import (
     Drivers, Item, LocalWorker, Result, Worker, cores, dump_placements,
-    own_placement, placement_drivers)
+    objective_on, own_placement, placement_drivers)
 from .pool import Placement, Workers
 
 
@@ -108,7 +108,8 @@ class WorkersProcesses(Workers):
         threads = self._threads or max(1, cores() // len(placements))
         return [
             _ProcessWorker(
-                objective.group(), objective.solves(), placement, threads)
+                objective.likelihoods(), objective.solves(), placement,
+                threads)
             for placement in placements]
 
 
@@ -117,7 +118,7 @@ class _ProcessWorker(LocalWorker):
 
     def __init__(
             self,
-            group: ObservationGroup,
+            likelihoods: Likelihoods,
             solves: Mapping[str, Solve],
             placement: Drivers,
             threads: int
@@ -126,7 +127,7 @@ class _ProcessWorker(LocalWorker):
         super().__init__(context.Event())
         self._executor = concurrent.futures.ProcessPoolExecutor(
             1, mp_context=context, initializer=_start_process,
-            initargs=(group, solves, placement, threads, self._flag))
+            initargs=(likelihoods, solves, placement, threads, self._flag))
 
     def submit(
             self,
@@ -153,7 +154,7 @@ _process_control: StopControl | None = None
 
 
 def _start_process(
-        group: ObservationGroup,
+        likelihoods: Likelihoods,
         solves: Mapping[str, Solve],
         placement: Drivers,
         threads: int,
@@ -165,7 +166,7 @@ def _start_process(
     by then, as the host driver loads its own).
     """
     global _process_copy, _process_control
-    _process_copy = Objective(GroupPlan(group, *placement), solves)
+    _process_copy = objective_on(likelihoods, solves, placement)
     _process_control = StopControl(flag)
     threadpoolctl.threadpool_limits(threads)
 

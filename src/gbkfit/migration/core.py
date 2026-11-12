@@ -14,11 +14,12 @@ from collections.abc import Generator, Mapping, MutableMapping
 from typing import Any, TextIO
 
 import ruamel.yaml
+from ruamel.yaml.comments import CommentedMap
 
 from gbkfit.config import FORMAT_VERSION, ConfigError
 import gbkfit.project
-from . import v2, v3, v4, v5, v6, v7, v8, v9
-from .rules import Change, PiecesView, Rule, insert_first
+from . import v2, v3, v4, v5, v6, v7, v8, v9, v10
+from .rules import Change, PiecesView, Rule, ViewedPiece, insert_first
 
 
 __all__ = [
@@ -71,7 +72,7 @@ def _yaml() -> ruamel.yaml.YAML:
 # The rules of all the versions, in order (see Rule)
 RULES: tuple[Rule, ...] = (
     *v2.RULES, *v3.RULES, *v4.RULES, *v5.RULES, *v6.RULES, *v7.RULES,
-    *v8.RULES, *v9.RULES)
+    *v8.RULES, *v9.RULES, *v10.RULES)
 
 
 def migrate(
@@ -268,8 +269,9 @@ def _setup_view(
     """
     Return a view of a setup with its galaxies and observations that name
     pieces replaced by copies of the pieces as they were (originals, by
-    section and name), so that the rules that rename parameters know them
-    (the rest is the setup itself, rewritten in place), and the positions
+    section and name; see ViewedPiece), so that the rules that take what
+    the setup takes of them know them (e.g. those that rename parameters;
+    the rest is the setup itself, rewritten in place), and the positions
     of those items, by section (whose changes are those of the pieces,
     not of the setup).
     """
@@ -284,7 +286,8 @@ def _setup_view(
     view = dict(setup)
     for section, found in named.items():
         view[section] = [
-            copy.deepcopy(originals[section][item]) if i in found else item
+            ViewedPiece(item, copy.deepcopy(originals[section][item]))
+            if i in found else item
             for i, item in enumerate(_listed(setup, section))]
     return view, named
 
@@ -301,8 +304,13 @@ def _write_back(
     """
     for key in [k for k in setup if k not in view]:
         del setup[key]
-    for key, value in view.items():
-        if key not in named:
+    for position, (key, value) in enumerate(view.items()):
+        if key in named:
+            continue
+        # (a new section where the rules put it, e.g. after another)
+        if key not in setup and isinstance(setup, CommentedMap):
+            setup.insert(position, key, value)
+        else:
             setup[key] = value
     for section, found in named.items():
         if isinstance(listed := setup[section], list):

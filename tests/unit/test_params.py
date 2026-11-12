@@ -118,8 +118,10 @@ UNITLESS_PARAMS = dict(
 
 @pytest.mark.parametrize('case, unitless', UNITLESS_PARAMS.items())
 def test_params_of_models_have_units(case, unitless):
-    group = gbkfit.describe(str(GOLDEN_DIR / case / 'config.yaml')).group
-    assert {name for name, pdesc in group.pdescs().items()
+    # (of the models and of the likelihoods)
+    description = gbkfit.describe(str(GOLDEN_DIR / case / 'config.yaml'))
+    pdescs = description.group.pdescs() | description.likelihoods.pdescs()
+    assert {name for name, pdesc in pdescs.items()
             if pdesc.unit() is None} == unitless
 
 

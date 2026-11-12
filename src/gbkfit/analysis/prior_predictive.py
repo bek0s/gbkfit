@@ -29,12 +29,13 @@ class PriorPredictive:
         parameters cannot be evaluated, or the model or a solve fails, as
         a fit takes such a point: see EvaluationError).
     bands : list of dict of str to np.ndarray
-        Of each observation, by data item: the 5th, 50th and 95th
-        percentiles of the data the draws predict at each value (3, *the
-        shape of the data).
+        Of each observation with data (see Objective.observations), by
+        data item: the 5th, 50th and 95th percentiles of the data the
+        draws predict at each value (3, *the shape of the data).
     coverage : list of dict of str to float
-        Of each observation, by data item: the share of the values of the
-        data within the 5-95 band (low: the priors do not reach the data).
+        Of each observation with data, by data item: the share of the
+        values of the data within the 5-95 band (low: the priors do not
+        reach the data).
     """
     chi2: np.ndarray
     bands: list[dict[str, np.ndarray]]
@@ -90,6 +91,7 @@ def prior_predictive(
               for element in params.free_elements().values()]
     rng = np.random.default_rng(seed)
     datasets = objective.datasets()
+    observed = objective.observations()
     chi2 = np.full(ndraws, np.inf)
     predicted: list[dict[str, list[np.ndarray]]] = [{} for _ in datasets]
     for k in range(ndraws):
@@ -102,8 +104,8 @@ def prior_predictive(
         except EvaluationError:
             continue
         chi2[k] = evaluation.merits.chi2
-        for i, (dataset, model) in enumerate(zip(datasets, models)):
-            for key, item in model.items():
+        for i, (dataset, index) in enumerate(zip(datasets, observed)):
+            for key, item in models[index].items():
                 error = dataset[key].error()
                 noise = 0 if error is None else rng.normal(0, 1, error.shape)
                 predicted[i].setdefault(key, []).append(

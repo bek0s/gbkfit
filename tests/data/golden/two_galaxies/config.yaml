@@ -1,6 +1,6 @@
 # two_galaxies: Two named galaxies (their parameters prefixed by their names): a cube of both through radiative transfer, the dust of the one in front (section depth_order) dimming the one behind; and moment maps of the one behind alone (option galaxies).
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - name: front
@@ -37,7 +37,8 @@ galaxies:
     rhtraits: {type: sech2, zmax: 6}
 depth_order: [front, back]
 observations:
-- type: sky
+- name: observation0
+  type: sky
   galaxies: [front, back]
   data:
     type: pixel_spectra
@@ -48,7 +49,6 @@ observations:
     spectral: {step: 15.0, rpix: 14.5, rval: 0.0}
     data: observation0_spectra_d.fits
     error: 0.0005
-  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   dtype: float64
   line_of_sight:
     type: transfer
@@ -63,7 +63,8 @@ observations:
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   fft_dtype: float64
-- type: sky
+- name: observation1
+  type: sky
   galaxies: [back]
   data:
     type: pixel_moments
@@ -72,11 +73,8 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation1_moment0_d.fits, error: observation1_moment0_e.fits}
-    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits,
-      error: observation1_moment1_e.fits}
-    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits,
-      error: observation1_moment2_e.fits}
-  likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits, error: observation1_moment1_e.fits}
+    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits, error: observation1_moment2_e.fits}
   dtype: float64
   line_of_sight:
     type: grid
@@ -94,6 +92,9 @@ observations:
     median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
+likelihoods:
+  observation0: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  observation1: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
 params:
   properties:
     front_gas_xpos: 0.3

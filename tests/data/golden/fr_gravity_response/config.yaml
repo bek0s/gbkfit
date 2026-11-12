@@ -1,6 +1,6 @@
 # fr_gravity_response: A gas disk rotating in Hu-Sawicki f(R) gravity (log_fr0) of a stellar disk, and an NFW halo contracted by it (gnedin04, screened); a profile observation of vcirc and the rotation of the gas at radii in arcsec, and small moment maps.
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - components:
@@ -35,7 +35,6 @@ observations:
     radius: {column: radius}
     vcirc: {column: vcirc, mask: vcirc_mask, error: vcirc_error}
     rotation_gas: {column: rotation_gas, mask: rotation_gas_mask, error: rotation_gas_error}
-  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
 - type: sky
   name: maps
   data:
@@ -47,7 +46,6 @@ observations:
     moment0: {data: maps_moment0_d.fits, error: maps_moment0_e.fits}
     moment1: {data: maps_moment1_d.fits, mask: maps_moment1_m.fits, error: maps_moment1_e.fits}
     moment2: {data: maps_moment2_d.fits, mask: maps_moment2_m.fits, error: maps_moment2_e.fits}
-  likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -63,6 +61,9 @@ observations:
     median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
+likelihoods:
+  rc: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  maps: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
 params:
   properties:
     gas_xpos: 0.3

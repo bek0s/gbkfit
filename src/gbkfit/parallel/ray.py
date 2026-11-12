@@ -102,7 +102,8 @@ class WorkersRay(Workers):
         threads = self._threads or max(1, math.floor(self._cpus))
         return [
             _RayWorker(actor.remote(
-                objective.group(), objective.solves(), placement, threads))
+                objective.likelihoods(), objective.solves(), placement,
+                threads))
             for placement in placements]
 
 

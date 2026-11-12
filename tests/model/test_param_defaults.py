@@ -25,8 +25,11 @@ USER_PARAMS = dict(user_likelihoods=['cube_s', 'maps_nu', 'jittered_jitter'])
     'path', sorted(GOLDEN_DIR.glob('*/config.yaml')),
     ids=lambda path: path.parent.name)
 def test_models_evaluate_at_the_defaults(path):
-    pdescs = describe(str(path)).group.pdescs()
-    assert [name for name, pdesc in pdescs.items()
+    # (those of the likelihoods too, which the models do not read)
+    description = describe(str(path))
+    pdescs = description.group.pdescs()
+    assert [name for name, pdesc in (
+            pdescs | description.likelihoods.pdescs()).items()
             if pdesc.default() is None] \
         == USER_PARAMS.get(path.parent.name, [])
     with load(str(path)) as setup:

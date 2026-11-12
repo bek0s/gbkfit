@@ -163,7 +163,7 @@ class FakeComm:
 def start_message(key, objective):
     """The message that starts a copy of an objective on a rank."""
     return (
-        'start', key, objective.group(), objective.solves(),
+        'start', key, objective.likelihoods(), objective.solves(),
         own_placement(objective), None)
 
 

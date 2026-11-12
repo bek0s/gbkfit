@@ -1,7 +1,9 @@
 // The sections of the dock of an observation on the sky: its data, its
-// observable, its instrument, its line of sight, its likelihood, the light
-// it sees, and its other options. The common choices are made by hand;
-// the options of each choice are a form of the schema (see SchemaForm).
+// observable, its instrument, its line of sight, the light it sees, and
+// its other options. The common choices are made by hand; the options of
+// each choice are a form of the schema (see SchemaForm). How its data are
+// compared with its model, its likelihood, is not of the observation but
+// of the fits of it (the section likelihoods of a setup).
 import { useState, type ReactNode } from 'react';
 import { membersOf, propertiesOf, SchemaForm, typeOf, type Defs, type Options, type Schema } from '../../components/SchemaForm';
 import { Button } from '../../components/ui/basics';
@@ -305,7 +307,7 @@ function formFits(member: Schema, value: Options): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// The line of sight, and the likelihood
+// The line of sight
 
 export function LineOfSightFields({ defs, project, options, onChange, blocks, titleOf }: Common & { titleOf: (family: string, type: unknown) => string }) {
   const sight = objectAt(options, 'line_of_sight');
@@ -336,36 +338,6 @@ export function LineOfSightFields({ defs, project, options, onChange, blocks, ti
           />
         </More>
       )}
-    </div>
-  );
-}
-
-export function LikelihoodFields({ defs, project, options, onChange, blocks, titleOf }: Common & { titleOf: (family: string, type: unknown) => string }) {
-  const likelihood = isObject(options.likelihood) ? options.likelihood : null;
-  const type = String(likelihood?.type ?? 'gauss');
-  const members = membersOf(defs.likelihood ?? {}, defs);
-  const member = members.find((m) => typeOf(m) === type);
-  const properties = member ? Object.fromEntries(Object.entries(propertiesOf(member)).filter(([key]) => key !== 'type')) : {};
-  const set = (next: Options | undefined) => onChange(withKey(options, 'likelihood', next));
-  return (
-    <div className="ob-form">
-      <Segments
-        items={members.map((m) => ({ value: typeOf(m) ?? '', label: titleOf('likelihood', typeOf(m)) }))}
-        value={type}
-        label="The likelihood"
-        onChange={(next) => set(next === 'gauss' ? undefined : { type: next })}
-      />
-      {typeof member?.description === 'string' && <p className="ob-text">{firstSentence(member.description)}</p>}
-      <More title={`Options of the ${titleOf('likelihood', type).toLowerCase()} likelihood`} count={likelihood ? Object.keys(likelihood).length - 1 : 0}>
-        <SchemaForm
-          defs={defs}
-          node={{ type: 'object', properties, required: [] }}
-          project={project}
-          value={likelihood ? Object.fromEntries(Object.entries(likelihood).filter(([key]) => key !== 'type')) : {}}
-          onChange={(next) => set(Object.keys(next).length || type !== 'gauss' ? { type, ...next } : undefined)}
-          blocks={blocks}
-        />
-      </More>
     </div>
   );
 }

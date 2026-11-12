@@ -11,10 +11,9 @@ from gbkfit.config import check_options
 from gbkfit.control import StopControl
 from gbkfit.driver import Driver
 from gbkfit.objective import Objective
-from gbkfit.observation import GroupPlan
 from ._detail import (
     Drivers, Item, LocalWorker, Result, Worker, dump_placements,
-    own_placement, placement_drivers)
+    objective_on, own_placement, placement_drivers)
 from .pool import Placement, Workers
 
 
@@ -90,9 +89,9 @@ class WorkersThreads(Workers):
                     w.copy for w in workers):
                 workers.append(_ThreadWorker(objective, False, lock))
             else:
-                workers.append(_ThreadWorker(Objective(
-                    GroupPlan(objective.group(), *placement),
-                    objective.solves()), True, lock))
+                workers.append(_ThreadWorker(objective_on(
+                    objective.likelihoods(), objective.solves(), placement),
+                    True, lock))
         return workers
 
 

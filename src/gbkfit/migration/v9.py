@@ -1,5 +1,5 @@
 """
-The rules of version 9 of the format (2026-11-12 on), which rewrite
+The rules of version 9 of the format (2026-11-12), which rewrite
 configurations of version 8.
 """
 

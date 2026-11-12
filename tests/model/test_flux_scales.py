@@ -17,9 +17,9 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, LikelihoodUser, ObservationGroup,
-    ObservationSky, PixelMoments, PixelSpectra, line_of_sight_parser,
-    noise_parser)
+    FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods,
+    ObservationGroup, ObservationSky, PixelMoments, PixelSpectra,
+    line_of_sight_parser, noise_parser)
 from gbkfit.params import ParamSpace, SolveGauss
 
 
@@ -42,11 +42,10 @@ SOLVE = dict(type='gauss', mean=1, sigma=SIGMA, min=0)
 GOLDEN = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
 
 
-def group_plan(driver, data, error, likelihood=None):
+def group_plan(driver, data, error):
     """
     The plan of the observations of a disk seen in data with the given
-    errors, named 'obs', with a flux scale per spectrum, under a
-    likelihood (Gaussian by default).
+    errors, named 'obs', with a flux scale per spectrum.
     """
     dataset = DatasetPixelSpectra(
         Data(data, error=np.full_like(data, error)), step=STEP[:2],
@@ -55,21 +54,23 @@ def group_plan(driver, data, error, likelihood=None):
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
             line_of_sight_parser.load(dict(type='flat')), data=dataset,
-            likelihood=likelihood, flux_scale='per_spectrum', name='obs')]
+            flux_scale='per_spectrum', name='obs')]
     ).plan(driver)
 
 
 def objective(driver, data, error, scale=None, likelihood=None, **values):
     """
-    The objective of a disk seen in data (see group_plan), and its
-    parameters (PARAMS and the given values), of the given flux scale
-    (solved by SOLVE by default).
+    The objective of a disk seen in data (see group_plan) under a
+    likelihood (Gaussian by default), and its parameters (PARAMS and the
+    given values), of the given flux scale (solved by SOLVE by default).
     """
-    plan = group_plan(driver, data, error, likelihood)
+    plan = group_plan(driver, data, error)
+    likelihoods = Likelihoods(plan.group(), likelihood)
     scale = dict(solve=SOLVE) if scale is None else scale
     params = ParamSpace.from_properties(
-        plan.group().pdescs(), PARAMS | dict(obs_flux_scale=scale) | values)
-    return Objective(plan, params.solves()), params
+        plan.group().pdescs() | likelihoods.pdescs(),
+        PARAMS | dict(obs_flux_scale=scale) | values)
+    return Objective(plan, likelihoods, params.solves()), params
 
 
 def model(driver):
@@ -152,8 +153,7 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
                     dataset,
                     spectral=SpectralAxis(size=21, step=20, convention='relativistic')),
                 line_of_sight_parser.load(dict(type='flat')), data=dataset,
-                flux_scale='one', name='obs',
-                likelihood=LikelihoodGauss(missing_residual=3))]
+                flux_scale='one', name='obs')]
         ).plan(driver)
     blank = moments(np.zeros(SIZE[1::-1]), np.zeros(SIZE[1::-1]))
     model = blank.model_h(ParamSpace.from_properties(
@@ -164,7 +164,10 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
     params = ParamSpace.from_properties(
         scaled.group().pdescs(),
         PARAMS | dict(obs_flux_scale=dict(solve=SOLVE)))
-    obj = Objective(scaled, params.solves())
+    obj = Objective(
+        scaled, Likelihoods(
+            scaled.group(), LikelihoodGauss(missing_residual=3)),
+        params.solves())
     assert obj.evaluate(params.evaluate()).solved['obs_flux_scale'] \
         == pytest.approx(2, rel=1e-6)
 
@@ -291,7 +294,7 @@ def test_only_linear_parameters_of_gaussian_likelihoods_are_solved(
     spectra = model(driver)
     plan = group_plan(driver, spectra, 1.0)
     with pytest.raises(ValueError, match="vsys cannot be solved"):
-        Objective(plan, dict(vsys=SolveGauss(0, 10)))
+        Objective(plan, solves=dict(vsys=SolveGauss(0, 10)))
     (tmp_path / 'like.py').write_text(
         "def like(key, data, model, error, mask, params):\n"
         "    return model - data\n")
@@ -302,7 +305,8 @@ def test_only_linear_parameters_of_gaussian_likelihoods_are_solved(
     # (and a fit needs an objective that solves those of its parameters)
     obj, params = objective(driver, spectra, 1.0, vsys=dict(value=0))
     with pytest.raises(ValueError, match="must solve the solved elements"):
-        FitProblem(Objective(obj.group_plan()), params)
+        FitProblem(
+            Objective(obj.group_plan(), obj.likelihoods()), params)
 
 
 def test_mocks_take_flux_scales_per_spectrum_of_1_only(driver):

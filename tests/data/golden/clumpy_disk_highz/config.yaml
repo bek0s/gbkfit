@@ -1,6 +1,6 @@
 # clumpy_disk_highz: The first science: a thick, turbulent disk with three clumps of a galaxy at z = 1.5 that emits Halpha and [NII] 6583, in the cube of an IFU whose spectral axis is in optical velocities of Halpha at rest, float32 (the default).
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - redshift: 1.5
@@ -28,11 +28,9 @@ observations:
     rpix: [14.5, 14.5]
     rval: [0, 0]
     rota: 0
-    spectral: {step: 120.0, rpix: 19.5, rval: 450870.0, rest: 6.564610000000001e-07
-        m, medium: vacuum}
+    spectral: {step: 120.0, rpix: 19.5, rval: 450870.0, rest: 6.564610000000001e-07 m, medium: vacuum}
     data: observation0_spectra_d.fits
     error: 1.9999999494757503e-05
-  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   dtype: float32
   line_of_sight:
     type: grid
@@ -45,6 +43,7 @@ observations:
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   fft_dtype: float64
+likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
 params:
   properties:
     xpos: 0.02

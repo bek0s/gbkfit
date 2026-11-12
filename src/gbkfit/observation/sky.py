@@ -27,7 +27,6 @@ from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from ._scene import check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
-from .likelihoods import Likelihood, likelihood_parser
 from .line_of_sight import LineOfSight, line_of_sight_parser
 from .noise import Noise
 from .observables import (
@@ -55,14 +54,17 @@ _DType: TypeAlias = Annotated[
 class ObservationSky(Observation):
     """
     An observation on the sky: galaxies seen as an observable through an
-    instrument, optionally compared with its data. They are seen along a
-    line of sight, through a foreground (e.g. a gravitational lens) and
-    the instrument, and the model of the galaxies is compared with the
-    data under a likelihood (see Observation).
+    instrument, optionally with its data. They are seen along a line of
+    sight, through a foreground (e.g. a gravitational lens) and the
+    instrument, and an objective compares the model of the galaxies with
+    the data under the likelihood of its setup (see Observation).
 
-    In its configuration (type 'sky'), the data have the form of the
-    observable (no type), and give it the options of options_from_data
-    (see Observable.from_data).
+    In its configuration (type 'sky'), the data are a dataset of the
+    dataset class of the observable, and give it the options of
+    options_from_data (see Observable.from_data); the configuration can
+    give those too, as without data (e.g. that of mock data, which then
+    takes the data), and they are checked against the data (see
+    Observable.load).
 
     Its model is in the unit of its data (see data_unit): the light of
     the components whose emission has a unit is turned into it (see
@@ -155,9 +157,6 @@ class ObservationSky(Observation):
         observation without them (see ObservationGroup).
     data : Dataset, optional
         The data, of the dataset class of the observable.
-    likelihood : Likelihood, optional
-        How the model is compared with the data; Gaussian by default when
-        there are data, and none without data.
     oversampling : Sequence of int, optional
         How many times the model is oversampled along each axis of the
         data (an accuracy setting); 1 by default. The smooth components
@@ -204,13 +203,9 @@ class ObservationSky(Observation):
         or offsets but no name, its flux scale is not one of its
         observable, the offsets are not position and velocity, true or
         false, the oversampling is not one integer of at least 1 for each
-        axis, there is a likelihood without data, the data are not those of
-        the observable, its model can have missing values but its
-        likelihood has no residual for them (see LikelihoodGauss), its
-        likelihood fits a noise but it has no name, the noise of an item
-        is correlated where its kind of data cannot have it, its
-        likelihood does not suit it (see Likelihood.check), the observable
-        cannot be seen through the instrument (see
+        axis, the data are not those of the observable, the noise of an
+        item is correlated where its kind of data cannot have it, the
+        observable cannot be seen through the instrument (see
         Observable.check_observation), the dtype or the fft_dtype is not one
         of the native modules (see Driver.dtypes), or the fft_dtype is less
         precise than the dtype, it has pixel weights and a lens (not
@@ -301,8 +296,7 @@ class ObservationSky(Observation):
         unit = {} if self._light is None else dict(
             unit=gbkfit.units.format_unit(self._light.unit))
         data = {} if self._data is None else dict(
-            data=dataset_parser.dump(self._data, **kwargs),
-            likelihood=likelihood_parser.dump(self._likelihood))
+            data=dataset_parser.dump(self._data, **kwargs))
         # (only a given dtype: one the data chose is chosen again by the
         # data it is loaded with, e.g. mock data of correlated noise)
         dtype = {} if self._given_dtype is None else dict(
@@ -331,7 +325,6 @@ class ObservationSky(Observation):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             data: Dataset | None = None,
-            likelihood: Likelihood | None = None,
             oversampling: Sequence[int] | None = None,
             dtype: _DType | None = None,
             fft_dtype: _DType = 'float64',
@@ -381,7 +374,7 @@ class ObservationSky(Observation):
         self._flux_scale = flux_scale
         self._offsets = offsets
         super().__init__(
-            observable.keys(), galaxies, data, likelihood, name,
+            observable.keys(), galaxies, data, name,
             observable.model_can_have_missing_values())
         # (as given, for copies of other data and dumps: by default, the
         # data choose it, see with_data)
@@ -437,10 +430,8 @@ class ObservationSky(Observation):
     def pdescs(self) -> dict[str, ParamDesc]:
         """
         Return its parameters: that of its flux scale and those of the
-        offsets of its frame, if any (see the class), those of its lens,
-        '{name}_lens_{parameter}' (see Foreground.pdescs), and those of the
-        fitted noise of its likelihood, e.g. '{name}_noise_scale_{item}'
-        (see LikelihoodGauss).
+        offsets of its frame, if any (see the class), and those of its
+        lens, '{name}_lens_{parameter}' (see Foreground.pdescs).
         """
         flux_scale = {}
         if (scale := self.flux_scale()) is not None:
@@ -464,8 +455,7 @@ class ObservationSky(Observation):
             for param, (title, desc, unit) in zip(
                 self._offset_params(), descs)
             if param is not None}
-        return flux_scale | offsets | self._setup.foreground.pdescs() \
-            | super().pdescs()
+        return flux_scale | offsets | self._setup.foreground.pdescs()
 
     def _offset_params(self) -> tuple[str | None, str | None, str | None]:
         """
@@ -507,18 +497,14 @@ class ObservationSky(Observation):
         return (f'{self._name}_flux_scale',
                 self._observable.flux_scales()[self._flux_scale])
 
-    def with_data(
-            self, data: Dataset, likelihood: Likelihood | None = None
-    ) -> Self:
+    def with_data(self, data: Dataset) -> Self:
         setup = self._setup
         return type(self)(
             self._observable, setup.line_of_sight, setup.foreground,
             setup.instrument, self._galaxies,
             self._components, self._lines, self._band, setup.pixel_weights,
-            self._flux_scale, self._offsets, data,
-            likelihood if likelihood is not None else self._likelihood,
-            setup.oversampling, self._given_dtype, setup.fft_dtype.name,
-            self._name)
+            self._flux_scale, self._offsets, data, setup.oversampling,
+            self._given_dtype, setup.fft_dtype.name, self._name)
 
     def observable(self) -> Observable:
         """Return the observable."""

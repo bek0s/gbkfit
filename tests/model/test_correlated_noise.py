@@ -13,7 +13,7 @@ from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective, whitening
 from gbkfit.observation import (
-    MAX_CORRELATED_PIXELS, LikelihoodGauss, ObservationGroup,
+    MAX_CORRELATED_PIXELS, LikelihoodGauss, Likelihoods, ObservationGroup,
     ObservationSky, PixelSpectra, line_of_sight_parser)
 from gbkfit.params import ParamSpace
 
@@ -38,10 +38,11 @@ def objective(driver, data, likelihood):
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), data=dataset,
-            likelihood=likelihood)])
-    return (Objective(group.plan(driver)),
-            ParamSpace.from_properties(group.pdescs(), PARAMS).evaluate())
+            line_of_sight_parser.load(dict(type='flat')), data=dataset)])
+    likelihoods = Likelihoods(group, likelihood)
+    return (Objective(group.plan(driver), likelihoods),
+            ParamSpace.from_properties(
+                group.pdescs() | likelihoods.pdescs(), PARAMS).evaluate())
 
 
 def noisy_cube(rng, mask):
@@ -143,7 +144,7 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
             flux_scale='one', name='obs')])
     with pytest.raises(ValueError, match="has correlated noise"):
         Objective(group.plan(driver),
-                  dict(obs_flux_scale=SolveGauss(1, 0.5, 0)))
+                  solves=dict(obs_flux_scale=SolveGauss(1, 0.5, 0)))
 
 
 def spectra_objective(driver, dataset, observable, likelihood):
@@ -154,9 +155,11 @@ def spectra_objective(driver, dataset, observable, likelihood):
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             observable, line_of_sight_parser.load(dict(type='flat')),
-            data=dataset, likelihood=likelihood)])
-    return (Objective(group.plan(driver)),
-            ParamSpace.from_properties(group.pdescs(), PARAMS).evaluate())
+            data=dataset)])
+    likelihoods = Likelihoods(group, likelihood)
+    return (Objective(group.plan(driver), likelihoods),
+            ParamSpace.from_properties(
+                group.pdescs() | likelihoods.pdescs(), PARAMS).evaluate())
 
 
 def noisy_spectra(rng, npositions, blank):
@@ -236,9 +239,17 @@ def test_region_spectra_have_the_chi2_of_their_spectral_correlation(
 
 def test_spectra_of_correlated_noise_keep_whole_spectra(tmp_path):
     # (as cubes do: the option of the files masks a spectrum with a masked
-    # channel, and is read from a dump with the correlation)
+    # channel, and is read from a dump with the correlation; their
+    # likelihoods check it)
     from gbkfit.dataset import DatasetSlitSpectra, dataset_parser
     from gbkfit.observation import SlitSpectra
+
+    def likelihoods(dataset):
+        return Likelihoods(ObservationGroup(
+            [galaxy_parser.load(GALAXY)], [ObservationSky(
+                SlitSpectra.from_data(dataset),
+                line_of_sight_parser.load(dict(type='flat')),
+                data=dataset)]))
     data = noisy_spectra(np.random.default_rng(13), 14, [])
     mask = data.mask().copy()
     mask[3, 6] = 0
@@ -247,18 +258,14 @@ def test_spectra_of_correlated_noise_keep_whole_spectra(tmp_path):
              spectral_correlation=data.spectral_correlation()),
         step=(1,), spectral=SPECTRAL, slit_pa=-60)
     with pytest.raises(ValueError, match="mask_whole_spectra"):
-        ObservationSky(
-            SlitSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), data=dataset)
+        likelihoods(dataset)
     info = dataset_parser.dump(dataset, prefix=str(tmp_path / ''))
     assert 'spectral_correlation' in info
     loaded = dataset_parser.load(info | dict(mask_whole_spectra=True))
     masked = loaded['spectra'].mask() == 0
     assert np.all(masked[:, [1, 4, 6]])
     assert np.count_nonzero(masked) == 3 * SIZE[2]
-    ObservationSky(
-        SlitSpectra.from_data(loaded),
-        line_of_sight_parser.load(dict(type='flat')), data=loaded)
+    likelihoods(loaded)
 
 
 def test_only_data_with_a_spectral_axis_have_a_spectral_correlation():

@@ -98,6 +98,153 @@ def test_a_setup_takes_the_parameters_of_its_group():
         gbkfit.Setup(group, params)
 
 
+def noisy_image(path, seed=1):
+    """
+    Write an image of 8 x 8 values of noise of errors 0.1, and return its
+    observation.
+    """
+    rng = np.random.default_rng(seed)
+    fits.writeto(path, rng.normal(0, 0.1, (8, 8)))
+    return dict(
+        type='sky', line_of_sight=dict(type='flat'),
+        observable=dict(type='pixel_brightness'),
+        data=dict(type='pixel_brightness', data=path.name, error=0.1))
+
+
+def test_the_likelihoods_are_one_for_all_or_by_observation_name(tmp_path):
+    # (of the section likelihoods: Gaussian by default; one for all; or by
+    # observation name, the Gaussian for the others)
+    observations = [
+        noisy_image(tmp_path / 'a.fits', 1) | dict(name='a'),
+        noisy_image(tmp_path / 'b.fits', 2) | dict(name='b')]
+    config = dict(
+        version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
+        observations=observations, params=PARAMS)
+
+    def chi2(**sections):
+        with gbkfit.load(config | sections) as loaded:
+            return loaded.evaluate().objective.data_chi2
+    default = chi2()
+    assert chi2(likelihoods=dict(type='gauss', weights=2)) == pytest.approx(
+        4 * default)
+    assert chi2(likelihoods=dict(b=dict(type='gauss', weights=2))) \
+        == pytest.approx(default + 3 * chi2(observations=[
+            observations[1]]), rel=1e-6)
+    # (a fitted noise of one is a parameter, named after it, of the data's
+    # unit)
+    with gbkfit.load(config | dict(
+            likelihoods=dict(a=dict(type='gauss', fitted_noise=dict(
+                brightness=dict(scale=True, scale_min=0.1)))),
+            params=dict(properties=PARAMS['properties'] | dict(
+                a_noise_scale_brightness=2)))) as loaded:
+        assert set(loaded.likelihoods().pdescs()) == {
+            'a_noise_scale_brightness'}
+        assert loaded.evaluate().values['a_noise_scale_brightness'] == 2
+
+
+@pytest.mark.parametrize('likelihoods, path, message', [
+    (dict(c=dict(type='gauss')), ['likelihoods'],
+     r"names unknown observations \['c'\]"),
+    (dict(b=dict(type='gauss', weights=dict(moment1=2))),
+     ['likelihoods', 'b'], r"does not have: \['moment1'\]"),
+    (dict(b=dict(type='gaus')), ['likelihoods', 'b'], "unknown type"),
+    (dict(type='gauss', fitted_noise=dict(moment0=dict(jitter=True))),
+     ['likelihoods'], r"observation 'a': the options of the likelihood"),
+    ('gauss', [], "section 'likelihoods' must be a dictionary")])
+def test_the_likelihoods_have_the_paths_of_their_errors(
+        tmp_path, likelihoods, path, message):
+    observations = [
+        noisy_image(tmp_path / 'a.fits', 1) | dict(name='a'),
+        noisy_image(tmp_path / 'b.fits', 2) | dict(name='b')]
+    with pytest.raises((ConfigError, ValueError), match=message) as error:
+        gbkfit.load(dict(
+            version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
+            observations=observations, params=PARAMS,
+            likelihoods=likelihoods))
+    assert getattr(error.value, 'config_path', path)[:len(path)] == path
+
+
+def test_a_fit_fits_the_observations_with_data(tmp_path):
+    # The others are evaluated alongside (e.g. a prediction of a band
+    # without data), at the values of the fit
+    observations = [
+        observation(name='prediction'),
+        noisy_image(tmp_path / 'image.fits') | dict(name='image')]
+    config = dict(
+        version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
+        observations=observations, params=PARAMS,
+        fitter=dict(type='scipy.least_squares'),
+        bootstrap=dict(nsamples=3, scheme=dict(image=dict(type='gauss'))))
+    with gbkfit.load(config) as loaded, gbkfit.load(
+            config | dict(observations=observations[1:])) as alone:
+        assert loaded.objective().observations() == (1,)
+        assert loaded.evaluate().objective.merits.chi2 == pytest.approx(
+            alone.evaluate().objective.merits.chi2, rel=1e-6)
+        best = loaded.fit().best()
+        assert best.free == pytest.approx(alone.fit().best().free, rel=1e-4)
+        outputs = loaded.outputs(
+            loaded.evaluate(best.free), data=True)
+        kinds = {}
+        for output in outputs.values():
+            kinds.setdefault(output.ids.get('observation'), set()).add(
+                output.kind)
+        assert kinds['prediction'] == {'model'}
+        assert {'model', 'data', 'residual', 'wresidual'} \
+            <= kinds['image']
+        # (a bootstrap refits the data alone, as the fit)
+        bootstrap = loaded.bootstrap(best.elements)
+        assert len(bootstrap.samples) == 3 and not bootstrap.failures
+
+
+def test_a_setup_without_data_states_the_likelihoods_of_its_fit():
+    # (e.g. a setup of mock data: checked against the observations, they
+    # compare nothing until the observations have data)
+    loaded = gbkfit.load(dict(
+        version=VERSION, galaxies=[GALAXY],
+        observations=[observation(name='image')], params=PARAMS,
+        likelihoods=dict(image=dict(type='gauss', weights=2))))
+    assert loaded.objective() is None
+    assert loaded.likelihoods().observations() == ()
+    with pytest.raises(ValueError, match=r"does not have: \['spectra'\]"):
+        gbkfit.load(dict(
+            version=VERSION, galaxies=[GALAXY],
+            observations=[observation(name='image')], params=PARAMS,
+            likelihoods=dict(type='gauss', weights=dict(spectra=2))))
+
+
+def test_an_observation_of_mocks_takes_data_in_one_line(tmp_path):
+    # (its grid, as without data, is checked against the data: one
+    # configuration of an observation draws mocks and fits data)
+    fits.writeto(tmp_path / 'image.fits', np.zeros((8, 8)))
+    data = dict(type='pixel_brightness', data='image.fits')
+    config = dict(
+        version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
+        params=PARAMS)
+    with gbkfit.load(config | dict(
+            observations=[observation(data=data)])) as loaded:
+        assert loaded.objective().observations() == (0,)
+    with pytest.raises(ConfigError, match="are not those of the data"):
+        gbkfit.load(config | dict(observations=[observation(
+            data=data, observable=dict(
+                type='pixel_brightness', size=[8, 6]))]))
+
+
+def test_a_setup_takes_likelihoods_of_its_group():
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import (
+        Likelihoods, ObservationGroup, observation_parser)
+    from gbkfit.params import ParamSpace
+
+    def group():
+        return ObservationGroup(
+            galaxy_parser.load(GALAXY),
+            observation_parser.load(observation()))
+    params = ParamSpace.from_properties(
+        group().pdescs(), PARAMS['properties'])
+    with pytest.raises(ValueError, match="of another group"):
+        gbkfit.Setup(group(), params, Likelihoods(group()))
+
+
 def test_the_outputs_of_an_evaluation_are_its_own():
     # (the plan reuses its arrays of the models: the outputs of a second
     # evaluation must not overwrite those of the first)

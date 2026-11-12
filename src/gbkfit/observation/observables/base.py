@@ -24,8 +24,8 @@ from gbkfit.model import (
     DataUnit, Emission, Extras, GalaxyState, LightUnit)
 from gbkfit.params import ParamValues
 from ._options import (
-    GRID_OPTIONS, check_no_options_from_data, dump_grid,
-    without_options_from_data)
+    GRID_OPTIONS, check_options_given_with_data, dump_grid,
+    options_given_with_data, without_options_from_data)
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -233,8 +233,10 @@ class Observable(TypedSerializable, abc.ABC):
     ) -> Self:
         """
         Load an observable from its configuration: with its __init__, or
-        with its from_data and the given dataset, whose options (see
-        options_from_data) the configuration must not repeat.
+        with its from_data and the given dataset, which gives its options
+        of options_from_data. The configuration can give those too, as
+        without data (e.g. one of mock data, which then takes the data):
+        they are checked against the data, and must be theirs.
 
         Parameters
         ----------
@@ -251,13 +253,17 @@ class Observable(TypedSerializable, abc.ABC):
         Raises
         ------
         ConfigError
-            If the configuration has an option that the data give.
+            If the configuration gives options that the data give, and
+            the observable of the configuration alone does not hold the
+            data (see check_dataset).
         """
         if dataset is None:
             return cls(**parse_options_for_callable(info, cls.__init__))
-        check_no_options_from_data(cls, info, dataset)
+        if given := options_given_with_data(cls, info, dataset):
+            check_options_given_with_data(cls, info, given, dataset)
         return cls.from_data(dataset, **parse_options_for_callable(
-            info, cls.from_data, ignore_params=['dataset']))
+            {k: v for k, v in info.items() if k not in given},
+            cls.from_data, ignore_params=['dataset']))
 
     def dump(
             self,

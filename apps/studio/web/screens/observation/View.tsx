@@ -10,10 +10,10 @@ import { showSection } from '../../components/ui/dock';
 import type { Options } from '../../components/SchemaForm';
 import { glanceOf, STAGES, type Check, type Ellipse } from './model';
 
-export function Stages({ options, titleOf, withData }: { options: Options; titleOf: (family: string, type: unknown) => string; withData: boolean }) {
+export function Stages({ options, titleOf }: { options: Options; titleOf: (family: string, type: unknown) => string }) {
   return (
     <ol className="ob-stages" aria-label="The stages of the observation">
-      {STAGES.filter((stage) => stage.key !== 'likelihood' || withData).map((stage) => (
+      {STAGES.map((stage) => (
         <li key={stage.key}>
           <button onClick={() => showSection(stage.section)}>
             <span className="ob-stage-title">{stage.title}</span>

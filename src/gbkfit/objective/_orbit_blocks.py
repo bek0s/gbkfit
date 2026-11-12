@@ -50,8 +50,9 @@ class OrbitBlock(Block):
         The recording.
     group_plan : GroupPlan
         The plan of its observations, each with data.
-    comparisons : Sequence of Comparison
-        The comparison of each observation of the group.
+    comparisons : Mapping of int to Comparison
+        The comparison of each observation with data of the group, by
+        index.
     elements : Sequence of str
         The names of the elements of its weights, in their order.
     solve : Solve
@@ -68,7 +69,7 @@ class OrbitBlock(Block):
             self,
             recording: OrbitRecording,
             group_plan: GroupPlan,
-            comparisons: Sequence[Comparison],
+            comparisons: Mapping[int, Comparison],
             elements: Sequence[str],
             solve: Solve
     ):
@@ -94,9 +95,8 @@ class OrbitBlock(Block):
         # of its observations, taking the orbits of its recording
         k = group_plan.orbit_recordings().index(recording)
         self._cache: StageCache[Solution] = StageCache(
-            (name for observation in observations
-             if observation.likelihood() is not None
-             for name in observation.likelihood().pdescs()),
+            (name for comparison in self._comparisons
+             for name in comparison.likelihood().pdescs()),
             (group_plan.orbit_caches()[k],))
 
     def recording(self) -> OrbitRecording:
@@ -153,14 +153,15 @@ class OrbitBlock(Block):
 
 def orbit_blocks(
         group_plan: GroupPlan,
-        comparisons: Sequence[Comparison],
+        comparisons: Mapping[int, Comparison],
         solves: Mapping[str, Solve]
 ) -> tuple[OrbitBlock, ...]:
     """
     Return the solves of the weights of the orbits of the recordings of a
-    group plan (see OrbitBlock and GroupPlan.orbit_recordings), of the
-    comparison of each observation, and the solve of each solved element
-    (by element name).
+    group plan (see OrbitBlock and GroupPlan.orbit_recordings: of the
+    observations with data), of the comparison of each observation with
+    data (by index), and the solve of each solved element (by element
+    name).
 
     Raises
     ------

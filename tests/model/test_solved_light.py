@@ -17,8 +17,8 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective, comparison_of
 from gbkfit.observation import (
-    LikelihoodGauss, ObservationGroup, ObservationSky, PixelBrightness,
-    line_of_sight_parser)
+    LikelihoodGauss, Likelihoods, ObservationGroup, ObservationSky,
+    PixelBrightness, line_of_sight_parser)
 from gbkfit.params import ParamSpace
 
 
@@ -88,7 +88,7 @@ def test_solved_amplitudes_are_the_least_squares_of_their_parts(driver):
         [observation(None, d) for d in data])
     params = ParamSpace.from_properties(
         group.pdescs(), TRUTH | dict(core_i0=SOLVE, envelope_ie=SOLVE))
-    objective = Objective(group.plan(driver), params.solves())
+    objective = Objective(group.plan(driver), solves=params.solves())
     evaluation = objective.evaluate(params.evaluate())
     chi2 = evaluation.merits.chi2
     parts = np.array([
@@ -140,8 +140,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
         obs = ObservationSky(
             observable, line_of_sight_parser.load(
                 dict(type='grid', depth=dict(step=0.5))),
-            data=moments, lines=['stars'],
-            likelihood=LikelihoodGauss(missing_residual=3))
+            data=moments, lines=['stars'])
     else:
         obs = observation(None, data)
     group = ObservationGroup([galaxy_parser.load(galaxy)], [obs])
@@ -152,7 +151,10 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
     properties['core_i0'] = SOLVE
     params = ParamSpace.from_properties(pdescs, properties)
     with pytest.raises(ValueError, match=message):
-        Objective(group.plan(driver), params.solves())
+        Objective(
+            group.plan(driver),
+            Likelihoods(group, LikelihoodGauss(missing_residual=3)),
+            params.solves())
 
 
 def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
@@ -171,7 +173,7 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
         core_i0=SOLVE, obs_flux_scale=dict(solve=dict(
             type='gauss', mean=1, sigma=0.5, min=0))))
     with pytest.raises(ValueError, match="not linear in both"):
-        Objective(group.plan(driver), params.solves())
+        Objective(group.plan(driver), solves=params.solves())
 
 
 def test_the_pieces_of_a_model_are_its_parts_and_are_weighed(driver):
@@ -196,7 +198,7 @@ def test_the_pieces_of_a_model_are_its_parts_and_are_weighed(driver):
             driver, [(32, 32)], with_amplitudes(TRUTH, np.eye(3)[k]))[0],
             atol=atol)
     obs = group.observations()[0]
-    comparison_ = comparison_of(obs, driver)
+    comparison_ = comparison_of(obs, LikelihoodGauss(), driver)
     comparison_.prepare()
     rows = driver.mem_alloc_d((2, image.size), np.float64)
     comparison_.weighted_pieces(pieces, TRUTH, rows)

@@ -15,7 +15,8 @@ from gbkfit.fitting import (
     ProgressObserver, SubFitLog, run_bootstrap)
 from gbkfit.objective import Objective, ObjectiveEvaluation
 from gbkfit.observation import (
-    GroupPlan, MockOptions, Observation, ObservationGroup, draw_mocks)
+    GroupPlan, Likelihoods, MockOptions, Observation, ObservationGroup,
+    draw_mocks)
 from gbkfit.outputs import Output
 from gbkfit.parallel import WorkerPool, Workers
 from gbkfit.params import ParamSpace, ParamValues
@@ -56,11 +57,16 @@ class Setup:
     """
     Galaxies, their observations and their parameters, set up on drivers:
     the plan of the group (see ObservationGroup.plan), the parameters, the
-    objective if every observation has data, the fitter if given, workers
-    of copies of the objective if given and it has one (see WorkerPool),
-    and the options of mock data and of a bootstrap if given. load sets up
-    a configuration as one. A fitter, workers or a bootstrap need no data
-    until a fit (e.g. a configuration of a fit evaluated to draw mocks).
+    likelihoods of the observations, the objective if an observation has
+    data, the fitter if given, workers of copies of the objective if
+    given and it has one (see WorkerPool), and the options of mock data
+    and of a bootstrap if given. load sets up a configuration as one. A
+    fitter, workers or a bootstrap need no data until a fit (e.g. a
+    configuration of a fit evaluated to draw mocks).
+
+    The objective compares the observations with data (see Objective),
+    and a fit fits them; the models of the others are evaluated alongside
+    (e.g. a prediction of a band without data, see outputs).
 
     It holds the memory of its objective and its workers until it is
     closed (see close; e.g. at the end of a with block).
@@ -70,9 +76,13 @@ class Setup:
     group : ObservationGroup
         The galaxies and their observations.
     params : ParamSpace
-        The parameters, of the group: of its parameters, constants and
-        functions (see ObservationGroup.pdescs, constants and
-        function_names).
+        The parameters, of the group and of the likelihoods: of their
+        parameters (see ObservationGroup.pdescs and Likelihoods.pdescs),
+        and of the constants and functions of the group (see
+        ObservationGroup.constants and function_names).
+    likelihoods : Likelihoods, optional
+        The likelihoods of the observations, of the group; Gaussian by
+        default (see Likelihoods).
     fitter : Fitter, optional
         The fitter of its fits (see fit).
     driver : Driver, optional
@@ -93,19 +103,23 @@ class Setup:
     Raises
     ------
     ValueError
-        If the parameters are not of the group, the fitter cannot fit
-        them (see Fitter.check), the options of mock data are not of the
-        observations (see MockOptions.check), the options of a
+        If the parameters are not of the group and the likelihoods, the
+        likelihoods are of another group, the fitter cannot fit the
+        parameters (see Fitter.check), the options of mock data are not
+        of the observations (see MockOptions.check), the options of a
         bootstrap do not suit the data (see BootstrapOptions.check), or
         the group cannot be planned (see ObservationGroup.plan).
 
     Examples
     --------
     >>> group = ObservationGroup(galaxy, observation)
+    >>> likelihoods = Likelihoods(group, LikelihoodGauss(missing_residual=3))
     >>> params = ParamSpace(
-    ...     group.pdescs(), dict(incl=60, vpt_vt=FreeElement(min=50, max=300)),
+    ...     group.pdescs() | likelihoods.pdescs(),
+    ...     dict(incl=60, vpt_vt=FreeElement(min=50, max=300)),
     ...     constants=group.constants())
-    >>> with Setup(group, params, fitter=FitterScipyLeastSquares(),
+    >>> with Setup(group, params, likelihoods,
+    ...            fitter=FitterScipyLeastSquares(),
     ...            driver=DriverCuda()) as setup:
     ...     result = setup.fit()
     """
@@ -114,6 +128,7 @@ class Setup:
             self,
             group: ObservationGroup,
             params: ParamSpace,
+            likelihoods: Likelihoods | None = None,
             fitter: Fitter | None = None,
             driver: Driver | None = None,
             placement: Mapping[str, Driver] | None = None,
@@ -121,33 +136,41 @@ class Setup:
             mock_options: MockOptions | None = None,
             bootstrap_options: BootstrapOptions | None = None
     ):
-        if missing := [n for n in group.pdescs() if n not in params.pdescs()]:
+        if likelihoods is None:
+            likelihoods = Likelihoods(group)
+        elif likelihoods.group() is not group:
             raise ValueError(
-                f"the parameters are not those of the group: they lack "
-                f"{missing}")
+                "the likelihoods are of another group (see "
+                "Likelihoods.with_group)")
+        pdescs = group.pdescs() | likelihoods.pdescs()
+        if missing := [n for n in pdescs if n not in params.pdescs()]:
+            raise ValueError(
+                f"the parameters are not those of the group and its "
+                f"likelihoods: they lack {missing}")
         if unknown := sorted(
                 set(params.function_names()) - set(group.function_names())):
             raise ValueError(
                 f"the galaxies have no functions {unknown}; they have "
                 f"{list(group.function_names())}")
         if fitter is not None:
-            fitter.check(params, group)
+            fitter.check(params, likelihoods)
         if mock_options is not None:
             mock_options.check(group)
-        if bootstrap_options is not None and group.has_data():
+        if bootstrap_options is not None and likelihoods.observations():
             bootstrap_options.check(group, params)
         self._group_plan = group.plan(driver, placement)
         self._params = params
+        self._likelihoods = likelihoods
         self._objective = None
         self._fitter = fitter
         self._mock_options = mock_options
         self._bootstrap_options = bootstrap_options
         self._pool = None
         try:
-            if group.has_data():
+            if likelihoods.observations():
                 _log.info("setting up objective...")
                 self._objective = Objective(
-                    self._group_plan, params.solves())
+                    self._group_plan, likelihoods, params.solves())
             if workers is not None and self._objective is not None:
                 self._pool = workers.start(self._objective)
         # (of any kind, e.g. an interrupt: no one can close a setup that
@@ -168,8 +191,15 @@ class Setup:
         """Return the parameters."""
         return self._params
 
+    def likelihoods(self) -> Likelihoods:
+        """Return the likelihoods of the observations."""
+        return self._likelihoods
+
     def objective(self) -> Objective | None:
-        """Return the objective, or None if an observation has no data."""
+        """
+        Return the objective (of the observations with data), or None if
+        no observation has data.
+        """
         return self._objective
 
     def fitter(self) -> Fitter | None:
@@ -249,10 +279,11 @@ class Setup:
         Returns
         -------
         dict
-            The outputs: the models ('model', and their images,
-            'model_image'), and of an evaluation of the objective the
-            residuals too ('residual', 'wresidual', 'chi2_residual' and
-            'residual_image'; see evaluation_outputs).
+            The outputs: the models of every observation ('model', and
+            their images, 'model_image'), and of an evaluation of the
+            objective the residuals of those with data too ('residual',
+            'wresidual', 'chi2_residual' and 'residual_image'; see
+            evaluation_outputs).
         """
         residuals = evaluation.objective is not None
         outputs = evaluation_outputs(
@@ -270,7 +301,8 @@ class Setup:
     ) -> FitResult:
         """
         Fit the data of its objective with its fitter, on its workers if
-        it has them (see Fitter.fit).
+        it has them (see Fitter.fit): those of the observations with data,
+        whose models are evaluated alongside those of the others.
 
         Parameters
         ----------
@@ -291,13 +323,13 @@ class Setup:
         Raises
         ------
         ValueError
-            If it has no fitter, or no objective (an observation has no
-            data), or the fit cannot start (see Fitter.fit).
+            If it has no fitter, or no objective (no observation has data),
+            or the fit cannot start (see Fitter.fit).
         """
         if self._fitter is None:
             raise ValueError("a fit needs a fitter (section 'fitter')")
         if self._objective is None:
-            raise ValueError("a fit needs data for every observation")
+            raise ValueError("a fit needs data, and no observation has any")
         return self._fitter.fit(
             self._objective, self._params, observers, control, log,
             self._pool)
@@ -332,9 +364,9 @@ class Setup:
         Raises
         ------
         ValueError
-            If it has no options of a bootstrap, no objective (an
-            observation has no data) or no fitter, or the bootstrap cannot
-            run (see run_bootstrap).
+            If it has no options of a bootstrap, no objective (no
+            observation has data) or no fitter, or the bootstrap cannot run
+            (see run_bootstrap).
         Stopped
             If it was asked to stop (see control).
         """
@@ -343,7 +375,8 @@ class Setup:
             raise ValueError(
                 "a bootstrap needs its options (section 'bootstrap')")
         if self._objective is None:
-            raise ValueError("a bootstrap needs data for every observation")
+            raise ValueError(
+                "a bootstrap needs data, and no observation has any")
         if self._fitter is None and options.fitter() is None:
             raise ValueError(
                 "a bootstrap needs a fitter (section 'fitter', or its "
@@ -357,7 +390,8 @@ class Setup:
         Draw mock data of its observations at values of the parameters, by
         its options (see MockOptions): their models measured from what
         their instruments record of the models plus noise, with their
-        errors (see draw_mocks).
+        errors (see draw_mocks). A fit of them compares them with the
+        models under its likelihoods (see likelihoods).
 
         Parameters
         ----------
@@ -367,8 +401,7 @@ class Setup:
         Returns
         -------
         list of list of Observation
-            The observations with their mock data, and the likelihoods of
-            the options: those of each mock.
+            The observations with their mock data: those of each mock.
 
         Raises
         ------
@@ -379,12 +412,10 @@ class Setup:
         options = self._mock_options
         if options is None:
             raise ValueError("mock data need their options (section 'mock')")
-        group = self.group()
-        _, likelihoods = options.per_observation(group.nobservations())
+        observations = self.group().observations()
         return [
-            [observation.with_data(dataset, likelihood)
-             for observation, dataset, likelihood in zip(
-                 group.observations(), datasets, likelihoods)]
+            [observation.with_data(dataset)
+             for observation, dataset in zip(observations, datasets)]
             for datasets in draw_mocks(self._group_plan, values, options)]
 
     def close(self) -> None:

@@ -94,7 +94,7 @@ class WorkersDask(Workers):
         hosts = list(client.scheduler_info()['workers'])
         return [
             _DaskWorker(client.submit(
-                ActorCopy, objective.group(), objective.solves(),
+                ActorCopy, objective.likelihoods(), objective.solves(),
                 placement, self._threads, actor=True, pure=False,
                 workers=[hosts[k % len(hosts)]]).result(),
                 client, own)

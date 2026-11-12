@@ -456,8 +456,10 @@ def test_relabelled_velocities_keep_the_line_of_their_rest(
 
 
 def test_observable_grid_comes_from_the_data(tmp_path):
-    # The grid comes from the data, so the observable must not give it
-    # too, and a dump of the observation does not repeat it
+    # The grid comes from the data, and a dump of the observation does not
+    # repeat it; the observable can give it too, as without data (e.g. that
+    # of mock data, which then takes the data), and it is checked against
+    # the data
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
     info = dict(
@@ -472,7 +474,21 @@ def test_observable_grid_comes_from_the_data(tmp_path):
     assert observable_info == dict(
         type='pixel_brightness',
         median_size=None)
-    with pytest.raises(Exception, match="give its options \\['step'\\]"):
+    given = observation_parser.load(info | dict(observable=dict(
+        type='pixel_brightness', size=[20, 8], step=1, median_size=3)))
+    assert given.observable().grid() == observation.observable().grid()
+    assert given.observable().dump(
+        given.data())['median_size'] == 3
+    with pytest.raises(ConfigError, match=(
+            r"gives the options \['size', 'step'\], which its data give "
+            r"too, and they are not those of the data: the data are on the "
+            r"grid")):
+        observation_parser.load(info | dict(observable=dict(
+            type='pixel_brightness', size=[20, 8], step=0.5)))
+    with pytest.raises(ConfigError, match=(
+            r"gives the options \['step'\], which its data give too, but "
+            r"not all those it needs without data \(missing required "
+            r"options: 'size'\)")):
         observation_parser.load(
             info | dict(observable=dict(type='pixel_brightness', step=1)))
 
@@ -494,7 +510,7 @@ def test_observation_data_must_be_on_the_grid_of_the_observable():
 
 def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     # The rest of the spectral axis of the data is that of the observable,
-    # which must not be given it too
+    # which gives it only with its whole grid, as without data
     from gbkfit.observation import observation_parser
     dataset = DatasetPixelSpectra(
         Data(np.ones((6, 8, 20))), step=(1, 1),
@@ -510,7 +526,9 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
         info | dict(observable=dict(type='pixel_spectra')))
     assert observation.observable().spectral().rest() \
         == dataset.grid().coords.rest
-    with pytest.raises(Exception, match="give its options \\['spectral'\\]"):
+    with pytest.raises(ConfigError, match=(
+            r"gives the options \['spectral'\], which its data give too, "
+            r"but not all")):
         observation_parser.load(info | dict(observable=dict(
             type='pixel_spectra', spectral=dict(rest='6562.8 Angstrom'))))
 

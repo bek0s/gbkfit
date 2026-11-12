@@ -298,7 +298,10 @@ def test_region_spectra_observation_from_data(tmp_path):
         observation, prefix=str(tmp_path / 'dump_'))
     assert set(dumped['observable']) == {
         'type', 'size', 'step', 'rpix', 'rval', 'rota'}
-    with pytest.raises(Exception, match="give its options \\['spectral'\\]"):
+    # (it can give them too, as without data, whole: they are checked)
+    with pytest.raises(Exception, match=(
+            r"gives the options \['spectral'\], which its data give too, "
+            r"but not all")):
         observation_parser.load(info | dict(observable=dict(
             type='region_spectra', size=[32, 41], spectral=dict(step=10))))
 

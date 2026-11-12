@@ -53,18 +53,15 @@ def eval_(
     observation (in mocks/<k>/observations/<observation>/, kind
     'mock_data') and a configuration that fits them (mocks/<k>/
     config.yaml, 'mock_config'): the configuration with each observation
-    of its mock data. The section 'mock' of the configuration has the
-    options
+    of its mock data, which its section 'likelihoods' compares with the
+    models (see Likelihoods; it can be given without data). The section
+    'mock' of the configuration has the options
 
-    - noise: the noise of every observation, or a list of one for each
-      (see Noise);
+    - noise: the noise of every observation, or of each, by observation
+      name (see MockOptions and Noise);
     - nmocks (1), nsamples (100) and seed (none): the number of mocks,
       the number of draws of the errors of measured data (e.g. moments),
-      and the seed of the random numbers (see draw_mocks);
-    - likelihood (optional): the likelihood of the mock data of every
-      observation, or a list of one (or null) for each, in the mock
-      configurations; by default that of its data, if it has data, or
-      that of data without one (see Observation).
+      and the seed of the random numbers (see draw_mocks).
 
     The mock data are in the units of the models.
 
@@ -132,7 +129,7 @@ def _eval(
     objective = setup.objective() if mode == 'objective' else None
     if mode == 'objective' and objective is None:
         raise ConfigError(
-            "the mode 'objective' needs data for every observation")
+            "the mode 'objective' needs data, and no observation has any")
 
     _log.info("calculating model parameters...")
     if missing := [

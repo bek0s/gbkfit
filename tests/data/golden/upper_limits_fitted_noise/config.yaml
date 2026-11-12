@@ -1,6 +1,6 @@
 # upper_limits_fitted_noise: The moment maps of a named observation with a flux scale, of spectra blanked beyond the detection: upper limits on its masked moment 0, and a fitted noise (scale and jitter) of its moment 1.
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - components:
@@ -25,15 +25,6 @@ observations:
     moment0: {data: halpha_moment0_d.fits, mask: halpha_moment0_m.fits, error: halpha_moment0_e.fits}
     moment1: {data: halpha_moment1_d.fits, mask: halpha_moment1_m.fits, error: halpha_moment1_e.fits}
     moment2: {data: halpha_moment2_d.fits, mask: halpha_moment2_m.fits, error: halpha_moment2_e.fits}
-  likelihood:
-    type: gauss
-    weights: 1.0
-    missing_residual: 3.0
-    upper_limits:
-      moment0: {limit: 0.12, error: 0.04}
-    fitted_noise:
-      moment1: {scale: true, scale_min: 0.5, jitter: true}
-    white_floor: 0.01
   dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -49,6 +40,15 @@ observations:
     median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
+likelihoods:
+  type: gauss
+  weights: 1.0
+  missing_residual: 3.0
+  upper_limits:
+    moment0: {limit: 0.12, error: 0.04}
+  fitted_noise:
+    moment1: {scale: true, scale_min: 0.5, jitter: true}
+  white_floor: 0.01
 params:
   properties:
     xpos: 0.2

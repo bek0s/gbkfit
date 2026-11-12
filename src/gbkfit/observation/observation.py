@@ -21,8 +21,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectraData
 from gbkfit.io import Beam
 from gbkfit.model import DataUnit, DepthUnit, Galaxy
-from gbkfit.params import ParamDesc, pdescs_with_units
-from .likelihoods import Likelihood, LikelihoodGauss
+from gbkfit.params import ParamDesc
 from .observables import FluxScale, ObservablePlan
 
 
@@ -94,15 +93,16 @@ class Observation(TypedSerializable, abc.ABC):
     """
     Data of galaxies, and how the model of the galaxies gives them: what
     the plan of an observation group evaluates (see ObservationGroup.plan),
-    and an objective compares with the data under its likelihood (see
-    Objective). Its kind says where the data are measured and how the
-    model gives them (e.g. on the sky, through an instrument; see
-    ObservationSky).
+    and an objective compares with the data under the likelihood its
+    setup gives it (see Likelihoods and Objective). Its kind says where
+    the data are measured and how the model gives them (e.g. on the sky,
+    through an instrument; see ObservationSky). Without data, its model is
+    evaluated alone (e.g. to draw mock data of it, see draw_mocks).
 
     Its data are named items of one shape (see keys), of a dataset of its
-    kind, which the kind checks before it makes it. Its likelihood and its
-    kind can have parameters of their own, named after it (see pdescs),
-    e.g. a flux scale of its model (see flux_scale).
+    kind, which the kind checks before it makes it. Its kind can have
+    parameters of its own, named after it (see pdescs), e.g. a flux scale
+    of its model (see flux_scale).
 
     Parameters
     ----------
@@ -113,29 +113,23 @@ class Observation(TypedSerializable, abc.ABC):
         several (see ObservationGroup).
     data : Dataset, optional
         The data, of its kind.
-    likelihood : Likelihood, optional
-        How the model is compared with the data; Gaussian by default when
-        there are data, and none without data.
     name : str, optional
         Its name, which is the id of its extra outputs instead of its
-        position (see ObservationGroup.observation_label), and starts the
-        names of its parameters.
+        position (see ObservationGroup.observation_label), starts the
+        names of its parameters, and keys the options of setups given by
+        observation (e.g. its likelihood, see Likelihoods).
     model_can_have_missing_values : bool, optional
         Whether its model can have missing values (NaN) where the data
         have some (e.g. the velocity of a spectrum below its flux_floor):
-        the likelihood then needs a residual for them (see
+        its likelihood then needs a residual for them (see
         LikelihoodGauss). False by default.
 
     Raises
     ------
     ValueError
-        If a name is invalid, there are no galaxies or they repeat, there
-        is a likelihood without data, its model can have missing values
-        but its likelihood has no residual for them (see
-        LikelihoodGauss), its likelihood fits a noise but it has no
-        name, the noise of an item is correlated where its kind of data
-        cannot have it (see Dataset.noise_correlation), or its likelihood
-        does not suit it (see Likelihood.check).
+        If a name is invalid, there are no galaxies or they repeat, or the
+        noise of an item is correlated where its kind of data cannot have
+        it (see Dataset.noise_correlation).
     """
 
     def __init__(
@@ -143,7 +137,6 @@ class Observation(TypedSerializable, abc.ABC):
             keys: Sequence[str],
             galaxies: Sequence[str] | None = None,
             data: Dataset | None = None,
-            likelihood: Likelihood | None = None,
             name: str | None = None,
             model_can_have_missing_values: bool = False
     ):
@@ -157,35 +150,14 @@ class Observation(TypedSerializable, abc.ABC):
                 raise ValueError(f"the galaxies repeat: {list(galaxies)}")
             for galaxy in galaxies:
                 check_name(galaxy)
-        if data is None and likelihood is not None:
-            raise ValueError("a likelihood needs data")
         if data is not None:
-            if likelihood is None:
-                likelihood = LikelihoodGauss()
             for key in keys:
                 # (the correlation of its noise must be one its kind of data
                 # can have)
                 data.noise_correlation(key)
-            likelihood.check(keys, data)
-            if name is None and likelihood.pdescs():
-                raise ValueError(
-                    "an observation whose likelihood has parameters (e.g. "
-                    "a fitted noise) needs a name, which names them (e.g. "
-                    "'{name}_noise_scale_moment1')")
-            likelihood = likelihood.with_prefix(
-                '' if name is None else f'{name}_')
-            if model_can_have_missing_values \
-                    and not likelihood.takes_missing_values():
-                raise ValueError(
-                    "the model of the observation can have missing values "
-                    "where the data have some (e.g. the velocity of a "
-                    "spectrum below its flux_floor): its likelihood needs "
-                    "the residual of such a value, the option "
-                    "missing_residual (e.g. 3; see LikelihoodGauss)")
         self._keys = keys
         self._galaxies = galaxies
         self._data = data
-        self._likelihood = likelihood
         self._name = name
         self._model_can_have_missing_values = model_can_have_missing_values
 
@@ -201,22 +173,12 @@ class Observation(TypedSerializable, abc.ABC):
         """Return the data, if any."""
         return self._data
 
-    def likelihood(self) -> Likelihood | None:
-        """Return the likelihood, if there are data."""
-        return self._likelihood
-
     def pdescs(self) -> dict[str, ParamDesc]:
         """
-        Return its parameters: here those of the fitted noise of its
-        likelihood, e.g. '{name}_noise_scale_{item}' (see
-        LikelihoodGauss), with the units that its data give them (see
-        Likelihood.param_units); kinds add their own.
+        Return its parameters, named after it: none here; kinds add their
+        own (e.g. its flux scale, see ObservationSky).
         """
-        if self._likelihood is None:
-            return {}
-        return pdescs_with_units(
-            self._likelihood.pdescs(),
-            self._likelihood.param_units(self._data))
+        return {}
 
     def sky_frame(self) -> SkyFrame | None:
         """
@@ -309,9 +271,7 @@ class Observation(TypedSerializable, abc.ABC):
         """Return the floating type of its model."""
 
     @abc.abstractmethod
-    def with_data(
-            self, data: Dataset, likelihood: Likelihood | None = None
-    ) -> Self:
+    def with_data(self, data: Dataset) -> Self:
         """
         Return a copy of it with other data (e.g. mock data; see
         draw_mocks).
@@ -320,9 +280,6 @@ class Observation(TypedSerializable, abc.ABC):
         ----------
         data : Dataset
             The data, of the observation.
-        likelihood : Likelihood, optional
-            Their likelihood; by default its own, if it has data, or that
-            of data without one (see __init__).
 
         Returns
         -------
@@ -332,8 +289,7 @@ class Observation(TypedSerializable, abc.ABC):
         Raises
         ------
         ValueError
-            If the data are not of the observation, or do not go with the
-            likelihood (see __init__).
+            If the data are not of the observation (see __init__).
         """
 
     def same_plan(self, other: 'Observation') -> bool:

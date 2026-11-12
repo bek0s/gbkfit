@@ -19,7 +19,6 @@ from gbkfit.grid import make_grid
 from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from .likelihoods import Likelihood, likelihood_parser
 from .observables import HostModelData, ModelData, ModelItem, ObservablePlan
 from .observation import Observation, SeenGalaxies
 
@@ -77,28 +76,33 @@ class ObservationProfile(Observation):
     In its configuration (type 'profile'), the data have the form of
     DatasetProfile (no type; see DatasetProfile.from_file).
 
+    The data give its functions, radii and assumed distance; it can give
+    them too, as without data (e.g. a profile of mock data, which then
+    takes the data), and they must then be those of the data.
+
     Parameters
     ----------
     functions : Sequence of str, optional
         The functions it measures (its data items); with data, those of
-        the data.
+        the data by default.
     radii : Quantity, optional
-        The radii; with data, those of the data.
+        The radii; with data, those of the data by default.
     assumed_distance : Quantity, optional
         The distance of radii in lengths that were measured at one; with
-        data, that of the data.
+        data, that of the data by default (when the radii are not
+        given).
     inclination : float, optional
         The inclination (degrees) at which its rotation velocities were
         deprojected: its parameter '{name}_incl' is then the inclination
         of the galaxy (degrees), and its name is required.
-    galaxies, data, likelihood, name
+    galaxies, data, name
         See Observation.
 
     Raises
     ------
     ValueError
-        If it has data and functions, radii or a distance (which the data
-        give), or neither data nor functions and radii, an item is not a
+        If it has data whose functions, radii or distance are not those it
+        gives, or neither data nor functions and radii, an item is not a
         function of radii, or its data are not in a unit of the kind of
         its own (they are converted to it), the radii or the distance are
         invalid (see check_profile_radii), a slope has a
@@ -147,8 +151,7 @@ class ObservationProfile(Observation):
             # (the form of the data is that of a profile: no type)
             data = self._data.dump(prefix, dump_path, overwrite)
             return info | dict(
-                data={k: v for k, v in data.items() if k != 'type'},
-                likelihood=likelihood_parser.dump(self._likelihood))
+                data={k: v for k, v in data.items() if k != 'type'})
         info |= dict(
             functions=list(self.keys()),
             radii=dict(
@@ -169,24 +172,24 @@ class ObservationProfile(Observation):
             Annotated[float, Gt(0), Le(90), Unit('deg')] | None = None,
             galaxies: Sequence[str] | None = None,
             data: DatasetProfile | None = None,
-            likelihood: Likelihood | None = None,
             name: str | None = None
     ):
         check_options(ObservationProfile.__init__, locals())
+        if assumed_distance is not None:
+            assumed_distance = assumed_distance * u.Mpc
         if data is not None:
-            if functions is not None or radii is not None \
-                    or assumed_distance is not None:
-                raise ValueError(
-                    "the data of a profile give its functions, its radii "
-                    "and their assumed distance")
             if not isinstance(data, DatasetProfile):
                 raise ValueError(
                     f"the data of a profile are a table of it "
                     f"(DatasetProfile); they are {type(data).__name__}")
-            functions, radii, assumed_distance = \
-                tuple(data.keys()), data.radii(), data.assumed_distance()
-        elif assumed_distance is not None:
-            assumed_distance = assumed_distance * u.Mpc
+            # (those it does not give are those of the data; those it
+            # gives are checked against them, see _checked_data)
+            if functions is None:
+                functions = tuple(data.keys())
+            if radii is None:
+                radii = data.radii()
+                if assumed_distance is None:
+                    assumed_distance = data.assumed_distance()
         elif functions is None or radii is None:
             raise ValueError(
                 "a profile without data needs its functions and its radii")
@@ -224,7 +227,7 @@ class ObservationProfile(Observation):
             else float(inclination)
         # (slopes have no values where the galaxy has no density)
         super().__init__(
-            keys, galaxies, data, likelihood, name,
+            keys, galaxies, data, name,
             model_can_have_missing_values=any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys))
 
@@ -252,8 +255,7 @@ class ObservationProfile(Observation):
     def pdescs(self) -> dict[str, ParamDesc]:
         """
         Return its parameters: the inclination of the galaxy,
-        '{name}_incl', if it has an inclination (see the class), and those
-        of the fitted noise of its likelihood (see Observation.pdescs).
+        '{name}_incl', if it has an inclination (see the class).
         """
         param = self._inclination_param()
         inclination = {} if param is None else {param: ParamScalarDesc(
@@ -262,7 +264,7 @@ class ObservationProfile(Observation):
                  f"{self._name}, whose rotation velocities were deprojected "
                  f"at {self._inclination:g} degrees", unit='deg',
             default=self._inclination)}
-        return inclination | super().pdescs()
+        return inclination
 
     def _inclination_param(self) -> str | None:
         """Return the name of the parameter of the inclination, if any."""
@@ -286,13 +288,10 @@ class ObservationProfile(Observation):
         """Return the floating type of its model: float64."""
         return np.dtype(np.float64)
 
-    def with_data(
-            self, data: Dataset, likelihood: Likelihood | None = None
-    ) -> Self:
+    def with_data(self, data: Dataset) -> Self:
         return type(self)(
             inclination=self._inclination, galaxies=self._galaxies, data=data,
-            likelihood=likelihood if likelihood is not None
-            else self._likelihood, name=self._name)
+            name=self._name)
 
     def same_plan(self, other: Observation) -> bool:
         """

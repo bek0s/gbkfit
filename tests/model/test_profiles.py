@@ -239,9 +239,9 @@ def test_groups_with_other_data_check_what_their_profiles_see():
     group = ObservationGroup(alone, ObservationProfile(
         data=dataset(['vcirc'], [1.0, 3.0] * u.kpc)))
     with pytest.raises(ValueError, match="needs a distance"):
-        group.with_data([dataset(['vcirc'], [1.0, 3.0] * u.arcsec)])
+        group.with_data({0: dataset(['vcirc'], [1.0, 3.0] * u.arcsec)})
     with pytest.raises(ValueError, match="has no functions"):
-        group.with_data([dataset(['vcirc_disk'], [1.0, 3.0] * u.kpc)])
+        group.with_data({0: dataset(['vcirc_disk'], [1.0, 3.0] * u.kpc)})
 
 
 def test_plans_with_other_data_evaluate_profiles_at_their_radii():
@@ -254,17 +254,36 @@ def test_plans_with_other_data_evaluate_profiles_at_their_radii():
     params = {k: v for k, v in PARAMS.items() if k != 'distance'}
     plan = ObservationGroup(alone, ObservationProfile(
         data=dataset(['vcirc'], [1.0, 3.0] * u.kpc))).plan()
-    assert plan.with_data([dataset(['vcirc'], [1e3, 3e3] * u.pc)])._plans[0] \
+    assert plan.with_data(
+        {0: dataset(['vcirc'], [1e3, 3e3] * u.pc)})._plans[0] \
         is plan._plans[0]
     for keys, radii in [(['vcirc'], [5.0, 7.0] * u.kpc),
                         (['vcirc_halo'], [1.0, 3.0] * u.kpc)]:
         other = dataset(keys, radii)
         fresh = ObservationGroup(
             alone, ObservationProfile(data=other)).plan().model_h(params)[0]
-        copied = plan.with_data([other]).model_h(params)[0]
+        copied = plan.with_data({0: other}).model_h(params)[0]
         assert copied.keys() == fresh.keys()
         for key in keys:
             np.testing.assert_array_equal(copied[key].data, fresh[key].data)
+
+
+def test_a_profile_of_data_can_give_their_functions_and_radii():
+    # (as without data, e.g. that of its mock data: they must be those of
+    # the data, which give them otherwise)
+    radii = [1.0, 3.0] * u.kpc
+    data = DatasetProfile({'vcirc': Data([100.0, 150.0])}, radii, 10)
+    given = ObservationProfile(['vcirc'], radii, 10, data=data)
+    assert np.array_equal(given.radii(), radii)
+    assert given.keys() == ('vcirc',)
+    assert ObservationProfile(data=data).assumed_distance() == 10 * u.Mpc
+    for functions, profile_radii, distance in (
+            (['vcirc_halo'], radii, 10), (['vcirc'], [1.0, 2.0] * u.kpc, 10),
+            (['vcirc'], radii, None)):
+        with pytest.raises(ValueError, match=(
+                "has the functions|not at the radii of the profile")):
+            ObservationProfile(
+                functions, profile_radii, distance, data=data)
 
 
 def test_profile_data_in_another_unit_are_converted():

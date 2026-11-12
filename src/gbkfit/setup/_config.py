@@ -18,8 +18,8 @@ from ruamel.yaml.scalarbool import ScalarBoolean
 
 from gbkfit.config import (
     FORMAT_VERSION, ConfigError, ConfigProblem, Family, collect_problems,
-    config_path, families, name_problem, paths_relative_to, report_unknown,
-    strict_mode, warn)
+    config_path, families, from_config, name_problem, paths_relative_to,
+    report_unknown, strict_mode, type_problem, warn)
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.cosmology import Cosmology, cosmology_parser
 import gbkfit.model
@@ -28,7 +28,8 @@ import gbkfit.project
 from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.fitting import BootstrapOptions, Fitter, fitter_parser
 from gbkfit.parallel import Workers, workers_parser
-from gbkfit.observation import DepthGroup, MockOptions, ObservationGroup
+from gbkfit.observation import (
+    DepthGroup, Likelihood, Likelihoods, MockOptions, ObservationGroup)
 from gbkfit.params import (
     ParamDesc, ParamSpace, ParamSpaceConfig, load_pdescs_dict,
     param_space_parser)
@@ -65,6 +66,11 @@ class _Section(NamedTuple):
     item_options: Mapping[str, Any] = {}
 
 
+# The form of the section 'likelihoods': one likelihood for every
+# observation (a dictionary with its type), or likelihoods by observation
+# name (see Likelihoods)
+_LIKELIHOODS = Likelihood | Mapping[str, Likelihood]
+
 # The sections of configurations, by name
 _SECTIONS = dict(
     version=_Section(
@@ -80,6 +86,11 @@ _SECTIONS = dict(
     observations=_Section(
         gbkfit.observation.Observation, "The observations of the galaxies.",
         True, True, dict(driver=str)),
+    likelihoods=_Section(
+        _LIKELIHOODS,
+        "How the models of the observations with data are compared with "
+        "them: one likelihood for every observation, or likelihoods by "
+        "observation name (Gaussian for the others); Gaussian by default."),
     params=_Section(ParamSpaceConfig, "The parameters.", True),
     pdescs=_Section(
         Mapping[str, ParamDesc],
@@ -287,6 +298,9 @@ class Description:
     group : ObservationGroup or None
         Its galaxies and their observations, if it has no error before
         them.
+    likelihoods : Likelihoods or None
+        The likelihoods of its observations, if it has no error before
+        them.
     params : ParamSpace or None
         Its parameters, with their descriptions, if it has no error
         before them.
@@ -303,6 +317,7 @@ class Description:
     problems: tuple[ConfigProblem, ...]
     config: dict[str, Any] | None
     group: ObservationGroup | None
+    likelihoods: Likelihoods | None
     params: ParamSpace | None
     fitter: Fitter | None
     sources: dict[str, Any]
@@ -315,11 +330,11 @@ def describe(
 ) -> Description:
     """
     Describe a configuration without devices: load its galaxies, their
-    observations, its parameters, its fitter and its options of mock data
-    and of a bootstrap as descriptions, with every rule of them checked
-    (see ObservationGroup), but no drivers and no plans; and collect its
-    problems, past its unknown names (see collect_problems). Its drivers
-    are checked by name and type only.
+    observations and likelihoods, its parameters, its fitter and its
+    options of mock data and of a bootstrap as descriptions, with every
+    rule of them checked (see ObservationGroup), but no drivers and no
+    plans; and collect its problems, past its unknown names (see
+    collect_problems). Its drivers are checked by name and type only.
 
     Parameters
     ----------
@@ -352,8 +367,8 @@ def describe(
                 sections=sections)
     return Description(
         tuple(problems), None if file is None else file.config,
-        sections.group, sections.params, sections.fitter,
-        {} if file is None else file.sources,
+        sections.group, sections.likelihoods, sections.params,
+        sections.fitter, {} if file is None else file.sources,
         None if file is None else file.root)
 
 
@@ -363,10 +378,11 @@ def load(
 ) -> Setup:
     """
     Set up a configuration: the plan of the observations of its galaxies
-    on its drivers, its parameters, its objective if every observation
-    has data, its fitter, its workers and its options of mock data and of
-    a bootstrap if it has them (see Setup). Its fitter, workers and
-    bootstrap need data only to fit (see Setup.fit).
+    on its drivers, the likelihoods of the observations, its parameters,
+    its objective if an observation has data, its fitter, its workers and
+    its options of mock data and of a bootstrap if it has them (see
+    Setup). Its fitter, workers and bootstrap need data only to fit (see
+    Setup.fit).
 
     Parameters
     ----------
@@ -411,9 +427,9 @@ def load(
             drivers = _load_drivers(config.config)
         sections = _load_sections(config.config, drivers)
         return Setup(
-            sections.group, sections.params, sections.fitter,
-            sections.driver, sections.placement, sections.workers,
-            sections.mock, sections.bootstrap)
+            sections.group, sections.params, sections.likelihoods,
+            sections.fitter, sections.driver, sections.placement,
+            sections.workers, sections.mock, sections.bootstrap)
 
 
 @dataclasses.dataclass
@@ -426,6 +442,8 @@ class _Sections:
     ----------
     group : ObservationGroup or None
         Its galaxies and their observations.
+    likelihoods : Likelihoods or None
+        The likelihoods of its observations.
     params : ParamSpace or None
         Its parameters.
     fitter : Fitter or None
@@ -443,6 +461,7 @@ class _Sections:
         Its workers.
     """
     group: ObservationGroup | None = None
+    likelihoods: Likelihoods | None = None
     params: ParamSpace | None = None
     fitter: Fitter | None = None
     mock: MockOptions | None = None
@@ -461,10 +480,10 @@ def _load_sections(
     """
     Load the sections of a configuration, each with its checks at its
     path (see config_path), in order: its galaxies and their
-    observations, its parameters, its fitter (with the rules of the
-    start of a fit, see Fitter.check), its options of mock data and of a
-    bootstrap, where its galaxies and observations go among its drivers
-    (see _load_placement), and its workers.
+    observations, their likelihoods, its parameters, its fitter (with the
+    rules of the start of a fit, see Fitter.check), its options of mock
+    data and of a bootstrap, where its galaxies and observations go among
+    its drivers (see _load_placement), and its workers.
 
     Parameters
     ----------
@@ -492,19 +511,21 @@ def _load_sections(
     host = DriverHost()
     _log.info("setting up galaxies and observations...")
     group = sections.group = _load_observation_group(cfg)
+    likelihoods = sections.likelihoods = _load_likelihoods(cfg, group)
     _log.info("setting up params...")
     params = sections.params = _load_params(
-        cfg, group.pdescs(), group.constants(), group.function_names())
+        cfg, group.pdescs() | likelihoods.pdescs(), group.constants(),
+        group.function_names())
     fitter = sections.fitter = _load_fitter(cfg)
     if fitter is not None:
         # (the rules of the start of a fit, at the paths of the options
         # they are about: of the parameters or of the fitter)
-        fitter.check(params, group)
-        if described and not group.has_data():
+        fitter.check(params, likelihoods)
+        if described and not likelihoods.observations():
             with config_path('fitter'):
                 warn(
-                    "a fit needs data for every observation, and some have "
-                    "none: the configuration can only be evaluated")
+                    "a fit needs data, and no observation has any: the "
+                    "configuration can only be evaluated")
     sections.mock = _load_mock(cfg, group)
     sections.bootstrap = _load_bootstrap(cfg, group, params)
     sections.driver, sections.placement = _load_placement(
@@ -611,7 +632,7 @@ def _prepare_config(
     # (empty sections are loaded as such, for clearer messages)
     config = {s: {} if v is None else v for s, v in config.items()}
     for s in ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'params',
-              'fitter', 'workers'):
+              'likelihoods', 'fitter', 'workers'):
         if s in config and not iterutils.is_mapping(config[s]):
             raise ConfigError(f"section '{s}' must be a dictionary")
     for s in ('galaxies', 'observations'):
@@ -756,6 +777,29 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
         galaxies, observations, depth_order, cosmology)
 
 
+def _load_likelihoods(
+        cfg: dict[str, Any], group: ObservationGroup
+) -> Likelihoods:
+    """
+    Return the likelihoods of the observations of a group of a
+    configuration: of its section 'likelihoods' (one likelihood, a
+    dictionary with its type, or likelihoods by observation name), or by
+    default Gaussian (see Likelihoods), checked against the observations.
+
+    Raises
+    ------
+    ConfigError
+        If the section is not of either form.
+    """
+    if 'likelihoods' not in cfg:
+        return Likelihoods(group)
+    with config_path('likelihoods'):
+        given = from_config(cfg['likelihoods'], _LIKELIHOODS)
+        if problem := type_problem(given, _LIKELIHOODS):
+            raise ConfigError(f"section 'likelihoods' {problem}")
+        return Likelihoods(group, given)
+
+
 def _without_driver(infos: Sequence[Any]) -> list[Any]:
     """
     Return the configurations of galaxies or observations without their
@@ -869,13 +913,13 @@ def _load_bootstrap(
     """
     Return the options of a bootstrap of a configuration (its section
     'bootstrap'), if it has them, checked for a fit of the data of a
-    group, if it has data, and the parameters.
+    group, if it has some, and the parameters.
     """
     if 'bootstrap' not in cfg:
         return None
     with config_path('bootstrap'):
         options = BootstrapOptions.load(cfg['bootstrap'])
-        if group.has_data():
+        if group.observed():
             options.check(group, params)
     return options
 

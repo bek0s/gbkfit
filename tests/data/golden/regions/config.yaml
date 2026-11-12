@@ -1,6 +1,6 @@
 # regions: One galaxy in two observations of regions: the moments of Voronoi bins, and the spectra of apertures (a circle, an ellipse, a rectangle and the field).
 # (written by make_golden.py; do not edit)
-version: 9
+version: 10
 driver: {type: host}
 galaxies:
 - components:
@@ -13,7 +13,8 @@ galaxies:
     dptraits: {type: uniform}
     emission: {type: lines}
 observations:
-- type: sky
+- name: observation0
+  type: sky
   data:
     type: region_moments
     regions:
@@ -21,14 +22,11 @@ observations:
       file: observation0_bins.fits
       step: [0.49999999999996797, 0.500000000000004]
       rpix: [11.5, 11.5]
-      rval: [4.296495291499103e-31, 0.0]
+      rval: [4.296495291499102e-31, 0.0]
       rota: 0.0
     moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
-      error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
-      error: observation0_moment2_e.fits}
-  likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
   dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -43,7 +41,8 @@ observations:
     method: moments
   oversampling: [1, 1]
   fft_dtype: float64
-- type: sky
+- name: observation1
+  type: sky
   data:
     type: region_spectra
     regions:
@@ -56,7 +55,6 @@ observations:
     spectral: {step: 20.0, rpix: 19.5, rval: 0.0}
     data: observation1_spectra_d.fits
     error: observation1_spectra_e.fits
-  likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
@@ -73,6 +71,9 @@ observations:
     rota: 0
   oversampling: [1, 1, 1]
   fft_dtype: float64
+likelihoods:
+  observation0: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  observation1: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
 params:
   properties:
     xpos: 0.2
