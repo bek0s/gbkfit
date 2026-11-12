@@ -48,6 +48,7 @@ observations:
     moment1: {data: maps_moment1_d.fits, mask: maps_moment1_m.fits, error: maps_moment1_e.fits}
     moment2: {data: maps_moment2_d.fits, mask: maps_moment2_m.fits, error: maps_moment2_e.fits}
   likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -61,7 +62,6 @@ observations:
     method: moments
     median_size: null
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:

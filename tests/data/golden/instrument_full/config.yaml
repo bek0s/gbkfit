@@ -25,11 +25,12 @@ observations:
     rpix: [7.5, 7.5]
     rval: [0, 0]
     rota: 0
+    spectral: {step: 25.0, rpix: 15.5, rval: 0.0}
     data: observation0_spectra_d.fits
     mask: observation0_spectra_m.fits
     error: observation0_spectra_e.fits
-    spectral: {step: 25, rpix: 15.5, rval: 0}
   likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -52,7 +53,6 @@ observations:
         unit: km s-1
   observable: {type: pixel_spectra, smooth_weights: true, median_size: 3}
   oversampling: [2, 2, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:

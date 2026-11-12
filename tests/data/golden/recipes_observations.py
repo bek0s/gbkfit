@@ -189,15 +189,18 @@ def _write_uv_coverage(folder: pathlib.Path) -> None:
 def _write_detection_noise(folder: pathlib.Path) -> None:
     """
     Write detected_noise.fits: the error of the cube of the moment maps
-    of _MOMENTS (24 x 24 pixels of 0.5 arcsec), 0.0005 where the disk of
-    the truth is within 5.5 arcsec of its centre in its plane, and
-    missing (NaN) beyond, where the spectra are blanked as
-    non-detections.
+    of _MOMENTS, on their pixels, 0.0005 where the disk of the truth is
+    within 5.5 arcsec of its centre in its plane, and missing (NaN)
+    beyond, where the spectra are blanked as non-detections.
     """
     from astropy.io import fits
+    from gbkfit.observation import observable_parser
     truth = _DISK_TRUTH
-    x = (np.arange(24) - 11.5) * 0.5
-    xx, yy = np.meshgrid(x - truth['xpos'], x - truth['ypos'])
+    grid = observable_parser.load(_MOMENTS['observable']).grid()
+    x, y = (
+        zero + step * np.arange(size) for zero, step, size in zip(
+            grid.zero(), grid.coords.step, grid.size))
+    xx, yy = np.meshgrid(x - truth['xpos'], y - truth['ypos'])
     posa, incl = np.radians(truth['posa']), np.radians(truth['incl'])
     along = -np.sin(posa) * xx + np.cos(posa) * yy
     across = (np.cos(posa) * xx + np.sin(posa) * yy) / np.cos(incl)

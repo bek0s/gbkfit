@@ -200,7 +200,7 @@ def test_at_least_one_moment_order():
 def test_a_cube_without_flux_somewhere_is_a_failed_model(driver):
     # A spectrum below the flux floor has no moments (a value missing
     # from the model); one whose flux is not a number is a model that
-    # failed
+    # failed, but missing from data
     from gbkfit.moments import MomentsPlan
     from gbkfit.params import ModelEvaluationError
     plan = MomentsPlan(driver, (3, 2), (0, 1), 0.01, 'moments', np.float64)
@@ -213,3 +213,6 @@ def test_a_cube_without_flux_somewhere_is_a_failed_model(driver):
     with pytest.raises(ModelEvaluationError, match="1 of its spectra"):
         plan.evaluate((1, 1, 10), (0, 0, -20), driver.mem_copy_h2d(cube),
                       None)
+    maps = plan.measure((1, 1, 10), (0, 0, -20), driver.mem_copy_h2d(cube),
+                        None)
+    assert driver.mem_copy_d2h(maps.mask).tolist() == [[0, 1, 1], [1, 0, 1]]

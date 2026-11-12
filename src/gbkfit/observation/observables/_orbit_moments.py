@@ -100,7 +100,9 @@ class OrbitMomentsPlan(ObservablePlan):
 
     Its mock data are the moments of the bins of the cube of the pixels
     of their grid plus the noise (see mock), as those of RegionMomentsPlan,
-    with data or without.
+    with data or without: measured as data, whose noise may blank values
+    on purpose, after the moments of the model without noise are
+    measured once, which raises if it failed.
 
     Its extra outputs, wanted, come from one pass that records the orbits
     in the bins and in the pixels of their grid and cells: the cube of the
@@ -240,15 +242,18 @@ class OrbitMomentsPlan(ObservablePlan):
             centres=np.array([centre]), light=light, channels=channels)
         return records, weights, light
 
-    def _measure(self, spectra: np.ndarray) -> ModelData:
+    def _measure(self, spectra: np.ndarray, draw: bool = False) -> ModelData:
         """
         Return the moments of the spectra of the bins (an array of shape
-        (nchannels, nbins)), on the driver.
+        (nchannels, nbins)), on the driver: of the model (see
+        MomentsPlan.evaluate), or of a mock draw (data, see
+        MomentsPlan.measure).
         """
         self._driver.mem_copy_h2d(
             np.ascontiguousarray(spectra[:, None, :], self._dtype),
             self._spectra)
-        return _moments.model_data(self._moments.evaluate(
+        measure = self._moments.measure if draw else self._moments.evaluate
+        return _moments.model_data(measure(
             (1.0, 1.0, self._step), (0.0, 0.0, self._zero), self._spectra,
             None), regions=True)
 
@@ -336,12 +341,15 @@ class OrbitMomentsPlan(ObservablePlan):
         state = galaxies[self._galaxy].states[self._component]
         records, _, _ = self._record(params, state, True)
         recorded = self._pixels.cube(records.spectra[:, self._nregions:])
+        # (a model that failed raises here, not in the draws)
+        self._measure(records.spectra[:, :self._nregions])
         draws = []
         for _ in range(ndraws):
             noisy = recorded + noise.draw(
                 rng, self._cube_grid, self._psf, recorded)
             measured = self._measure(
-                (self._bin_weights @ noisy.reshape(len(noisy), -1).T).T)
+                (self._bin_weights @ noisy.reshape(len(noisy), -1).T).T,
+                draw=True)
             draws.append({
                 key: ModelItem(
                     self._driver.mem_copy_d2h(value.data),

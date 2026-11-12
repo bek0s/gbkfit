@@ -16,6 +16,7 @@ observations:
 - type: sky
   data: {type: visibilities, file: observation0_visibilities.npz}
   likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -32,7 +33,6 @@ observations:
     transform: exact
     eps: null
   oversampling: [1, 1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:

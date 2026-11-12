@@ -19,14 +19,17 @@ observations:
     regions:
       type: bins
       file: observation0_bins.fits
-      step: [0.49999999999996797, 0.4999999999999968]
+      step: [0.49999999999996797, 0.500000000000004]
       rpix: [11.5, 11.5]
-      rval: [0.0, 0.0]
+      rval: [4.296495291499103e-31, 0.0]
       rota: 0.0
     moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
+      error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
+      error: observation0_moment2_e.fits}
   likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -39,7 +42,6 @@ observations:
     flux_floor: 1.0e-06
     method: moments
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 - type: sky
   data:
@@ -51,10 +53,11 @@ observations:
       - {type: ellipse, x: 0, y: 0, a: 4, b: 2, posa: 40}
       - {type: rectangle, x: -1, y: 1, length: 8, width: 1, posa: 130}
       - {type: field}
+    spectral: {step: 20.0, rpix: 19.5, rval: 0.0}
     data: observation1_spectra_d.fits
     error: observation1_spectra_e.fits
-    spectral: {step: 20, rpix: 19.5, rval: 0, rest: null, medium: null}
   likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -69,7 +72,6 @@ observations:
     rval: [0, 0]
     rota: 0
   oversampling: [1, 1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:

@@ -29,9 +29,12 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
+      error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
+      error: observation0_moment2_e.fits}
   likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  dtype: float64
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -45,7 +48,6 @@ observations:
     method: moments
     median_size: null
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:
@@ -68,7 +70,8 @@ params:
     rpt2_s: [0.6, 0.8, 0.6]
     rpt2_q: [0.6, 0.8, 1]
     rpt2_p: [0, 30, 0]
-    rpt3_a: [0.05, 0.1, 0.1, 0.05, 0.1, 0.2, 0.2, 0.1, 0.1, 0.2, 0.35, 0.1, 0.05, 0.1, 0.1, 0.05]
+    rpt3_a: [0.05, 0.1, 0.1, 0.05, 0.1, 0.2, 0.2, 0.1, 0.1, 0.2, 0.35, 0.1, 0.05,
+      0.1, 0.1, 0.05]
     spt_rmin: 0.5
     spt_rmax: 7.2
     spt2_p: 10

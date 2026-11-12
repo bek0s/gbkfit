@@ -304,9 +304,14 @@ class RegionMomentsPlan(RegionsObservablePlan):
             driver, (nregions, 1), moments.orders(), moments.flux_floor(),
             moments.method(), setup.dtype)
 
-    def _measure(self) -> ModelData:
+    def _measure(self, draw: bool = False) -> ModelData:
+        # (of the model, or of a mock draw: data, see _measure_draw)
         self._sum_regions(self._model_cube_plan.cube())
         grid = self._model_cube.grid()
-        return _moments.model_data(self._moments.evaluate(
+        measure = self._moments.measure if draw else self._moments.evaluate
+        return _moments.model_data(measure(
             grid.coords.step, grid.zero(), self._spectra_cube, None),
             regions=True)
+
+    def _measure_draw(self) -> ModelData:
+        return self._measure(draw=True)

@@ -28,10 +28,12 @@ observations:
     rpix: [14.5, 14.5]
     rval: [0, 0]
     rota: 0
-    spectral: {step: 120.0, rpix: 19.5, rval: 450870.0, rest: 6.564610000000001e-07 m, medium: vacuum}
+    spectral: {step: 120.0, rpix: 19.5, rval: 450870.0, rest: 6.564610000000001e-07
+        m, medium: vacuum}
     data: observation0_spectra_d.fits
     error: 1.9999999494757503e-05
   likelihood: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  dtype: float32
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: null}
@@ -42,7 +44,6 @@ observations:
     lsf: {type: gauss, sigma: 35.0 km s-1}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
-  dtype: float32
   fft_dtype: float64
 params:
   properties:

@@ -24,13 +24,16 @@ observations:
     regions:
       type: bins
       file: observation0_bins.fits
-      step: [0.49999999999996797, 0.4999999999999968]
+      step: [0.49999999999996797, 0.500000000000004]
       rpix: [11.5, 11.5]
-      rval: [0.0, 0.0]
+      rval: [4.296495291499103e-31, 0.0]
       rota: 0.0
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
+      error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
+      error: observation0_moment2_e.fits}
   likelihood: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  dtype: float64
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: 0.5}
@@ -45,7 +48,6 @@ observations:
     flux_floor: 1.0e-06
     method: moments
   oversampling: [1, 1]
-  dtype: float64
   fft_dtype: float64
 params:
   properties:
