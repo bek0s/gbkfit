@@ -462,9 +462,14 @@ class Observation(TypedSerializable, abc.ABC):
 
 def _same_unit(a: DataUnit | None, b: DataUnit | None) -> bool:
     """
-    Return whether two units of the light of data are the same (see
-    DataUnit, whose beams can be arrays, one for each spectral point).
+    Return whether two units of the light of data are the same for a plan
+    (see DataUnit, whose beams can be arrays, one for each spectral
+    point). Data without a unit of their light are as no data: the light
+    of the components is taken as it is (and their components have no
+    unit, which the check of an observation makes sure of; see
+    check_data_unit), e.g. mock data of an observation without data.
     """
+    a, b = (None if x is None or x.unit is None else x for x in (a, b))
     if a is None or b is None:
         return a is b
     return all(np.array_equal(x, y) if isinstance(x, np.ndarray)

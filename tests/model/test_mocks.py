@@ -350,3 +350,32 @@ def test_mock_options_dump_the_noise_of_each_observation(tmp_path):
     noises = MockOptions.load(info).noises(named_images('hi', 'ha'))
     for noise, error in zip(noises, errors):
         np.testing.assert_array_equal(noise.error(), error)
+
+
+@pytest.mark.parametrize('name', ['pixel_brightness', 'pixel_spectra'])
+def test_mocks_of_an_observation_without_data_share_its_plan(driver, name):
+    # (its plan takes nothing of mock data without a unit: the light of
+    # the components as it is, as without data; see Observation.same_plan)
+    plan = plan_of(driver, dict(type=name) | RECORDED[name])
+    model, _, params = evaluate(plan)
+    [dataset] = mock_data(plan, params, NoiseGauss(rms=0.01))
+    copy = plan.with_datasets({0: dataset})
+    assert copy._plans[0] is plan._plans[0]
+    np.testing.assert_array_equal(
+        next(iter(copy.model_h(params)[0].values())).data,
+        next(iter(model.values())))
+
+
+def test_data_without_a_unit_take_no_light_of_a_unit(driver):
+    # (checked with the observation, also of a copy that shares its plan)
+    image = dict(type='pixel_brightness') | RECORDED['pixel_brightness']
+    plan = plan_of(driver, image)
+    _, _, params = evaluate(plan)
+    [dataset] = mock_data(plan, params, NoiseGauss(rms=0.01))
+    lit = group_plan([dict(
+        driver=dict(type=driver.type()), observable=image,
+        galaxy=dict(components=[disk('band') | dict(
+            emission=dict(type='band', unit='MJy/sr'))]),
+        unit='MJy/sr')])
+    with pytest.raises(ValueError, match="the data have no unit"):
+        lit.with_datasets({0: dataset})

@@ -34,6 +34,7 @@ __all__ = [
     'OpacityScales',
     'band_factors',
     'check_band_unit',
+    'check_data_unit',
     'check_line_unit',
     'check_line_units_agree',
     'density_unit',
@@ -370,6 +371,24 @@ def line_factor(
             f"{e}") from e
 
 
+def check_data_unit(
+        source: u.UnitBase | None, target: DataUnit | None
+) -> None:
+    """
+    Raise ValueError if the light of a component has a unit (source) and
+    the data it is seen in (target) have none: it cannot become theirs.
+    Without a unit of the component, its light is in the unit of the data
+    (or of none); without data, the model is in the unit of its
+    components.
+    """
+    if source is not None and target is not None and target.unit is None:
+        raise ValueError(
+            f"the light of the component is in "
+            f"{gbkfit.units.format_unit(source)!r}, but the data have no "
+            f"unit: give them one (BUNIT in the header, or the option unit "
+            f"of the data)")
+
+
 def line_factors(
         source: u.UnitBase | None,
         target: DataUnit | None,
@@ -391,12 +410,7 @@ def line_factors(
     """
     if source is None or target is None:
         return None
-    if target.unit is None:
-        raise ValueError(
-            f"the light of the component is in "
-            f"{gbkfit.units.format_unit(source)!r}, but the data have no "
-            f"unit: give them one (BUNIT in the header, or the option unit "
-            f"of the data)")
+    check_data_unit(source, target)
     return LineFactors(source, target, redshifts, spectral, frequencies)
 
 
@@ -570,12 +584,7 @@ def band_factors(
     """
     if source is None or target is None:
         return None
-    if target.unit is None:
-        raise ValueError(
-            f"the light of the component is in "
-            f"{gbkfit.units.format_unit(source)!r}, but the data have no "
-            f"unit: give them one (BUNIT in the header, or the option unit "
-            f"of the data)")
+    check_data_unit(source, target)
     return BandFactors(source, target, band, redshift)
 
 

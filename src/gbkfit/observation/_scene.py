@@ -12,7 +12,7 @@ from gbkfit.config import check_name
 from gbkfit.model import (
     STARS, Band, BandEmission, Component, DataUnit, DepthUnit, Emission,
     Galaxy, LineEmission, Scene, SceneEvaluation, StarsEmission,
-    named_components)
+    check_data_unit, named_components)
 from .observation import SeenGalaxies
 
 
@@ -52,7 +52,9 @@ def make_scene(
         Scene.evaluation) that the order of the galaxies along the line of
         sight does not all place (see ObservationGroup: depth_order), or
         without data of light, it sees components of different units (its
-        model is then in the unit of its components).
+        model is then in the unit of its components), or with data
+        without a unit, a component whose light has one (see
+        check_data_unit).
     """
     galaxies, order = seen.galaxies, seen.order
     kind = "an image, which sees the components that emit in a band" \
@@ -71,14 +73,19 @@ def make_scene(
     _check_lines(galaxies, emitters, lines)
     if data_unit is None:
         _check_one_unit(galaxies, emitters)
-    if emission is LineEmission:
-        for galaxy, galaxy_emitters in zip(galaxies, emitters):
-            for i in galaxy_emitters:
-                try:
-                    galaxy.components()[i].check_lines(lines)
-                except ValueError as e:
-                    raise ValueError(
-                        f"component {_label(galaxy, i)}: {e}") from e
+    # (here, before any plan: the copies of an observation with other
+    # data, which can share its plan, are checked again, see
+    # Observation.same_plan)
+    for galaxy, galaxy_emitters in zip(galaxies, emitters):
+        for i in galaxy_emitters:
+            component = galaxy.components()[i]
+            try:
+                check_data_unit(component.emission().unit(), data_unit)
+                if emission is LineEmission:
+                    component.check_lines(lines)
+            except ValueError as e:
+                raise ValueError(
+                    f"component {_label(galaxy, i)}: {e}") from e
     scene = Scene(
         galaxies, seen.mappings, seen.labels, [tuple(e) for e in emitters],
         lines, band, emission, order, data_unit)
