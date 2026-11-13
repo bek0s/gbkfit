@@ -9,7 +9,7 @@ import gbkfit.params
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
+from gbkfit.config import FORMAT_VERSION, ConfigError
 from gbkfit.model import Extras
 from gbkfit.observation import (
     MockOptions, NoiseGauss, NoisePoisson, draw_mocks)
@@ -126,7 +126,8 @@ def test_setups_mock_observations_for_fits_under_their_likelihoods(
     group = plan.group()
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
-    likelihoods = Likelihoods(group, LikelihoodGauss(white_floor=0.2))
+    likelihoods = Likelihoods(
+        group, LikelihoodGauss(white_floor=0.2), mocked=True)
     options = MockOptions(NoiseGauss(rms=0.01), nmocks=2, seed=1)
     with Setup(
             group, params, likelihoods, driver=driver,
@@ -379,3 +380,54 @@ def test_data_without_a_unit_take_no_light_of_a_unit(driver):
         unit='MJy/sr')])
     with pytest.raises(ValueError, match="the data have no unit"):
         lit.with_datasets({0: dataset})
+
+
+def mock_setup_config(observable, likelihoods=None):
+    """
+    A configuration of mock data of an observation 'img' of a disk, with
+    the given section likelihoods, if any.
+    """
+    emission = 'band' if observable['type'] == 'pixel_brightness' \
+        else 'lines'
+    return dict(
+        version=FORMAT_VERSION, driver=dict(type='host'),
+        galaxies=[dict(components=[disk(emission)])],
+        observations=[dict(type='sky', name='img', observable=observable)],
+        params=dict(properties=dict(PROPERTIES)),
+        mock=dict(noise=dict(type='gauss', rms=0.01), seed=1)) | (
+        {} if likelihoods is None else dict(likelihoods=likelihoods))
+
+
+def test_fits_of_mocks_have_the_parameters_of_their_likelihoods():
+    # A fitted noise of an observation without data, in a setup of mock
+    # data: its parameter is the setup's, and that of the fit of a mock
+    import gbkfit
+    from gbkfit import Setup
+    from gbkfit.observation import ObservationGroup
+    image = dict(type='pixel_brightness') | RECORDED['pixel_brightness']
+    config = mock_setup_config(image, dict(
+        type='gauss',
+        fitted_noise=dict(brightness=dict(scale=True, scale_min=0.1))))
+    config['params']['properties'] |= dict(
+        img_noise_scale_brightness=dict(value=1, min=0.5, max=2))
+    with gbkfit.load(config) as setup:
+        assert 'img_noise_scale_brightness' in setup.params().pdescs()
+        [[mock]] = setup.mock(setup.evaluate().values)
+        group = ObservationGroup(setup.group().galaxies(), [mock])
+        with Setup(group, setup.params(),
+                   setup.likelihoods().with_group(group)) as fit:
+            evaluation = fit.evaluate()
+    assert np.isfinite(evaluation.objective.merits.chi2)
+
+
+def test_a_setup_of_mocks_checks_the_likelihoods_of_their_fits():
+    # The Gaussian of moment maps, by default, needs a missing_residual:
+    # the setup of mock data says so, rather than the fit of its mocks
+    import gbkfit
+    moments = dict(type='pixel_moments', size=[16, 17], spectral=dict(
+        size=31, step=20, convention='relativistic'))
+    with pytest.raises(ValueError, match="missing_residual"):
+        gbkfit.load(mock_setup_config(moments))
+    with gbkfit.load(mock_setup_config(
+            moments, dict(type='gauss', missing_residual=3))) as setup:
+        assert setup.likelihoods().of(0).takes_missing_values()

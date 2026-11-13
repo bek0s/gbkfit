@@ -846,15 +846,18 @@ class Likelihoods:
     configuration, one likelihood is a dictionary with its type, and
     likelihoods by name a dictionary of them (see the examples).
 
-    The likelihood of each observation with data is checked against its
-    data (see Likelihood.check), and so is one given for an observation
-    without data (e.g. that of the fit a setup of mock data prepares; see
-    MockOptions), as far as its data items tell: it compares nothing
-    until the observation has data. The parameters of the likelihood of
-    an observation (e.g. those of a fitted noise, see LikelihoodGauss)
-    are named after it, '{name}_noise_scale_{item}' (see
-    Likelihood.with_prefix; the observation then needs a name), in the
-    units of its data (see pdescs).
+    They are those of the observations with data, which an objective
+    compares; of a setup of mock data (mocked), those of every
+    observation, which the fits of its mock data compare (see
+    MockOptions), with or without data. The likelihood of each is checked
+    against its data (see Likelihood.check), without data as far as its
+    data items tell, and so is one given for another observation without
+    data (which it compares once it has data). The parameters of the
+    likelihood of an observation (e.g. those of a fitted noise, see
+    LikelihoodGauss) are those of the likelihoods of the observations
+    compared (see pdescs), named after it, '{name}_noise_scale_{item}'
+    (see Likelihood.with_prefix; the observation then needs a name), in
+    the units of its data, if it has data.
 
     Parameters
     ----------
@@ -863,12 +866,15 @@ class Likelihoods:
     likelihoods : Likelihood or Mapping of str to Likelihood, optional
         One likelihood for every observation, or likelihoods by
         observation name; Gaussian by default.
+    mocked : bool, optional
+        Whether they are those of a setup of mock data (see MockOptions),
+        of every observation; False by default.
 
     Raises
     ------
     ValueError
         If the likelihoods by name name unknown observations, or an
-        observation with data has no name; or a likelihood has parameters
+        observation compared has no name; or a likelihood has parameters
         but its observation no name, does not suit its observation (see
         Likelihood.check), takes no values missing from a model that can
         have them (see Observation.model_can_have_missing_values; e.g. a
@@ -905,29 +911,34 @@ class Likelihoods:
     def __init__(
             self,
             group: 'ObservationGroup',
-            likelihoods: Likelihood | Mapping[str, Likelihood] | None = None
+            likelihoods: Likelihood | Mapping[str, Likelihood] | None = None,
+            mocked: bool = False
     ):
         observations = group.observations()
+        # (the observations compared: with data, or all of a setup of mock
+        # data, whose fits compare its mock data of every observation)
+        compared = tuple(range(len(observations))) if mocked \
+            else group.observed()
         by_name = isinstance(likelihoods, Mapping)
         given = {} if likelihoods is None else group.per_observation(
-            likelihoods, 'likelihoods', group.observed(), complete=False)
+            likelihoods, 'likelihoods', compared, complete=False)
         self._group = group
         self._given = dict(likelihoods) if by_name else likelihoods
-        # The likelihood of each observation with data, by index, with the
-        # names of its parameters (see with_prefix)
+        self._mocked = mocked
+        self._compared = compared
+        # The likelihood of each observation compared, or given one, by
+        # index, with the names of its parameters (see with_prefix)
         self._likelihoods: dict[int, Likelihood] = {}
         for i, observation in enumerate(observations):
-            if i not in given and observation.dataset() is None:
+            if i not in given and i not in compared:
                 continue
             # (the errors of one given by name are at its name; those of
             # the others name their observation)
             named = by_name and i in given
             with config_path(*((observation.name(),) if named else ())):
-                likelihood = _bound(
+                self._likelihoods[i] = _bound(
                     given.get(i, LikelihoodGauss()), observation,
                     None if named else i)
-            if observation.dataset() is not None:
-                self._likelihoods[i] = likelihood
         if repeated := sorted(self.pdescs().keys() & group.pdescs().keys()):
             raise ValueError(
                 f"the parameters of the likelihoods have the names of "
@@ -945,55 +956,68 @@ class Likelihoods:
         """
         return self._given
 
+    def mocked(self) -> bool:
+        """
+        Check whether they are those of a setup of mock data, of every
+        observation.
+        """
+        return self._mocked
+
     def observations(self) -> tuple[int, ...]:
         """
         Return the observations with data, by index: those whose models
         an objective compares with their data.
         """
-        return tuple(self._likelihoods)
+        return tuple(
+            i for i in self._compared if i in self._group.observed())
 
     def of(self, index: int) -> Likelihood:
         """
         Return the likelihood of the observation of the given index, with
-        the names of its parameters (see Likelihood.with_prefix).
+        the names of its parameters (see Likelihood.with_prefix): of one
+        compared, or given one.
 
         Raises
         ------
         KeyError
-            If the observation has no data.
+            If the observation has none.
         """
         return self._likelihoods[index]
 
     def items(self) -> Iterator[tuple[int, Likelihood]]:
         """
         Yield the likelihood of each observation with data, with its index
-        (see of).
+        (see observations and of).
         """
-        yield from self._likelihoods.items()
+        for i in self.observations():
+            yield i, self._likelihoods[i]
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
-        Return the parameters of the likelihoods of the observations with
-        data (e.g. '{name}_noise_scale_{item}' of a fitted noise, see
-        LikelihoodGauss), with the units that their data give them (see
-        Likelihood.param_units).
+        Return the parameters of the likelihoods of the observations
+        compared (e.g. '{name}_noise_scale_{item}' of a fitted noise, see
+        LikelihoodGauss): with the units that their data give them (see
+        Likelihood.param_units), and without units without data (e.g. of
+        a setup of mock data, whose mock data give them theirs).
         """
         observations = self._group.observations()
         pdescs = {}
-        for i, likelihood in self._likelihoods.items():
+        for i in self._compared:
+            likelihood = self._likelihoods[i]
+            dataset = observations[i].dataset()
             pdescs |= pdescs_with_units(
                 likelihood.pdescs(),
-                likelihood.param_units(observations[i].dataset()))
+                {} if dataset is None else likelihood.param_units(dataset))
         return pdescs
 
     def with_group(self, group: 'ObservationGroup') -> 'Likelihoods':
         """
         Return the likelihoods as given of another group of the same
         observations (e.g. with other data, see
-        ObservationGroup.with_datasets),
-        checked against it.
+        ObservationGroup.with_datasets), checked against it, of a setup of
+        mock data if they are.
         """
-        return Likelihoods(group, self._given)
+        return Likelihoods(group, self._given, self._mocked)
 
 
 def _bound(

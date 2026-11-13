@@ -96,7 +96,9 @@ class Setup:
         The workers of copies of the objective, which evaluate the batches
         of points of fits at once (see Workers.start).
     mock_options : MockOptions, optional
-        The options of mock data of the observations (see mock).
+        The options of mock data of the observations (see mock): its
+        likelihoods are then those of the fits of the mock data, of every
+        observation (see Likelihoods: mocked).
     bootstrap_options : BootstrapOptions, optional
         The options of a bootstrap of a fit (see bootstrap).
 
@@ -104,7 +106,8 @@ class Setup:
     ------
     ValueError
         If the parameters are not of the group and the likelihoods, the
-        likelihoods are of another group, the fitter cannot fit the
+        likelihoods are of another group, or not of mock data with options
+        of mock data, the fitter cannot fit the
         parameters (see Fitter.check), the options of mock data are not
         of the observations (see MockOptions.check), the options of a
         bootstrap do not suit the data (see BootstrapOptions.check), or
@@ -137,11 +140,17 @@ class Setup:
             bootstrap_options: BootstrapOptions | None = None
     ):
         if likelihoods is None:
-            likelihoods = Likelihoods(group)
+            likelihoods = Likelihoods(
+                group, mocked=mock_options is not None)
         elif likelihoods.group() is not group:
             raise ValueError(
                 "the likelihoods are of another group (see "
                 "Likelihoods.with_group)")
+        elif mock_options is not None and not likelihoods.mocked():
+            raise ValueError(
+                "the likelihoods of a setup of mock data are those of the "
+                "fits of its mock data, of every observation: "
+                "Likelihoods(group, ..., mocked=True)")
         pdescs = group.pdescs() | likelihoods.pdescs()
         if missing := [n for n in pdescs if n not in params.pdescs()]:
             raise ValueError(
