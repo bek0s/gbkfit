@@ -83,7 +83,7 @@ def mock_data(run, k):
     filename = pathlib.Path(run.filename(run.product('mock_config', mock=k)))
     config = yaml.load(filename)
     root = filename.parent / config['root']
-    data = config['observations'][0]['data']
+    data = config['observations'][0]['dataset']
     return filename, *(
         np.array(fits.getdata(root / data[part])) for part in ('data', 'error'))
 
@@ -99,7 +99,7 @@ def test_objective_residuals(tmp_path):
     model = array(run_eval('model', config, tmp_path / 'model'), 'model')
     fits.writeto(tmp_path / 'data.fits', model + 1)
     observation = config['observations'][0]
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         data=str(tmp_path / 'data.fits'), error=2.0) \
         | data_grid(observation['observable'])
     config['likelihoods'] = dict(type='gauss', weights=0.5)
@@ -132,7 +132,7 @@ def test_profiling_writes_the_timings(tmp_path, mode):
         model = array(run_eval('model', config, tmp_path / 'model'), 'model')
         fits.writeto(tmp_path / 'data.fits', model)
         observation = config['observations'][0]
-        observation['data'] = dict(
+        observation['dataset'] = dict(
             data=str(tmp_path / 'data.fits'), error=1.0) \
             | data_grid(observation['observable'])
     run = run_eval(mode, config, tmp_path / mode, profile_iters=3)
@@ -201,7 +201,7 @@ def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     # data and the residuals, 1, as those the task writes
     fits.writeto(tmp_path / 'data.fits', expected + 1)
     observation = config['observations'][0]
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         data=str(tmp_path / 'data.fits'), error=2.0) \
         | data_grid(observation['observable'])
     yaml.dump(config, tmp_path / 'data.yaml')
@@ -224,7 +224,7 @@ def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
     project.create(str(study))
     fits.writeto(study / 'data/cube.fits', model + 1)
     observation = config['observations'][0]
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         data='data/cube.fits', error=2.0) \
         | data_grid(observation['observable'])
     for path, piece in (
@@ -307,7 +307,7 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
     observable = observation['observable']
     for key in ('regions', 'spectral'):
         observable.pop(key)
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         type='region_spectra', regions=regions,
         data=str(tmp_path / 'data.fits'), error=2.0)
     run = run_eval('objective', config, tmp_path / 'objective')

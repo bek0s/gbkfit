@@ -57,7 +57,7 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     fits.writeto(tmp_path / 'data.fits', model)
     # Fit three of its parameters, from elsewhere
     observation = config['observations'][0]
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         data='data.fits', error=0.01 * float(model.max())) \
         | data_grid(observation['observable'])
     truth = dict(config['params']['properties'])
@@ -145,7 +145,7 @@ def test_a_fit_resumes_from_its_output_directory(tmp_path):
     model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     observation = config['observations'][0]
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         data='data.fits', error=0.01 * float(model.max())) \
         | data_grid(observation['observable'])
     config['params']['properties'] |= dict(
@@ -173,7 +173,7 @@ def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
     model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     observation = config['observations'][0]
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         data='data.fits', error=0.01 * float(model.max())) \
         | data_grid(observation['observable'])
     config['params']['properties'] |= dict(
