@@ -12,19 +12,16 @@ import pytest
 from modelutils import group_plan
 
 
-FLAT = dict(type='flat')
-GRID = dict(type='grid')
-
 # A galaxy of a point that emits in a band (seen by images), and one of a
 # point that emits a line (seen by spectral cubes)
 BAND_POINT = dict(components=[dict(type='point', emission=dict(type='band'))])
 LINE_POINT = dict(components=[dict(type='point', emission=dict(type='lines'))])
 
 
-def evaluate(driver, galaxy, observable, properties, line_of_sight=FLAT):
+def evaluate(driver, galaxy, observable, properties):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
-        line_of_sight=line_of_sight, observable=copy.deepcopy(observable))])
+        observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
@@ -35,25 +32,26 @@ def evaluate(driver, galaxy, observable, properties, line_of_sight=FLAT):
 PIXEL_AREA = 0.25
 
 
-@pytest.mark.parametrize('line_of_sight', [FLAT, GRID], ids=['flat', 'grid'])
-def test_point_in_an_image(driver, line_of_sight):
+@pytest.mark.parametrize('evaluation', ['plane', 'depth'])
+def test_point_in_an_image(driver, force_evaluation, evaluation):
     # At the centre of a pixel (pixel (5, 6) is at (0.25, 1.25)), all its
-    # flux is in that pixel; between pixels, it is shared bilinearly
+    # flux is in that pixel; between pixels, it is shared bilinearly. On a
+    # depth axis (e.g. beside a thick component), a point is a layer at
+    # its depth, as on the plane of the sky
+    force_evaluation(evaluation)
     image = dict(type='pixel_brightness', size=[10, 8], step=[0.5, 0.5])
     centred = evaluate(
-        driver, BAND_POINT, image, dict(xpos=0.25, ypos=1.25, flux=3),
-        line_of_sight)
+        driver, BAND_POINT, image, dict(xpos=0.25, ypos=1.25, flux=3))
     assert centred[6, 5] * PIXEL_AREA == pytest.approx(3)
     assert centred.sum() * PIXEL_AREA == pytest.approx(3)
     shared = evaluate(
-        driver, BAND_POINT, image, dict(xpos=0.5, ypos=1.25, flux=4),
-        line_of_sight)
+        driver, BAND_POINT, image, dict(xpos=0.5, ypos=1.25, flux=4))
     np.testing.assert_allclose(shared[6, 5:7] * PIXEL_AREA, [2, 2], rtol=1e-6)
     # With a psf, the image of a point is the psf
     psf = dict(type='gauss', sigma=1.0)
     smeared = evaluate(
         driver, BAND_POINT, image | dict(psf=psf),
-        dict(xpos=0.25, ypos=1.25, flux=1), line_of_sight)
+        dict(xpos=0.25, ypos=1.25, flux=1))
     from gbkfit.instrument import psf_parser
     # (the psf drawn at its own size, around pixel (5, 6))
     kernel = psf_parser.load(dict(psf)).asarray((0.5, 0.5))
@@ -114,15 +112,17 @@ def test_point_with_an_lsf_does_not_depend_on_oversampling(driver, n):
     assert variance == pytest.approx(10 ** 2 + 30 ** 2 + 10 ** 2 / 12, rel=1e-4)
 
 
-@pytest.mark.parametrize('line_of_sight', [FLAT, GRID], ids=['flat', 'grid'])
-def test_point_in_a_cube(driver, line_of_sight):
+@pytest.mark.parametrize('evaluation', ['plane', 'depth'])
+def test_point_in_a_cube(driver, force_evaluation, evaluation):
     # The spectrum of the point is a Gaussian of its flux, velocity and
-    # dispersion (the mean of the line over each channel)
+    # dispersion (the mean of the line over each channel), on the plane of
+    # the sky and on a depth axis
+    force_evaluation(evaluation)
     scube = dict(
         type='pixel_spectra', size=[10, 8], step=[0.5, 0.5],
         spectral=dict(size=41, step=10, convention='relativistic'))
     cube = evaluate(driver, LINE_POINT, scube, dict(
-        xpos=0.25, ypos=1.25, flux=2, vsys=33, disp=25), line_of_sight)
+        xpos=0.25, ypos=1.25, flux=2, vsys=33, disp=25))
     spectrum = cube[:, 6, 5]
     np.testing.assert_allclose(spectrum.sum() * 10 * PIXEL_AREA, 2, rtol=1e-5)
     velocity = (np.arange(41) - 20) * 10

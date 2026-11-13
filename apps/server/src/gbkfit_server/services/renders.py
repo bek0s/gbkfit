@@ -418,8 +418,8 @@ def _observations(
     options of a spectral axis given, or else of two, whose velocities its
     maps hold whatever its channels; at the rest of the first line named,
     if any), and an image of those that emit in
-    bands; each with a depth axis if a component it sees is thick or has
-    an opacity, and with radiative transfer if one absorbs its own lines.
+    bands; each evaluated along the line of sight as what it sees needs
+    (see Scene.evaluation of gbkfit.model).
     """
     components = galaxy.components()
     infos = []
@@ -437,17 +437,10 @@ def _observations(
             observable = observable | dict(spectral={
                 key: value for key, value in observable['spectral'].items()
                 if key != 'convention'} | dict(rest=rest))
-        opacities = [c.opacity() for c in seen if c.opacity() is not None]
-        if any(o.type() == 'line' for o in opacities):
-            line_of_sight = 'transfer'
-        elif opacities or any(c.thick(kind) for c in seen):
-            line_of_sight = 'grid'
-        else:
-            line_of_sight = 'flat'
         infos.append(dict(
             type='sky',
-            observable=observable | dict(size=[size, size], step=[step, step]),
-            line_of_sight=dict(type=line_of_sight)))
+            observable=observable | dict(
+                size=[size, size], step=[step, step])))
     return observation_parser.load(infos)
 
 

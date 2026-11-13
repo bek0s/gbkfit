@@ -159,11 +159,11 @@ def blob_objective():
     from gbkfit.instrument import Instrument, PSFGauss
     from gbkfit.objective import Objective
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationGroup, ObservationSky, PixelBrightness)
+        ObservationGroup, ObservationSky, PixelBrightness)
 
     def group(dataset):
         return ObservationGroup(galaxy_parser.load(GALAXY), ObservationSky(
-            PixelBrightness.from_data(dataset), LineOfSightFlat(),
+            PixelBrightness.from_data(dataset),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
         ).plan(DriverHost())
     shape = (16, 16)

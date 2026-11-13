@@ -49,7 +49,6 @@ def case(component):
         observable=dict(
             type='pixel_spectra', size=[32, 32], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
-        line_of_sight=dict(type='grid' if thick else 'flat'),
         galaxy=dict(components=[component]))
 
 

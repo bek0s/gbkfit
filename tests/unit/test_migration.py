@@ -25,7 +25,7 @@ yaml = ruamel.yaml.YAML(typ='safe')
 VERSION = FORMAT_VERSION
 
 OBSERVATION = dict(
-    type='sky', name='kmos', line_of_sight=dict(type='flat'),
+    type='sky', name='kmos',
     observable=dict(
         type='pixel_spectra', size=[4, 4],
         spectral=dict(size=5, convention='relativistic')))
@@ -1376,7 +1376,7 @@ def test_the_slit_pa_of_a_migrated_slit_is_the_slit_of_its_rota():
     # The migrated observable is the slit it was: its grid has the rota of
     # the configuration of version 8
     config = dict(observations=[dict(
-        type='sky', line_of_sight=dict(type='flat'), observable=dict(
+        type='sky', observable=dict(
             type='slit_spectra', size=[40],
             spectral=dict(size=5, step=10, convention='relativistic'),
             rota=30))])
@@ -1543,13 +1543,13 @@ def _group_of(observations):
     """
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationGroup, ObservationSky, PixelBrightness)
+        ObservationGroup, ObservationSky, PixelBrightness)
     galaxy = galaxy_parser.load(dict(components=[dict(
         type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
         emission=dict(type='band'))]))
     return ObservationGroup(galaxy, [
         ObservationSky(
-            PixelBrightness(size=(8, 8)), LineOfSightFlat(),
+            PixelBrightness(size=(8, 8)),
             name=observation.get('name'))
         for observation in observations])
 
@@ -1649,7 +1649,7 @@ def test_a_migrated_file_has_its_likelihoods_after_its_observations(
         "params: {properties: {a: 1}}  # the parameters\n")
     migration.migrate_file(str(path))
     assert path.read_text() == (
-        "version: 10\n"
+        f"version: {VERSION}\n"
         "# the observations\n"
         "observations:\n"
         "- type: sky\n"
@@ -1698,3 +1698,56 @@ def test_the_likelihoods_of_observation_pieces_move_into_their_setups(
         "by hand: name the observation piece 'unnamed' (e.g. "
         "'observation0'), and give its likelihood by that name")) \
         in changes['setups/by_hand.yaml']
+
+
+@pytest.mark.parametrize('line_of_sight, depth', [
+    (dict(type='flat'), None),
+    (dict(type='grid'), None),
+    (dict(type='grid', depth=dict(step=0.5)), dict(step=0.5)),
+    (dict(type='transfer', depth=dict(extent=120), slab=4, subchannels=2),
+     dict(extent=120, slab=4, subchannels=2)),
+    (dict(type='transfer', slab=None, subchannels=4), dict(subchannels=4))])
+def test_the_line_of_sight_leaves_for_the_depth_of_the_observation(
+        line_of_sight, depth):
+    # Version 11: the components decide how an observation is evaluated
+    # along the line of sight; its depth axis and the options of
+    # radiative transfer are its option depth, in the place of the line of
+    # sight
+    config = dict(observations=[dict(
+        type='sky', name='hi', line_of_sight=line_of_sight,
+        observable=dict(type='pixel_brightness', size=[8, 8]))])
+    changes = migration.migrate(config, 10)
+    observation = config['observations'][0]
+    assert 'line_of_sight' not in observation
+    if depth is None:
+        assert list(observation) == ['type', 'name', 'observable']
+    else:
+        assert observation['depth'] == depth
+        assert list(observation) == ['type', 'name', 'depth', 'observable']
+    assert any(
+        change.path == ['observations', 0, 'line_of_sight']
+        for change in changes)
+    # (the migrated configuration loads)
+    group_of_config = setup._config._load_observation_group
+    group_of_config(config | dict(galaxies=[dict(components=[dict(
+        type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+        emission=dict(type='band'))])]))
+
+
+def test_a_migrated_line_of_sight_keeps_the_comments(tmp_path):
+    path = tmp_path / 'fit.yaml'
+    path.write_text(
+        "version: 10\n"
+        "observations:\n"
+        "- type: sky\n"
+        "  # the depth axis\n"
+        "  line_of_sight: {type: grid, depth: {step: 0.5}}  # fine\n"
+        "  observable: {type: pixel_brightness, size: [8, 8]}\n")
+    migration.migrate_file(str(path))
+    # (the comment after it stays in its column)
+    lines = path.read_text().splitlines()
+    assert lines[:4] == [
+        f"version: {VERSION}", "observations:", "- type: sky",
+        "  # the depth axis"]
+    assert lines[4].split() == ['depth:', '{step:', '0.5}', '#', 'fine']
+    assert lines[5] == "  observable: {type: pixel_brightness, size: [8, 8]}"

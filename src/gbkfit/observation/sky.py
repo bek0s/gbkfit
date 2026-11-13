@@ -27,7 +27,7 @@ from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from ._scene import check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
-from .line_of_sight import LineOfSight, line_of_sight_parser
+from .depth import Depth, check_scene
 from .noise import Noise
 from .observables import (
     FluxScale, HostModelData, ModelData, Observable, ObservablePlan,
@@ -111,9 +111,6 @@ class ObservationSky(Observation):
     ----------
     observable : Observable
         What the data measure.
-    line_of_sight : LineOfSight
-        How it treats the line of sight: LineOfSightFlat() (the plane of
-        the sky) or LineOfSightGrid() (a depth axis).
     foreground : Foreground, optional
         What the light meets before the telescope; nothing by default.
     instrument : Instrument, optional
@@ -168,6 +165,13 @@ class ObservationSky(Observation):
         disk of scale length 2.5 pixels at peak S/N 20, 1 biased the
         dispersion by +2 error bars and 2 by +0.5; on data of many pixels
         per beam (e.g. the cubes of LVHIS), it changed nothing.
+    depth : Depth, optional
+        The depth axis along the line of sight, if what it sees needs one
+        (thick components, or opacity; see Scene.evaluation), and the
+        options of radiative transfer along it; Depth() by default. What
+        it sees decides how it is evaluated along the line of sight: on
+        the plane of the sky, on the depth axis, or by radiative transfer
+        (line opacity, or several galaxies that dim one another).
     dtype : str, optional
         The floating type of the model: 'float32' or 'float64'. By default
         float64 if the noise of an item of its data is correlated (see
@@ -303,7 +307,7 @@ class ObservationSky(Observation):
             dtype=self._given_dtype)
         return name | galaxies | components | lines | band | pixel_weights \
             | flux_scale | offsets | unit | data | dtype | dict(
-            line_of_sight=line_of_sight_parser.dump(setup.line_of_sight),
+            depth=setup.depth.dump(),
             foreground=foreground_parser.dump(setup.foreground, **kwargs),
             instrument=instrument_parser.dump(setup.instrument, **kwargs),
             observable=observable_parser.dump(
@@ -314,7 +318,6 @@ class ObservationSky(Observation):
     def __init__(
             self,
             observable: Observable,
-            line_of_sight: LineOfSight,
             foreground: Foreground | None = None,
             instrument: Instrument | None = None,
             galaxies: Sequence[str] | None = None,
@@ -326,6 +329,7 @@ class ObservationSky(Observation):
             offsets: Mapping[str, bool] | None = None,
             data: Dataset | None = None,
             oversampling: Sequence[int] | None = None,
+            depth: Depth | None = None,
             dtype: _DType | None = None,
             fft_dtype: _DType = 'float64',
             name: str | None = None,
@@ -393,7 +397,8 @@ class ObservationSky(Observation):
         scale = self.flux_scale()
         one = scale is not None and scale[1].axis is None
         self._setup = ObservationSetup(
-            line_of_sight=line_of_sight, foreground=foreground,
+            depth=depth if depth is not None else Depth(),
+            foreground=foreground,
             instrument=instrument, oversampling=oversampling, dtype=dtype,
             fft_dtype=fft_dtype, pixel_weights=pixel_weights,
             flux_scale_param=scale[0] if one else None)
@@ -407,9 +412,9 @@ class ObservationSky(Observation):
         if data is not None:
             _check_beams(data, instrument, observable)
 
-    def line_of_sight(self) -> LineOfSight:
-        """Return how it treats the line of sight."""
-        return self._setup.line_of_sight
+    def depth(self) -> Depth:
+        """Return its depth axis, for what it sees that needs one."""
+        return self._setup.depth
 
     def components(self) -> tuple[str, ...] | None:
         """Return the names of the components it sees, if given."""
@@ -500,11 +505,11 @@ class ObservationSky(Observation):
     def with_data(self, data: Dataset) -> Self:
         setup = self._setup
         return type(self)(
-            self._observable, setup.line_of_sight, setup.foreground,
-            setup.instrument, self._galaxies,
-            self._components, self._lines, self._band, setup.pixel_weights,
-            self._flux_scale, self._offsets, data, setup.oversampling,
-            self._given_dtype, setup.fft_dtype.name, self._name)
+            self._observable, setup.foreground, setup.instrument,
+            self._galaxies, self._components, self._lines, self._band,
+            setup.pixel_weights, self._flux_scale, self._offsets, data,
+            setup.oversampling, setup.depth, self._given_dtype,
+            setup.fft_dtype.name, self._name)
 
     def observable(self) -> Observable:
         """Return the observable."""
@@ -626,13 +631,11 @@ class ObservationSky(Observation):
 
     def _scene(self, seen: SeenGalaxies) -> Scene:
         """
-        Return the scene of the galaxies it sees, along its line of sight
-        (see make_scene).
+        Return the scene of the galaxies it sees (see make_scene).
         """
         return make_scene(
             seen, self._components, self._lines, self._band,
-            self._setup.line_of_sight, self._observable.emission,
-            self.data_unit())
+            self._observable.emission, self.data_unit())
 
     def check(self, seen: SeenGalaxies) -> None:
         scene = self._scene(seen)
@@ -642,7 +645,7 @@ class ObservationSky(Observation):
             trait.check_psf(setup.instrument.psf())
         if setup.pixel_weights is not None:
             weights_geometry(setup.pixel_weights, scene)
-        setup.line_of_sight.check_scene(scene)
+        check_scene(scene)
         self._observable.check_scene(scene, setup)
 
     def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:

@@ -13,6 +13,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData
 from gbkfit.model import Extras, GalaxyState
 from gbkfit.params import ParamValues
+from ..depth import plan_scene
 from ..weights import plan_weights
 from ._model_cube import ModelCube, cube_extra
 from .base import (
@@ -97,8 +98,8 @@ class CubeObservablePlan(ObservablePlan):
         # an image has none)
         smoothing = None if grid.spectral_axis is None \
             else model_cube.spectral_smoothing()
-        self._model_plan = setup.line_of_sight.plan_scene(
-            scene, driver, grid, dtype, smoothing)
+        self._model_plan = plan_scene(
+            scene, setup.depth, driver, grid, dtype, smoothing)
 
     def _model_grid(self) -> Grid:
         """

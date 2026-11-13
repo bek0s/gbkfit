@@ -33,13 +33,12 @@ def disk(vptraits, density=None, **options):
         emission=dict(type='lines')) | options
 
 
-def spectral_cube(components, line_of_sight):
+def spectral_cube(components):
     return dict(
         driver=dict(type='host'),
         observable=dict(
             type='pixel_spectra', size=[32, 32], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
-        line_of_sight=line_of_sight,
         galaxy=dict(components=components))
 
 
@@ -47,7 +46,7 @@ def test_rotation_curve_from_radial_nodes(evaluate_cases):
     # A node-wise rotation curve given by an expression of the radial
     # nodes is the same as the one given by its values
     case = spectral_cube(
-        [disk(dict(type='nw_uniform', direction='tan'))], dict(type='flat'))
+        [disk(dict(type='nw_uniform', direction='tan'))])
     curve = 200 * np.arctan(np.array(RNODES) / 3)
     expression, _ = evaluate_cases(
         [case], PROPERTIES | dict(vpt_vt='200 * np.arctan(rnodes / 3)'))
@@ -67,10 +66,9 @@ def test_names_of_constants():
         [disk(vptraits, thick, name='gas'),
          disk(vptraits, thick, name='ring', rnodes=[0, 5, 10]),
          dict(type='thick_disk', name='dust', loose=False, tilted=False,
-              rnodes=[0, 1], **thick, opacity=dict(type='dust'))],
-        dict(type='grid')) | dict(name='g0')
-    galaxy1 = spectral_cube(
-        [disk(vptraits, rnodes=[0, 3, 6])], dict(type='flat')) \
+              rnodes=[0, 1], **thick, opacity=dict(type='dust'))]) \
+        | dict(name='g0')
+    galaxy1 = spectral_cube([disk(vptraits, rnodes=[0, 3, 6])]) \
         | dict(name='g1')
     constants = observation_group([galaxy0, galaxy1]).constants()
     assert list(constants) == [
@@ -90,11 +88,11 @@ def test_the_redshift_and_the_cosmology_are_constants():
     # of the galaxy); redshift_at, a function of the derived values
     import gbkfit.cosmology
     vptraits = dict(type='arctan', direction='tan')
-    far = spectral_cube([disk(vptraits)], dict(type='flat'))
+    far = spectral_cube([disk(vptraits)])
     far['galaxy']['redshift'] = 0.5
     galaxies = [
-        spectral_cube([disk(vptraits)], dict(type='flat'))
-        | dict(name='near'), far | dict(name='far')]
+        spectral_cube([disk(vptraits)]) | dict(name='near'),
+        far | dict(name='far')]
     constants = observation_group(galaxies).constants()
     assert constants['near_redshift'] == 0
     assert constants['far_redshift'] == 0.5

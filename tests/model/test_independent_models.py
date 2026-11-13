@@ -50,12 +50,15 @@ def _disk(**options):
         emission=dict(type='lines')) | options
 
 
-def _cube(driver, galaxy, observable, line_of_sight, properties):
-    """Return the model spectra of a galaxy in a cube, in float64."""
+def _cube(driver, galaxy, observable, properties, depth=None):
+    """
+    Return the model spectra of a galaxy in a cube, in float64, on the
+    given depth axis, if it needs one.
+    """
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
         observable=observable | dict(dtype='float64'),
-        line_of_sight=line_of_sight)])
+        **({} if depth is None else dict(depth=depth)))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     return np.asarray(
@@ -139,7 +142,6 @@ def test_a_thin_disk_in_a_cube(
              oversampling=[oversampling, oversampling, 1],
              psf=dict(type='gauss', sigma=PSF_SIGMA),
              lsf=dict(type='gauss', sigma=f'{LSF_SIGMA} km/s')),
-        dict(type='flat'),
         dict(vsys=0, xpos=0, ypos=0, posa=PA, incl=INCL, rpt_a=1, rpt_s=RD,
              vpt_rt=RT, vpt_vt=VT, dpt_a=SIG))
     velocities = _velocities(NZ, DV)
@@ -201,9 +203,9 @@ def test_a_thick_disk_in_a_cube(driver, incl):
         dict(type='pixel_spectra', size=[N, N], step=[STEP, STEP],
              spectral=dict(size=NZ, step=DV, convention='relativistic'),
              oversampling=[3, 3, 1]),
-        dict(type='grid', depth=dict(extent=60, step=0.1)),
         dict(vsys=0, xpos=0, ypos=0, posa=THICK_PA, incl=incl, rpt_a=1,
-             rpt_s=RD, rht_s=HS, vpt_rt=RT, vpt_vt=VT, dpt_a=THICK_SIG))
+             rpt_s=RD, rht_s=HS, vpt_rt=RT, vpt_vt=VT, dpt_a=THICK_SIG),
+        depth=dict(extent=60, step=0.1))
     flux, mean, dispersion = _moments(cube, _velocities(NZ, DV))
     true_flux, true_mean, true_dispersion = _thick_disk(incl)
     bright = _bright(true_flux, 8)
@@ -237,7 +239,7 @@ def test_a_galaxy_at_redshift_1_5(driver):
         observable | dict(spectral=dict(
             size=nz, step=C * dw / centre, rval=0, convention='optical',
             rest=f'{centre} um')),
-        dict(type='flat'), properties)
+        properties)
     flux, wavelength, width = _moments(
         cube, centre + (np.arange(nz) - (nz - 1) / 2) * dw)
     ratio = (wavelength / centre) ** 2
@@ -248,7 +250,7 @@ def test_a_galaxy_at_redshift_1_5(driver):
         driver, dict(components=[_disk(rnodes=disk['rnodes'])]),
         observable | dict(spectral=dict(
             size=301, step=3, convention='relativistic')),
-        dict(type='flat'), properties)
+        properties)
     rest_flux, rest_mean, rest_dispersion = _moments(
         at_rest, _velocities(301, 3))
     rest_dispersion = np.sqrt(rest_dispersion ** 2 - 3 ** 2 / 12)
@@ -275,8 +277,7 @@ def test_an_elliptical_blob(driver, posa, incl):
             dptraits=dict(type='uniform'))]),
         observable=dict(
             type='pixel_spectra', size=[n, n], step=[step, step],
-            spectral=dict(size=21, step=5, convention='relativistic')),
-        line_of_sight=dict(type='flat'))])
+            spectral=dict(size=21, step=5, convention='relativistic')))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), dict(
             vsys=0, xpos=0, ypos=0, posa=posa, incl=incl, vpt_vt=0, dpt_a=10,

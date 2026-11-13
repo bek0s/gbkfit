@@ -1,22 +1,19 @@
 """
 The scene of an observation on the sky (see ObservationSky): the
 components whose light it sees, of the galaxies it sees (see
-SeenGalaxies), checked along its line of sight (make_scene; see
-gbkfit.model.Scene).
+SeenGalaxies), which decide how it is evaluated along the line of sight
+(make_scene; see gbkfit.model.Scene).
 """
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
 import gbkfit.units
 from gbkfit.config import check_name
 from gbkfit.model import (
-    STARS, Band, BandEmission, Component, DataUnit, Emission, Galaxy,
-    LineEmission, Scene, StarsEmission, named_components)
+    STARS, Band, BandEmission, Component, DataUnit, DepthUnit, Emission,
+    Galaxy, LineEmission, Scene, SceneEvaluation, StarsEmission,
+    named_components)
 from .observation import SeenGalaxies
-
-if TYPE_CHECKING:
-    from .line_of_sight import LineOfSight
 
 
 __all__ = [
@@ -30,14 +27,13 @@ def make_scene(
         components: Sequence[str] | None,
         lines: tuple[str, ...] | None,
         band: Band | None,
-        line_of_sight: 'LineOfSight',
         emission: type[Emission],
         data_unit: DataUnit | None = None
 ) -> Scene:
     """
     Return the scene of an observation of the galaxies it sees (see
-    Scene), along its line of sight, which sees the emission of the given
-    type (see Observable.emission), in the given band if known (an image),
+    Scene), which sees the emission of the given type (see
+    Observable.emission), in the given band if known (an image),
     and of the unit of its data, if any (see Observable.data_unit). The
     names of the components it sees (all those with that emission, in its
     band, if None) are qualified by the names of their galaxies
@@ -50,13 +46,13 @@ def make_scene(
     ValueError
         If a name is unknown or repeats, a component does not emit what it
         sees, it sees nothing, a line is not one of the components it
-        sees, a component cannot be seen along its line of sight (see
-        LineOfSight.check) or by a spectral cube of its lines (see
-        Component.check_lines), it sees several galaxies with opacity that
-        its line of sight cannot order, or not in that order (see
-        LineOfSight.check_order), or without data of light, it sees
-        components of different units (its model is then in the unit of
-        its components).
+        sees, a component cannot be seen by a spectral cube of its lines
+        (see Component.check_lines), it sees several galaxies with opacity
+        (which radiative transfer marches one after the other, see
+        Scene.evaluation) that the order of the galaxies along the line of
+        sight does not all place (see ObservationGroup: depth_order), or
+        without data of light, it sees components of different units (its
+        model is then in the unit of its components).
     """
     galaxies, order = seen.galaxies, seen.order
     kind = "an image, which sees the components that emit in a band" \
@@ -75,35 +71,41 @@ def make_scene(
     _check_lines(galaxies, emitters, lines)
     if data_unit is None:
         _check_one_unit(galaxies, emitters)
-    absorbers = [galaxy.absorbers() for galaxy in galaxies]
-    if len(galaxies) > 1 and any(
-            _has_opacity(galaxy, galaxy_emitters)
-            for galaxy, galaxy_emitters in zip(galaxies, emitters)):
-        line_of_sight.check_order(galaxies, order)
-    for galaxy, galaxy_emitters, galaxy_absorbers in zip(
-            galaxies, emitters, absorbers):
-        for i in sorted(set(galaxy_emitters) | set(galaxy_absorbers)):
-            component = galaxy.components()[i]
-            try:
-                line_of_sight.check(component, emission)
-                if emission is LineEmission and i in galaxy_emitters:
-                    component.check_lines(lines)
-            except ValueError as e:
-                raise ValueError(
-                    f"component {_label(galaxy, i)}: {e}") from e
-    return Scene(
+    if emission is LineEmission:
+        for galaxy, galaxy_emitters in zip(galaxies, emitters):
+            for i in galaxy_emitters:
+                try:
+                    galaxy.components()[i].check_lines(lines)
+                except ValueError as e:
+                    raise ValueError(
+                        f"component {_label(galaxy, i)}: {e}") from e
+    scene = Scene(
         galaxies, seen.mappings, seen.labels, [tuple(e) for e in emitters],
-        lines, band, order, data_unit)
+        lines, band, emission, order, data_unit)
+    if len(galaxies) > 1 \
+            and scene.evaluation() is SceneEvaluation.TRANSFER:
+        _check_order(galaxies, order)
+    return scene
 
 
-def _has_opacity(galaxy: Galaxy, emitters: Sequence[int]) -> bool:
+def _check_order(
+        galaxies: Sequence[Galaxy], order: Sequence[DepthUnit] | None
+) -> None:
     """
-    Return whether a galaxy dims light in an observation that sees the
-    given emitters of it: whether it has absorbers (see Galaxy.absorbers),
-    or among those emitters, components with opacity.
+    Raise ValueError unless the order of the galaxies along the line of
+    sight (in units, see ObservationGroup: depth_order) places every one
+    of them: radiative transfer marches galaxies with opacity one after
+    the other, front to back.
     """
-    return bool(galaxy.absorbers()) or any(
-        galaxy.components()[i].opacity() is not None for i in emitters)
+    ordered = {g for unit in order or () for g in unit.galaxies}
+    if missing := [
+            galaxy.name() for g, galaxy in enumerate(galaxies)
+            if g not in ordered]:
+        raise ValueError(
+            f"an observation of several galaxies with opacity marches them "
+            f"by radiative transfer, one after the other, front to back: "
+            f"the depth_order of the observation group must place the "
+            f"galaxies {missing}")
 
 
 def _label(galaxy: Galaxy, index: int) -> str:

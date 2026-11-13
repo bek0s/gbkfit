@@ -40,7 +40,7 @@ def config(driver, observable, weights, component=None):
         galaxies=[dict(components=[gas])],
         observations=[dict(
             type='sky',
-            observable=observable, line_of_sight=dict(type='flat'),
+            observable=observable,
             pixel_weights=weights)])
 
 
@@ -147,8 +147,7 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
     from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra, Weights,
-        line_of_sight_parser)
+        ObservationGroup, ObservationSky, PixelSpectra, Weights)
     values = PROPERTIES | dict(gas_incl=incl)
     gas = config(driver, None, None)['galaxies']
     size, step = (24, 24, 21), (1, 1, 20)
@@ -159,8 +158,7 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
             spectral=SpectralAxis(step=step[2], convention='relativistic'))
         return ObservationGroup(
             galaxy_parser.load(gas), [ObservationSky(
-                PixelSpectra.from_data(dataset),
-                line_of_sight_parser.load(dict(type='flat')), data=dataset,
+                PixelSpectra.from_data(dataset), data=dataset,
                 pixel_weights=Weights('gas', WeightAzimuthPower(2)))]
         ).plan(driver)
     blank = plan(np.zeros(size[::-1]), None)

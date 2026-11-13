@@ -14,7 +14,7 @@ from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective, whitening
 from gbkfit.observation import (
     MAX_CORRELATED_PIXELS, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationSky, PixelSpectra, line_of_sight_parser)
+    ObservationSky, PixelSpectra)
 from gbkfit.params import ParamSpace
 
 
@@ -37,8 +37,7 @@ def objective(driver, data, likelihood):
     dataset = DatasetPixelSpectra(data, step=STEP[:2], spectral=SPECTRAL)
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
-            PixelSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), data=dataset)])
+            PixelSpectra.from_data(dataset), data=dataset)])
     likelihoods = Likelihoods(group, likelihood)
     return (Objective(group.plan(driver), likelihoods),
             ParamSpace.from_properties(
@@ -139,8 +138,7 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
         spectral=SPECTRAL)
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
-            PixelSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), data=dataset,
+            PixelSpectra.from_data(dataset), data=dataset,
             flux_scale='one', name='obs')])
     with pytest.raises(ValueError, match="has correlated noise"):
         Objective(group.plan(driver),
@@ -154,7 +152,7 @@ def spectra_objective(driver, dataset, observable, likelihood):
     """
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
-            observable, line_of_sight_parser.load(dict(type='flat')),
+            observable,
             data=dataset)])
     likelihoods = Likelihoods(group, likelihood)
     return (Objective(group.plan(driver), likelihoods),
@@ -248,7 +246,6 @@ def test_spectra_of_correlated_noise_keep_whole_spectra(tmp_path):
         return Likelihoods(ObservationGroup(
             [galaxy_parser.load(GALAXY)], [ObservationSky(
                 SlitSpectra.from_data(dataset),
-                line_of_sight_parser.load(dict(type='flat')),
                 data=dataset)]))
     data = noisy_spectra(np.random.default_rng(13), 14, [])
     mask = data.mask().copy()

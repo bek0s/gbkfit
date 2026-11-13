@@ -30,7 +30,6 @@ PROPERTIES = dict(
 def evaluate(driver, observable):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=GALAXY,
-        line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)

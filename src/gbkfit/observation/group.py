@@ -170,11 +170,11 @@ class ObservationGroup:
     depth_order : Sequence of str or DepthGroup, optional
         The galaxies along the line of sight, front to back, by name, or
         in groups of galaxies that can pass through each other (see
-        DepthGroup): an observation of several galaxies through radiative
-        transfer (see LineOfSightTransfer) marches them in this order,
-        which it needs when one of them has opacity (the light of each is
-        dimmed by the opacity of those in front of it), and then of all of
-        them. In configurations, a group is {name: [galaxies]}.
+        DepthGroup): an observation of several galaxies of which one has
+        opacity marches them in this order by radiative transfer (the
+        light of each is dimmed by the opacity of those in front of it;
+        see Scene.evaluation), and needs it then of all of them. In
+        configurations, a group is {name: [galaxies]}.
     cosmology : Cosmology, optional
         The cosmology of the galaxies, that of their setup (see
         Galaxy.plan_stage); Planck18 by default (see

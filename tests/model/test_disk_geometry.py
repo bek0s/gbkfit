@@ -21,7 +21,6 @@ def image_case(driver, observable, **component):
     return dict(
         driver=dict(type=driver.type()),
         observable=observable,
-        line_of_sight=dict(type='flat'),
         galaxy=dict(components=[disk | component]))
 
 
@@ -32,7 +31,6 @@ def spectral_cube_case(driver, **component):
         observable=dict(
             type='pixel_spectra', size=[32, 32], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
-        line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
             type='thin_disk',
             rnodes=list(range(0, 12)),
@@ -78,7 +76,6 @@ def thick_spectral_cube_case(driver, disk, rota, psf=None):
             type='pixel_spectra', size=[33, 33], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic'),
             rota=rota, psf=psf),
-        line_of_sight=dict(type='grid'),
         galaxy=dict(components=[component]))
 
 
@@ -252,7 +249,7 @@ def test_a_layer_thinner_than_a_voxel_keeps_its_light(
         disk['type'] = 'thick_disk'
         disk |= dict(
             rptraits=EXPONENTIAL, rhtraits=dict(type=profile, zmax=5))
-        case['line_of_sight'] = dict(type='grid', depth=dict(step=depth))
+        case['depth'] = dict(step=depth)
         data, _ = evaluate_cases([case], dict(
             xpos=0, ypos=0, posa=30, incl=incl, rpt_a=1, rpt_s=6, rht_s=0.25))
         return data[0]['brightness'].data
@@ -281,7 +278,7 @@ def test_a_loose_thick_disk_centres_its_rings(driver, evaluate_cases):
     disk['type'] = 'thick_disk'
     disk |= dict(
         rptraits=EXPONENTIAL, rhtraits=dict(type='exponential', zmax=12))
-    case['line_of_sight'] = dict(type='grid', depth=dict(step=0.05))
+    case['depth'] = dict(step=0.05)
     properties = dict(
         xpos=[0.2 * r for r in rnodes], ypos=[0] * len(rnodes),
         posa=0, incl=0, rpt_a=1, rpt_s=4, rht_s=1)

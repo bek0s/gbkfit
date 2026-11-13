@@ -19,8 +19,7 @@ PIECES = {
         emission=dict(type='band'))]),
     'observations/image.yaml': dict(
         type='sky',
-        observable=dict(type='pixel_brightness', size=[16, 12]),
-        line_of_sight=dict(type='flat')),
+        observable=dict(type='pixel_brightness', size=[16, 12])),
     'params/disk.yaml': dict(properties=dict(
         xpos=0, ypos=0, posa=30, incl=dict(value=45, min=0, max=90),
         rpt_a=1, rpt_s=3)),

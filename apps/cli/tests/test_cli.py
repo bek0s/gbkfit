@@ -41,8 +41,7 @@ def test_eval_writes_a_run(tmp_path):
             emission=dict(type='band'))])],
         observations=[dict(
             type='sky',
-            observable=dict(type='pixel_brightness', size=[16, 12]),
-            line_of_sight=dict(type='flat'))],
+            observable=dict(type='pixel_brightness', size=[16, 12]))],
         params=dict(properties=dict(
             xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=3)))
     (tmp_path / 'config.json').write_text(json.dumps(config))

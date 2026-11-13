@@ -16,9 +16,9 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, Likelihoods, LineOfSightFlat,
-    ObservationGroup, ObservationSky, PixelBrightness, PixelMoments,
-    UpperLimit, observable_parser)
+    FittedNoise, LikelihoodGauss, Likelihoods, ObservationGroup,
+    ObservationSky, PixelBrightness, PixelMoments, UpperLimit,
+    observable_parser)
 from gbkfit.params import (
     ParamSpace, SolveGauss, solve_together, solve_together_rows)
 
@@ -40,7 +40,7 @@ def make_objective(driver, data, likelihood=None, name=None, **values):
     """
     dataset = DatasetPixelBrightness(data)
     observation = ObservationSky(
-        PixelBrightness.from_data(dataset), LineOfSightFlat(), data=dataset,
+        PixelBrightness.from_data(dataset), data=dataset,
         name=name)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
     likelihoods = Likelihoods(group, likelihood)
@@ -332,7 +332,7 @@ def test_a_fitted_noise_has_parameters_of_the_observation():
 def test_an_objective_needs_an_observation_with_data(driver):
     dataset = DatasetPixelBrightness(Data(np.ones((24, 32))))
     observation = ObservationSky(
-        PixelBrightness.from_data(dataset), LineOfSightFlat())
+        PixelBrightness.from_data(dataset))
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
     with pytest.raises(ValueError, match="no observation has data"):
         Objective(group.plan(driver))
@@ -346,9 +346,9 @@ def test_an_objective_compares_the_observations_with_data(driver):
     dataset = DatasetPixelBrightness(data)
     observable = PixelBrightness.from_data(dataset)
     observations = [
-        ObservationSky(observable, LineOfSightFlat(), name='band'),
+        ObservationSky(observable, name='band'),
         ObservationSky(
-            observable, LineOfSightFlat(), data=dataset, name='image')]
+            observable, data=dataset, name='image')]
     group = ObservationGroup(galaxy_parser.load(GALAXY), observations)
     alone, params = make_objective(driver, data, name='image')
     objective = Objective(group.plan(driver))
@@ -389,7 +389,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     # its moments 1 and 2 count as misses of 3 errors (they counted 0)
     def group(observable, dataset=None):
         observation = ObservationSky(
-            observable, LineOfSightFlat(), data=dataset)
+            observable, data=dataset)
         return ObservationGroup(
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
@@ -433,7 +433,7 @@ def test_missing_values_take_the_noise_of_their_error(driver):
     # and -2 log L differ by one constant, however many are missing
     def group(observable, dataset=None):
         observation = ObservationSky(
-            observable, LineOfSightFlat(), data=dataset, name='obs')
+            observable, data=dataset, name='obs')
         return ObservationGroup(
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
@@ -570,7 +570,7 @@ def test_the_residuals_of_the_fit_are_written_where_they_differ(driver):
         'residual', 'wresidual'}
     dataset = DatasetPixelBrightness(data)
     observation = ObservationSky(
-        PixelBrightness.from_data(dataset), LineOfSightFlat(), data=dataset,
+        PixelBrightness.from_data(dataset), data=dataset,
         pixel_weights=Weights('disk', WeightAzimuthPower(2)))
     group = ObservationGroup(galaxy_parser.load(dict(components=[
         GALAXY['components'][0] | dict(name='disk')])), observation)

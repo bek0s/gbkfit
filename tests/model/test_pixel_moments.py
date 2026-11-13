@@ -57,7 +57,7 @@ def evaluate_mmaps(driver, observable, **properties):
     """
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationGroup, ObservationSky)
+        ObservationGroup, ObservationSky)
     from gbkfit.params import ParamSpace
     galaxy = galaxy_parser.load(dict(components=[dict(
         type='thin_disk', loose=False, tilted=False,
@@ -67,7 +67,7 @@ def evaluate_mmaps(driver, observable, **properties):
         dptraits=dict(type='uniform'),
         emission=dict(type='lines'))]))
     group = ObservationGroup(
-        [galaxy], [ObservationSky(observable, LineOfSightFlat())])
+        [galaxy], [ObservationSky(observable)])
     params = ParamSpace.from_properties(group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
         rpt_a=1, rpt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)

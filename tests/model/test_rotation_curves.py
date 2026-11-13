@@ -72,7 +72,6 @@ def test_rotation_curves(driver, trait, evaluate_cases):
         observable=dict(
             type='pixel_spectra', size=[33, 41], step=[0.5, 0.5],
             spectral=dict(size=81, step=10, convention='relativistic')),
-        line_of_sight=dict(type='flat'),
         galaxy=dict(components=[thin_disk(
             dict(type=trait, direction='tan'), list(range(0, 14)),
             loose=False, tilted=False)]))
@@ -112,7 +111,6 @@ def test_rotation_curves_near_the_centre(driver, trait, evaluate_cases):
         observable=dict(
             type='pixel_spectra', size=[9, 9], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
-        line_of_sight=dict(type='flat'),
         galaxy=dict(components=[thin_disk(
             dict(type=trait, direction='tan'), list(range(0, 6)),
             loose=False, tilted=False)]))
@@ -141,7 +139,6 @@ def test_the_centre_does_not_move(driver, evaluate_cases, trait, values):
         observable=dict(
             type='pixel_spectra', size=[33, 33], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
-        line_of_sight=dict(type='flat'),
         galaxy=dict(components=[thin_disk(trait, list(range(0, 12)))]))
     _, extra = evaluate_cases([case], dict(
         vsys=0, xpos=0, ypos=0, posa=0, incl=60, rpt_a=1, rpt_s=4,

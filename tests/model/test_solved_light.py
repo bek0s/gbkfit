@@ -17,8 +17,8 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective, comparison_of
 from gbkfit.observation import (
-    LikelihoodGauss, Likelihoods, ObservationGroup, ObservationSky,
-    PixelBrightness, line_of_sight_parser)
+    Depth, LikelihoodGauss, Likelihoods, ObservationGroup, ObservationSky,
+    PixelBrightness)
 from gbkfit.params import ParamSpace
 
 
@@ -52,7 +52,7 @@ def observation(size, data=None, observable=None):
         PixelBrightness.from_data(dataset) if dataset is not None
         else PixelBrightness(size=size, step=(0.5, 0.5)))
     return ObservationSky(
-        observable, line_of_sight_parser.load(dict(type='flat')),
+        observable,
         data=dataset)
 
 
@@ -138,8 +138,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
         observable = PixelMoments.from_data(
             moments, spectral=SpectralAxis(convention='relativistic'))
         obs = ObservationSky(
-            observable, line_of_sight_parser.load(
-                dict(type='grid', depth=dict(step=0.5))),
+            observable, depth=Depth(step=0.5),
             data=moments, lines=['stars'])
     else:
         obs = observation(None, data)
@@ -162,8 +161,7 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
     data = np.zeros((16, 16))
     dataset = DatasetPixelBrightness(Data(data, error=data + 1))
     obs = ObservationSky(
-        PixelBrightness.from_data(dataset),
-        line_of_sight_parser.load(dict(type='flat')), data=dataset,
+        PixelBrightness.from_data(dataset), data=dataset,
         flux_scale='one', name='obs')
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=[copy.deepcopy(CORE)]))], [obs])

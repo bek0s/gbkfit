@@ -46,7 +46,6 @@ GRID = dict(fov=[32, 28], step=1, rval=[150, -30])
 def evaluate(driver, galaxy, observable, properties):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
-        line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
@@ -122,10 +121,10 @@ def test_a_point_source_is_its_flux_at_its_phase(driver):
 def test_visibilities_have_no_psf():
     from gbkfit.instrument import Instrument, PSFGauss
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationSky, Visibilities)
+        ObservationSky, Visibilities)
     with pytest.raises(ValueError, match="no PSF"):
         ObservationSky(
-            Visibilities(COVERAGE, 8), LineOfSightFlat(),
+            Visibilities(COVERAGE, 8),
             instrument=Instrument(psf=PSFGauss(sigma=1)))
 
 
@@ -145,7 +144,7 @@ def observation_of_data(driver, offset):
     from gbkfit.dataset import Data, DatasetVisibilities
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationGroup, ObservationSky, Visibilities)
+        ObservationGroup, ObservationSky, Visibilities)
     from gbkfit.params import ParamSpace
     model = visibilities(driver, DISK, DISK_PROPERTIES)
     error = np.ones(model.shape)
@@ -153,7 +152,7 @@ def observation_of_data(driver, offset):
         Data(model.real + offset, error=error),
         Data(model.imag + offset, error=error), COVERAGE)
     observation = ObservationSky(
-        Visibilities.from_data(dataset, **GRID), LineOfSightFlat(),
+        Visibilities.from_data(dataset, **GRID),
         data=dataset)
     group = ObservationGroup(galaxy_parser.load(DISK), observation)
     return (group.plan(driver),

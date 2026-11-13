@@ -23,9 +23,9 @@ class LineOpacity(Opacity):
     HI), of a coefficient 1/S of each line (S the source function). At
     each of its lines, it is its light there times the coefficient, so
     that the light j of a voxel has the optical depth j/S, with the shape
-    of its line. Seen only along a line of sight of radiative transfer
-    (LineOfSightTransfer), by the observations that see the component,
-    which must be a thick disk that emits lines.
+    of its line. Seen by radiative transfer, which it makes the
+    observations that see the component use (see Scene.evaluation); the
+    component must be a thick disk that emits lines.
 
     With a unit of its emission (see LineEmission), S is the brightness
     (radiation) temperature of the source function, J(T_ex) =

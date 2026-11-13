@@ -41,7 +41,7 @@ def _disk(**options: Any) -> dict[str, Any]:
 
 
 def _cube(
-        size: list[int], step: list[float], line_of_sight: str = 'flat',
+        size: list[int], step: list[float],
         spectral: dict[str, Any] | None = None, **observable: Any
 ) -> dict[str, Any]:
     """
@@ -52,7 +52,7 @@ def _cube(
     """
     spectral = spectral or dict(convention='relativistic')
     return dict(
-        type='sky', line_of_sight=dict(type=line_of_sight), dtype='float64',
+        type='sky', dtype='float64',
         observable=dict(
             type='pixel_spectra', size=size[:2], step=step[:2],
             spectral=dict(size=size[2], step=step[2]) | spectral)
@@ -68,7 +68,7 @@ def _moments(
     given options of its observable.
     """
     return dict(
-        type='sky', line_of_sight=dict(type='flat'), dtype='float64',
+        type='sky', dtype='float64',
         observable=dict(
             type='pixel_moments', size=size, step=step,
             spectral=dict(
@@ -77,15 +77,14 @@ def _moments(
 
 
 def _image(
-        size: list[int], step: list[float], line_of_sight: str = 'flat',
-        **options: Any
+        size: list[int], step: list[float], **options: Any
 ) -> dict[str, Any]:
     """
     An observation of an image, float64, with a psf, and the given
     options.
     """
     return dict(
-        type='sky', line_of_sight=dict(type=line_of_sight), dtype='float64',
+        type='sky', dtype='float64',
         observable=dict(type='pixel_brightness', size=size, step=step),
         instrument=dict(psf=_PSF)) | options
 
@@ -117,7 +116,7 @@ _DISK_TRIAL = dict(
     vpt_vt=_free(140, 50, 300), dpt_a=_free(30, 5, 80))
 
 
-# --- A1: a thick disk and dust, on a grid and through radiative transfer -----
+# --- A1: a thick disk of line opacity and dust, through radiative transfer --
 
 def _thick_disk(name: str, **roles: Any) -> dict[str, Any]:
     """
@@ -132,6 +131,11 @@ def _thick_disk(name: str, **roles: Any) -> dict[str, Any]:
 _GAS = _disk(type='thick_disk', name='gas', **_THICK)
 _DUST = _thick_disk('dust', opacity=dict(type='dust'))
 
+# The gas, of lines that absorb themselves (line opacity, of a uniform
+# coefficient: an optical depth of about 1 at the peak of the cube)
+_SELF_ABSORBED_GAS = _GAS | dict(
+    opacity=dict(type='line', coefficients=dict(type='uniform')))
+
 _DUST_TRUTH = dict(
     xpos=0.27, ypos=-0.38, posa=40, incl=55, rpt_a=0.4, rpt_s=3, rht_s=0.4)
 
@@ -139,18 +143,18 @@ _DUST_TRIAL = _DUST_TRUTH | dict(rpt_a=_free(0.3, 0, 2), rht_s=0.5)
 
 _THICK_DISK_TRANSFER = dict(
     name='thick_disk_transfer',
-    doc="A thick disk of gas and one of dust, seen in two cubes: on a grid "
-        "(the dust dims the light behind it) and through radiative "
-        "transfer (the march along each line of sight).",
-    galaxies=[dict(components=[_GAS, _DUST])],
-    observations=[
-        _cube([20, 20, 32], [0.8, 0.8, 20], 'grid'),
-        _cube([20, 20, 32], [0.8, 0.8, 20], 'transfer')],
-    truth=_prefixed('gas', _DISK_TRUTH | dict(rht_s=0.5))
+    doc="A thick disk of gas whose lines absorb themselves and one of dust "
+        "that dims the light behind it, seen in a cube through radiative "
+        "transfer (the march along each line of sight), which line opacity "
+        "needs.",
+    galaxies=[dict(components=[_SELF_ABSORBED_GAS, _DUST])],
+    observations=[_cube([20, 20, 32], [0.8, 0.8, 20])],
+    truth=_prefixed('gas', _DISK_TRUTH | dict(rht_s=0.5, op_a=100))
     | _prefixed('dust', _DUST_TRUTH),
-    trial=_prefixed('gas', _DISK_TRIAL | dict(rht_s=_free(0.6, 0.1, 2)))
+    trial=_prefixed('gas', _DISK_TRIAL | dict(
+        rht_s=_free(0.6, 0.1, 2), op_a=_free(80, 0, 400)))
     | _prefixed('dust', _DUST_TRIAL),
-    noises=[dict(type='gauss', rms=1.5e-4)] * 2)
+    noises=[dict(type='gauss', rms=1.5e-4)])
 
 
 # --- A2: a Monte Carlo disk --------------------------------------------------
@@ -165,7 +169,7 @@ _MCDISK_CUBE = dict(
             type='thick_disk', clouds=dict(cflux=1e-4, seed=7),
             **_THICK)])],
     observations=[
-        _cube([24, 24, 40], [0.8, 0.8, 15], 'grid')],
+        _cube([24, 24, 40], [0.8, 0.8, 15])],
     truth=_DISK_TRUTH | dict(rht_s=0.5),
     trial=_DISK_TRIAL | dict(rht_s=_free(0.6, 0.1, 2)),
     noises=[dict(type='gauss', rms=1.5e-4)])
@@ -274,7 +278,7 @@ _DISK_CONE_LINES = dict(
     galaxies=[dict(components=[
         _disk(name='disk', emission=_HALPHA_NII), _CONE])],
     observations=[_cube(
-        [24, 24, 40], [0.6, 0.6, 50], 'grid',
+        [24, 24, 40], [0.6, 0.6, 50],
         spectral=dict(rval=450, rest='6562.8 Angstrom')) | dict(
             name='cube', flux_scale='per_spectrum')],
     truth=_prefixed('disk', _DISK_TRUTH | dict(nii_ratio=0.3))
@@ -350,7 +354,7 @@ _DUST_EXTINCTION_BAND = dict(
             type='band', bands=['sdss_r'], unit='MJy/sr')),
         _thick_disk('dust', opacity=dict(
             type='dust', law=dict(type='ccm')))])],
-    observations=[_image([32, 32], [0.5, 0.5], 'grid', band='sdss_r')],
+    observations=[_image([32, 32], [0.5, 0.5], band='sdss_r')],
     # (the mock data are in the unit of the stars, but read as data in
     # uJy/arcsec2: 1 MJy/sr emitted at z = 0.25 is 12.03 uJy/arcsec2 of the
     # data, hence rpt_a near 1 / 12.03 at the trial values)
@@ -383,7 +387,7 @@ def _write_image(folder: pathlib.Path) -> None:
         rptraits=dict(type='exponential'),
         emission=dict(type='band'))])
     observation = dict(
-        type='sky', line_of_sight=dict(type='flat'),
+        type='sky',
         observable=dict(
             type='pixel_brightness', size=[40, 40], step=0.4, rval=_SKY))
     group = ObservationGroup(

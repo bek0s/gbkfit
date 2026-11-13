@@ -3,8 +3,9 @@ The observations: how the model of galaxies gives the data of a dataset
 (see Observation and observation_parser). An observation on the sky
 (ObservationSky) sees galaxies as an observable (see
 gbkfit.observation.observables, whose observables it exports too),
-along a line of sight, through a foreground (e.g. a gravitational lens;
-see gbkfit.observation.lensing) and an instrument; an observation of
+along the line of sight (on a depth axis if what it sees needs one, see
+Depth), through a foreground (e.g. a gravitational lens; see
+gbkfit.observation.lensing) and an instrument; an observation of
 profiles (ObservationProfile) gives values of functions of a galaxy at
 radii. Observations are evaluated in groups (see ObservationGroup and
 GroupPlan), those with data compared with them under the likelihoods
@@ -13,14 +14,14 @@ of gbkfit.objective), and draw mock data (see draw_mocks).
 """
 
 from . import (
-    foreground, group, group_plan, lensing, likelihoods, line_of_sight,
-    mocks, noise, observables, observation, profile, sky, weights)
+    depth, foreground, group, group_plan, lensing, likelihoods, mocks,
+    noise, observables, observation, profile, sky, weights)
+from .depth import *
 from .foreground import *
 from .group import *
 from .group_plan import *
 from .lensing import *
 from .likelihoods import *
-from .line_of_sight import *
 from .mocks import *
 from .noise import *
 from .observables import *
@@ -31,12 +32,12 @@ from .weights import *
 
 
 __all__ = []
+__all__ += depth.__all__
 __all__ += foreground.__all__
 __all__ += group.__all__
 __all__ += group_plan.__all__
 __all__ += lensing.__all__
 __all__ += likelihoods.__all__
-__all__ += line_of_sight.__all__
 __all__ += mocks.__all__
 __all__ += noise.__all__
 __all__ += observables.__all__

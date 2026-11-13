@@ -1,6 +1,6 @@
 # log_lambda_cube: A cube of an axis uniform in ln w (FITS WAVE-LOG, log velocities) of a galaxy at z = 0.03 that emits Halpha and [NII] 6583.
 # (written by make_golden.py; do not edit)
-version: 10
+version: 11
 driver: {type: host}
 galaxies:
 - redshift: 0.03
@@ -23,11 +23,12 @@ observations:
     rpix: [9.5, 9.5]
     rval: [0, 0]
     rota: 0
-    spectral: {step: 30.0, rpix: 24.5, rval: 9300.0, rest: 6.564610000000001e-07 m, medium: vacuum}
+    spectral: {step: 30.0, rpix: 24.5, rval: 9300.0, rest: 6.564610000000001e-07
+        m, medium: vacuum}
     data: observation0_spectra_d.fits
     error: 0.0005
   dtype: float64
-  line_of_sight: {type: flat}
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}
   instrument:
     primary_beam: null

@@ -36,13 +36,12 @@ def evaluate(driver, foreground=None, properties=PROPERTIES, observable=IMAGE,
              galaxy=GALAXY):
     group = observation_group([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
-        line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
     observation = group.observations()[0]
     if foreground is not None:
         from gbkfit.observation import ObservationGroup, ObservationSky
         observation = ObservationSky(
-            observation.observable(), observation.line_of_sight(),
+            observation.observable(),
             foreground=foreground, instrument=observation.instrument(),
             name='obs')
         group = ObservationGroup(group.galaxies(), [observation])
@@ -347,12 +346,12 @@ def test_the_frame_of_an_observation_moves_its_lens(driver):
     from gbkfit.observation import ObservationGroup, ObservationSky
     group = observation_group([dict(
         driver=dict(type=driver.type()), galaxy=GALAXY,
-        line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))])
+        observable=copy.deepcopy(IMAGE))])
     plain = group.observations()[0]
     reference = ObservationSky(
-        plain.observable(), plain.line_of_sight(), name='reference')
+        plain.observable(), name='reference')
     observation = ObservationSky(
-        plain.observable(), plain.line_of_sight(),
+        plain.observable(),
         foreground=Foreground(Lens((40, 40), (0.5, 0.5), LensSIE())),
         name='obs', offsets=dict(position=True))
     plan = ObservationGroup(
@@ -386,13 +385,13 @@ def test_the_frame_of_an_observation_moves_its_shifted_maps(driver):
     from gbkfit.observation import ObservationGroup, ObservationSky
     group = observation_group([dict(
         driver=dict(type=driver.type()), galaxy=GALAXY,
-        line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))])
+        observable=copy.deepcopy(IMAGE))])
     plain = group.observations()[0]
     reference = ObservationSky(
-        plain.observable(), plain.line_of_sight(), name='reference')
+        plain.observable(), name='reference')
     maps = LensDeflectionMap(*sis_maps(), step=0.5, shifted=True)
     observation = ObservationSky(
-        plain.observable(), plain.line_of_sight(),
+        plain.observable(),
         foreground=Foreground(Lens((40, 40), (0.5, 0.5), maps)),
         name='obs', offsets=dict(position=True))
     plan = ObservationGroup(
@@ -431,10 +430,9 @@ def test_the_alignment_of_frames_leaves_maps_where_they_are(
         observable = IMAGE | dict(rval=list(rval))
         plain = observation_group([dict(
             driver=dict(type=driver.type()), galaxy=GALAXY,
-            line_of_sight=dict(type='flat'),
             observable=observable)]).observations()[0]
         return ObservationSky(
-            plain.observable(), plain.line_of_sight(), name=name,
+            plain.observable(), name=name,
             foreground=lens)
     maps = LensDeflectionMap(
         *sis_maps(), step=0.5, rval=origin, shifted=shifted)
@@ -442,7 +440,6 @@ def test_the_alignment_of_frames_leaves_maps_where_they_are(
     cube = observation('obs', (west.ra.deg, west.dec.deg), lens)
     galaxies = observation_group([dict(
         driver=dict(type=driver.type()), galaxy=GALAXY,
-        line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(IMAGE))]).galaxies()
     shift = lens_params(xpos=0, ypos=0) if shifted else {}
     images = []
@@ -473,11 +470,11 @@ def test_a_lens_is_placed_again_only_for_other_values(driver, monkeypatch):
     monkeypatch.setattr(LensSIE, 'deflection', counted)
     group = observation_group([dict(
         driver=dict(type=driver.type()), galaxy=GALAXY,
-        line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))])
+        observable=copy.deepcopy(IMAGE))])
     plain = group.observations()[0]
     foreground = Foreground(Lens((40, 40), (0.5, 0.5), LensSIE()))
     observation = ObservationSky(
-        plain.observable(), plain.line_of_sight(), foreground=foreground,
+        plain.observable(), foreground=foreground,
         name='obs')
     plan = ObservationGroup(group.galaxies(), [observation]).plan(driver)
     cases = [
@@ -517,11 +514,11 @@ def test_a_lens_refuses_pixel_weights_as_the_observation_is_made():
     from gbkfit.observation import ObservationSky, weights_parser
     plain = observation_group([dict(
         driver=dict(type='host'), galaxy=GALAXY,
-        line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))
+        observable=copy.deepcopy(IMAGE))
     ]).observations()[0]
     with pytest.raises(ValueError, match="a lens does not support"):
         ObservationSky(
-            plain.observable(), plain.line_of_sight(),
+            plain.observable(),
             foreground=Foreground(Lens((40, 40), (0.5, 0.5), LensSIE())),
             pixel_weights=weights_parser.load(dict(component='disk', traits=[
                 dict(type='azimuth_power', power=1)])),

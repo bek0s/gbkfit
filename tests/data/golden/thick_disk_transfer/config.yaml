@@ -1,6 +1,6 @@
-# thick_disk_transfer: A thick disk of gas and one of dust, seen in two cubes: on a grid (the dust dims the light behind it) and through radiative transfer (the march along each line of sight).
+# thick_disk_transfer: A thick disk of gas whose lines absorb themselves and one of dust that dims the light behind it, seen in a cube through radiative transfer (the march along each line of sight), which line opacity needs.
 # (written by make_golden.py; do not edit)
-version: 10
+version: 11
 driver: {type: host}
 galaxies:
 - components:
@@ -14,6 +14,9 @@ galaxies:
     emission: {type: lines}
     name: gas
     rhtraits: {type: sech2, zmax: 4}
+    opacity:
+      type: line
+      coefficients: {type: uniform}
   - type: thick_disk
     name: dust
     loose: false
@@ -34,33 +37,7 @@ observations:
     data: observation0_spectra_d.fits
     error: 0.00015
   dtype: float64
-  line_of_sight:
-    type: grid
-    depth: {extent: galaxy, step: null}
-  foreground: {lens: null}
-  instrument:
-    primary_beam: null
-    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20.0 km s-1}
-  observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
-  oversampling: [1, 1, 1]
-  fft_dtype: float64
-- type: sky
-  data:
-    type: pixel_spectra
-    step: [0.8, 0.8]
-    rpix: [9.5, 9.5]
-    rval: [0, 0]
-    rota: 0
-    spectral: {step: 20.0, rpix: 15.5, rval: 0.0}
-    data: observation1_spectra_d.fits
-    error: 0.00015
-  dtype: float64
-  line_of_sight:
-    type: transfer
-    depth: {extent: galaxy, step: null}
-    slab: null
-    subchannels: 1
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}
   instrument:
     primary_beam: null
@@ -83,6 +60,7 @@ params:
     gas_vpt_vt: {value: 140, min: 50, max: 300}
     gas_dpt_a: {value: 30, min: 5, max: 80}
     gas_rht_s: {value: 0.6, min: 0.1, max: 2}
+    gas_op_a: {value: 80, min: 0, max: 400}
     dust_xpos: 0.27
     dust_ypos: -0.38
     dust_posa: 40

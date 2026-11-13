@@ -1,6 +1,6 @@
 # slit_spectra: The spectra of a long slit rotated on the sky, wider than its step.
 # (written by make_golden.py; do not edit)
-version: 10
+version: 11
 driver: {type: host}
 galaxies:
 - components:
@@ -24,7 +24,7 @@ observations:
     data: observation0_spectra_d.fits
     error: 0.0005
   dtype: float64
-  line_of_sight: {type: flat}
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}
   instrument:
     primary_beam: null

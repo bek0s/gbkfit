@@ -18,7 +18,7 @@ from ruamel.yaml.comments import CommentedMap
 
 from gbkfit.config import FORMAT_VERSION, ConfigError
 import gbkfit.project
-from . import v2, v3, v4, v5, v6, v7, v8, v9, v10
+from . import v2, v3, v4, v5, v6, v7, v8, v9, v10, v11
 from .rules import Change, PiecesView, Rule, ViewedPiece, insert_first
 
 
@@ -72,7 +72,7 @@ def _yaml() -> ruamel.yaml.YAML:
 # The rules of all the versions, in order (see Rule)
 RULES: tuple[Rule, ...] = (
     *v2.RULES, *v3.RULES, *v4.RULES, *v5.RULES, *v6.RULES, *v7.RULES,
-    *v8.RULES, *v9.RULES, *v10.RULES)
+    *v8.RULES, *v9.RULES, *v10.RULES, *v11.RULES)
 
 
 def migrate(

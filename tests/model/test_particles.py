@@ -49,16 +49,14 @@ def disk_particles(path, n=200_000, seed=1):
     return str(path)
 
 
-def evaluate(driver, galaxy, properties, line_of_sight='flat'):
+def evaluate(driver, galaxy, properties, depth=None):
     """
-    The cube of a galaxy along a line of sight (its type, or its
-    options).
+    The cube of a galaxy, with the options of the depth axis given, if
+    any (e.g. of radiative transfer, see force_evaluation).
     """
-    if isinstance(line_of_sight, str):
-        line_of_sight = dict(type=line_of_sight)
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
-        line_of_sight=line_of_sight, observable=CUBE)])
+        observable=CUBE, **({} if depth is None else dict(depth=depth)))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     return plan.model_h(params.evaluate())[0]['spectra'].data.astype(float)
@@ -72,9 +70,9 @@ def moments(cube):
         return image, np.tensordot(velocities, cube, 1) / image
 
 
-@pytest.mark.parametrize('line_of_sight', ['flat', 'transfer'])
+@pytest.mark.parametrize('evaluation', ['plane', 'transfer'])
 def test_particles_of_a_disk_are_seen_as_the_disk(
-        driver, tmp_path, line_of_sight):
+        driver, tmp_path, force_evaluation, evaluation):
     # Their image and velocity map are those of the disk, to the noise of
     # their number (up to ~10% of the light of a pixel of a fifth of the
     # peak); in the march, the particles of a voxel are one line of their
@@ -82,10 +80,10 @@ def test_particles_of_a_disk_are_seen_as_the_disk(
     particles = dict(components=[dict(
         type='particles', file=disk_particles(tmp_path / 'disk.npz'),
         emission=dict(type='lines'))])
+    force_evaluation(evaluation)
     disk_image, disk_velocity = moments(evaluate(
-        driver, DISK, DISK_PROPERTIES, line_of_sight))
-    image, velocity = moments(evaluate(
-        driver, particles, GEOMETRY, line_of_sight))
+        driver, DISK, DISK_PROPERTIES))
+    image, velocity = moments(evaluate(driver, particles, GEOMETRY))
     assert image.sum() == pytest.approx(disk_image.sum(), rel=0.01)
     bright = disk_image > 0.2 * disk_image.max()
     assert np.max(np.abs(image - disk_image)[bright]
@@ -94,7 +92,8 @@ def test_particles_of_a_disk_are_seen_as_the_disk(
     assert np.max(difference) < 10 and np.mean(difference) < 2
 
 
-def test_particles_go_to_their_planes_in_slabs(driver, tmp_path):
+def test_particles_go_to_their_planes_in_slabs(
+        driver, tmp_path, force_evaluation):
     # A march in slabs of two planes of the depth axis (the option slab)
     # places each particle in its plane of the slab that has it: the cube
     # of the whole axis at once
@@ -102,9 +101,10 @@ def test_particles_go_to_their_planes_in_slabs(driver, tmp_path):
         type='particles',
         file=disk_particles(tmp_path / 'disk.npz', n=20_000),
         emission=dict(type='lines'))])
-    whole = evaluate(driver, particles, GEOMETRY, 'transfer')
-    slabs = evaluate(
-        driver, particles, GEOMETRY, dict(type='transfer', slab=2))
+    # (by radiative transfer, which alone marches in slabs)
+    force_evaluation('transfer')
+    whole = evaluate(driver, particles, GEOMETRY)
+    slabs = evaluate(driver, particles, GEOMETRY, dict(slab=2))
     np.testing.assert_allclose(
         slabs, whole, rtol=1e-5, atol=1e-6 * whole.max())
 
@@ -124,8 +124,7 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
         type='particles', file=disk_particles(tmp_path / 'disk.npz'),
         emission=dict(type='lines'))])
     plan = group_plan([dict(
-        driver=dict(type='host'), galaxy=particles,
-        line_of_sight=dict(type='flat'), observable=CUBE)])
+        driver=dict(type='host'), galaxy=particles, observable=CUBE)])
     values = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), GEOMETRY).evaluate()
     peak = plan.model_h(values)[0]['spectra'].data.max()
@@ -133,7 +132,6 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
         plan, values, MockOptions(NoiseGauss(rms=0.01 * peak), seed=2))
     disk = observation_group([dict(
         driver=dict(type='host'), galaxy=DISK,
-        line_of_sight=dict(type='flat'),
         observable=CUBE | dict(oversampling=[4, 4, 1]))])
     objective = Objective(ObservationGroup(
         disk.galaxies(), disk.observations()[0].with_data(mock)).plan())
@@ -164,8 +162,7 @@ def test_particles_in_an_image(driver, tmp_path):
         type='particles', file=str(tmp_path / 'three.npz'),
         emission=dict(type='band'))])
     plan = group_plan([dict(
-        driver=dict(type=driver.type()), galaxy=galaxy,
-        line_of_sight=dict(type='flat'), observable=dict(
+        driver=dict(type=driver.type()), galaxy=galaxy, observable=dict(
             type='pixel_brightness', size=[10, 8], step=[0.5, 0.5]))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), dict(

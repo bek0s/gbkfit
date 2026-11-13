@@ -29,7 +29,7 @@ from ._options import (
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from ..line_of_sight import LineOfSight
+    from ..depth import Depth
     from ..foreground import Foreground
     from ..noise import Noise
     from ..weights import Weights
@@ -100,9 +100,10 @@ class ObservationSetup(NamedTuple):
 
     Attributes
     ----------
-    line_of_sight : LineOfSight
-        The line of sight, along which the plan of an observable plans
-        the scene (see LineOfSight.plan_scene).
+    depth : Depth
+        The depth axis along the line of sight, for the scenes that need
+        one, on which the plan of an observable plans its scene (see
+        plan_scene of gbkfit.observation.depth).
     foreground : Foreground
         What the light meets before the telescope (e.g. a lens).
     instrument : Instrument
@@ -124,7 +125,7 @@ class ObservationSetup(NamedTuple):
         several values multiplies the items of light of the model instead
         (see ObservationSky), and is not here.
     """
-    line_of_sight: 'LineOfSight'
+    depth: 'Depth'
     foreground: 'Foreground'
     instrument: Instrument
     oversampling: tuple[int, ...]
@@ -674,11 +675,11 @@ class Observable(TypedSerializable, abc.ABC):
             What is seen: the galaxies, and the components of each whose
             light is seen.
         setup : ObservationSetup
-            The setup of the observation: its line of sight, along which it
-            plans the scene (see LineOfSight.plan_scene), its foreground,
-            its instrument, the oversampling and the floating types of its
-            model, its pixel weights and its flux scale of one value, if
-            any.
+            The setup of the observation: its depth axis, for a scene that
+            needs one (see plan_scene of gbkfit.observation.depth), its
+            foreground, its instrument, the oversampling and the floating
+            types of its model, its pixel weights and its flux scale of one
+            value, if any.
 
         Returns
         -------

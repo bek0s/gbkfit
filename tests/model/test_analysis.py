@@ -207,7 +207,6 @@ def test_the_geometry_of_a_model_is_found(driver):
         emission=dict(type='lines'))])
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
-        line_of_sight=dict(type='flat'),
         observable=dict(
             type='pixel_moments', size=[41, 41],
             spectral=dict(size=161, step=5, convention='relativistic'),
@@ -228,7 +227,6 @@ def test_the_geometry_of_a_model_is_found(driver):
     observation = plan.group().observations()[0]
     rotated = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
-        line_of_sight=dict(type='flat'),
         observable=observation.observable().dump() | dict(rota=25))])
     v = rotated.model_h(params.evaluate())[0]['moment1'].data
     sky_x, sky_y = sky_positions(

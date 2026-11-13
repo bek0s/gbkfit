@@ -30,9 +30,9 @@ def _named(prefix: str, properties: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sky(observable: dict[str, Any], **options: Any) -> dict[str, Any]:
-    """An observation on the sky, flat, float64, of an observable."""
+    """An observation on the sky, float64, of an observable."""
     return dict(
-        type='sky', line_of_sight=dict(type='flat'), dtype='float64',
+        type='sky', dtype='float64',
         observable=observable) | options
 
 
@@ -311,7 +311,6 @@ _IFU_HIGHZ = _sky(
         spectral=dict(
             size=40, step=120, rval=450870, convention='optical',
             rest='6564.61 Angstrom')),
-    line_of_sight=dict(type='grid'),
     instrument=dict(
         psf=dict(type='gauss', sigma=0.2), lsf=dict(type='gauss', sigma='35 km/s')),
     dtype='float32')
@@ -456,7 +455,7 @@ CASES: list[dict[str, Any]] = [
                 regions=dict(type='bins', file='bins.fits'), orders=[1, 2],
                 method='moments',
                 spectral=dict(size=101, step=10, convention='log')),
-            line_of_sight=dict(type='grid', depth=dict(step=0.5)),
+            depth=dict(step=0.5),
             lines=['stars'], instrument=dict(psf=_PSF))],
         truth=_STARS_TRUTH, trial=_STARS_TRIAL,
         noises=[_gauss(0.0002)],
@@ -482,7 +481,7 @@ CASES: list[dict[str, Any]] = [
                 regions=dict(type='bins', file='bins.fits'),
                 orders=[1, 2, 3, 4], method='gauss_hermite',
                 spectral=dict(size=101, step=10, convention='log')),
-            line_of_sight=dict(type='grid', depth=dict(step=0.5)),
+            depth=dict(step=0.5),
             lines=['stars'], instrument=dict(psf=_PSF))],
         truth=_MGE_STARS_TRUTH | dict(stars_beta_z=0.0, stars_kappa=0.5),
         trial=_MGE_STARS_TRUTH | dict(

@@ -1,7 +1,7 @@
 """
 The evaluation of the components of a galaxy by radiative transfer along
-each line of sight (TransferPlan; see the line of sight
-LineOfSightTransfer).
+each line of sight (TransferPlan), for the scenes that need it (see
+SceneEvaluation).
 """
 
 import logging
@@ -115,15 +115,15 @@ def warn_resolution(
             f"sub-channel{'s' if subchannels > 1 else ''}) are up to "
             f"{resolution.spectral:.3g} times as wide as the dispersion of "
             f"the lines where they are not thin; raise the option "
-            f"subchannels of the line of sight to "
-            f"{min(needed, MAX_SUBCHANNELS)}")
+            f"subchannels of the observation (depth: {{subchannels: ...}}) "
+            f"to {min(needed, MAX_SUBCHANNELS)}")
     if resolution.depth > _MAX_DEPTH_RATIO:
         _log.warning(
             f"radiative transfer does not resolve line opacity along the "
             f"line of sight: the velocity changes by up to "
             f"{resolution.depth:.3g} dispersions between adjacent voxels "
             f"where the lines are not thin; lower the step of the depth "
-            f"axis (the option depth: {{step: ...}} of the line of sight) "
+            f"axis (the option depth: {{step: ...}} of the observation) "
             f"from {depth_step:g} to "
             f"{depth_step * _MAX_DEPTH_RATIO / resolution.depth:.3g} arcsec")
     elif resolution.light > _MAX_DEPTH_RATIO:
@@ -133,7 +133,7 @@ def warn_resolution(
             f"{resolution.light:.3g} widths of the lines (with the smoothing "
             f"of the instrument) between adjacent voxels where the light is "
             f"bright; lower the step of the depth axis (the option depth: "
-            f"{{step: ...}} of the line of sight) from {depth_step:g} to "
+            f"{{step: ...}} of the observation) from {depth_step:g} to "
             f"{depth_step * _MAX_DEPTH_RATIO / resolution.light:.3g} arcsec")
 
 

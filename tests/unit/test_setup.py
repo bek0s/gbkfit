@@ -30,7 +30,6 @@ def observation(**options):
     """The configuration of an observation of GALAXY, with options."""
     return dict(
         type='sky',
-        line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_brightness', size=[8, 8])) | options
 
 
@@ -38,7 +37,7 @@ def image(path):
     """Write an image of 8 x 8 zeros, and return its observation."""
     fits.writeto(path, np.zeros((8, 8)))
     return dict(
-        type='sky', line_of_sight=dict(type='flat'),
+        type='sky',
         observable=dict(type='pixel_brightness'),
         data=dict(type='pixel_brightness', data=path.name))
 
@@ -106,7 +105,7 @@ def noisy_image(path, seed=1):
     rng = np.random.default_rng(seed)
     fits.writeto(path, rng.normal(0, 0.1, (8, 8)))
     return dict(
-        type='sky', line_of_sight=dict(type='flat'),
+        type='sky',
         observable=dict(type='pixel_brightness'),
         data=dict(type='pixel_brightness', data=path.name, error=0.1))
 
@@ -356,7 +355,6 @@ MASSIVE = dict(
 
 CUBE = dict(
     type='sky',
-    line_of_sight=dict(type='flat'),
     observable=dict(
         type='pixel_spectra', size=[8, 8],
         spectral=dict(size=5, convention='relativistic')))
@@ -494,7 +492,7 @@ def test_a_configuration_is_described_without_devices(tmp_path):
     assert description.problems == ()
     assert set(description.params.pdescs()) >= {'xpos', 'rpt_s'}
     stars = dict(
-        type='sky', lines=['stars'], line_of_sight=dict(type='flat'),
+        type='sky', lines=['stars'],
         observable=dict(type='pixel_spectra', size=[8, 8], spectral=dict(
             size=11, convention='relativistic')))
     described = gbkfit.describe(config | dict(observations=[stars]))

@@ -10,7 +10,7 @@ import scipy.ndimage
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
-    LineOfSightFlat, ObservationGroup, ObservationSky, PixelBrightness,
+    ObservationGroup, ObservationSky, PixelBrightness,
     PixelMoments, PixelSpectra, observable_parser)
 from gbkfit.params import ParamSpace
 
@@ -35,7 +35,7 @@ PARAMS = dict(
 def model(driver, observable, galaxy, item, out_extra=None):
     """The model data of an item of an observation of a galaxy."""
     group = ObservationGroup(
-        galaxy, ObservationSky(observable, LineOfSightFlat()))
+        galaxy, ObservationSky(observable))
     params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()
@@ -98,7 +98,7 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
         size=(8, 8), spectral=SpectralAxis(size=5, convention='relativistic'),
         median_size=3).linear_in_light()
     group = ObservationGroup(disk('band'), ObservationSky(
-        PixelBrightness(size=(24, 20), median_size=3), LineOfSightFlat()))
+        PixelBrightness(size=(24, 20), median_size=3)))
     params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()

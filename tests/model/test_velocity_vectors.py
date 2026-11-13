@@ -87,7 +87,7 @@ def case(driver, component):
                 size=41, step=10, convention='relativistic')) | grid
     return dict(
         driver=dict(type=driver.type()), observable=observable,
-        line_of_sight=dict(type='grid', depth=dict(step=0.5)),
+        depth=dict(step=0.5),
         galaxy=dict(components=[component]))
 
 
@@ -100,7 +100,10 @@ def vectors(extra):
 
 @pytest.mark.parametrize('name', COMPONENTS)
 def test_the_vector_along_the_line_of_sight_is_the_velocity(
-        driver, evaluate_cases, name):
+        driver, evaluate_cases, force_evaluation, name):
+    # (on a depth axis, which an image of a spheroid, its projection, has
+    # only beside components that need one)
+    force_evaluation('depth')
     component, values = COMPONENTS[name]
     _, extra = evaluate_cases([case(driver, component)], GEOMETRY | values)
     vdata = extra.get('vdata', component='component0').data
@@ -164,7 +167,6 @@ def test_a_radial_flow_points_away_from_the_centre(driver, evaluate_cases):
         driver=dict(type=driver.type()), observable=dict(
             type='pixel_spectra', size=[24, 24], step=[0.5, 0.5],
             spectral=dict(size=41, step=10, convention='relativistic')),
-        line_of_sight=dict(type='flat'),
         galaxy=dict(components=[component]))],
         GEOMETRY | dict(rpt_a=1, rpt_s=3, vpt_vr=20, dpt_a=10))
     vx, vy = vectors(extra)[:2]

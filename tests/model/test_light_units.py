@@ -13,7 +13,7 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
-    ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
+    ObservationGroup, ObservationSky, PixelSpectra)
 from gbkfit.params import ParamSpace
 
 
@@ -43,13 +43,12 @@ def disk(unit=None, lines=('hi21',), thick=False):
 
 
 def model(
-        driver, components, data_unit=None, beam=BEAM, line_of_sight='flat',
-        params=PARAMS, redshift=None, psf=None, unit=None):
+        driver, components, data_unit=None, beam=BEAM, params=PARAMS,
+        redshift=None, psf=None, unit=None):
     """
     The model of the spectra of a galaxy of the given components (and
     redshift, if any), seen in data of the given unit (none: without data)
-    along a line of sight of the given type, through the PSF, if given,
-    in the given unit without data, if any.
+    through the PSF, if given, in the given unit without data, if any.
     """
     observable = PixelSpectra(
         size=SIZE[:2], step=STEP[:2], rval=(0, 0), spectral=SpectralAxis(
@@ -65,8 +64,8 @@ def model(
         galaxy.update(redshift=redshift)
     group = ObservationGroup(
         [galaxy_parser.load(galaxy)], [ObservationSky(
-            observable, line_of_sight_parser.load(dict(type=line_of_sight)),
-            instrument=Instrument(psf=psf), data=data, unit=unit)])
+            observable, instrument=Instrument(psf=psf), data=data,
+            unit=unit)])
     plan = group.plan(driver)
     space = ParamSpace.from_properties(group.pdescs(), params)
     return plan.model_h(space.evaluate())[0]['spectra'].data.copy()
@@ -103,14 +102,14 @@ def test_line_opacity_saturates_at_a_temperature(driver):
     # that times Jy/beam per K)
     params = PARAMS | dict(rht_s=5)
     gas = disk('K km/s', thick=True)
-    thin = model(driver, [gas], 'K', line_of_sight='transfer', params=params)
+    thin = model(driver, [gas], 'K', params=params)
     one_plus_z = 1 / (1 - 470 / 299792.458)
     source = one_plus_z * thin.max() / 3
     gas |= dict(opacity=dict(
         type='line', coefficients=dict(hi21=dict(type='uniform'))))
     params |= dict(op_hi21_a=1 / source)
-    kelvin = model(driver, [gas], 'K', None, 'transfer', params)
-    jansky = model(driver, [gas], 'Jy/beam', BEAM, 'transfer', params)
+    kelvin = model(driver, [gas], 'K', None, params)
+    jansky = model(driver, [gas], 'Jy/beam', BEAM, params)
     assert_same(
         kelvin, source / one_plus_z * -np.expm1(-one_plus_z * thin / source))
     assert_same(jansky, kelvin * per_kelvin(470))

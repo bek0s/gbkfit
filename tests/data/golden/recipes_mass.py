@@ -46,11 +46,11 @@ _INSTRUMENT = dict(
 
 
 def _moments(
-        size: int = 24, line_of_sight: str = 'flat', **options: Any
+        size: int = 24, **options: Any
 ) -> dict[str, Any]:
     """A sky observation of moment maps, float64."""
     return dict(
-        type='sky', line_of_sight=dict(type=line_of_sight), dtype='float64',
+        type='sky', dtype='float64',
         observable=dict(
             type='pixel_moments', size=[size, size],
             spectral=dict(size=60, step=10, convention='relativistic')),
@@ -63,13 +63,13 @@ _MOMENTS_LIKELIHOOD = dict(type='gauss', missing_residual=3)
 
 
 def _cube(
-        size: list[int], line_of_sight: str = 'grid', **options: Any
+        size: list[int], **options: Any
 ) -> dict[str, Any]:
     """
     A sky observation of a spectral cube of the size (nx, ny, nz), float64.
     """
     return dict(
-        type='sky', line_of_sight=dict(type=line_of_sight), dtype='float64',
+        type='sky', dtype='float64',
         observable=dict(
             type='pixel_spectra', size=size[:2], step=[1, 1],
             spectral=dict(
@@ -338,8 +338,8 @@ _TWO_GALAXIES = dict(
         dict(name='front', components=[_c6_gas(), _C6_DUST]),
         dict(name='back', components=[_c6_gas()])],
     observations=[
-        _cube([20, 20, 30], 'transfer', galaxies=['front', 'back']),
-        _moments(size=20, line_of_sight='grid', galaxies=['back'])],
+        _cube([20, 20, 30], galaxies=['front', 'back']),
+        _moments(size=20, galaxies=['back'])],
     truth=_c6_properties(_GEOMETRY_TRUTH, vpt_vt=150),
     trial=_c6_properties(
         _GEOMETRY_TRIAL, vpt_vt=dict(value=130, min=50, max=300)),
@@ -383,7 +383,7 @@ _PARAMS_FEATURES = dict(
             _warped('cold'), _warped('warm'),
             dict(type='point', name='nucleus',
                  emission=dict(type='lines'))])],
-    observations=[_cube([24, 24, 30], 'flat')],
+    observations=[_cube([24, 24, 30])],
     truth=dict(
         cold_xpos=0.3, cold_ypos=-0.4, cold_vsys=10,
         cold_posa=[40, 41, 43, 46, 50, 54, 58], cold_incl=55,

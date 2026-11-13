@@ -34,7 +34,6 @@ def spectra(driver, psf=None, lsf=None, oversampling=(1, 1, 1)):
         observation_parser.load(dict(
             type='sky',
             oversampling=list(oversampling),
-            line_of_sight=dict(type='flat'),
             instrument=dict(psf=psf, lsf=lsf),
             observable=dict(
                 type='pixel_spectra', size=list(SIZE[:2]),

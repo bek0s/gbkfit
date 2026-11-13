@@ -8,7 +8,6 @@ import { membersOf, propertiesOf, typeOf, type Defs, type Options, type Schema }
 // as the dock has them (by the id of their section)
 export const STAGES = [
   { key: 'light', title: 'Galaxies', section: 'ob-light' },
-  { key: 'line_of_sight', title: 'Line of sight', section: 'ob-sight' },
   { key: 'instrument', title: 'Instrument', section: 'ob-instrument' },
   { key: 'observable', title: 'Observable', section: 'ob-observable' },
   { key: 'data', title: 'Data', section: 'ob-data' },
@@ -17,7 +16,7 @@ export const STAGES = [
 // The options of a sky observation that its sections set by hand; the
 // others are in its forms of more options
 export const LIGHT_KEYS = ['galaxies', 'components', 'lines', 'band'];
-export const HANDLED_KEYS = ['type', 'data', 'observable', 'instrument', 'line_of_sight', ...LIGHT_KEYS];
+export const HANDLED_KEYS = ['type', 'data', 'observable', 'instrument', ...LIGHT_KEYS];
 
 // The observables (and datasets) whose data have a spectral axis
 const SPECTRAL = ['pixel_spectra', 'pixel_moments', 'slit_spectra', 'slitless_spectra', 'region_spectra', 'region_moments', 'visibilities'];
@@ -54,7 +53,6 @@ export function glanceOf(key: (typeof STAGES)[number]['key'], options: Options, 
     const galaxies = options.galaxies;
     return Array.isArray(galaxies) && galaxies.length ? galaxies.join(', ') : 'All of the setup';
   }
-  if (key === 'line_of_sight') return options.line_of_sight == null ? 'Not chosen' : titleOf('line_of_sight', objectAt(options, 'line_of_sight').type).replace(/ \(.*\)$/, '');
   if (key === 'instrument') {
     const instrument = objectAt(options, 'instrument');
     const parts = (['psf', 'lsf'] as const).flatMap((part) => {
@@ -222,6 +220,5 @@ export function needsOf({
       if (spectral.size == null || spectral.step == null) needs.push({ section: 'ob-observable', text: 'Give the channels of the model (their number and width)' });
     }
   }
-  if (options.line_of_sight == null) needs.push({ section: 'ob-sight', text: 'Choose the line of sight' });
   return needs;
 }

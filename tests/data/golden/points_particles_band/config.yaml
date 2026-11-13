@@ -1,6 +1,6 @@
 # points_particles_band: An image of a point (a nucleus) and of the particles of a table (the stars of a disk), which emit in a band.
 # (written by make_golden.py; do not edit)
-version: 10
+version: 11
 driver: {type: host}
 galaxies:
 - components:
@@ -22,7 +22,7 @@ observations:
     data: observation0_brightness_d.fits
     error: 0.02
   dtype: float64
-  line_of_sight: {type: flat}
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}
   instrument:
     primary_beam: null

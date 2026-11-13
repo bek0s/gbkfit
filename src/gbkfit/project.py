@@ -139,7 +139,6 @@ observable:
   size: [48, 48]
   step: [1, 1]
   spectral: {size: 40, step: 10, convention: radio}
-line_of_sight: {type: flat}
 instrument:
   psf: {type: gauss, sigma: 1.5}
   lsf: {type: gauss, sigma: 15 km/s}

@@ -13,9 +13,9 @@ from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, Likelihoods, LineOfSightFlat,
-    ObservationGroup, ObservationSky, PixelBrightness, PixelMoments,
-    UpperLimit, observable_parser, observation_parser)
+    FittedNoise, LikelihoodGauss, Likelihoods, ObservationGroup,
+    ObservationSky, PixelBrightness, PixelMoments, UpperLimit,
+    observable_parser, observation_parser)
 
 
 def test_observable_from_data():
@@ -29,7 +29,7 @@ def test_observable_from_data():
     assert observable.grid() == data.grid()
     assert observable.orders() == (0, 1)
     assert observable.spectral().rval() == 1500
-    ObservationSky(observable, LineOfSightFlat(), data=data)
+    ObservationSky(observable, data=data)
 
 
 @pytest.mark.parametrize('dataset_class, observable_class, shape', [
@@ -65,7 +65,7 @@ def moments_group(names=('maps',), data=True):
         dataset, spectral=SpectralAxis(step=5, convention='relativistic'))
     return ObservationGroup(galaxy, [
         ObservationSky(
-            observable, LineOfSightFlat(), name=name,
+            observable, name=name,
             data=dataset if data else None)
         for name in names])
 
@@ -93,7 +93,7 @@ def test_observable_options_are_checked():
             spectral=SpectralAxis(convention='relativistic'))
     with pytest.raises(ValueError, match="no spectral axis for an LSF"):
         ObservationSky(
-            PixelBrightness(size=(8, 8)), LineOfSightFlat(),
+            PixelBrightness(size=(8, 8)),
             instrument=Instrument(lsf=LSFGauss(10 * u.km / u.s)))
 
 
@@ -112,7 +112,6 @@ def test_grid_options_take_one_value_or_one_for_each_axis():
 
 def test_observations_need_their_type():
     info = dict(
-        line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_brightness', size=[4, 4]))
     with pytest.raises(ConfigError, match="missing required options: 'type'.*'sky'"):
         observation_parser.load(info)
@@ -126,7 +125,6 @@ def test_instrument_warnings_have_the_path_of_the_configuration(caplog):
     with config_path('observations'):
         observation_parser.load([dict(
             type='sky',
-            line_of_sight=dict(type='flat'),
             observable=dict(
                 type='pixel_spectra', size=[4, 4],
                 spectral=dict(size=4, convention='relativistic'),
@@ -141,17 +139,14 @@ def test_dtypes_without_kernels_are_errors(dtype):
     from gbkfit.dataset import DatasetPixelBrightness
     observable = PixelBrightness.from_data(DatasetPixelBrightness(dataset))
     with pytest.raises(ValueError, match="'dtype' must be one of 'float32', 'float64'"):
-        ObservationSky(observable, LineOfSightFlat(), dtype=dtype)
+        ObservationSky(observable, dtype=dtype)
 
 
 def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
     observable = PixelBrightness(size=(8, 8))
-    assert ObservationSky(
-        observable, LineOfSightFlat()).fft_dtype() == np.float64
+    assert ObservationSky(observable).fft_dtype() == np.float64
     with pytest.raises(ValueError, match=r"fft_dtype \(float32\) is less"):
-        ObservationSky(
-            observable, LineOfSightFlat(
-                ), dtype='float64', fft_dtype='float32')
+        ObservationSky(observable, dtype='float64', fft_dtype='float32')
 
 
 def brightness(unit=None, spatial_correlation=None):
@@ -169,11 +164,11 @@ def test_the_data_choose_the_dtype_unless_it_is_given():
     from gbkfit.instrument import PSFGauss
     correlated = brightness(spatial_correlation=PSFGauss(1.0))
     observable = PixelBrightness.from_data(correlated)
-    chosen = ObservationSky(observable, LineOfSightFlat())
+    chosen = ObservationSky(observable)
     assert chosen.dtype() == np.float32
     assert 'dtype' not in chosen.dump()
     assert chosen.with_data(correlated).dtype() == np.float64
-    given = ObservationSky(observable, LineOfSightFlat(), dtype='float32')
+    given = ObservationSky(observable, dtype='float32')
     assert given.with_data(correlated).dtype() == np.float32
     assert given.dump()['dtype'] == 'float32'
 
@@ -192,7 +187,7 @@ def image_group(*names, data=(True,)):
     names = names or (None,) * len(data)
     return ObservationGroup([galaxy], [
         ObservationSky(
-            observable, LineOfSightFlat(), name=name,
+            observable, name=name,
             data=dataset if with_data else None)
         for name, with_data in zip(names, data, strict=True)])
 
@@ -295,7 +290,7 @@ def test_likelihoods_have_parameters_of_names_of_their_own():
         rptraits=dict(type='exponential'), emission=dict(type='band'))]))
     dataset = brightness()
     group = ObservationGroup(galaxy, ObservationSky(
-        PixelBrightness.from_data(dataset), LineOfSightFlat(), data=dataset,
+        PixelBrightness.from_data(dataset), data=dataset,
         name='disk'))
     clash = LikelihoodUser(lambda *args: 0.0, 'log_likelihood', ['rpt_a'])
     with pytest.raises(ValueError, match=r"names of parameters of the group:"
@@ -340,7 +335,7 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
         Data(np.ones((10, 4, 4))),
         spectral=SpectralAxis(convention='relativistic'))
     observation = ObservationSky(
-        PixelSpectra.from_data(data), LineOfSightFlat(), data=data)
+        PixelSpectra.from_data(data), data=data)
     comparison_ = comparison_of(observation, LikelihoodGauss(
         upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))),
         DriverHost())
@@ -365,7 +360,7 @@ def test_the_psf_must_be_the_beam_of_data_of_a_beam(caplog):
             Data(np.zeros((3, 4, 4)), unit='Jy/beam', beam=beam),
             spectral=SpectralAxis(step=10, rval=0, rest=hi))
         ObservationSky(
-            PixelSpectra(size=(4, 4), spectral=spectral), LineOfSightFlat(),
+            PixelSpectra(size=(4, 4), spectral=spectral),
             instrument=Instrument(psf=psf), data=data)
         return caplog.text
     beam = Beam(6.0, 3.0, 30.0)

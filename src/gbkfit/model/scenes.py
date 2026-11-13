@@ -1,12 +1,14 @@
 """
 Scenes: galaxies drawn together on one grid (e.g. those an observation
 sees; see gbkfit.observation), and their evaluation on the grid of an
-image or of a spectral cube: their light added up (AdditiveScenePlan), or
-marched through, front to back, by radiative transfer
-(TransferScenePlan).
+image or of a spectral cube: their light added up (AdditiveScenePlan), on
+the plane of the sky or on a depth axis, or marched through, front to
+back, by radiative transfer (TransferScenePlan). Which of them a scene
+needs follows from its components (see Scene.evaluation).
 """
 
 import abc
+import enum
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -26,7 +28,7 @@ from .components.base import (
     ComponentState, DepthAxis, FrameParams, SceneTarget)
 from .components.disks.disk import Disk
 from .components.lines import Band
-from .components.roles import STARS
+from .components.roles import STARS, Emission
 from .components.traits import RPTraitImage
 from .extras import Extras
 
@@ -41,6 +43,7 @@ __all__ = [
     'AdditiveScenePlan',
     'DepthUnit',
     'Scene',
+    'SceneEvaluation',
     'ScenePlan',
     'TransferScenePlan',
     'named_components'
@@ -66,15 +69,40 @@ class DepthUnit(NamedTuple):
     separations: tuple[str | None, ...] = (None,)
 
 
+class SceneEvaluation(enum.Enum):
+    """
+    How a scene is evaluated along the line of sight, which its components
+    decide (see Scene.evaluation):
+
+    - PLANE: on the plane of the sky (AdditiveScenePlan without a depth
+      axis), for components that are thin and have no opacity;
+    - DEPTH: on a depth axis (AdditiveScenePlan with one), each galaxy
+      dimmed by its own dust: thick components fill its voxels, and thin
+      ones are layers at their depths;
+    - TRANSFER: by radiative transfer along each line of sight
+      (TransferScenePlan), front to back, for line opacity and for
+      galaxies that dim one another.
+
+    Where several could evaluate a scene, they give the same model: the
+    first of them that can is the one.
+    """
+    PLANE = 'plane'
+    DEPTH = 'depth'
+    TRANSFER = 'transfer'
+
+
 class Scene:
     """
     Galaxies drawn together on one grid (e.g. those an observation sees;
     see gbkfit.observation): the galaxies, the indices of the components
     of each whose light is drawn (its emitters; the opacity of all
     components applies), the emission lines drawn (all if None) or the
-    band (if known), the order of the galaxies along the line of sight,
-    front to back (in units: galaxies or groups of them; those it leaves
-    out after them, in their order), and the unit of the data, which the
+    band (if known), the type of the emission it is seen in (see
+    Observable.emission of gbkfit.observation: BandEmission for an image,
+    LineEmission for a spectral cube), the order of the galaxies along the
+    line of sight, front to back (in units: galaxies or groups of them;
+    those it leaves out after them, in their order), and the unit of the
+    data, which the
     light of the emitters takes (see Component.plan; None without data).
     The parameters of each galaxy have the names of the mapping of the
     galaxy among those of its group of galaxies (e.g. ObservationGroup),
@@ -90,6 +118,7 @@ class Scene:
             emitters: Sequence[tuple[int, ...]],
             lines: tuple[str, ...] | None,
             band: Band | None,
+            emission: type[Emission],
             order: Sequence[DepthUnit] | None = None,
             data_unit: DataUnit | None = None
     ):
@@ -99,6 +128,7 @@ class Scene:
         self._emitters = tuple(emitters)
         self._lines = lines
         self._band = band
+        self._emission = emission
         self._data_unit = data_unit
         order = tuple(order or ())
         ordered = {g for unit in order for g in unit.galaxies}
@@ -127,6 +157,47 @@ class Scene:
         drawn.
         """
         return self._emitters
+
+    def emission(self) -> type[Emission]:
+        """Return the type of the emission it is seen in."""
+        return self._emission
+
+    def order(self) -> tuple[DepthUnit, ...]:
+        """
+        Return the order of its galaxies along the line of sight, front to
+        back, in units: those given, then the others, in their order.
+        """
+        return self._order
+
+    def evaluation(self) -> SceneEvaluation:
+        """
+        Return how it is evaluated along the line of sight, which the
+        components it draws (its emitters, and the absorbers of its
+        galaxies, see Galaxy.absorbers) decide (see SceneEvaluation):
+
+        - by radiative transfer if one has line opacity (see LineOpacity),
+          or there are several galaxies and one has opacity (its light,
+          or that of the others behind it, is then dimmed by the dust in
+          front of it, in their order);
+        - otherwise on a depth axis if one is thick in the emission it is
+          seen in (see Component.thick) or has opacity;
+        - otherwise on the plane of the sky.
+        """
+        drawn = [
+            [galaxy.components()[i]
+             for i in sorted(set(emitters) | set(galaxy.absorbers()))]
+            for galaxy, emitters in zip(self._galaxies, self._emitters)]
+        opacities = [
+            [c.opacity() for c in components if c.opacity() is not None]
+            for components in drawn]
+        if any(not o.dims_others() for galaxy in opacities for o in galaxy) \
+                or (len(drawn) > 1 and any(opacities)):
+            return SceneEvaluation.TRANSFER
+        if any(opacities) or any(
+                c.thick(self._emission)
+                for components in drawn for c in components):
+            return SceneEvaluation.DEPTH
+        return SceneEvaluation.PLANE
 
     def target(
             self,
@@ -230,9 +301,9 @@ class Scene:
 class ScenePlan(abc.ABC):
     """
     The evaluation of a scene on a grid (e.g. along the line of sight of
-    an observation; see gbkfit.observation.LineOfSight.plan_scene): the
-    plan of each galaxy, whose light adds up in the image or spectral
-    cube.
+    an observation, as it needs, see Scene.evaluation and
+    gbkfit.observation.plan_scene): the plan of each galaxy, whose light
+    adds up in the image or spectral cube.
     """
 
     def __init__(self, scene: Scene, grid: Grid, target: SceneTarget):
@@ -293,12 +364,10 @@ class ScenePlan(abc.ABC):
 class AdditiveScenePlan(ScenePlan):
     """
     The evaluation of a scene whose galaxies add their light, each dimmed
-    by its own opacity only (e.g. along the lines of sight
-    LineOfSightFlat and LineOfSightGrid of observations): on the given
-    depth axis, if any (for the largest
-    disk of the scene). With extra outputs, it logs a warning if the depth
-    axis resolves the velocity of the light too coarsely (see
-    warn_resolution).
+    by its own opacity only (see SceneEvaluation, PLANE and DEPTH): on the
+    given depth axis, if any (for the largest disk of the scene). With
+    extra outputs, it logs a warning if the depth axis resolves the
+    velocity of the light too coarsely (see warn_resolution).
     """
 
     def __init__(
@@ -366,12 +435,11 @@ class AdditiveScenePlan(ScenePlan):
 class TransferScenePlan(ScenePlan):
     """
     The evaluation of a scene by radiative transfer along each line of
-    sight (e.g. the line of sight LineOfSightTransfer of observations),
-    unit by unit,
-    front to back, in the order of the scene (see DepthUnit): a galaxy on
-    its depth axis (the given one of each galaxy, for its largest disk),
-    or a group of galaxies on one axis, each at its position (see
-    TransferPlan), from the opacity of the units in front of it. One set
+    sight (see SceneEvaluation, TRANSFER), unit by unit, front to back,
+    in the order of the scene (see DepthUnit): a galaxy on its depth axis
+    (the given one of each galaxy, for its largest disk), or a group of
+    galaxies on one axis, each at its position (see TransferPlan), from
+    the opacity of the units in front of it. One set
     of cubes of opacity holds the dust of all of them (see opacity_cubes).
     (The light of galaxies without opacity just adds up, in any order.)
 

@@ -14,7 +14,7 @@ import pytest
 from gbkfit.instrument import instrument_parser
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
-    Foreground, Lens, LensDeflectionMap, LineOfSightFlat, ObservationGroup,
+    Foreground, Lens, LensDeflectionMap, ObservationGroup,
     ObservationSky, observable_parser)
 
 
@@ -102,7 +102,7 @@ def test_feature_combinations(driver, name, lens):
         foreground = Foreground(Lens((40, 40), (0.5, 0.5), LensDeflectionMap(
             np.ones((40, 40)), -np.ones((40, 40)))))
     observation = ObservationSky(
-        observable_parser.load(info), LineOfSightFlat(), foreground=foreground,
+        observable_parser.load(info), foreground=foreground,
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
         components=['gas'], oversampling=OVERSAMPLING[name],
         # Moments are of one line (they would mix the lines of a spectrum)

@@ -1696,37 +1696,35 @@ def mass_model(mass):
     return MassModel(mass_component_parser.load(copy.deepcopy(mass)))
 
 
-def evaluate(driver, galaxy, line_of_sight, properties):
+def evaluate(driver, galaxy, properties):
     """
-    Evaluate a spectral cube of a galaxy, along the given line of sight
-    ('flat' or 'grid').
+    Evaluate a spectral cube of a galaxy (on a depth axis if it is thick).
     """
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
+        ObservationGroup, ObservationSky, PixelSpectra)
     from gbkfit.params import ParamSpace
     group = ObservationGroup([galaxy], [ObservationSky(
         PixelSpectra(
             size=(32, 32), step=(1, 1),
             spectral=SpectralAxis(
-                size=51, step=10, convention='relativistic')),
-        line_of_sight_parser.load(dict(type=line_of_sight)))])
+                size=51, step=10, convention='relativistic')))])
     params = ParamSpace.from_properties(group.pdescs(), properties)
     return group.plan(driver).model_h(
         params.evaluate())[0]['spectra'].data.copy()
 
 
-@pytest.mark.parametrize('line_of_sight, disk_type', [
-    ('flat', 'smooth'),
-    ('grid', 'smooth'),
-    ('grid', 'clouds')])
+@pytest.mark.parametrize('thickness, disk_type', [
+    ('thin', 'smooth'),
+    ('thick', 'smooth'),
+    ('thick', 'clouds')])
 def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
-        driver, line_of_sight, disk_type):
+        driver, thickness, disk_type):
     # A disk with the trait 'mass' is the disk whose node-wise tangential
     # velocity at its subnodes is the circular velocity of the mass of its
     # galaxy, at the radii of the subnodes in kpc (a disk of no light that
     # matters beyond its last ring, where the one given at the subnodes
     # keeps its last value, and the one of the mass goes on)
-    thick = line_of_sight == 'grid'
+    thick = thickness == 'thick'
     massive = disk_galaxy(
         disk_type, dict(type='mass'), MASS, DISTANCE, thick=thick)
     given = disk_galaxy(
@@ -1741,9 +1739,9 @@ def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
         properties |= dict(rht_s=1)
     np.testing.assert_allclose(
         evaluate(
-            driver, massive, line_of_sight, properties | MASS_PROPERTIES),
+            driver, massive, properties | MASS_PROPERTIES),
         evaluate(
-            driver, given, line_of_sight, properties | dict(vpt_vt=vcirc)),
+            driver, given, properties | dict(vpt_vt=vcirc)),
         rtol=1e-6, atol=1e-7)
 
 
@@ -1967,9 +1965,9 @@ def test_disk_densities_see_small_blobs(driver):
         rtol=1e-5, atol=1e-12)
 
 
-@pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
+@pytest.mark.parametrize('thickness', ['thin', 'thick'])
 def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
-        driver, line_of_sight):
+        driver, thickness):
     # A disk whose mass follows a node-wise density (linear between the
     # subnodes, and 0 at the last) is the nodewise disk of that surface
     # density at the subnodes, and of the scale height of the density
@@ -1979,7 +1977,7 @@ def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
     brightness = np.append(np.linspace(1, 0.2, 10), 0)
     upsilon = 2e8
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
-    thick = line_of_sight == 'grid'
+    thick = thickness == 'thick'
     disk = with_traits(
         DISK, rptraits=dict(type='nw_uniform'), vptraits=dict(type='mass'))
     disk |= dict(name='hi')
@@ -2010,10 +2008,10 @@ def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
         nodewise_properties |= dict(mass_gas_hz=KPC_PER_ARCSEC)
     np.testing.assert_allclose(
         evaluate(
-            driver, following, line_of_sight,
+            driver, following,
             properties | halo_properties | dict(mass_gas_upsilon=upsilon)),
         evaluate(
-            driver, nodewise, line_of_sight,
+            driver, nodewise,
             properties | halo_properties | nodewise_properties),
         rtol=1e-5, atol=1e-7)
 
@@ -2170,8 +2168,8 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
         / squared, rtol=1e-10)
 
 
-@pytest.mark.parametrize('line_of_sight', ['flat', 'grid'])
-def test_mass_trait_with_pressure_support(driver, line_of_sight):
+@pytest.mark.parametrize('thickness', ['thin', 'thick'])
+def test_mass_trait_with_pressure_support(driver, thickness):
     # The trait 'mass' with pressure support is the node-wise velocity
     # sqrt(v_c^2 + (R / rho) d(rho sigma^2)/dR) at the subnodes, with the
     # derivative by the three-point formula: thin, rho is the surface
@@ -2186,7 +2184,7 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
     properties = DISK_PROPERTIES | dict(rpt_s=1.2, dpt_a=30, dpt_s=10)
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
     density = np.exp(-subrnodes / 1.2)
-    if line_of_sight == 'grid':
+    if thickness == 'thick':
         disk = with_traits(
             disk, rhtraits=dict(type='sech2', zmax=8, nodewise=True))
         properties |= dict(rht_s=flaring)
@@ -2207,18 +2205,18 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
     assert np.all(vcirc2 + support >= 0) and np.max(-support) > 500
     np.testing.assert_allclose(
         evaluate(
-            driver, supported, line_of_sight, properties | MASS_PROPERTIES),
-        evaluate(driver, given, line_of_sight, properties | dict(
+            driver, supported, properties | MASS_PROPERTIES),
+        evaluate(driver, given, properties | dict(
             vpt_vt=np.sqrt(vcirc2 + support))),
         rtol=1e-5, atol=1e-7)
 
 
-@pytest.mark.parametrize('line_of_sight, disk_type', [
-    ('flat', 'smooth'),
-    ('grid', 'smooth'),
-    ('grid', 'clouds')])
+@pytest.mark.parametrize('thickness, disk_type', [
+    ('thin', 'smooth'),
+    ('thick', 'smooth'),
+    ('thick', 'clouds')])
 def test_pressure_support_corrects_fitted_tangential_traits(
-        driver, line_of_sight, disk_type):
+        driver, thickness, disk_type):
     # Without the trait 'mass', the pressure support corrects the sum of
     # the tangential traits, a fitted circular velocity v_c, at each point
     # (no mass needed): sign(v_c) sqrt(v_c^2 + P), P = (R / rho) d(rho
@@ -2226,7 +2224,7 @@ def test_pressure_support_corrects_fitted_tangential_traits(
     # node-wise speed at its subnodes is the corrected one, up to the
     # interpolation between them (small for a flat curve)
     from gbkfit.model.components._nodal import subring_radii
-    thick = line_of_sight == 'grid'
+    thick = thickness == 'thick'
     subrnodes = np.array(subring_radii(DISK['rnodes'], DISK['rstep']))
     vcirc = np.full_like(subrnodes, 150)
     disk = dict(dptraits=dict(type='exponential'))
@@ -2243,10 +2241,10 @@ def test_pressure_support_corrects_fitted_tangential_traits(
         disk_type, nodewise, thick=thick,
         pressure_support=dict(type='jeans'), **disk)
     given = disk_galaxy(disk_type, nodewise, thick=thick, **disk)
-    expected = evaluate(driver, given, line_of_sight, properties | dict(
+    expected = evaluate(driver, given, properties | dict(
         vpt_vt=np.sqrt(vcirc ** 2 + support)))
     np.testing.assert_allclose(
-        evaluate(driver, supported, line_of_sight, properties | dict(
+        evaluate(driver, supported, properties | dict(
             vpt_vt=vcirc)),
         expected, rtol=0, atol=2e-5 * np.max(expected))
 
@@ -2605,7 +2603,7 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.model._galaxy_stage import GalaxyStage
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
+        ObservationGroup, ObservationSky, PixelSpectra)
     from gbkfit.params import ParamSpace
     calls = []
     evaluate_stage = GalaxyStage.evaluate
@@ -2623,8 +2621,7 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
             PixelSpectra(
                 size=(32, 32), step=(1, 1),
                 spectral=SpectralAxis(
-                    size=51, step=10, convention='relativistic')),
-            line_of_sight_parser.load(dict(type='flat')), dtype=dtype,
+                    size=51, step=10, convention='relativistic')), dtype=dtype,
             name=name)
         for name, dtype in (('single', 'float32'), ('double', 'float64'))])
     params = ParamSpace.from_properties(

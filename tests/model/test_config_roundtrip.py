@@ -89,7 +89,6 @@ TRAIT_PARSERS = {
 OTHER_PARSERS = dict(
     emission=gbkfit.model.emission_parser,
     opacity=gbkfit.model.opacity_parser,
-    line_of_sight=gbkfit.observation.line_of_sight_parser,
     psf=gbkfit.instrument.psf_parser,
     lsf=gbkfit.instrument.lsf_parser,
     aperture=gbkfit.dataset.aperture_parser,
@@ -197,8 +196,8 @@ OBSERVABLES = dict(
         dict(psf=GAUSS, lsf=GAUSS_LSF), [2, 1]))
 
 
-# A line of sight with a depth axis other than the default one
-LINE_OF_SIGHT = dict(type='grid', depth=dict(extent=21.0, step=1.5))
+# A depth axis other than the default one, of every option
+DEPTH = dict(extent=21.0, step=1.5, slab=4, subchannels=2)
 
 
 @pytest.mark.parametrize('observable_type', OBSERVABLES)
@@ -208,12 +207,12 @@ def test_observation_dump_has_every_option(observable_type):
     info = dict(
         type='sky',
         name='obs', galaxies=['galaxy'], components=['gas'], lines=['ha'],
-        line_of_sight=LINE_OF_SIGHT,
+        depth=DEPTH,
         instrument=instrument,
         observable=dict(type=observable_type) | observable,
         oversampling=oversampling, dtype='float64')
     dumped = json.loads(json.dumps(roundtrip(observation_parser, info)))
-    for key in ('name', 'galaxies', 'components', 'lines', 'line_of_sight',
+    for key in ('name', 'galaxies', 'components', 'lines', 'depth',
                 'oversampling', 'dtype'):
         assert dumped[key] == info[key], key
     for key, value in info['observable'].items():

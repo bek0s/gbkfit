@@ -1,9 +1,11 @@
 // The sections of the dock of an observation on the sky: its data, its
-// observable, its instrument, its line of sight, the light it sees, and
-// its other options. The common choices are made by hand; the options of
-// each choice are a form of the schema (see SchemaForm). How its data are
-// compared with its model, its likelihood, is not of the observation but
-// of the fits of it (the section likelihoods of a setup).
+// observable, its instrument, the light it sees, and its other options
+// (e.g. its depth axis, for the galaxies that need one: what they are
+// made of decides how they are seen along the line of sight). The common
+// choices are made by hand; the options of each choice are a form of the
+// schema (see SchemaForm). How its data are compared with its model, its
+// likelihood, is not of the observation but of the fits of it (the
+// section likelihoods of a setup).
 import { useState, type ReactNode } from 'react';
 import { membersOf, propertiesOf, SchemaForm, typeOf, type Defs, type Options, type Schema } from '../../components/SchemaForm';
 import { Button } from '../../components/ui/basics';
@@ -307,42 +309,6 @@ function formFits(member: Schema, value: Options): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// The line of sight
-
-export function LineOfSightFields({ defs, project, options, onChange, blocks, titleOf }: Common & { titleOf: (family: string, type: unknown) => string }) {
-  const sight = objectAt(options, 'line_of_sight');
-  // (none chosen: the observation needs one; the library has no default)
-  const type = typeof sight.type === 'string' ? sight.type : null;
-  const members = membersOf(defs.line_of_sight ?? {}, defs);
-  const member = members.find((m) => typeOf(m) === type);
-  const properties = member ? Object.fromEntries(Object.entries(propertiesOf(member)).filter(([key]) => key !== 'type')) : {};
-  const set = (next: Options) => onChange({ ...options, line_of_sight: next });
-  return (
-    <div className="ob-form">
-      <Segments
-        items={members.map((m) => ({ value: typeOf(m) ?? '', label: titleOf('line_of_sight', typeOf(m)).replace(/ \(.*\)$/, '') }))}
-        value={type}
-        label="The line of sight"
-        onChange={(next) => set({ type: next })}
-      />
-      {typeof member?.description === 'string' && <p className="ob-text">{firstSentence(member.description)}</p>}
-      {Object.keys(properties).length > 0 && (
-        <More title="Its depth" count={Object.keys(sight).length - 1}>
-          <SchemaForm
-            defs={defs}
-            node={{ type: 'object', properties, required: [] }}
-            project={project}
-            value={Object.fromEntries(Object.entries(sight).filter(([key]) => key !== 'type'))}
-            onChange={(next) => set({ type: type ?? 'flat', ...next })}
-            blocks={blocks}
-          />
-        </More>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // The light it sees: of which galaxies, components and lines, and in which
 // band (lists of names; all by default)
 
@@ -506,9 +472,4 @@ function number(text: string): number | undefined {
 
 function round(value: number): number {
   return Number(value.toPrecision(4));
-}
-
-function firstSentence(text: string): string {
-  const end = text.indexOf('. ');
-  return end < 0 ? text : text.slice(0, end + 1);
 }

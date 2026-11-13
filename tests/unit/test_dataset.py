@@ -351,7 +351,6 @@ def test_observations_have_their_own_dtype(tmp_path):
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20), np.float64))
     observation = observation_parser.load(dict(
         type='sky',
-        line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_brightness'),
         data=dict(
             type='pixel_brightness', data=str(tmp_path / 'image.fits'))))
@@ -464,7 +463,6 @@ def test_observable_grid_comes_from_the_data(tmp_path):
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
     info = dict(
         type='sky',
-        line_of_sight=dict(type='flat'),
         data=dict(type='pixel_brightness', data=str(tmp_path / 'image.fits')))
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_brightness')))
@@ -495,17 +493,17 @@ def test_observable_grid_comes_from_the_data(tmp_path):
 
 def test_observation_data_must_be_on_the_grid_of_the_observable():
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationSky, PixelBrightness)
+        ObservationSky, PixelBrightness)
     data = DatasetPixelBrightness(Data(np.ones((8, 20))), rota=30)
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
     with pytest.raises(ValueError, match="the data are on the grid"):
         ObservationSky(
-            PixelBrightness(size=(20, 8)), LineOfSightFlat(), data=data)
+            PixelBrightness(size=(20, 8)), data=data)
     with pytest.raises(ValueError, match="cannot be compared"):
         ObservationSky(
-            PixelBrightness(size=(20, 8)), LineOfSightFlat(), data=moments)
+            PixelBrightness(size=(20, 8)), data=moments)
     ObservationSky(
-        PixelBrightness(size=(20, 8), rota=30), LineOfSightFlat(), data=data)
+        PixelBrightness(size=(20, 8), rota=30), data=data)
 
 
 def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
@@ -520,7 +518,7 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     loaded = dataset_parser.load(dict(type='pixel_spectra') | dict(data_info))
     assert loaded.grid().coords.rest == dataset.grid().coords.rest
     info = dict(
-        type='sky', line_of_sight=dict(type='flat'),
+        type='sky',
         data=dict(type='pixel_spectra') | dict(data_info))
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_spectra')))

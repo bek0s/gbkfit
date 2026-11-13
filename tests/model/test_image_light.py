@@ -16,7 +16,7 @@ from gbkfit.observation import ObservationGroup, observation_parser
 
 # An image of 64 x 64 pixels of 0.2 arcsec, at RA 150 and Dec 2 degrees
 IMAGE = dict(
-    type='sky', line_of_sight=dict(type='flat'),
+    type='sky',
     observable=dict(
         type='pixel_brightness', size=[64, 64], step=0.2, rval=[150.0, 2.0]))
 GEOMETRY = dict(xpos=0.3, ypos=-0.2, posa=30, incl=60)

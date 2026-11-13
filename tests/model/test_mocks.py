@@ -48,8 +48,7 @@ def plan_of(driver, observable):
         else 'lines'
     return group_plan([dict(
         driver=dict(type=driver.type()), galaxy=dict(
-            components=[disk(emission)]),
-        line_of_sight=dict(type='flat'), observable=observable)])
+            components=[disk(emission)]), observable=observable)])
 
 
 def evaluate(plan):
@@ -182,7 +181,7 @@ def test_mocks_without_data_have_the_unit_and_beam_of_their_model(
         type='lines', lines=['hi21'], unit='Msun/pc2'))
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=dict(components=[hi]),
-        line_of_sight=dict(type='flat'), observable=dict(
+        observable=dict(
             type='pixel_spectra', psf=psf) | RECORDED['pixel_spectra']
         | dict(spectral=dict(
             size=31, step=20, rest='1420.405751768 MHz')),
@@ -315,7 +314,7 @@ def named_images(*names):
     return ObservationGroup(
         galaxy_parser.load(dict(components=[disk('band')])),
         observation_parser.load([
-            dict(type='sky', name=name, line_of_sight=dict(type='flat'),
+            dict(type='sky', name=name,
                  observable=dict(type='pixel_brightness', size=[4, 4]))
             for name in names]))
 

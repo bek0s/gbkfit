@@ -26,44 +26,41 @@ GAUSS_PSF = dict(type='gauss', sigma=1.3)
 GAUSS_LSF = dict(type='gauss', sigma='17 km/s')
 VARYING_PSF = dict(type='gauss', sigma=dict(
     points=dict(value=[-500, 500], unit='km/s'), values=[1, 2]))
-FLAT = dict(type='flat')
-GRID = dict(type='grid')
-# A galaxy, and an observable seen along a line of sight through an
-# instrument
+# A galaxy, and an observable seen through an instrument
 CASES = {
     '2d spectra': (
         dict(components=[THIN_DISK]),
         dict(
             type='pixel_spectra', size=[33, 32], step=[1, 1],
             spectral=dict(size=40, step=12, convention='relativistic')),
-        FLAT, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
+        dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     '3d spectra': (
         dict(components=[THICK_DISK]),
         dict(
             type='pixel_spectra', size=[33, 32], step=[1, 1],
             spectral=dict(size=40, step=12, convention='relativistic')),
-        GRID, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
+        dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     'moments': (
         dict(components=[THIN_DISK]),
         dict(
             type='pixel_moments', size=[33, 32], step=[1, 1],
             spectral=dict(convention='relativistic')),
-        FLAT, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
+        dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     'varying psf': (
         dict(components=[THIN_DISK]),
         dict(
             type='pixel_spectra', size=[33, 32], step=[1, 1],
             spectral=dict(size=40, step=12, convention='relativistic')),
-        FLAT, dict(psf=VARYING_PSF, lsf=GAUSS_LSF))}
+        dict(psf=VARYING_PSF, lsf=GAUSS_LSF))}
 
 
 def evaluate(driver, case, dtype, fft_dtype='float64'):
-    galaxy, observable, line_of_sight, instrument = CASES[case]
+    galaxy, observable, instrument = CASES[case]
     group = ObservationGroup([galaxy_parser.load(galaxy)], [
         observation_parser.load(dict(
             type='sky',
-            observable=observable, line_of_sight=line_of_sight,
-            instrument=instrument, dtype=dtype, fft_dtype=fft_dtype))])
+            observable=observable, instrument=instrument, dtype=dtype,
+            fft_dtype=fft_dtype))])
     # (the disk on a grid is thick: it has a scale height)
     properties = PROPERTIES | (dict(rht_s=0.5) if '3d' in case else {})
     params = gbkfit.params.ParamSpace.from_properties(

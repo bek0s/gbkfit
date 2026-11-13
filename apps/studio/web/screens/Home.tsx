@@ -78,7 +78,7 @@ function Start() {
   const { startAdding } = useStudio();
   const steps = [
     { title: 'Add your data', text: 'A cube or maps from FITS files: the Studio reads the header, finds the spectral axis and the beam, and keeps the originals.', act: 'Add data…', run: () => startAdding('datasets') },
-    { title: 'Say how it is seen', text: 'An observation of the data: its PSF and LSF (from the header, or made here), its noise, and the line of sight.', act: 'New observation…', run: () => startAdding('observations') },
+    { title: 'Say how it is seen', text: 'An observation of the data: its PSF and LSF (from the header, or made here), and its noise.', act: 'New observation…', run: () => startAdding('observations') },
     { title: 'Build a galaxy', text: 'Its components (disks, a bulge…), their density, their motions, and the mass that moves them.', act: 'New galaxy…', run: () => startAdding('galaxies') },
     { title: 'Compare, then fit', text: 'See the galaxy through the observation beside the data, move its parameters, then fit it.', act: 'Comes soon', run: null },
   ];

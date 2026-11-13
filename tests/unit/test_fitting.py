@@ -27,7 +27,7 @@ from gbkfit.objective import Merits, Objective
 from gbkfit.parallel import WorkersProcesses, WorkersThreads
 from gbkfit.observation import (
     FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods,
-    LineOfSightFlat, ObservationGroup, ObservationSky, PixelBrightness)
+    ObservationGroup, ObservationSky, PixelBrightness)
 from gbkfit.params import (
     FreeElement, ParamEvaluationError, ParamScalarDesc, ParamSpace,
     PriorGauss, PriorGaussTrunc,
@@ -61,7 +61,7 @@ def mock_objective(
     """
     def group(dataset, flux_scale=None):
         observation = ObservationSky(
-            PixelBrightness.from_data(dataset), LineOfSightFlat(),
+            PixelBrightness.from_data(dataset),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset,
             flux_scale=flux_scale, name=name)
         return ObservationGroup(
@@ -1534,7 +1534,7 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
 
     def group(dataset):
         observation = ObservationSky(
-            PixelBrightness.from_data(dataset), LineOfSightFlat(),
+            PixelBrightness.from_data(dataset),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
         return ObservationGroup(
             galaxy_parser.load(GALAXY), observation).plan(DriverHost())

@@ -30,7 +30,6 @@ PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
     rpt_a=1, rpt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
-FLAT = dict(type='flat')
 
 INSTRUMENT = dict(
     psf=dict(type='gauss', sigma=1.5),
@@ -43,7 +42,7 @@ def evaluate(driver, observable):
     """The model data of an observable of the tests, by data item."""
     plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
-             line_of_sight=FLAT, observable=copy.deepcopy(observable))])
+             observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
@@ -155,7 +154,7 @@ def test_region_moments_observation_from_data(tmp_path):
     np.testing.assert_array_equal(loaded['moment1'].data(), [1400, 1500, 1600])
     info = dict(
         type='sky',
-        data=dict(type='region_moments') | data_info, line_of_sight=FLAT,
+        data=dict(type='region_moments') | data_info,
         observable=dict(
             type='region_moments',
             spectral=dict(step=2, convention='relativistic')))
@@ -181,11 +180,10 @@ def test_region_moments_observation_dumps_its_bins_with_the_prefix(tmp_path):
     # Without data, the bins are options of the observable: their file is
     # named with the prefix of the dump, which can be dumped again
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationSky, RegionMoments, observation_parser)
+        ObservationSky, RegionMoments, observation_parser)
     observation = ObservationSky(RegionMoments(
         RegionsBins(np.arange(16).reshape(4, 4) % 3),
-        spectral=SpectralAxis(size=11, convention='relativistic')),
-        LineOfSightFlat())
+        spectral=SpectralAxis(size=11, convention='relativistic')))
     prefix = str(tmp_path / 'out_')
     for _ in range(2):
         dumped = observation_parser.dump(
@@ -199,7 +197,7 @@ def test_region_moments_objective_residual(driver):
     from gbkfit.objective import Objective
     from gbkfit.instrument import instrument_parser
     from gbkfit.observation import (
-        LikelihoodGauss, Likelihoods, LineOfSightFlat, ObservationGroup,
+        LikelihoodGauss, Likelihoods, ObservationGroup,
         ObservationSky, RegionMoments)
     index = np.full((41, 32), -1)
     index[10:20, 5:15] = 0
@@ -210,7 +208,7 @@ def test_region_moments_objective_residual(driver):
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
-        [ObservationSky(observable, LineOfSightFlat(), instrument=instrument)])
+        [ObservationSky(observable, instrument=instrument)])
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
     model = {
@@ -223,7 +221,7 @@ def test_region_moments_objective_residual(driver):
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
         [ObservationSky(
-            observable, LineOfSightFlat(), instrument=instrument,
+            observable, instrument=instrument,
             data=dataset)])
     residual = Objective(group.plan(driver), Likelihoods(
         group, LikelihoodGauss(missing_residual=3))).residual_nddata_h(

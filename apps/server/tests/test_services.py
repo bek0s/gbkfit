@@ -32,7 +32,6 @@ def write_data_setup(root):
     yaml.dump(dict(
         type='sky',
         observable=dict(type='pixel_brightness'),
-        line_of_sight=dict(type='flat'),
         data=dict(
             type='pixel_brightness', data='data/image.fits', error=0.01,
             step=[1, 1])),

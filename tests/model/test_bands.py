@@ -31,14 +31,17 @@ PROPERTIES = dict(
         nucleus_sdss_r_ratio=0.5))
 
 
-def image_case(driver, components, band, line_of_sight=None, redshift=0):
-    """An image in a band of a galaxy of the given components."""
+def image_case(driver, components, band, depth=None, redshift=0):
+    """
+    An image in a band of a galaxy of the given components, on the given
+    depth axis, if it needs one.
+    """
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(type='pixel_brightness', size=[24, 24]),
-        line_of_sight=line_of_sight or dict(type='flat'),
         galaxy=dict(components=components, redshift=redshift),
-        **({} if band is None else dict(band=band)))
+        **({} if band is None else dict(band=band)),
+        **({} if depth is None else dict(depth=depth)))
 
 
 def test_the_catalogue_has_bands_and_those_of_the_user():
@@ -81,7 +84,6 @@ def test_only_images_have_a_band(driver):
         observable=dict(
             type='pixel_spectra', size=[8, 8],
             spectral=dict(size=10, convention='relativistic')),
-        line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
             STARS, emission=dict(type='lines'),
             vptraits=dict(type='arctan', direction='tan'),
@@ -103,15 +105,14 @@ def test_dust_dims_an_image_at_the_rest_wavelength_of_its_band(
         rhtraits=dict(type='sech2', zmax=8),
         opacity=dict(type='dust', law=dict(
             type='table', wavelengths=[0.2, 1.0], ratios=[3.0, 1.0])))
-    line_of_sight = dict(
-        type='grid', depth=dict(extent=40 * 0.25, step=0.25))
+    depth = dict(extent=40 * 0.25, step=0.25)
     properties = PROPERTIES['stars'] | dict(
         dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0, dust_rpt_s=4,
         dust_rht_s=1)
 
     def evaluate(opacity):
         case = image_case(
-            driver, [STARS, dust], 'sdss_r', line_of_sight, redshift)
+            driver, [STARS, dust], 'sdss_r', depth, redshift)
         data, extra = evaluate_cases(
             [case], properties | dict(dust_rpt_a=opacity))
         tau = extra.get('total_odata').data.sum(axis=0)
@@ -133,7 +134,7 @@ def test_configurations_name_bands():
         observations=[dict(
             type='sky',
             observable=dict(type='pixel_brightness', size=[8, 8]),
-            line_of_sight=dict(type='flat'), band='mine')])
+            band='mine')])
     plan = config_group_plan(config)
     observation, = plan.group().observations()
     assert observation.band().name() == 'mine'

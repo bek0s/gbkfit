@@ -41,7 +41,6 @@ SLITLESS = dict(
 def evaluate(driver, observable, properties=PROPERTIES):
     plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
-             line_of_sight=dict(type='flat'),
              observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
@@ -145,14 +144,14 @@ def test_slitless_spectra_objective_residual(driver):
     from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationGroup, ObservationSky, observable_parser)
+        ObservationGroup, ObservationSky, observable_parser)
     model = evaluate(driver, SLITLESS)
     dataset = DatasetSlitlessSpectra(
         Data(model + 1, error=np.full_like(model, 2)))
     options = {k: v for k, v in SLITLESS.items() if k not in ('type', 'size')}
     observable = observable_parser.load(
         dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
-    observation = ObservationSky(observable, LineOfSightFlat(), data=dataset)
+    observation = ObservationSky(observable, data=dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     objective = Objective(group.plan(driver))
@@ -166,13 +165,11 @@ def test_slitless_spectra_refuse_an_lsf_and_frequencies():
     with pytest.raises(ValueError, match="no LSF"):
         observation_group([dict(
             driver=dict(type='host'), galaxy=GALAXY,
-            line_of_sight=dict(type='flat'),
             observable=SLITLESS | dict(lsf=dict(
                 type='gauss', sigma='15 km/s')))])
     with pytest.raises(ValueError, match="rest wavelength"):
         observation_group([dict(
             driver=dict(type='host'), galaxy=GALAXY,
-            line_of_sight=dict(type='flat'),
             observable=SLITLESS | dict(spectral=dict(
                 size=NZ, step=STEP, rest='1420 MHz')))])
 
@@ -283,7 +280,7 @@ def test_slitless_spectra_have_flux_scales_per_row(driver):
     from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationGroup, ObservationSky, observable_parser)
+        ObservationGroup, ObservationSky, observable_parser)
     model = evaluate(driver, SLITLESS)
     scales = 1 + 0.3 * np.sin(np.arange(model.shape[0]))
     error = 1e-3
@@ -294,8 +291,7 @@ def test_slitless_spectra_have_flux_scales_per_row(driver):
         dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
     assert observable.flux_scales()['per_row'].axis == 1
     observation = ObservationSky(
-        observable, LineOfSightFlat(
-            ), data=dataset, flux_scale='per_row', name='grism')
+        observable, data=dataset, flux_scale='per_row', name='grism')
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace.from_properties(

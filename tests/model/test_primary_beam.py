@@ -49,7 +49,6 @@ def evaluate(
         key='brightness'):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
-        line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
@@ -239,11 +238,11 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
     # with the prefix of the dump, which can be dumped again (overwrite)
     from gbkfit.instrument import PrimaryBeamImage
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationSky, PixelBrightness,
+        ObservationSky, PixelBrightness,
         observation_parser)
     beam = PrimaryBeamImage(np.ones((8, 8)))
     observation = ObservationSky(
-        PixelBrightness(size=(8, 8)), LineOfSightFlat(),
+        PixelBrightness(size=(8, 8)),
         instrument=Instrument(primary_beam=beam))
     prefix = str(tmp_path / 'out_')
     for _ in range(2):

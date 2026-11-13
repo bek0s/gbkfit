@@ -1,4 +1,4 @@
-version: 10
+version: 11
 driver: {type: host}
 galaxies:
 - components:
@@ -14,7 +14,6 @@ galaxies:
     emission: {type: lines}
 observations:
 - type: sky
-  line_of_sight: {type: grid}
   observable:
     type: pixel_spectra
     size: [48, 48]

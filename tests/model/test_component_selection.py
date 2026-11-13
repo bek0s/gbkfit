@@ -13,8 +13,6 @@ from gbkfit.model import galaxy_parser
 from gbkfit.observation import ObservationGroup, observation_parser
 
 
-FLAT = dict(type='flat')
-GRID = dict(type='grid')
 
 THIN = dict(rptraits=dict(type='exponential'))
 THICK = THIN | dict(rhtraits=dict(type='sech2', zmax=8))
@@ -46,7 +44,7 @@ SCUBE = dict(
 
 
 def observation(components=None, **options):
-    info = dict(type='sky', observable=SCUBE, line_of_sight=FLAT)
+    info = dict(type='sky', observable=SCUBE)
     if components is not None:
         info['components'] = components
     return observation_parser.load(copy.deepcopy(info | options))
@@ -92,14 +90,14 @@ def test_components_with_opacity_always_absorb(driver):
         ha_rht_s=1, co_rht_s=0.5, dust_rpt_a=0.3, dust_rpt_s=4, dust_rht_s=0.5) | {
         f'dust_{key}': f'ha_{key}' for key in GEOMETRY if key != 'vsys'}
     ha, co, both = evaluate(driver, galaxy, [
-        observation(['ha'], name='muse', line_of_sight=GRID),
-        observation(['co'], name='alma', line_of_sight=GRID),
-        observation(name='all', line_of_sight=GRID)], properties)
+        observation(['ha'], name='muse'),
+        observation(['co'], name='alma'),
+        observation(name='all')], properties)
     np.testing.assert_allclose(
         ha + co, both, rtol=1e-4, atol=1e-6 * both.max())
     clear = evaluate(
         driver, dict(components=emitters),
-        [observation(['ha'], line_of_sight=GRID)],
+        [observation(['ha'])],
         {k: v for k, v in properties.items() if not k.startswith('dust')})
     assert ha.sum() < 0.99 * clear[0].sum()
 

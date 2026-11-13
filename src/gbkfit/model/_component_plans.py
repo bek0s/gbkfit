@@ -192,8 +192,8 @@ class ComponentPlans:
         If the light of an emitter has a unit that cannot become that of
         the data (see Component.plan).
     ValueError
-        If there is no depth axis and components have opacity (the
-        observations check that first, see LineOfSight).
+        If there is no depth axis and components have opacity (a scene
+        with opacity has one, see Scene.evaluation).
     """
 
     def __init__(

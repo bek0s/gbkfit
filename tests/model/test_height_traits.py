@@ -41,7 +41,6 @@ def observe(driver, component):
     """A spectral cube of a galaxy of the component, on a grid."""
     return group_plan([dict(
         driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
-        line_of_sight=dict(type='grid'),
         galaxy=dict(components=[component]))])
 
 
@@ -205,7 +204,7 @@ def observe_depth(driver, component, depth):
     """
     return group_plan([dict(
         driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
-        line_of_sight=dict(type='grid', depth=depth),
+        depth=depth,
         galaxy=dict(components=[component]))])
 
 
