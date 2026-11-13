@@ -336,7 +336,7 @@ class BootstrapOptions(Serializable):
             name = [observations[i].name()] \
                 if isinstance(self._scheme, dict) else []
             with config_path('scheme', *name):
-                scheme.check(observations[i].data(), params)
+                scheme.check(observations[i].dataset(), params)
         if self._fitter is not None:
             with config_path('fitter'):
                 self._fitter.load_fit_params(params)
@@ -540,11 +540,12 @@ def _refit(
     Stopped
         If the control stopped it.
     """
-    # (the refits share its whitening of correlated noise; see with_data)
+    # (the refits share its whitening of correlated noise; see
+    # with_datasets)
     objective.prepare()
     try:
         # (closed after the refit: the fitter can keep it alive)
-        with objective.with_data(refit.datasets) as refit_objective:
+        with objective.with_datasets(refit.datasets) as refit_objective:
             result = refit.fitter.fit(
                 refit_objective, refit.params, control=control)
     except (ParamEvaluationError, RuntimeError) as e:

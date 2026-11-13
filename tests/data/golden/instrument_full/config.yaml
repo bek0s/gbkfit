@@ -19,7 +19,7 @@ observations:
     component: gas
     traits:
     - {type: azimuth_power, power: 1, axis: minor}
-  data:
+  dataset:
     type: pixel_spectra
     step: [0.75, 0.75]
     rpix: [7.5, 7.5]

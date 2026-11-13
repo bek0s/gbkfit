@@ -210,7 +210,7 @@ def draw_mocks(
     list of list of Dataset
         The mock data, in the units of the models: those of each mock, a
         dataset for each observation (e.g. the datasets of
-        GroupPlan.with_data).
+        GroupPlan.with_datasets).
 
     Raises
     ------
@@ -302,7 +302,7 @@ def _data_options(
             "instrument), but the errors of data take one correlation for "
             "all the channels: give the noise a correlation that does not "
             "vary")
-    data = observation.data()
+    data = observation.dataset()
     options = {}
     for key in observation.keys():
         unit, beam = observation.model_unit(key)

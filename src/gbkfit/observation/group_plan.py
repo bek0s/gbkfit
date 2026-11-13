@@ -71,7 +71,7 @@ class GroupPlan:
     lock): threads that evaluate it at the same time wait for each other.
     Plans of the group on other drivers have their own memory and lock
     (see ObservationGroup.plan); plans of it with other data share them
-    (see with_data).
+    (see with_datasets).
 
     The orbits of the stars of a spheroid whose weights are solved (see
     Component.orbit_weights) that observations with data see are recorded
@@ -226,7 +226,7 @@ class GroupPlan:
             self._group, self._galaxy_drivers, self._observation_drivers)
 
     def __copy__(self) -> Self:
-        # (shallow copies share them, see with_data)
+        # (shallow copies share them, see with_datasets)
         copied = object.__new__(type(self))
         copied.__dict__.update(self.__dict__)
         return copied
@@ -250,7 +250,7 @@ class GroupPlan:
     def lock(self) -> threading.RLock:
         """
         Return the lock of the memory of its plans, which its plans with
-        other data share (see with_data). Its evaluations hold it; who
+        other data share (see with_datasets). Its evaluations hold it; who
         reads the model data on the devices (see model_d) holds it until
         done with them (e.g. an objective, from the evaluation of the
         models to their residuals), as the next evaluation of a plan that
@@ -258,10 +258,10 @@ class GroupPlan:
         """
         return self._lock
 
-    def with_data(self, datasets: Mapping[int, Dataset]) -> Self:
+    def with_datasets(self, datasets: Mapping[int, Dataset]) -> Self:
         """
         Return a plan of the group with other data of some of its
-        observations (see ObservationGroup.with_data), on the same
+        observations (see ObservationGroup.with_datasets), on the same
         drivers.
 
         The plans of the observations take little from their data (their
@@ -294,7 +294,7 @@ class GroupPlan:
             If an index is not that of an observation, or a dataset does
             not suit its observation.
         """
-        group = self._group.with_data(datasets)
+        group = self._group.with_datasets(datasets)
         olds, news = self._group.observations(), group.observations()
         copied = copy.copy(self)
         copied._group = group
@@ -488,12 +488,12 @@ class GroupPlan:
         Without extra outputs, an observation whose parameters (see
         ObservationGroup.model_params) have exactly the values of its last
         evaluation (by this plan, or by one with other data that shares
-        its plans, see with_data) keeps the model data of that evaluation,
-        which nothing else writes; so does each part of the stage of a
-        galaxy (see GalaxyStage) whose parameters, and the parts it takes,
-        are those of its last evaluation (with extra outputs too, but the
-        states of the components). A recording of orbits keeps the orbits
-        of its last recording while the parameters it reads (see
+        its plans, see with_datasets) keeps the model data of that
+        evaluation, which nothing else writes; so does each part of the
+        stage of a galaxy (see GalaxyStage) whose parameters, and the parts
+        it takes, are those of its last evaluation (with extra outputs too,
+        but the states of the components). A recording of orbits keeps the
+        orbits of its last recording while the parameters it reads (see
         OrbitRecording.reads) and the orbits of its spheroid do (with extra
         outputs too: it has none), and the model of an observation it
         models while those and the weights of the orbits do. NaN is never

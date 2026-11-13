@@ -134,7 +134,7 @@ def test_setups_mock_observations_for_fits_under_their_likelihoods(
         mocks = setup.mock(params.evaluate())
     assert [len(mock) for mock in mocks] == [1, 1]
     for [mock] in mocks:
-        assert mock.data() is not None
+        assert mock.dataset() is not None
         fitted = likelihoods.with_group(
             ObservationGroup(group.galaxies(), [mock]))
         assert fitted.observations() == (0,)
@@ -155,7 +155,7 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
     data = observation.make_dataset({'spectra': Data(
         model['spectra'], error=np.full_like(model['spectra'], 0.01),
         unit='Jy/beam', beam=dict(bmaj=4, bmin=3, bpa=10))})
-    plan = plan.with_data({0: data})
+    plan = plan.with_datasets({0: data})
     [mock] = mock_data(
         plan, params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
         seed=1)
@@ -163,7 +163,7 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
     assert mock['spectra'].beam() == data['spectra'].beam()
     assert mock['spectra'].spatial_correlation() \
         == observation.instrument().psf()
-    with Objective(plan.with_data({0: mock})) as objective:
+    with Objective(plan.with_datasets({0: mock})) as objective:
         assert objective.nindependent() < objective.nresiduals()
 
 
@@ -198,7 +198,7 @@ def test_mocks_without_data_have_the_unit_and_beam_of_their_model(
     else:
         assert beam.bmaj == beam.bmin
     mocked = ObservationGroup(
-        plan.group().galaxies(), [observation.with_data(mock)])
+        plan.group().galaxies(), [observation.with_dataset(mock)])
     np.testing.assert_allclose(
         evaluate(mocked.plan(driver))[0]['spectra'], model['spectra'],
         rtol=1e-6)
@@ -217,7 +217,7 @@ def test_mocks_of_correlated_noise_have_float64_models(driver):
     [mock] = mock_data(
         plan, params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
         seed=1)
-    mocked = evaluate(plan.with_data({0: mock}))[0]['spectra']
+    mocked = evaluate(plan.with_datasets({0: mock}))[0]['spectra']
     assert mocked.dtype == np.float64
     np.testing.assert_allclose(
         mocked, model['spectra'], rtol=1e-5,

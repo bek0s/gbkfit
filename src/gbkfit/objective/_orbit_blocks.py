@@ -88,7 +88,7 @@ class OrbitBlock(Block):
             {key: np.nan_to_num(np.asarray(dataset[key].data(), float))
              for key in dataset}
             for dataset in (
-                observation.data() for observation in observations))
+                observation.dataset() for observation in observations))
         self._elements = tuple(elements)
         self._solve = solve
         # The cache of its solutions: of the parameters of the likelihoods

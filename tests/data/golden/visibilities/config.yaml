@@ -14,7 +14,7 @@ galaxies:
     emission: {type: lines}
 observations:
 - type: sky
-  data: {type: visibilities, file: observation0_visibilities.npz}
+  dataset: {type: visibilities, file: observation0_visibilities.npz}
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}

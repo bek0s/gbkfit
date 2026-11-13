@@ -15,7 +15,7 @@ galaxies:
 observations:
 - type: sky
   name: cube
-  data:
+  dataset:
     type: pixel_spectra
     step: [0.5, 0.5]
     rpix: [9.5, 9.5]
@@ -36,7 +36,7 @@ observations:
   fft_dtype: float64
 - type: sky
   name: maps
-  data:
+  dataset:
     type: pixel_moments
     step: [1, 1]
     rpix: [11.5, 11.5]
@@ -62,7 +62,7 @@ observations:
   fft_dtype: float64
 - type: sky
   name: jittered
-  data:
+  dataset:
     type: pixel_moments
     step: [1, 1]
     rpix: [11.5, 11.5]

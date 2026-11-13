@@ -111,7 +111,7 @@ class Observation(TypedSerializable, abc.ABC):
     galaxies : Sequence of str, optional
         The names of the galaxies it sees; required only when there are
         several (see ObservationGroup).
-    data : Dataset, optional
+    dataset : Dataset, optional
         The data, of its kind.
     name : str, optional
         Its name, which is the id of its extra outputs instead of its
@@ -136,7 +136,7 @@ class Observation(TypedSerializable, abc.ABC):
             self,
             keys: Sequence[str],
             galaxies: Sequence[str] | None = None,
-            data: Dataset | None = None,
+            dataset: Dataset | None = None,
             name: str | None = None,
             model_can_have_missing_values: bool = False
     ):
@@ -150,14 +150,14 @@ class Observation(TypedSerializable, abc.ABC):
                 raise ValueError(f"the galaxies repeat: {list(galaxies)}")
             for galaxy in galaxies:
                 check_name(galaxy)
-        if data is not None:
+        if dataset is not None:
             for key in keys:
                 # (the correlation of its noise must be one its kind of data
                 # can have)
-                data.noise_correlation(key)
+                dataset.noise_correlation(key)
         self._keys = keys
         self._galaxies = galaxies
-        self._data = data
+        self._dataset = dataset
         self._name = name
         self._model_can_have_missing_values = model_can_have_missing_values
 
@@ -169,9 +169,9 @@ class Observation(TypedSerializable, abc.ABC):
         """Return the names of the galaxies it sees, if given."""
         return self._galaxies
 
-    def data(self) -> Dataset | None:
-        """Return the data, if any."""
-        return self._data
+    def dataset(self) -> Dataset | None:
+        """Return its data, if any."""
+        return self._dataset
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
@@ -261,9 +261,9 @@ class Observation(TypedSerializable, abc.ABC):
         tuple
             The unit, or None, and the beam, or None.
         """
-        if self._data is None:
+        if self._dataset is None:
             return None, None
-        item = self._data[key]
+        item = self._dataset[key]
         return item.unit(), item.beam()
 
     @abc.abstractmethod
@@ -271,14 +271,14 @@ class Observation(TypedSerializable, abc.ABC):
         """Return the floating type of its model."""
 
     @abc.abstractmethod
-    def with_data(self, data: Dataset) -> Self:
+    def with_dataset(self, dataset: Dataset) -> Self:
         """
         Return a copy of it with other data (e.g. mock data; see
         draw_mocks).
 
         Parameters
         ----------
-        data : Dataset
+        dataset : Dataset
             The data, of the observation.
 
         Returns
@@ -295,9 +295,9 @@ class Observation(TypedSerializable, abc.ABC):
     def same_plan(self, other: 'Observation') -> bool:
         """
         Check whether its plan is also that of another observation, the
-        same one with other data (see with_data), which can then share it
-        (see GroupPlan.with_data): whether all that its plan takes from
-        its data is the same in the other.
+        same one with other data (see with_dataset), which can then share
+        it (see GroupPlan.with_datasets): whether all that its plan takes
+        from its data is the same in the other.
 
         Here, the unit of their light (see data_unit) and the floating
         type of their models, which the data can choose (see dtype);

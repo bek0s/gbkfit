@@ -390,7 +390,7 @@ class _BinsData:
     """
 
     def __init__(self, observation: 'ObservationSky', index: int):
-        dataset = observation.data()
+        dataset = observation.dataset()
         orders = observation.observable().orders()
         self.order = len(orders)
         # (the Gauss-Hermite series of the stars: V, sigma, h3 ... hM)
@@ -541,7 +541,7 @@ def orbit_recordings(
     """
     seen: dict[tuple[int, int], list[int]] = {}
     for i, observation in enumerate(group.observations()):
-        if observation.data() is not None:
+        if observation.dataset() is not None:
             for key in group.orbit_components(i):
                 seen.setdefault(key, []).append(i)
     return tuple(

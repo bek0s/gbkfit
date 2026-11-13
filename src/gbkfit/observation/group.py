@@ -367,7 +367,7 @@ class ObservationGroup:
         """
         return tuple(
             i for i, member in enumerate(self._members)
-            if member.observation.data() is not None)
+            if member.observation.dataset() is not None)
 
     def per_observation[T](
             self,
@@ -558,11 +558,11 @@ class ObservationGroup:
         """
         return self._galaxies[index].mass_model() is None
 
-    def with_data(self, datasets: Mapping[int, Dataset]) -> Self:
+    def with_datasets(self, datasets: Mapping[int, Dataset]) -> Self:
         """
         Return a copy of the group with other data of some of its
         observations (e.g. those of a bootstrap, or mock data; see
-        Observation.with_data): the others keep theirs, or have none. Its
+        Observation.with_dataset): the others keep theirs, or have none. Its
         parameters are those of this one (the data do not change them).
 
         Parameters
@@ -589,7 +589,7 @@ class ObservationGroup:
         group = copy.copy(self)
         group._members = tuple(
             member if i not in datasets else member._replace(
-                observation=member.observation.with_data(datasets[i]))
+                observation=member.observation.with_dataset(datasets[i]))
             for i, member in enumerate(self._members))
         # (what an observation can see may depend on its data: e.g. the
         # radii of a profile are those of its data, and radii in angles

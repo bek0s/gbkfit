@@ -90,7 +90,7 @@ def observation(regions, psf=1.0, oversampling=None, data=None):
             spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
         depth=Depth(step=2),
         instrument=Instrument(psf=None if psf is None else PSFGauss(psf)),
-        lines=['stars'], data=dataset, dtype='float64',
+        lines=['stars'], dataset=dataset, dtype='float64',
         oversampling=oversampling)
 
 
@@ -209,7 +209,7 @@ def test_orbits_are_seen_without_what_their_recording_ignores(driver):
         seen.observable(), depth=seen.depth(),
         instrument=Instrument(
             psf=PSFGauss(1.0), lsf=LSFGauss(20.0 * u.km / u.s)),
-        lines=['stars'], data=seen.data(), dtype='float64')
+        lines=['stars'], dataset=seen.dataset(), dtype='float64')
     with pytest.raises(ValueError, match="without an LSF"):
         ObservationGroup([galaxy()], [with_lsf]).plan(driver)
 
@@ -221,7 +221,7 @@ def test_an_image_sees_the_light_of_stars_on_orbits(driver):
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
     image = ObservationSky(
-        PixelBrightness.from_data(dataset), data=dataset)
+        PixelBrightness.from_data(dataset), dataset=dataset)
     group = ObservationGroup([galaxy()], [observation(bins()), image])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
@@ -248,11 +248,11 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
     seen = observation(bins())
     stars = ObservationSky(
         seen.observable(), depth=seen.depth(), instrument=seen.instrument(),
-        lines=['stars'], data=seen.data(), dtype='float64', name='bins')
+        lines=['stars'], dataset=seen.dataset(), dtype='float64', name='bins')
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
     image = ObservationSky(
-        PixelBrightness.from_data(dataset), data=dataset,
+        PixelBrightness.from_data(dataset), dataset=dataset,
         name='image')
     group = ObservationGroup([galaxy()], [stars, image])
     likelihoods = Likelihoods(group, dict(
@@ -496,7 +496,7 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     np.testing.assert_allclose(
         list(evaluation.solved.values()), 1, rtol=1e-6)
     residuals = objective.residual_nddata_h(params.evaluate())[0]
-    errors = {key: obs.data()[key].error() for key in residuals}
+    errors = {key: obs.dataset()[key].error() for key in residuals}
     assert np.abs(data[4]).max() > 0.08
     np.testing.assert_allclose(
         residuals['moment1'] * errors['moment1'], 0, atol=1e-6)
@@ -609,7 +609,7 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
             spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
         depth=Depth(step=2),
         instrument=Instrument(psf=PSFGauss(0.5 / np.sqrt(8 * np.log(2)))),
-        lines=['stars'], data=dataset)
+        lines=['stars'], dataset=dataset)
     a = light.a / mock.kpc_per_arcsec()
     sigma, i0 = hernquist_mge(a)
     spheroid = SPHEROID | dict(
@@ -699,7 +699,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
         RegionMoments.from_data(
             dataset, method='gauss_hermite',
             spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
-        depth=depth, instrument=instrument, lines=['stars'], data=dataset)
+        depth=depth, instrument=instrument, lines=['stars'], dataset=dataset)
     group = ObservationGroup(
         [stars(dict(norbits=1500, turns=30))], [obs])
     solve = dict(solve=dict(

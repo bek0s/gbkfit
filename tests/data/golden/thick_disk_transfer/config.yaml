@@ -27,7 +27,7 @@ galaxies:
     opacity: {type: dust}
 observations:
 - type: sky
-  data:
+  dataset:
     type: pixel_spectra
     step: [0.8, 0.8]
     rpix: [9.5, 9.5]

@@ -115,7 +115,7 @@ def test_slit_spectra_objective_residual(driver):
         ObservationGroup, ObservationSky, observable_parser)
     observation = ObservationSky(
         observable_parser.load(copy.deepcopy(observable)),
-        data=dataset)
+        dataset=dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     objective = Objective(group.plan(driver))

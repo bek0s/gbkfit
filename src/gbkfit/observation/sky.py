@@ -59,8 +59,8 @@ class ObservationSky(Observation):
     instrument, and an objective compares the model of the galaxies with
     the data under the likelihood of its setup (see Observation).
 
-    In its configuration (type 'sky'), the data are a dataset of the
-    dataset class of the observable, and give it the options of
+    In its configuration (type 'sky'), its dataset (the option dataset) is
+    of the dataset class of the observable, and gives it the options of
     options_from_data (see Observable.from_data); the configuration can
     give those too, as without data (e.g. that of mock data, which then
     takes the data), and they are checked against the data (see
@@ -152,7 +152,7 @@ class ObservationSky(Observation):
         it sees, and the masses of its lens (deflection maps if shifted,
         see LensDeflectionMap). None by default; a galaxy needs an
         observation without them (see ObservationGroup).
-    data : Dataset, optional
+    dataset : Dataset, optional
         The data, of the dataset class of the observable.
     oversampling : Sequence of int, optional
         How many times the model is oversampled along each axis of the
@@ -178,8 +178,8 @@ class ObservationSky(Observation):
         Data): the whitening of its residuals (see LikelihoodGauss)
         magnifies the rounding of a float32 model enough to stop least
         squares up to about 1 sigma short of the best fit; float32
-        otherwise. A copy with other data (see with_data, e.g. mock data)
-        then chooses again, by them.
+        otherwise. A copy with other data (see with_dataset, e.g. mock
+        data) then chooses again, by them.
     fft_dtype : str, optional
         The floating type of the FFT convolutions of the model by the PSF
         and the LSF: 'float64' (by default) or 'float32' (faster, for a
@@ -253,9 +253,10 @@ class ObservationSky(Observation):
             If an object it makes refuses its options.
         """
         info = dict(info)
-        load_option_and_update_info(dataset_parser, info, 'data')
+        load_option_and_update_info(dataset_parser, info, 'dataset')
         load_option_and_update_info(
-            observable_parser, info, 'observable', dataset=info.get('data'))
+            observable_parser, info, 'observable',
+            dataset=info.get('dataset'))
         return super().load(info)
 
     def dump(
@@ -299,19 +300,19 @@ class ObservationSky(Observation):
             self._offsets))
         unit = {} if self._light is None else dict(
             unit=gbkfit.units.format_unit(self._light.unit))
-        data = {} if self._data is None else dict(
-            data=dataset_parser.dump(self._data, **kwargs))
+        dataset = {} if self._dataset is None else dict(
+            dataset=dataset_parser.dump(self._dataset, **kwargs))
         # (only a given dtype: one the data chose is chosen again by the
         # data it is loaded with, e.g. mock data of correlated noise)
         dtype = {} if self._given_dtype is None else dict(
             dtype=self._given_dtype)
         return name | galaxies | components | lines | band | pixel_weights \
-            | flux_scale | offsets | unit | data | dtype | dict(
+            | flux_scale | offsets | unit | dataset | dtype | dict(
             depth=setup.depth.dump(),
             foreground=foreground_parser.dump(setup.foreground, **kwargs),
             instrument=instrument_parser.dump(setup.instrument, **kwargs),
             observable=observable_parser.dump(
-                self._observable, data=self._data, **kwargs),
+                self._observable, dataset=self._dataset, **kwargs),
             oversampling=setup.oversampling,
             fft_dtype=setup.fft_dtype.name)
 
@@ -327,7 +328,7 @@ class ObservationSky(Observation):
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
-            data: Dataset | None = None,
+            dataset: Dataset | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
             dtype: _DType | None = None,
@@ -369,8 +370,8 @@ class ObservationSky(Observation):
             raise ValueError(
                 f"oversampling must have {ndim} values, each at least 1; it "
                 f"is {oversampling}")
-        if data is not None:
-            observable.check_dataset(data)
+        if dataset is not None:
+            observable.check_dataset(dataset)
         self._observable = observable
         self._components = components
         self._lines = lines
@@ -378,14 +379,14 @@ class ObservationSky(Observation):
         self._flux_scale = flux_scale
         self._offsets = offsets
         super().__init__(
-            observable.keys(), galaxies, data, name,
+            observable.keys(), galaxies, dataset, name,
             observable.model_can_have_missing_values())
         # (as given, for copies of other data and dumps: by default, the
-        # data choose it, see with_data)
+        # data choose it, see with_dataset)
         self._given_dtype = dtype
         if dtype is None:
-            dtype = 'float64' if data is not None \
-                and _has_correlated_noise(data) else 'float32'
+            dtype = 'float64' if dataset is not None \
+                and _has_correlated_noise(dataset) else 'float32'
         dtype, fft_dtype = np.dtype(dtype), np.dtype(fft_dtype)
         if fft_dtype.itemsize < dtype.itemsize:
             raise ValueError(
@@ -408,9 +409,9 @@ class ObservationSky(Observation):
         # (the unit of the model without data, and its beam, of a unit per
         # beam: those of data of the model, e.g. mock data)
         self._light, self._light_beam = (None, None) if unit is None \
-            else _light_unit(unit, data, observable, instrument)
-        if data is not None:
-            _check_beams(data, instrument, observable)
+            else _light_unit(unit, dataset, observable, instrument)
+        if dataset is not None:
+            _check_beams(dataset, instrument, observable)
 
     def depth(self) -> Depth:
         """Return its depth axis, for what it sees that needs one."""
@@ -502,12 +503,12 @@ class ObservationSky(Observation):
         return (f'{self._name}_flux_scale',
                 self._observable.flux_scales()[self._flux_scale])
 
-    def with_data(self, data: Dataset) -> Self:
+    def with_dataset(self, dataset: Dataset) -> Self:
         setup = self._setup
         return type(self)(
             self._observable, setup.foreground, setup.instrument,
             self._galaxies, self._components, self._lines, self._band,
-            setup.pixel_weights, self._flux_scale, self._offsets, data,
+            setup.pixel_weights, self._flux_scale, self._offsets, dataset,
             setup.oversampling, setup.depth, self._given_dtype,
             setup.fft_dtype.name, self._name)
 
@@ -536,7 +537,7 @@ class ObservationSky(Observation):
         (see Observable.data_unit); None without data (its model is then
         in the unit of the components it sees), or without data of light.
         """
-        return self._observable.data_unit(self._data, self._light)
+        return self._observable.data_unit(self._dataset, self._light)
 
     def model_unit(
             self, key: str
@@ -549,7 +550,7 @@ class ObservationSky(Observation):
         with the beam of the PSF of its instrument for a unit per beam
         (see _light_unit), and the others none.
         """
-        if self._data is not None or self._light is None \
+        if self._dataset is not None or self._light is None \
                 or key not in self._observable.light_items():
             return super().model_unit(key)
         return self._light.unit, self._light_beam
@@ -683,7 +684,7 @@ class ObservationSky(Observation):
 
 def _light_unit(
         unit: str,
-        data: Dataset | None,
+        dataset: Dataset | None,
         observable: Observable,
         instrument: Instrument
 ) -> tuple[LightUnit, Beam | None]:
@@ -700,7 +701,7 @@ def _light_unit(
         If it has data, which give the unit, the unit is not a unit, or a
         unit per beam has no PSF, or one without a beam.
     """
-    if data is not None:
+    if dataset is not None:
         raise ValueError(
             "the data of an observation give the unit of its model; remove "
             "its unit")
@@ -868,16 +869,16 @@ class _FluxScaledPlan(ObservablePlan):
         return self._plan.has_exact_errors()
 
 
-def _has_correlated_noise(data: Dataset) -> bool:
+def _has_correlated_noise(dataset: Dataset) -> bool:
     """Return whether the noise of an item of the data is correlated."""
     return any(
         item.spatial_correlation() is not None
         or item.spectral_correlation() is not None
-        for item in data.values())
+        for item in dataset.values())
 
 
 def _check_beams(
-        data: Dataset, instrument: Instrument, observable: Observable
+        dataset: Dataset, instrument: Instrument, observable: Observable
 ) -> None:
     """
     Warn (see warn) if an item of the data has a beam, and the PSF of the
@@ -887,8 +888,8 @@ def _check_beams(
     channel is checked against the PSF at the point of each (see PSF.at).
     """
     psf = instrument.psf()
-    for key in data.keys():
-        beam = data[key].beam()
+    for key in dataset.keys():
+        beam = dataset[key].beam()
         if beam is None:
             continue
         if beam.spectral is None:

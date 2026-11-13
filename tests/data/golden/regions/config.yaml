@@ -15,7 +15,7 @@ galaxies:
 observations:
 - name: observation0
   type: sky
-  data:
+  dataset:
     type: region_moments
     regions:
       type: bins
@@ -45,7 +45,7 @@ observations:
   fft_dtype: float64
 - name: observation1
   type: sky
-  data:
+  dataset:
     type: region_spectra
     regions:
       type: apertures

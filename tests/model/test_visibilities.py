@@ -153,7 +153,7 @@ def observation_of_data(driver, offset):
         Data(model.imag + offset, error=error), COVERAGE)
     observation = ObservationSky(
         Visibilities.from_data(dataset, **GRID),
-        data=dataset)
+        dataset=dataset)
     group = ObservationGroup(galaxy_parser.load(DISK), observation)
     return (group.plan(driver),
             ParamSpace.from_properties(

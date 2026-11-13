@@ -16,7 +16,7 @@ galaxies:
     rhtraits: {type: sech2, zmax: 4}
 observations:
 - type: sky
-  data:
+  dataset:
     type: pixel_spectra
     step: [0.8, 0.8]
     rpix: [11.5, 11.5]

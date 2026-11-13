@@ -10,13 +10,13 @@ export const STAGES = [
   { key: 'light', title: 'Galaxies', section: 'ob-light' },
   { key: 'instrument', title: 'Instrument', section: 'ob-instrument' },
   { key: 'observable', title: 'Observable', section: 'ob-observable' },
-  { key: 'data', title: 'Data', section: 'ob-data' },
+  { key: 'dataset', title: 'Data', section: 'ob-data' },
 ] as const;
 
 // The options of a sky observation that its sections set by hand; the
 // others are in its forms of more options
 export const LIGHT_KEYS = ['galaxies', 'components', 'lines', 'band'];
-export const HANDLED_KEYS = ['type', 'data', 'observable', 'instrument', ...LIGHT_KEYS];
+export const HANDLED_KEYS = ['type', 'dataset', 'observable', 'instrument', ...LIGHT_KEYS];
 
 // The observables (and datasets) whose data have a spectral axis
 const SPECTRAL = ['pixel_spectra', 'pixel_moments', 'slit_spectra', 'slitless_spectra', 'region_spectra', 'region_moments', 'visibilities'];
@@ -63,7 +63,7 @@ export function glanceOf(key: (typeof STAGES)[number]['key'], options: Options, 
     return parts.join(' · ') || 'A perfect one';
   }
   if (key === 'observable') return titleOf('observable', objectAt(options, 'observable').type);
-  return typeof options.data === 'string' ? options.data : options.data ? 'Given in place' : 'None: a model';
+  return typeof options.dataset === 'string' ? options.dataset : options.dataset ? 'Given in place' : 'None: a model';
 }
 
 // The ellipse of a PSF or a beam at half its maximum: the FWHM of its
@@ -115,8 +115,8 @@ export function checksOf({
   const checks: Check[] = [];
   const observable = objectAt(options, 'observable');
   const instrument = objectAt(options, 'instrument');
-  const named = typeof options.data === 'string' ? options.data : null;
-  if (options.data == null) checks.push({ ok: null, text: 'No data: the observation makes a model (or mock data).' });
+  const named = typeof options.dataset === 'string' ? options.dataset : null;
+  if (options.dataset == null) checks.push({ ok: null, text: 'No data: the observation makes a model (or mock data).' });
   else if (named !== null && !datasets.includes(named)) checks.push({ ok: false, text: `The project has no dataset ${named}.` });
   else if (datasetType !== undefined) {
     checks.push(
@@ -203,8 +203,8 @@ export function needsOf({
 }): { text: string; section: string }[] {
   const needs: { text: string; section: string }[] = [];
   const observable = objectAt(options, 'observable');
-  const withData = options.data != null;
-  if (typeof options.data === 'string' && !datasets.includes(options.data)) needs.push({ section: 'ob-data', text: `The project has no dataset ${options.data}` });
+  const withData = options.dataset != null;
+  if (typeof options.dataset === 'string' && !datasets.includes(options.dataset)) needs.push({ section: 'ob-data', text: `The project has no dataset ${options.dataset}` });
   if (observable.type == null) needs.push({ section: 'ob-observable', text: 'Choose what the data measure (the observable)' });
   else {
     if (withData && datasetType !== undefined && datasetType !== observable.type) {

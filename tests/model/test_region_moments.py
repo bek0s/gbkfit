@@ -154,7 +154,7 @@ def test_region_moments_observation_from_data(tmp_path):
     np.testing.assert_array_equal(loaded['moment1'].data(), [1400, 1500, 1600])
     info = dict(
         type='sky',
-        data=dict(type='region_moments') | data_info,
+        dataset=dict(type='region_moments') | data_info,
         observable=dict(
             type='region_moments',
             spectral=dict(step=2, convention='relativistic')))
@@ -222,7 +222,7 @@ def test_region_moments_objective_residual(driver):
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
         [ObservationSky(
             observable, instrument=instrument,
-            data=dataset)])
+            dataset=dataset)])
     residual = Objective(group.plan(driver), Likelihoods(
         group, LikelihoodGauss(missing_residual=3))).residual_nddata_h(
         params.evaluate())

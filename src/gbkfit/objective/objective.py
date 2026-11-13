@@ -207,7 +207,7 @@ class Objective:
         # comparison of each, by index
         self._observed = likelihoods.observations()
         self._datasets = tuple(
-            observations[i].data() for i in self._observed)
+            observations[i].dataset() for i in self._observed)
         self._comparisons = {
             i: comparison_of(observations[i], likelihood, drivers[i])
             for i, likelihood in likelihoods.items()}
@@ -277,12 +277,12 @@ class Objective:
         """Return the plan of the observations."""
         return self._group_plan
 
-    def with_data(self, datasets: Sequence[Dataset]) -> 'Objective':
+    def with_datasets(self, datasets: Sequence[Dataset]) -> 'Objective':
         """
         Return a copy of it with other data of the observations it compares
         (e.g. those of a bootstrap): one dataset for each, in the order of
         observations. Its plan shares what it can with its own (see
-        GroupPlan.with_data), and its comparisons share what they can with
+        GroupPlan.with_datasets), and its comparisons share what they can with
         its own (see Comparison.share): e.g. the refits of a bootstrap work
         out the whitening of correlated noise once.
 
@@ -297,7 +297,8 @@ class Objective:
                 f"the copy takes one dataset for each observation the "
                 f"objective compares ({len(self._observed)}); there are "
                 f"{len(datasets)}")
-        plan = self._group_plan.with_data(dict(zip(self._observed, datasets)))
+        plan = self._group_plan.with_datasets(
+            dict(zip(self._observed, datasets)))
         objective = Objective(
             plan, self._likelihoods.with_group(plan.group()), self._solves)
         for i, comparison_ in objective._comparisons.items():
@@ -348,7 +349,7 @@ class Objective:
             _, scale = observation.flux_scale()
             shape = tuple(
                 1 if scale.axis in (None, k) else n
-                for k, n in enumerate(observation.data().shape()))
+                for k, n in enumerate(observation.dataset().shape()))
             driver = self._group_plan.observation_drivers()[i]
             (self._h_scales[i],
              self._d_scales[i]) = driver.mem_alloc_s(

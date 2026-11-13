@@ -13,7 +13,7 @@ galaxies:
 observations:
 - type: sky
   name: hst
-  data:
+  dataset:
     type: pixel_brightness
     step: [0.1, 0.1]
     rpix: [19.5, 19.5]

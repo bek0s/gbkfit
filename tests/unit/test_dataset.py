@@ -352,10 +352,10 @@ def test_observations_have_their_own_dtype(tmp_path):
     observation = observation_parser.load(dict(
         type='sky',
         observable=dict(type='pixel_brightness'),
-        data=dict(
+        dataset=dict(
             type='pixel_brightness', data=str(tmp_path / 'image.fits'))))
     assert observation.dtype() == np.float32
-    assert observation.data().dtype() == np.float64
+    assert observation.dataset().dtype() == np.float64
     assert observation.observable().size() == (20, 8)
 
 
@@ -463,7 +463,8 @@ def test_observable_grid_comes_from_the_data(tmp_path):
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
     info = dict(
         type='sky',
-        data=dict(type='pixel_brightness', data=str(tmp_path / 'image.fits')))
+        dataset=dict(
+            type='pixel_brightness', data=str(tmp_path / 'image.fits')))
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_brightness')))
     assert observation.observable().size() == (20, 8)
@@ -476,7 +477,7 @@ def test_observable_grid_comes_from_the_data(tmp_path):
         type='pixel_brightness', size=[20, 8], step=1, median_size=3)))
     assert given.observable().grid() == observation.observable().grid()
     assert given.observable().dump(
-        given.data())['median_size'] == 3
+        given.dataset())['median_size'] == 3
     with pytest.raises(ConfigError, match=(
             r"gives the options \['size', 'step'\], which its data give "
             r"too, and they are not those of the data: the data are on the "
@@ -498,12 +499,12 @@ def test_observation_data_must_be_on_the_grid_of_the_observable():
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
     with pytest.raises(ValueError, match="the data are on the grid"):
         ObservationSky(
-            PixelBrightness(size=(20, 8)), data=data)
+            PixelBrightness(size=(20, 8)), dataset=data)
     with pytest.raises(ValueError, match="cannot be compared"):
         ObservationSky(
-            PixelBrightness(size=(20, 8)), data=moments)
+            PixelBrightness(size=(20, 8)), dataset=moments)
     ObservationSky(
-        PixelBrightness(size=(20, 8), rota=30), data=data)
+        PixelBrightness(size=(20, 8), rota=30), dataset=data)
 
 
 def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
@@ -519,7 +520,7 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     assert loaded.grid().coords.rest == dataset.grid().coords.rest
     info = dict(
         type='sky',
-        data=dict(type='pixel_spectra') | dict(data_info))
+        dataset=dict(type='pixel_spectra') | dict(data_info))
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_spectra')))
     assert observation.observable().spectral().rest() \

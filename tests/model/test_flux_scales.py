@@ -51,7 +51,7 @@ def group_plan(driver, data, error):
         spectral=SpectralAxis(step=STEP[2], convention='relativistic'))
     return ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
-            PixelSpectra.from_data(dataset), data=dataset,
+            PixelSpectra.from_data(dataset), dataset=dataset,
             flux_scale='per_spectrum', name='obs')]
     ).plan(driver)
 
@@ -149,7 +149,7 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
                 PixelMoments.from_data(
                     dataset, spectral=SpectralAxis(
                         size=21, step=20, convention='relativistic')),
-                data=dataset, flux_scale='one', name='obs')]
+                dataset=dataset, flux_scale='one', name='obs')]
         ).plan(driver)
     blank = moments(np.zeros(SIZE[1::-1]), np.zeros(SIZE[1::-1]))
     model = blank.model_h(ParamSpace.from_properties(
@@ -275,7 +275,7 @@ def test_flux_scales_need_light_and_a_name():
     with pytest.raises(ValueError, match=r"has the flux scales \[\]"):
         ObservationSky(
             observable,
-            data=data, flux_scale='one', name='obs')
+            dataset=data, flux_scale='one', name='obs')
     with pytest.raises(ValueError, match="needs a name"):
         ObservationSky(
             PixelSpectra.from_data(DatasetPixelSpectra(

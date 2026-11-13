@@ -40,7 +40,7 @@ def make_objective(driver, data, likelihood=None, name=None, **values):
     """
     dataset = DatasetPixelBrightness(data)
     observation = ObservationSky(
-        PixelBrightness.from_data(dataset), data=dataset,
+        PixelBrightness.from_data(dataset), dataset=dataset,
         name=name)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
     likelihoods = Likelihoods(group, likelihood)
@@ -178,7 +178,7 @@ def test_copies_with_other_data_evaluate_in_two_threads_at_once(driver):
         driver, Data(rng.normal(0.1, 1, (24, 32))))
     other = objective.datasets()[0].with_data(
         dict(brightness=rng.normal(0.1, 1, (24, 32))))
-    copy = objective.with_data([other])
+    copy = objective.with_datasets([other])
     assert copy.group_plan().lock() is objective.group_plan().lock()
     # (without it, a few of 20 points mix the models of the two)
     points = [params | dict(incl=incl) for incl in (30, 45, 60, 75)] * 5
@@ -348,7 +348,7 @@ def test_an_objective_compares_the_observations_with_data(driver):
     observations = [
         ObservationSky(observable, name='band'),
         ObservationSky(
-            observable, data=dataset, name='image')]
+            observable, dataset=dataset, name='image')]
     group = ObservationGroup(galaxy_parser.load(GALAXY), observations)
     alone, params = make_objective(driver, data, name='image')
     objective = Objective(group.plan(driver))
@@ -363,11 +363,11 @@ def test_an_objective_compares_the_observations_with_data(driver):
         models[0]['brightness'].data, models[1]['brightness'].data)
     # (its copies with other data take data of those it compares)
     other = dataset.with_data(dict(brightness=rng.normal(0, 1, (24, 32))))
-    copy = objective.with_data([other])
-    assert copy.group().observations()[0].data() is None
+    copy = objective.with_datasets([other])
+    assert copy.group().observations()[0].dataset() is None
     assert copy.datasets() == (other,)
     with pytest.raises(ValueError, match="one dataset for each"):
-        objective.with_data([other, other])
+        objective.with_datasets([other, other])
 
 
 KINEMATICS = dict(components=[dict(
@@ -389,7 +389,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     # its moments 1 and 2 count as misses of 3 errors (they counted 0)
     def group(observable, dataset=None):
         observation = ObservationSky(
-            observable, data=dataset)
+            observable, dataset=dataset)
         return ObservationGroup(
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
@@ -433,7 +433,7 @@ def test_missing_values_take_the_noise_of_their_error(driver):
     # and -2 log L differ by one constant, however many are missing
     def group(observable, dataset=None):
         observation = ObservationSky(
-            observable, data=dataset, name='obs')
+            observable, dataset=dataset, name='obs')
         return ObservationGroup(
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
@@ -570,7 +570,7 @@ def test_the_residuals_of_the_fit_are_written_where_they_differ(driver):
         'residual', 'wresidual'}
     dataset = DatasetPixelBrightness(data)
     observation = ObservationSky(
-        PixelBrightness.from_data(dataset), data=dataset,
+        PixelBrightness.from_data(dataset), dataset=dataset,
         pixel_weights=Weights('disk', WeightAzimuthPower(2)))
     group = ObservationGroup(galaxy_parser.load(dict(components=[
         GALAXY['components'][0] | dict(name='disk')])), observation)
@@ -833,7 +833,7 @@ def test_copies_with_other_data_share_the_whitening_of_their_masks(driver):
         np.arange(32) < 4, np.nan, same['brightness'].data())))
     whitener = objective._comparisons[0]._whiteners['brightness']
     for copy_data, shared in ((same, True), (other, False)):
-        with objective.with_data([copy_data]) as copy:
+        with objective.with_datasets([copy_data]) as copy:
             fresh, _ = make_objective(driver, copy_data['brightness'])
             assert copy.chi2(params) == pytest.approx(
                 fresh.chi2(params), rel=1e-6)
@@ -848,11 +848,11 @@ def test_copies_with_other_data_release_the_whitening_they_share(driver):
     data = correlated_data(np.random.default_rng(11), PSFGauss(2))
     objective, params = make_objective(driver, data)
     objective.prepare()
-    copy = objective.with_data(objective.datasets())
+    copy = objective.with_datasets(objective.datasets())
     assert copy._comparisons[0]._shared
     copy.close()
     assert not copy._comparisons[0]._shared
-    copy = objective.with_data(objective.datasets())
+    copy = objective.with_datasets(objective.datasets())
     copy.prepare()
     assert not copy._comparisons[0]._shared
 
@@ -866,7 +866,7 @@ def test_copies_with_other_data_share_the_plans_of_the_models(driver):
     group_plan = objective.group_plan()
     other = objective.datasets()[0].with_data(
         dict(brightness=rng.normal(0, 1, (24, 32))))
-    copy = group_plan.with_data({0: other})
+    copy = group_plan.with_datasets({0: other})
     assert copy._plans[0] is group_plan._plans[0]
     np.testing.assert_array_equal(
         copy.model_h(params)[0]['brightness'].data,

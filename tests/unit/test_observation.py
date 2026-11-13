@@ -29,7 +29,7 @@ def test_observable_from_data():
     assert observable.grid() == data.grid()
     assert observable.orders() == (0, 1)
     assert observable.spectral().rval() == 1500
-    ObservationSky(observable, data=data)
+    ObservationSky(observable, dataset=data)
 
 
 @pytest.mark.parametrize('dataset_class, observable_class, shape', [
@@ -66,7 +66,7 @@ def moments_group(names=('maps',), data=True):
     return ObservationGroup(galaxy, [
         ObservationSky(
             observable, name=name,
-            data=dataset if data else None)
+            dataset=dataset if data else None)
         for name in names])
 
 
@@ -167,9 +167,9 @@ def test_the_data_choose_the_dtype_unless_it_is_given():
     chosen = ObservationSky(observable)
     assert chosen.dtype() == np.float32
     assert 'dtype' not in chosen.dump()
-    assert chosen.with_data(correlated).dtype() == np.float64
+    assert chosen.with_dataset(correlated).dtype() == np.float64
     given = ObservationSky(observable, dtype='float32')
-    assert given.with_data(correlated).dtype() == np.float32
+    assert given.with_dataset(correlated).dtype() == np.float32
     assert given.dump()['dtype'] == 'float32'
 
 
@@ -188,7 +188,7 @@ def image_group(*names, data=(True,)):
     return ObservationGroup([galaxy], [
         ObservationSky(
             observable, name=name,
-            data=dataset if with_data else None)
+            dataset=dataset if with_data else None)
         for name, with_data in zip(names, data, strict=True)])
 
 
@@ -203,7 +203,7 @@ def test_the_parameters_of_likelihoods_have_the_units_of_their_data():
     jitter = 'obs_noise_jitter_brightness'
     assert jitter not in group.pdescs()
     assert likelihoods.pdescs()[jitter].unit() == u.Jy
-    other = likelihoods.with_group(group.with_data({0: brightness('mJy')}))
+    other = likelihoods.with_group(group.with_datasets({0: brightness('mJy')}))
     assert other.pdescs()[jitter].unit() == u.mJy
     assert other.of(0).noise_params('brightness') == (None, jitter)
 
@@ -213,14 +213,14 @@ def test_a_group_with_other_data_is_a_copy_of_the_same_parameters():
     # parameters, which the data do not change; the observations it gives
     # no data keep theirs)
     group = image_group('a', 'b', data=(True, False))
-    copied = group.with_data({0: brightness('mJy')})
+    copied = group.with_datasets({0: brightness('mJy')})
     assert copied.seen_by(0) is group.seen_by(0)
     assert copied.pdescs() == group.pdescs()
     assert copied.observations()[1] is group.observations()[1]
-    assert copied.observations()[0].data()['brightness'].unit() == u.mJy
-    assert group.with_data({1: brightness()}).observed() == (0, 1)
+    assert copied.observations()[0].dataset()['brightness'].unit() == u.mJy
+    assert group.with_datasets({1: brightness()}).observed() == (0, 1)
     with pytest.raises(ValueError, match="no observations \\[2\\]"):
-        group.with_data({2: brightness()})
+        group.with_datasets({2: brightness()})
 
 
 def test_likelihoods_are_one_for_all_or_by_observation_name():
@@ -290,7 +290,7 @@ def test_likelihoods_have_parameters_of_names_of_their_own():
         rptraits=dict(type='exponential'), emission=dict(type='band'))]))
     dataset = brightness()
     group = ObservationGroup(galaxy, ObservationSky(
-        PixelBrightness.from_data(dataset), data=dataset,
+        PixelBrightness.from_data(dataset), dataset=dataset,
         name='disk'))
     clash = LikelihoodUser(lambda *args: 0.0, 'log_likelihood', ['rpt_a'])
     with pytest.raises(ValueError, match=r"names of parameters of the group:"
@@ -335,7 +335,7 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
         Data(np.ones((10, 4, 4))),
         spectral=SpectralAxis(convention='relativistic'))
     observation = ObservationSky(
-        PixelSpectra.from_data(data), data=data)
+        PixelSpectra.from_data(data), dataset=data)
     comparison_ = comparison_of(observation, LikelihoodGauss(
         upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))),
         DriverHost())
@@ -361,7 +361,7 @@ def test_the_psf_must_be_the_beam_of_data_of_a_beam(caplog):
             spectral=SpectralAxis(step=10, rval=0, rest=hi))
         ObservationSky(
             PixelSpectra(size=(4, 4), spectral=spectral),
-            instrument=Instrument(psf=psf), data=data)
+            instrument=Instrument(psf=psf), dataset=data)
         return caplog.text
     beam = Beam(6.0, 3.0, 30.0)
     assert warnings(PSFGauss.from_beam(6.0, 3.0, 30.0), beam) == ""

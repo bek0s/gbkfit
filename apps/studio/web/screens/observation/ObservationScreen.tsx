@@ -31,7 +31,7 @@ export function ObservationScreen({ name }: { name: string }) {
   // read as the dataset reads it: of its rest or that of the observation,
   // the convention of velocities its header leaves ambiguous and the type
   // of a spectral axis FITS does not define)
-  const dataset = usePiece(named('datasets', options?.data)).data as Options | undefined;
+  const dataset = usePiece(named('datasets', options?.dataset)).data as Options | undefined;
   const kind = kindOfType(dataset?.type);
   const first = kind && dataset ? Object.values(draftOfDataset(kind, dataset, root).items)[0]?.files.data : undefined;
   const axis = dataset ? objectAt(dataset, 'spectral') : {};
@@ -57,7 +57,7 @@ export function ObservationScreen({ name }: { name: string }) {
   const psf = instrument.psf == null ? null : psfEllipse(psfView.data?.axes as [number, number, number | null] | undefined);
   const beam = headerBeam(array);
   const observable = options ? objectAt(options, 'observable') : {};
-  const withData = options?.data != null;
+  const withData = options?.dataset != null;
   const lsfWidth = instrument.lsf == null ? null : (lsfView.data?.fwhm ?? null);
   const channel = array?.step?.length === 3 ? Math.abs(array.step[2]) : typeof objectAt(observable, 'spectral').step === 'number' ? (objectAt(observable, 'spectral').step as number) : null;
   const skyData: SkyData | null = first && array ? { path: first.file, array, cube: kept(array).length === 3, reading: { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null } } : null;

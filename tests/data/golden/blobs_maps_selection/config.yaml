@@ -22,7 +22,7 @@ galaxies:
     - {type: azrange}
 observations:
 - type: sky
-  data:
+  dataset:
     type: pixel_moments
     step: [0.6, 0.6]
     rpix: [11.5, 11.5]

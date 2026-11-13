@@ -75,7 +75,7 @@ class Comparison(abc.ABC):
         self._observation = observation
         self._likelihood = likelihood
         self._driver = driver
-        self._dataset = observation.data()
+        self._dataset = observation.dataset()
         # The number of values of each data item that the data do not mask
         # (over which the pixel weights of the model are normalised; see
         # _pixel_weight)
@@ -162,7 +162,7 @@ class Comparison(abc.ABC):
     def share(self, other: 'Comparison') -> None:
         """
         Take what it can share with a comparison of the same observation
-        with other data, before it is prepared (see Objective.with_data):
+        with other data, before it is prepared (see Objective.with_datasets):
         nothing here.
         """
 

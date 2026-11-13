@@ -26,7 +26,7 @@ observations:
 - type: profile
   name: rc
   inclination: 60.0
-  data:
+  dataset:
     file: rc_profile.ecsv
     radius: {column: radius}
     assumed_distance: 10.0

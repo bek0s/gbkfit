@@ -64,7 +64,7 @@ def model(
         galaxy.update(redshift=redshift)
     group = ObservationGroup(
         [galaxy_parser.load(galaxy)], [ObservationSky(
-            observable, instrument=Instrument(psf=psf), data=data,
+            observable, instrument=Instrument(psf=psf), dataset=data,
             unit=unit)])
     plan = group.plan(driver)
     space = ParamSpace.from_properties(group.pdescs(), params)

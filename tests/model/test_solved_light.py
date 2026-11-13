@@ -53,7 +53,7 @@ def observation(size, data=None, observable=None):
         else PixelBrightness(size=size, step=(0.5, 0.5)))
     return ObservationSky(
         observable,
-        data=dataset)
+        dataset=dataset)
 
 
 def models(driver, sizes, values, galaxy=(CORE, ENVELOPE)):
@@ -139,7 +139,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
             moments, spectral=SpectralAxis(convention='relativistic'))
         obs = ObservationSky(
             observable, depth=Depth(step=0.5),
-            data=moments, lines=['stars'])
+            dataset=moments, lines=['stars'])
     else:
         obs = observation(None, data)
     group = ObservationGroup([galaxy_parser.load(galaxy)], [obs])
@@ -161,7 +161,7 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
     data = np.zeros((16, 16))
     dataset = DatasetPixelBrightness(Data(data, error=data + 1))
     obs = ObservationSky(
-        PixelBrightness.from_data(dataset), data=dataset,
+        PixelBrightness.from_data(dataset), dataset=dataset,
         flux_scale='one', name='obs')
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=[copy.deepcopy(CORE)]))], [obs])

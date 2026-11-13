@@ -40,7 +40,7 @@ observations:
 - name: observation0
   type: sky
   galaxies: [front, back]
-  data:
+  dataset:
     type: pixel_spectra
     step: [1, 1]
     rpix: [9.5, 9.5]
@@ -62,7 +62,7 @@ observations:
 - name: observation1
   type: sky
   galaxies: [back]
-  data:
+  dataset:
     type: pixel_moments
     step: [1, 1]
     rpix: [9.5, 9.5]

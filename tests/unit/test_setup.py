@@ -39,7 +39,7 @@ def image(path):
     return dict(
         type='sky',
         observable=dict(type='pixel_brightness'),
-        data=dict(type='pixel_brightness', data=path.name))
+        dataset=dict(type='pixel_brightness', data=path.name))
 
 
 def test_the_front_door_is_gbkfit_load():
@@ -67,7 +67,7 @@ def test_a_setup_in_python_is_that_of_its_configuration(tmp_path):
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     from gbkfit.params import ParamSpace
-    obs = image(tmp_path / 'image.fits') | dict(data=dict(
+    obs = image(tmp_path / 'image.fits') | dict(dataset=dict(
         type='pixel_brightness', data=str(tmp_path / 'image.fits')))
     with gbkfit.load(dict(
             version=VERSION, galaxies=[GALAXY], observations=[obs],
@@ -107,7 +107,7 @@ def noisy_image(path, seed=1):
     return dict(
         type='sky',
         observable=dict(type='pixel_brightness'),
-        data=dict(type='pixel_brightness', data=path.name, error=0.1))
+        dataset=dict(type='pixel_brightness', data=path.name, error=0.1))
 
 
 def test_the_likelihoods_are_one_for_all_or_by_observation_name(tmp_path):
@@ -220,11 +220,11 @@ def test_an_observation_of_mocks_takes_data_in_one_line(tmp_path):
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         params=PARAMS)
     with gbkfit.load(config | dict(
-            observations=[observation(data=data)])) as loaded:
+            observations=[observation(dataset=data)])) as loaded:
         assert loaded.objective().observations() == (0,)
     with pytest.raises(ConfigError, match="are not those of the data"):
         gbkfit.load(config | dict(observations=[observation(
-            data=data, observable=dict(
+            dataset=data, observable=dict(
                 type='pixel_brightness', size=[8, 6]))]))
 
 
@@ -611,11 +611,11 @@ def test_the_units_of_a_configuration_are_read_as_fits_reads_them(tmp_path):
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         observations=[data], params=PARAMS)
-    data['data']['unit'] = 'erg/s/cm2/Angstrom'
+    data['dataset']['unit'] = 'erg/s/cm2/Angstrom'
     with gbkfit.load(config) as loaded:
-        dataset = loaded.group().observations()[0].data()
+        dataset = loaded.group().observations()[0].dataset()
         assert next(iter(dataset.values())).unit() == (
             u.erg / u.s / u.cm ** 2 / u.Angstrom)
-    data['data']['unit'] = 'ERG/S'
+    data['dataset']['unit'] = 'ERG/S'
     with pytest.raises(ValueError, match="not a valid unit"):
         gbkfit.load(config)

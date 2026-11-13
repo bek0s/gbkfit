@@ -151,7 +151,7 @@ def test_slitless_spectra_objective_residual(driver):
     options = {k: v for k, v in SLITLESS.items() if k not in ('type', 'size')}
     observable = observable_parser.load(
         dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
-    observation = ObservationSky(observable, data=dataset)
+    observation = ObservationSky(observable, dataset=dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     objective = Objective(group.plan(driver))
@@ -291,7 +291,7 @@ def test_slitless_spectra_have_flux_scales_per_row(driver):
         dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
     assert observable.flux_scales()['per_row'].axis == 1
     observation = ObservationSky(
-        observable, data=dataset, flux_scale='per_row', name='grism')
+        observable, dataset=dataset, flux_scale='per_row', name='grism')
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace.from_properties(

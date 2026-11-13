@@ -130,7 +130,7 @@ class RegionsObservable(Observable):
 
     def dump(
             self,
-            data: Dataset | None = None,
+            dataset: Dataset | None = None,
             prefix: str = '',
             dump_path: bool = True,
             overwrite: bool = False
@@ -139,12 +139,12 @@ class RegionsObservable(Observable):
         # give them (the other options that the data give are left out of
         # the dump after it is made, see without_options_from_data)
         info = dict(type=self.type())
-        if data is None:
+        if dataset is None:
             info.update(regions=regions_parser.dump(
                 self._regions, prefix=prefix, dump_path=dump_path,
                 overwrite=overwrite))
         return info | without_options_from_data(
-            self, self._dump_options(prefix, dump_path, overwrite), data)
+            self, self._dump_options(prefix, dump_path, overwrite), dataset)
 
     def _dump_spatial_grid(self) -> dict[str, Any]:
         """

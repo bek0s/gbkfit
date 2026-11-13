@@ -30,14 +30,14 @@ galaxies:
 observations:
 - type: profile
   name: rc
-  data:
+  dataset:
     file: rc_profile.ecsv
     radius: {column: radius}
     vcirc: {column: vcirc, mask: vcirc_mask, error: vcirc_error}
     rotation_gas: {column: rotation_gas, mask: rotation_gas_mask, error: rotation_gas_error}
 - type: sky
   name: maps
-  data:
+  dataset:
     type: pixel_moments
     step: [1, 1]
     rpix: [7.5, 7.5]

@@ -33,7 +33,7 @@ observations:
 - type: sky
   name: cube
   flux_scale: per_spectrum
-  data:
+  dataset:
     type: pixel_spectra
     step: [0.6, 0.6]
     rpix: [11.5, 11.5]

@@ -14,7 +14,7 @@ galaxies:
     emission: {type: lines}
 observations:
 - type: sky
-  data:
+  dataset:
     type: pixel_spectra
     step: [1, 1]
     rpix: [7.5, 7.5]

@@ -37,7 +37,7 @@ def objective(driver, data, likelihood):
     dataset = DatasetPixelSpectra(data, step=STEP[:2], spectral=SPECTRAL)
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
-            PixelSpectra.from_data(dataset), data=dataset)])
+            PixelSpectra.from_data(dataset), dataset=dataset)])
     likelihoods = Likelihoods(group, likelihood)
     return (Objective(group.plan(driver), likelihoods),
             ParamSpace.from_properties(
@@ -138,7 +138,7 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
         spectral=SPECTRAL)
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
-            PixelSpectra.from_data(dataset), data=dataset,
+            PixelSpectra.from_data(dataset), dataset=dataset,
             flux_scale='one', name='obs')])
     with pytest.raises(ValueError, match="has correlated noise"):
         Objective(group.plan(driver),
@@ -153,7 +153,7 @@ def spectra_objective(driver, dataset, observable, likelihood):
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             observable,
-            data=dataset)])
+            dataset=dataset)])
     likelihoods = Likelihoods(group, likelihood)
     return (Objective(group.plan(driver), likelihoods),
             ParamSpace.from_properties(
@@ -246,7 +246,7 @@ def test_spectra_of_correlated_noise_keep_whole_spectra(tmp_path):
         return Likelihoods(ObservationGroup(
             [galaxy_parser.load(GALAXY)], [ObservationSky(
                 SlitSpectra.from_data(dataset),
-                data=dataset)]))
+                dataset=dataset)]))
     data = noisy_spectra(np.random.default_rng(13), 14, [])
     mask = data.mask().copy()
     mask[3, 6] = 0

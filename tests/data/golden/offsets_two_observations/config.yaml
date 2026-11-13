@@ -15,7 +15,7 @@ galaxies:
 observations:
 - type: sky
   name: kmos
-  data:
+  dataset:
     type: pixel_spectra
     step: [0.5, 0.5]
     rpix: [9.5, 9.5]
@@ -37,7 +37,7 @@ observations:
 - type: sky
   name: sinfoni
   offsets: {position: true, velocity: true}
-  data:
+  dataset:
     type: pixel_moments
     step: [1, 1]
     rpix: [11.5, 11.5]

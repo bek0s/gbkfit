@@ -27,7 +27,7 @@ galaxies:
   gravity: {type: mond, interpolation: simple}
 observations:
 - type: sky
-  data:
+  dataset:
     type: pixel_spectra
     step: [1, 1]
     rpix: [9.5, 9.5]

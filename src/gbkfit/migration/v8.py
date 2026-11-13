@@ -692,8 +692,8 @@ class AssumedDistances(Rule):
             data = observation.get('data')
             if isinstance(data, MutableMapping):
                 changes += _assumed(data, path + ['data'])
-        # (the data pieces of a project, of their type)
-        for path, data in items(config, 'data'):
+        # (the dataset pieces of a project, of their type)
+        for path, data in items(config, 'dataset'):
             if data.get('type') == 'profile':
                 changes += _assumed(data, path)
         return changes

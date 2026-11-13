@@ -26,7 +26,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 # a folder; the pieces of the options of observations and mock data are
 # only read (see _uses)
 _SECTIONS = dict(
-    galaxies='galaxies', observations='observations', datasets='data',
+    galaxies='galaxies', observations='observations', datasets='dataset',
     psfs='psf', lsfs='lsf', noise='noise', params='params',
     fitters='fitter')
 

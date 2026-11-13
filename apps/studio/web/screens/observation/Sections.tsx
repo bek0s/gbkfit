@@ -26,7 +26,7 @@ interface Common {
 
 export function DataFields({ defs, options, onChange, blocks, openBlock, datasetType, titleOf }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string }) {
   const datasets = blocks.datasets ?? [];
-  const value = typeof options.data === 'string' ? options.data : options.data ? '(in place)' : '';
+  const value = typeof options.dataset === 'string' ? options.dataset : options.dataset ? '(in place)' : '';
   return (
     <div className="ob-form">
       <Row label="Dataset">
@@ -42,19 +42,19 @@ export function DataFields({ defs, options, onChange, blocks, openBlock, dataset
             // (the data give the grid: the observable's own goes)
             const observable = objectAt(options, 'observable');
             const pruned = name ? Object.fromEntries(Object.entries(observable).filter(([key]) => !gridOptions(defs, observable).includes(key))) : observable;
-            onChange({ ...withKey(options, 'data', name || undefined), observable: pruned });
+            onChange({ ...withKey(options, 'dataset', name || undefined), observable: pruned });
           }}
         />
       </Row>
-      {typeof options.data === 'string' && datasets.includes(options.data) && (
+      {typeof options.dataset === 'string' && datasets.includes(options.dataset) && (
         <p className="ob-text">
           {datasetType ? `${titleOf(datasetType)}. ` : ''}
-          <button className="ob-link" onClick={() => openBlock('datasets', options.data as string)}>
+          <button className="ob-link" onClick={() => openBlock('datasets', options.dataset as string)}>
             Open the dataset →
           </button>
         </p>
       )}
-      {options.data == null && <p className="ob-text">Without data, the observation makes a model on a grid of its own (see Observable), or mock data.</p>}
+      {options.dataset == null && <p className="ob-text">Without data, the observation makes a model on a grid of its own (see Observable), or mock data.</p>}
     </div>
   );
 }
@@ -68,7 +68,7 @@ const GRID_KEYS = ['size', 'step', 'spectral'];
 
 export function ObservableFields({ defs, project, options, onChange, blocks, datasetType, titleOf }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string }) {
   const observable = objectAt(options, 'observable');
-  const withData = options.data != null;
+  const withData = options.dataset != null;
   // (the channels of data of a spectral axis are those of the model; moment
   // maps have none, and the model needs its own)
   const fromData = withData && dataHaveChannels(datasetType);

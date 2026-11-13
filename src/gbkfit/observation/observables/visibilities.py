@@ -200,7 +200,7 @@ class Visibilities(Observable):
 
     def dump(
             self,
-            data: DatasetVisibilities | None = None,
+            dataset: DatasetVisibilities | None = None,
             prefix: str = '',
             dump_path: bool = True,
             overwrite: bool = False
@@ -208,7 +208,7 @@ class Visibilities(Observable):
         # (the dump of the coverage writes a file: only without data,
         # which give it; the grid is that of the field, without its size)
         info = dict(type=self.type())
-        if data is None:
+        if dataset is None:
             info.update(coverage=self._coverage.dump(
                 prefix, dump_path, overwrite))
         return info | self._dump_options(prefix, dump_path, overwrite)

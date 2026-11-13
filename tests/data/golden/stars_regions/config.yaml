@@ -19,7 +19,7 @@ galaxies:
 observations:
 - type: sky
   lines: [stars]
-  data:
+  dataset:
     type: region_moments
     regions:
       type: bins

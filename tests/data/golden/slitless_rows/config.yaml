@@ -16,7 +16,7 @@ observations:
 - type: sky
   name: grism
   flux_scale: per_row
-  data:
+  dataset:
     type: slitless_spectra
     step: [1, 1]
     rpix: [15.5, 11.5]

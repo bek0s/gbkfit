@@ -3,7 +3,8 @@ The rules of version 11 of the format (2026-11-14 on), which rewrite
 configurations of version 10: an observation on the sky no longer
 chooses its line of sight (the components it sees decide how it is
 evaluated along it), and its depth axis, with the options of radiative
-transfer, is its option depth.
+transfer, is its option depth; and the dataset of an observation is its
+option dataset (it was data).
 """
 
 import json
@@ -17,7 +18,8 @@ from .rules import Change, Rule, flow, items, rename
 
 __all__ = [
     'RULES',
-    'LineOfSightDepth'
+    'LineOfSightDepth',
+    'ObservationDataset'
 ]
 
 
@@ -90,6 +92,28 @@ def _depth(line_of_sight: Any) -> MutableMapping[str, Any] | None:
     return depth or None
 
 
+class ObservationDataset(Rule):
+    """
+    The dataset of an observation (2026-11-14; of the sky or of profiles,
+    in place or the name of a piece) is its option dataset, in the place
+    of its option data: the values of each data item keep their option
+    data.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 11
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, observation in items(config, 'observations'):
+            if 'data' in observation:
+                rename(observation, 'data', 'dataset')
+                changes.append(Change(path + ['data'], "-> dataset"))
+        return changes
+
+
 RULES: tuple[Rule, ...] = (
     LineOfSightDepth(),
+    ObservationDataset(),
 )

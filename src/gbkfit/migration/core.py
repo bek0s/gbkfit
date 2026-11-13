@@ -33,7 +33,7 @@ __all__ = [
 # The sections and options of configurations whose items are pieces of
 # projects (see gbkfit.project.piece_folder)
 _SECTIONS = (
-    'galaxies', 'observations', 'data', 'psf', 'lsf', 'noise', 'params',
+    'galaxies', 'observations', 'dataset', 'psf', 'lsf', 'noise', 'params',
     'fitter')
 
 # The sections of setups whose pieces the rules see with them, as they

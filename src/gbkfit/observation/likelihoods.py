@@ -917,7 +917,7 @@ class Likelihoods:
         # names of its parameters (see with_prefix)
         self._likelihoods: dict[int, Likelihood] = {}
         for i, observation in enumerate(observations):
-            if i not in given and observation.data() is None:
+            if i not in given and observation.dataset() is None:
                 continue
             # (the errors of one given by name are at its name; those of
             # the others name their observation)
@@ -926,7 +926,7 @@ class Likelihoods:
                 likelihood = _bound(
                     given.get(i, LikelihoodGauss()), observation,
                     None if named else i)
-            if observation.data() is not None:
+            if observation.dataset() is not None:
                 self._likelihoods[i] = likelihood
         if repeated := sorted(self.pdescs().keys() & group.pdescs().keys()):
             raise ValueError(
@@ -983,13 +983,14 @@ class Likelihoods:
         for i, likelihood in self._likelihoods.items():
             pdescs |= pdescs_with_units(
                 likelihood.pdescs(),
-                likelihood.param_units(observations[i].data()))
+                likelihood.param_units(observations[i].dataset()))
         return pdescs
 
     def with_group(self, group: 'ObservationGroup') -> 'Likelihoods':
         """
         Return the likelihoods as given of another group of the same
-        observations (e.g. with other data, see ObservationGroup.with_data),
+        observations (e.g. with other data, see
+        ObservationGroup.with_datasets),
         checked against it.
         """
         return Likelihoods(group, self._given)
@@ -1010,7 +1011,7 @@ def _bound(
     """
     name = observation.name()
     try:
-        likelihood.check(observation.keys(), observation.data())
+        likelihood.check(observation.keys(), observation.dataset())
         if name is None and likelihood.pdescs():
             raise ValueError(
                 "a likelihood with parameters (e.g. a fitted noise) needs a "

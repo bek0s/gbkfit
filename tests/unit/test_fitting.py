@@ -62,7 +62,7 @@ def mock_objective(
     def group(dataset, flux_scale=None):
         observation = ObservationSky(
             PixelBrightness.from_data(dataset),
-            instrument=Instrument(psf=PSFGauss(1.5)), data=dataset,
+            instrument=Instrument(psf=PSFGauss(1.5)), dataset=dataset,
             flux_scale=flux_scale, name=name)
         return ObservationGroup(
             galaxy_parser.load(GALAXY), observation).plan(driver)
@@ -609,7 +609,7 @@ def test_a_fit_resumed_from_its_log_is_the_fit_that_did_not_stop(tmp_path):
     other = [
         dataset.with_data({key: 2 * dataset[key].data() for key in dataset})
         for dataset in objective.datasets()]
-    with objective.with_data(other) as changed:
+    with objective.with_datasets(other) as changed:
         with pytest.raises(ValueError, match="other data"):
             FitterCMAES().fit(
                 changed, params, log=EvaluationLog.resume(filename))
@@ -1535,7 +1535,7 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
     def group(dataset):
         observation = ObservationSky(
             PixelBrightness.from_data(dataset),
-            instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
+            instrument=Instrument(psf=PSFGauss(1.5)), dataset=dataset)
         return ObservationGroup(
             galaxy_parser.load(GALAXY), observation).plan(DriverHost())
     image = group(DatasetPixelBrightness(Data(np.zeros((48, 48)))))

@@ -414,7 +414,7 @@ class Setup:
             raise ValueError("mock data need their options (section 'mock')")
         observations = self.group().observations()
         return [
-            [observation.with_data(dataset)
+            [observation.with_dataset(dataset)
              for observation, dataset in zip(observations, datasets)]
             for datasets in draw_mocks(self._group_plan, values, options)]
 

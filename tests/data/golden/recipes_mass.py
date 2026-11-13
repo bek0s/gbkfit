@@ -285,7 +285,7 @@ _PROFILE_TABLE_MASS = dict(
         distance=_DISTANCE)],
     observations=[dict(
         type='profile', name='rc', inclination=60,
-        data=_rotmod(vcirc=dict(column='col2', error='col3')))],
+        dataset=_rotmod(vcirc=dict(column='col2', error='col3')))],
     truth=dict(
         distance=10, mass_gas_upsilon=1, mass_disk_upsilon=0.5,
         mass_halo_log_m=11.5, mass_halo_c=10, rc_incl=60),

@@ -268,7 +268,7 @@ class Observable(TypedSerializable, abc.ABC):
 
     def dump(
             self,
-            data: Dataset | None = None,
+            dataset: Dataset | None = None,
             prefix: str = '',
             dump_path: bool = True,
             overwrite: bool = False
@@ -282,7 +282,7 @@ class Observable(TypedSerializable, abc.ABC):
 
         Parameters
         ----------
-        data : Dataset, optional
+        dataset : Dataset, optional
             The data, whose options the configuration leaves out.
         prefix : str, optional
             The start of the names of the files of its options (e.g. the
@@ -300,7 +300,7 @@ class Observable(TypedSerializable, abc.ABC):
         """
         return without_options_from_data(self, dict(
             type=self.type(), **self._dump_grid(),
-            **self._dump_options(prefix, dump_path, overwrite)), data)
+            **self._dump_options(prefix, dump_path, overwrite)), dataset)
 
     def _dump_grid(self) -> dict[str, Any]:
         """
