@@ -996,3 +996,32 @@ def test_the_log_likelihood_of_a_fitted_scale_is_free_of_its_minimum(driver):
         merits[1].log_likelihood, rel=1e-6)
     assert merits[0].aicp == pytest.approx(merits[1].aicp, rel=1e-6)
     assert merits[0].chi2 != pytest.approx(merits[1].chi2, rel=1e-3)
+
+
+def test_an_objective_evaluates_only_the_observations_it_compares(driver):
+    # (of a fit: the model of an observation without data, e.g. a
+    # prediction, is evaluated by the outputs, not at each step)
+    rng = np.random.default_rng(13)
+    dataset = DatasetPixelBrightness(Data(rng.normal(0, 1, (24, 32))))
+    observed = ObservationSky(
+        PixelBrightness.from_data(dataset), dataset=dataset, name='data')
+    predicted = ObservationSky(PixelBrightness(size=(16, 16)), name='model')
+    group = ObservationGroup(
+        galaxy_parser.load(GALAXY), [observed, predicted])
+    likelihoods = Likelihoods(group)
+    params = ParamSpace.from_properties(
+        group.pdescs(), PROPERTIES).evaluate()
+    plan = group.plan(driver)
+    counts = [0, 0]
+    for i, part in enumerate(plan._plans):
+        def counted(*args, i=i, evaluate=part.evaluate):
+            counts[i] += 1
+            return evaluate(*args)
+        part.evaluate = counted
+    objective = Objective(plan, likelihoods)
+    for incl in (50, 60, 70):
+        objective.evaluate(params | dict(incl=incl))
+    assert counts == [3, 0]
+    # (the outputs, of the group plan, evaluate both)
+    plan.model_h(params)
+    assert counts == [4, 1]

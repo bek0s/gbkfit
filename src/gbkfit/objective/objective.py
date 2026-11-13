@@ -111,10 +111,11 @@ class Objective:
     a comparison of its kind of likelihood (see Comparison and
     comparison_of), its residuals, of each value of its data, and the
     terms of the chi-square beyond them (e.g. the noise residuals of a
-    fitted noise; see LikelihoodGauss). The objective sums them. The
-    models of the observations without data are evaluated alongside (e.g.
-    a prediction of a band without data, at the values a fit finds; see
-    GroupPlan.model_d), and compare nothing.
+    fitted noise; see LikelihoodGauss). The objective sums them. It
+    evaluates the models of those observations only: those of the others
+    (e.g. a prediction of a band without data, at the values a fit finds)
+    are evaluated by who wants them (see GroupPlan.model_h, and the
+    outputs of a setup).
 
     The elements of parameters can be solved at each evaluation, rather
     than fitted (see Solve and ParamSpace): those that the models are
@@ -818,7 +819,7 @@ class Objective:
             if self._orbit_blocks:
                 with group_plan.timers().measure('objective_orbits'):
                     values = self._solve_orbits(values, solutions)
-            models = group_plan.model_d(values, out_extra)
+            models = group_plan.model_d(values, out_extra, self._observed)
             with group_plan.timers().measure('objective_residual_eval'):
                 scales = self._solve_scales(models, values, solutions)
                 for i, comparison_ in self._comparisons.items():

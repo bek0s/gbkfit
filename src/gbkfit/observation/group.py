@@ -153,8 +153,9 @@ class ObservationGroup:
     evaluation is planned on devices by plan (see GroupPlan), where the
     stage of each galaxy is evaluated once for all the observations of
     it. An objective compares the models of the observations with data
-    with them (see Objective), and evaluates those of the others
-    alongside (e.g. a prediction of a band without data).
+    with them (see Objective); those of the others are evaluated by who
+    wants them (e.g. a prediction of a band without data, see the outputs
+    of a setup).
 
     Options of setups that are given by observation (e.g. their
     likelihoods, see Likelihoods, or the noise of their mock data, see

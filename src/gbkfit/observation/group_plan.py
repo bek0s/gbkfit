@@ -475,11 +475,13 @@ class GroupPlan:
     def model_d(
             self,
             params: ParamValues,
-            out_extra: Extras | None = None
+            out_extra: Extras | None = None,
+            observations: Sequence[int] | None = None
     ) -> list[ModelData]:
         """
-        Evaluate the model data of the observations, on their drivers,
-        with BLAS on one thread (see threadutils.single_threaded_blas).
+        Evaluate the model data of the observations (all, or those given),
+        on their drivers, with BLAS on one thread (see
+        threadutils.single_threaded_blas).
         Those of the observations that a recording of orbits models (see
         orbit_series) are of its orbits in the series of their data, at
         the weights of the orbits in the parameters; their extra outputs
@@ -516,14 +518,17 @@ class GroupPlan:
             ObservationGroup.observation_label), and those of the stage of
             each galaxy (e.g. its rotation tables, see GalaxyStage.evaluate)
             with its label as the id 'galaxy'.
+        observations : Sequence of int, optional
+            The observations to evaluate, by index (e.g. those that an
+            objective compares); all by default.
 
         Returns
         -------
         list of ModelData
-            The model data of each observation, on its driver; they are
-            overwritten by the next evaluation (of it, or of a plan that
-            shares its memory: hold its lock while reading them, see
-            lock).
+            The model data of each observation, on its driver (of those
+            not evaluated, as they were); they are overwritten by the next
+            evaluation (of it, or of a plan that shares its memory: hold
+            its lock while reading them, see lock).
         """
         with (self._lock, self._timers.measure('model_eval'),
               threadutils.single_threaded_blas()):
@@ -531,7 +536,8 @@ class GroupPlan:
                 states = self._galaxy_states(params, out_extra)
             series = self._orbit_series(params, states)
             self._evaluate_models(
-                range(len(self._plans)), params, states, series, out_extra)
+                range(len(self._plans)) if observations is None
+                else observations, params, states, series, out_extra)
         return self._d_model_data
 
     def amplitude_pieces(

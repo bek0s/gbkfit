@@ -65,8 +65,8 @@ class Setup:
     configuration of a fit evaluated to draw mocks).
 
     The objective compares the observations with data (see Objective),
-    and a fit fits them; the models of the others are evaluated alongside
-    (e.g. a prediction of a band without data, see outputs).
+    and a fit fits them; the models of the others are evaluated with the
+    outputs (e.g. a prediction of a band without data, see outputs).
 
     It holds the memory of its objective and its workers until it is
     closed (see close; e.g. at the end of a with block).
