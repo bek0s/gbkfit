@@ -15,9 +15,9 @@ from gbkfit.dataset import Data, DatasetPixelMoments, DatasetPixelSpectra
 from gbkfit.fitting import FitProblem
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective
+from gbkfit.objective import (
+    FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods, Objective)
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods,
     ObservationGroup, ObservationPixelMoments, ObservationPixelSpectra,
     noise_parser)
 from gbkfit.params import ParamSpace, SolveGauss

@@ -23,11 +23,11 @@ from gbkfit.fitting import (
     read_chain, read_evaluations)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Merits, Objective
+from gbkfit.objective import (
+    FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods, Merits,
+    Objective)
 from gbkfit.parallel import WorkersProcesses, WorkersThreads
-from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods,
-    ObservationGroup, ObservationPixelBrightness)
+from gbkfit.observation import ObservationGroup, ObservationPixelBrightness
 from gbkfit.params import (
     FreeElement, ParamEvaluationError, ParamScalarDesc, ParamSpace,
     PriorGauss, PriorGaussTrunc,

@@ -15,10 +15,10 @@ import scipy.optimize
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective, comparison_of
+from gbkfit.objective import (
+    LikelihoodGauss, Likelihoods, Objective, comparison_of)
 from gbkfit.observation import (
-    Depth, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationPixelBrightness)
+    Depth, ObservationGroup, ObservationPixelBrightness)
 from gbkfit.params import ParamSpace
 
 

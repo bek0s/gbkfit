@@ -27,8 +27,7 @@ from gbkfit.params import (
 from gbkfit.utils import funcutils
 
 if TYPE_CHECKING:
-    from .group import ObservationGroup
-    from .observation import Observation
+    from gbkfit.observation import Observation, ObservationGroup
 
 
 __all__ = [

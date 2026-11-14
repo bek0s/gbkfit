@@ -18,10 +18,11 @@ from gbkfit.dataset import Data, DatasetRegionMoments, RegionsBins
 from gbkfit.grid import SpectralAxis, sky_positions
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective
+from gbkfit.objective import (
+    FittedNoise, LikelihoodGauss, Likelihoods, Objective)
 from gbkfit.observation import (
-    Depth, FittedNoise, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationPixelSpectra, ObservationRegionMoments)
+    Depth, ObservationGroup, ObservationPixelSpectra,
+    ObservationRegionMoments)
 from gbkfit.observation.orbits import _bins_light
 from gbkfit.observation.sky._orbit_sky import bins_sky_grid
 from gbkfit.params import ParamSpace

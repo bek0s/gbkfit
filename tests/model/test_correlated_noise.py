@@ -11,10 +11,9 @@ from gbkfit.dataset import Data, DatasetPixelSpectra, NoiseCorrelation
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective, whitening
-from gbkfit.observation import (
-    MAX_CORRELATED_PIXELS, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationPixelSpectra)
+from gbkfit.objective import (
+    MAX_CORRELATED_PIXELS, LikelihoodGauss, Likelihoods, Objective, whitening)
+from gbkfit.observation import ObservationGroup, ObservationPixelSpectra
 from gbkfit.params import ParamSpace
 
 

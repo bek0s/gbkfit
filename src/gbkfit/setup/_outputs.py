@@ -13,9 +13,8 @@ import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.model import Extra, Extras
-from gbkfit.objective import Objective
-from gbkfit.observation import (
-    GroupPlan, HostModelData, Likelihood, ModelItem, Observation)
+from gbkfit.objective import Likelihood, Objective
+from gbkfit.observation import GroupPlan, HostModelData, ModelItem, Observation
 from gbkfit.outputs import Output, product_extension
 from gbkfit.params import ParamValues
 

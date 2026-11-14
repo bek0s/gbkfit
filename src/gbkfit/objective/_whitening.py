@@ -13,7 +13,7 @@ from gbkfit.dataset import NoiseCorrelation
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.correlation import (
     correlation_matrix, periodic_correlation, whitening_matrix)
-from gbkfit.observation import correlated_pixels
+from .likelihoods import correlated_pixels
 
 
 __all__ = [

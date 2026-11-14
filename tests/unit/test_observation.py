@@ -12,9 +12,10 @@ from gbkfit.config import ConfigError, config_path
 from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, LSFGauss
+from gbkfit.objective import (
+    FittedNoise, LikelihoodGauss, Likelihoods, UpperLimit)
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationPixelBrightness, ObservationPixelMoments, UpperLimit,
+    ObservationGroup, ObservationPixelBrightness, ObservationPixelMoments,
     observation_parser)
 
 
@@ -308,7 +309,7 @@ def test_likelihoods_have_parameters_of_names_of_their_own():
     # (the parameters of a likelihood must not be those of the group: e.g.
     # of a component of the name of the observation)
     from gbkfit.model import galaxy_parser
-    from gbkfit.observation import LikelihoodUser
+    from gbkfit.objective import LikelihoodUser
     likelihood = LikelihoodUser(lambda *args: 0.0, 'log_likelihood', ['s'])
     assert set(Likelihoods(image_group('a'), likelihood).pdescs()) == {'a_s'}
     galaxy = galaxy_parser.load(dict(components=[dict(

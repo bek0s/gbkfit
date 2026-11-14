@@ -14,10 +14,10 @@ from gbkfit.dataset import Data, DatasetPixelBrightness, DatasetPixelMoments
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective
+from gbkfit.objective import (
+    FittedNoise, LikelihoodGauss, Likelihoods, Objective, UpperLimit)
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationPixelBrightness, ObservationPixelMoments, UpperLimit,
+    ObservationGroup, ObservationPixelBrightness, ObservationPixelMoments,
     observation_parser)
 from gbkfit.params import (
     ParamSpace, SolveGauss, solve_together, solve_together_rows)
@@ -893,7 +893,7 @@ def user_data():
 
 def test_user_likelihoods_of_gaussian_noise_are_the_gaussian(
         driver, tmp_path):
-    from gbkfit.observation import LikelihoodUser
+    from gbkfit.objective import LikelihoodUser
     file = tmp_path / 'likelihoods.py'
     file.write_text(USER_LIKELIHOODS)
     gaussian, params = make_objective(driver, user_data())
@@ -913,7 +913,7 @@ def test_user_likelihoods_of_gaussian_noise_are_the_gaussian(
         -chi2 / 2, rel=1e-5)
     with pytest.raises(ValueError, match="has no residuals"):
         log_likelihood.residuals(params)
-    from gbkfit.observation import likelihood_parser
+    from gbkfit.objective import likelihood_parser
     info = dict(type='user', file=str(file), func='gaussian_log_likelihood',
                 form='log_likelihood', params=[])
     assert likelihood_parser.dump(likelihood_parser.load(info)) == info
@@ -922,7 +922,7 @@ def test_user_likelihoods_of_gaussian_noise_are_the_gaussian(
 def test_user_likelihoods_take_parameters_of_their_observation(
         driver, tmp_path):
     # (Cauchy noise of the scale s: -2 log L = sum 2 log(1 + x^2))
-    from gbkfit.observation import LikelihoodUser
+    from gbkfit.objective import LikelihoodUser
     file = tmp_path / 'likelihoods.py'
     file.write_text(USER_LIKELIHOODS)
     cauchy = LikelihoodUser.from_file(
@@ -942,7 +942,7 @@ def test_user_likelihoods_take_parameters_of_their_observation(
 def test_user_likelihoods_cannot_change_the_data(driver):
     # (a function that changed them in place, e.g. data -= 1, changed the
     # data of every later evaluation)
-    from gbkfit.observation import LikelihoodUser
+    from gbkfit.objective import LikelihoodUser
     writeable = []
 
     def residuals(item, data, model, error, mask, params):

@@ -227,8 +227,8 @@ def test_an_observation_of_mocks_takes_data_in_one_line(tmp_path):
 
 def test_a_setup_takes_likelihoods_of_its_group():
     from gbkfit.model import galaxy_parser
-    from gbkfit.observation import (
-        Likelihoods, ObservationGroup, observation_parser)
+    from gbkfit.objective import Likelihoods
+    from gbkfit.observation import ObservationGroup, observation_parser
     from gbkfit.params import ParamSpace
 
     def group():

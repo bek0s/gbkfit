@@ -13,10 +13,9 @@ from gbkfit.driver import Driver
 from gbkfit.fitting import (
     Bootstrap, BootstrapOptions, EvaluationLog, Fitter, FitResult,
     ProgressObserver, SubFitLog, run_bootstrap)
-from gbkfit.objective import Objective, ObjectiveEvaluation
+from gbkfit.objective import Likelihoods, Objective, ObjectiveEvaluation
 from gbkfit.observation import (
-    GroupPlan, Likelihoods, MockOptions, Observation, ObservationGroup,
-    draw_mocks)
+    GroupPlan, MockOptions, Observation, ObservationGroup, draw_mocks)
 from gbkfit.outputs import Output
 from gbkfit.parallel import WorkerPool, Workers
 from gbkfit.params import ParamSpace, ParamValues

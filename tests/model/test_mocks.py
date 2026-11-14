@@ -119,8 +119,8 @@ def test_setups_mock_observations_for_fits_under_their_likelihoods(
     # (the likelihoods of a setup without data are those of the fits of
     # its mocks, as a configuration of them takes them)
     from gbkfit import Setup
-    from gbkfit.observation import (
-        LikelihoodGauss, Likelihoods, ObservationGroup)
+    from gbkfit.objective import LikelihoodGauss, Likelihoods
+    from gbkfit.observation import ObservationGroup
     plan = plan_of(
         driver, dict(type='pixel_brightness') | RECORDED['pixel_brightness'])
     group = plan.group()

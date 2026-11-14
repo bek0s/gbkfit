@@ -12,11 +12,11 @@ from typing import NamedTuple
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.observation import (
-    Likelihood, LikelihoodGauss, LikelihoodUser, LinearPieces, ModelData,
-    Observation, UpperLimit, channel_mask)
+from gbkfit.observation import LinearPieces, ModelData, Observation
 from gbkfit.params import ParamValues
 from ._whitening import Whitener, whitening
+from .likelihoods import (
+    Likelihood, LikelihoodGauss, LikelihoodUser, UpperLimit, channel_mask)
 
 
 __all__ = [

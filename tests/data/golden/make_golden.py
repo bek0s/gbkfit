@@ -266,9 +266,8 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     data of the model at its true values (see Case.mock_galaxies), and
     its parameters at its trial values.
     """
-    from gbkfit.observation import (
-        LikelihoodGauss, MockOptions, draw_mocks, likelihood_parser,
-        noise_parser)
+    from gbkfit.objective import LikelihoodGauss, likelihood_parser
+    from gbkfit.observation import MockOptions, draw_mocks, noise_parser
     from gbkfit.observation import observation_parser
     from gbkfit.config import FORMAT_VERSION
     from gbkfit.config import paths_relative_to

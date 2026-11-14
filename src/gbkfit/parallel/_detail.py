@@ -17,8 +17,8 @@ import threadpoolctl
 
 from gbkfit.control import StopControl, StopFlag
 from gbkfit.driver import Driver, driver_parser
-from gbkfit.objective import Objective
-from gbkfit.observation import GroupPlan, Likelihoods
+from gbkfit.objective import Likelihoods, Objective
+from gbkfit.observation import GroupPlan
 from gbkfit.params import Solve
 
 if typing.TYPE_CHECKING:

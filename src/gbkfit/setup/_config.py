@@ -27,9 +27,9 @@ import gbkfit.observation
 import gbkfit.project
 from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.fitting import BootstrapOptions, Fitter, fitter_parser
+from gbkfit.objective import Likelihood, Likelihoods
+from gbkfit.observation import DepthGroup, MockOptions, ObservationGroup
 from gbkfit.parallel import Workers, workers_parser
-from gbkfit.observation import (
-    DepthGroup, Likelihood, Likelihoods, MockOptions, ObservationGroup)
 from gbkfit.params import (
     ParamDesc, ParamSpace, ParamSpaceConfig, load_pdescs_dict,
     param_space_parser)

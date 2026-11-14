@@ -12,8 +12,7 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray
 from gbkfit.model import Extras
-from gbkfit.observation import (
-    GroupPlan, Likelihoods, ModelData, ObservationGroup)
+from gbkfit.observation import GroupPlan, ModelData, ObservationGroup
 from gbkfit.params import (
     ParamDesc, ParamValues, Solution, Solve, with_elements)
 from gbkfit.utils import threadutils
@@ -22,6 +21,7 @@ from ._block import Block
 from ._comparisons import comparison_of
 from ._orbit_blocks import orbit_blocks
 from ._scale_blocks import scale_blocks
+from .likelihoods import Likelihoods
 
 
 __all__ = [
