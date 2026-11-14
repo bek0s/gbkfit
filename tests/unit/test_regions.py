@@ -173,7 +173,7 @@ def test_pixels_of_no_bin_can_be_nan():
 def test_region_sums(driver):
     # The native sums of the regions of each channel of a cube equal the
     # product of the weights and the cube
-    from gbkfit.observation.observables._sparse_sums import SparseSumsPlan
+    from gbkfit.observation.sky._sparse_sums import SparseSumsPlan
     grid = _grid()
     weights = RegionsApertures([
         ApertureCircle(1, -0.5, 1.5),
@@ -191,7 +191,7 @@ def test_region_sums(driver):
 
 def test_region_sums_of_chunks_and_empty_regions(driver):
     # Regions of 0 to 1000 pixels (in chunks of 256), the last ones empty
-    from gbkfit.observation.observables._sparse_sums import SparseSumsPlan
+    from gbkfit.observation.sky._sparse_sums import SparseSumsPlan
     rng = np.random.default_rng(1)
     lengths = np.append(rng.integers(0, 1000, 50), [0, 0])
     indptr = np.concatenate(([0], np.cumsum(lengths)))

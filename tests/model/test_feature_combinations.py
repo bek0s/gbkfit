@@ -1,8 +1,8 @@
 """
-Every observable with the options of the instrument, the foreground and
-the galaxy together (oversampling, psf, lsf, primary beam, lens, a
-selection of components, emission lines): the model is finite, of the
-shape of its data, and not empty.
+Every kind of observation with the options of the instrument, the
+foreground and the galaxy together (oversampling, psf, lsf, primary
+beam, lens, a selection of components, emission lines): the model is
+finite, of the shape of its data, and not empty.
 """
 
 import copy
@@ -15,7 +15,7 @@ from gbkfit.instrument import instrument_parser
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
     Foreground, Lens, LensDeflectionMap, ObservationGroup,
-    ObservationSky, observable_parser)
+    observation_parser)
 
 
 def component(name, **emission):
@@ -48,7 +48,7 @@ PROPERTIES = {f'gas_{key}': value for key, value in GEOMETRY.items()} | {
 APERTURES = dict(type='apertures', apertures=[
     dict(type='circle', x=1, y=0, radius=2), dict(type='field')])
 
-OBSERVABLES = dict(
+KINDS = dict(
     pixel_spectra=dict(
         type='pixel_spectra', size=[24, 25], step=[1, 1],
         spectral=dict(size=61, step=20, rest='6562.8 Angstrom')),
@@ -87,9 +87,9 @@ INSTRUMENT = dict(
 
 
 @pytest.mark.parametrize('lens', [False, True], ids=['plain', 'lensed'])
-@pytest.mark.parametrize('name', list(OBSERVABLES))
+@pytest.mark.parametrize('name', list(KINDS))
 def test_feature_combinations(driver, name, lens):
-    info = copy.deepcopy(OBSERVABLES[name])
+    info = copy.deepcopy(KINDS[name])
     instrument = dict(INSTRUMENT)
     moments = name in ('pixel_moments', 'pixel_moments_fit', 'region_moments')
     if moments:
@@ -101,27 +101,26 @@ def test_feature_combinations(driver, name, lens):
         # A constant deflection: the source moved by (1, -1) arcsec
         foreground = Foreground(Lens((40, 40), (0.5, 0.5), LensDeflectionMap(
             np.ones((40, 40)), -np.ones((40, 40)))))
-    observation = ObservationSky(
-        observable_parser.load(info), foreground=foreground,
+    observation = observation_parser.load(info | dict(
+        foreground=foreground,
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
         components=['gas'], oversampling=OVERSAMPLING[name],
         # Moments are of one line (they would mix the lines of a spectrum)
-        lines=['ha'] if moments else None)
+        lines=['ha'] if moments else None))
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
     extra = Extras()
     data = group.plan(driver).model_h(params.evaluate(), extra)[0]
-    observable = observation.observable()
-    assert set(data) == set(observable.keys())
+    assert set(data) == set(observation.keys())
     for key, value in data.items():
         model = value.data
         assert np.isfinite(model).any(), key
         assert np.nanmax(np.abs(model)) > 0, key
         if value.mask is None:
             assert np.isfinite(model).all(), key
-    # The extra outputs can be written as their observables give them
+    # The extra outputs can be written as their observations give them
     for key, value in data.items():
-        observable.output(value.data)
+        observation.output(value.data)
     assert extra.find(observation='observation0', galaxy='galaxy0')

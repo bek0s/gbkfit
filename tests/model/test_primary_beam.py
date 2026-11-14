@@ -49,7 +49,7 @@ def evaluate(
         key='brightness'):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
-        observable=copy.deepcopy(observable))])
+        observation=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     return plan.model_h(params.evaluate())[0][key].data.copy()
@@ -238,11 +238,11 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
     # with the prefix of the dump, which can be dumped again (overwrite)
     from gbkfit.instrument import PrimaryBeamImage
     from gbkfit.observation import (
-        ObservationSky, PixelBrightness,
+        ObservationPixelBrightness,
         observation_parser)
     beam = PrimaryBeamImage(np.ones((8, 8)))
-    observation = ObservationSky(
-        PixelBrightness(size=(8, 8)),
+    observation = ObservationPixelBrightness(
+        size=(8, 8),
         instrument=Instrument(primary_beam=beam))
     prefix = str(tmp_path / 'out_')
     for _ in range(2):

@@ -21,9 +21,9 @@ from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
     Depth, FittedNoise, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationSky, PixelSpectra, RegionMoments)
+    ObservationPixelSpectra, ObservationRegionMoments)
 from gbkfit.observation.orbits import _bins_light
-from gbkfit.observation.observables._orbit_sky import bins_sky_grid
+from gbkfit.observation.sky._orbit_sky import bins_sky_grid
 from gbkfit.params import ParamSpace
 from test_spheroids import hernquist_mge
 
@@ -84,10 +84,9 @@ def observation(regions, psf=1.0, oversampling=None, data=None):
     # (V and sigma, and the coefficients h3 and h4)
     dataset = DatasetRegionMoments(
         {m: item(m) for m in (1, 2)}, regions, {m: item(m) for m in (3, 4)})
-    return ObservationSky(
-        RegionMoments.from_data(
-            dataset, method='gauss_hermite',
-            spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
+    return ObservationRegionMoments(
+        method='gauss_hermite',
+        spectral=SpectralAxis(convention='log', rest='5000 Angstrom'),
         depth=Depth(step=2),
         instrument=Instrument(psf=None if psf is None else PSFGauss(psf)),
         lines=['stars'], dataset=dataset, dtype='float64',
@@ -103,20 +102,30 @@ def likelihoods_of(group):
     return Likelihoods(group, LikelihoodGauss(missing_residual=3))
 
 
+def moments_of(obs, **options):
+    """
+    The moments of the bins of an observation of the tests (see
+    observation), with the given options of every observation on the sky.
+    """
+    return ObservationRegionMoments(
+        obs.spectral(), regions=obs.regions(), orders=obs.orders(),
+        method=obs.method(), flux_floor=obs.flux_floor(), **options)
+
+
 def without_data(obs):
     """
     An observation as another, without data: its model is that of the
     orbits as they are (see OrbitMomentsPlan), not in the series of data.
     """
-    return ObservationSky(
-        obs.observable(), depth=obs.depth(), instrument=obs.instrument(),
+    return moments_of(
+        obs, depth=obs.depth(), instrument=obs.instrument(),
         lines=['stars'], dtype='float64', oversampling=obs.oversampling())
 
 
 def sky_grid(obs):
     """The sky grid of the bins of an observation (see SkyGrid)."""
     return bins_sky_grid(
-        obs.observable().regions(), obs.instrument(), obs.oversampling())
+        obs.regions(), obs.instrument(), obs.oversampling())
 
 
 def galaxy(**changes):
@@ -186,11 +195,10 @@ def test_orbits_take_a_mass_disk_far_from_it():
 
 
 def test_spectral_cubes_do_not_see_stars_on_orbits(driver):
-    spectra = ObservationSky(
-        PixelSpectra(
-            size=(8, 8), step=(2, 2),
-            spectral=SpectralAxis(
-                size=16, step=20, convention='relativistic')),
+    spectra = ObservationPixelSpectra(
+        size=(8, 8), step=(2, 2),
+        spectral=SpectralAxis(
+            size=16, step=20, convention='relativistic'),
         depth=Depth(step=2),
         lines=['stars'])
     # (the message names those that see them; see Observable.orbit_stars)
@@ -205,8 +213,8 @@ def test_orbits_are_seen_without_what_their_recording_ignores(driver):
     # refused when the observation is planned, not ignored)
     from gbkfit.instrument import LSFGauss
     seen = observation(bins())
-    with_lsf = ObservationSky(
-        seen.observable(), depth=seen.depth(),
+    with_lsf = moments_of(
+        seen, depth=seen.depth(),
         instrument=Instrument(
             psf=PSFGauss(1.0), lsf=LSFGauss(20.0 * u.km / u.s)),
         lines=['stars'], dataset=seen.dataset(), dtype='float64')
@@ -217,11 +225,11 @@ def test_orbits_are_seen_without_what_their_recording_ignores(driver):
 def test_an_image_sees_the_light_of_stars_on_orbits(driver):
     # (as that of any component: it is no observation of their orbits)
     from gbkfit.dataset import DatasetPixelBrightness
-    from gbkfit.observation import PixelBrightness
+    from gbkfit.observation import ObservationPixelBrightness
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
-    image = ObservationSky(
-        PixelBrightness.from_data(dataset), dataset=dataset)
+    image = ObservationPixelBrightness(
+        dataset=dataset)
     group = ObservationGroup([galaxy()], [observation(bins()), image])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
@@ -237,7 +245,7 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
     # the image keeps its solution, one in that of the bins solves again
     import gbkfit.objective._orbit_blocks as orbit_blocks
     from gbkfit.dataset import DatasetPixelBrightness
-    from gbkfit.observation import PixelBrightness
+    from gbkfit.observation import ObservationPixelBrightness
     solved = orbit_blocks.solve_together_rows
     solves = []
 
@@ -246,13 +254,13 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
         return solved(*args)
     monkeypatch.setattr(orbit_blocks, 'solve_together_rows', counted)
     seen = observation(bins())
-    stars = ObservationSky(
-        seen.observable(), depth=seen.depth(), instrument=seen.instrument(),
+    stars = moments_of(
+        seen, depth=seen.depth(), instrument=seen.instrument(),
         lines=['stars'], dataset=seen.dataset(), dtype='float64', name='bins')
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
-    image = ObservationSky(
-        PixelBrightness.from_data(dataset), dataset=dataset,
+    image = ObservationPixelBrightness(
+        dataset=dataset,
         name='image')
     group = ObservationGroup([galaxy()], [stars, image])
     likelihoods = Likelihoods(group, dict(
@@ -396,8 +404,7 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
     # twin, of the opposite angular momentum)
     from gbkfit.model import Extras
     from gbkfit.moments import MomentsPlan
-    obs = without_data(observation(bins()))
-    moments = obs.observable()
+    moments = obs = without_data(observation(bins()))
     extras = Extras()
     model = ObservationGroup([galaxy()], [obs]).plan(driver).model_h(
         PROPERTIES | dict(stars_weights=np.ones(400)), extras)[0]
@@ -438,7 +445,7 @@ def test_the_dispersions_of_cold_cells_are_0():
     # R), rounding leaves <v^2> - <v>^2 slightly negative: the dispersions
     # are 0, not NaN; those of a cell without light stay NaN
     from astropy.table import Table
-    from gbkfit.observation.observables._orbit_outputs import _add_moments
+    from gbkfit.observation.sky._orbit_outputs import _add_moments
     sums = np.array([[1, 0.1, 0.1, 0.1, 0.01, 0, 0.01, 0.01, 0], [0] * 9])
     table = Table()
     _add_moments(table, sums, np.ones(2))
@@ -603,10 +610,9 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
         2: Data(mock.sigma, error=mock.sigma_error)}, regions, {
         3: Data(mock.h[:, 0], error=mock.h_error[:, 0]),
         4: Data(mock.h[:, 1], error=mock.h_error[:, 1])})
-    obs = ObservationSky(
-        RegionMoments.from_data(
-            dataset, method='gauss_hermite',
-            spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
+    obs = ObservationRegionMoments(
+        method='gauss_hermite',
+        spectral=SpectralAxis(convention='log', rest='5000 Angstrom'),
         depth=Depth(step=2),
         instrument=Instrument(psf=PSFGauss(0.5 / np.sqrt(8 * np.log(2)))),
         lines=['stars'], dataset=dataset)
@@ -680,14 +686,15 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
         mass_stars_upsilon=1e8, mass_bh_log_m=8.5)
     depth = Depth(step=0.5)
     instrument = Instrument(psf=PSFGauss(0.4))
-    moments = RegionMoments(
-        regions, orders=[1, 2, 3, 4], method='gauss_hermite',
+    moments = dict(
+        regions=regions, orders=[1, 2, 3, 4], method='gauss_hermite',
         spectral=SpectralAxis(
             size=241, step=10, rval=0, convention='log', rest='5000 Angstrom'))
     model = ObservationGroup(
         [stars(dict(type='jeans_spheroid'))],
-        [ObservationSky(moments, instrument=instrument, lines=['stars'],
-                        depth=depth, dtype='float64')]).plan(driver).model_h(
+        [ObservationRegionMoments(
+            **moments, instrument=instrument, lines=['stars'], depth=depth,
+            dtype='float64')]).plan(driver).model_h(
         truth | dict(stars_beta_z=0.0, stars_kappa=0.6))[0]
     errors = {1: 3.0, 2: 3.0, 3: 0.02, 4: 0.02}
     def item(m):
@@ -695,10 +702,9 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
             model[KEYS[m]].data, error=np.full(regions.nregions(), errors[m]))
     dataset = DatasetRegionMoments(
         {m: item(m) for m in (1, 2)}, regions, {m: item(m) for m in (3, 4)})
-    obs = ObservationSky(
-        RegionMoments.from_data(
-            dataset, method='gauss_hermite',
-            spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
+    obs = ObservationRegionMoments(
+        method='gauss_hermite',
+        spectral=SpectralAxis(convention='log', rest='5000 Angstrom'),
         depth=depth, instrument=instrument, lines=['stars'], dataset=dataset)
     group = ObservationGroup(
         [stars(dict(norbits=1500, turns=30))], [obs])

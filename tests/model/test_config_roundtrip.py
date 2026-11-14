@@ -204,19 +204,17 @@ DEPTH = dict(extent=21.0, step=1.5, slab=4, subchannels=2)
 def test_observation_dump_has_every_option(observable_type):
     from gbkfit.observation import observation_parser
     observable, instrument, oversampling = OBSERVABLES[observable_type]
-    info = dict(
-        type='sky',
+    info = dict(type=observable_type) | observable | dict(
         name='obs', galaxies=['galaxy'], components=['gas'], lines=['ha'],
         depth=DEPTH,
         instrument=instrument,
-        observable=dict(type=observable_type) | observable,
         oversampling=oversampling, dtype='float64')
     dumped = json.loads(json.dumps(roundtrip(observation_parser, info)))
     for key in ('name', 'galaxies', 'components', 'lines', 'depth',
                 'oversampling', 'dtype'):
         assert dumped[key] == info[key], key
-    for key, value in info['observable'].items():
-        assert dumped['observable'][key] == value, key
+    for key, value in observable.items():
+        assert dumped[key] == value, key
     for key, value in instrument.items():
         if value is None:
             assert dumped['instrument'][key] is None

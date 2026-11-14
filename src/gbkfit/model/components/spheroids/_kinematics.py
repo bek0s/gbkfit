@@ -150,7 +150,7 @@ class SpheroidKinematics(TypedSerializable, abc.ABC):
     distribution, which a Gaussian at each point does not give: its h3,
     h4 and the sigma of a Gauss-Hermite series fitted to it (e.g. by pPXF)
     are not those of the stars (a sigma 5% low, in a test of an isotropic
-    Hernquist sphere). Fit their mean and dispersion: observables of
+    Hernquist sphere). Fit their mean and dispersion: observations of
     moments of the method 'moments', with the data of pPXF converted (see
     gbkfit.moments.gauss_hermite_moments).
     """

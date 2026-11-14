@@ -134,20 +134,18 @@ components:
 # the project (dataset: <name>), whose grid the grid here must then be
 # (or leave the grid out); the PSF and the LSF can be named too (psf:
 # <name>, lsf: <name>).
-type: sky
-observable:
-  type: pixel_spectra
-  size: [48, 48]
-  step: [1, 1]
-  spectral: {size: 40, step: 10, convention: radio}
+type: pixel_spectra
+size: [48, 48]
+step: [1, 1]
+spectral: {size: 40, step: 10, convention: radio}
 instrument:
   psf: {type: gauss, sigma: 1.5}
   lsf: {type: gauss, sigma: 15 km/s}
 """,
     'datasets': """\
 # A dataset: here a cube and its errors (FITS files; paths relative to the
-# project), of the type of the observable of the observations that name it
-# (dataset: <name>).
+# project), of the type of the observations that name it (dataset:
+# <name>).
 type: pixel_spectra
 data: data/cube.fits
 error: data/error.fits

@@ -268,7 +268,7 @@ def _kernel_cube(
 
 class ModelCube:
     """
-    A cube of the data of an observable, of the given grid (x, y and the
+    A cube of the data of an observation, of the given grid (x, y and the
     spectral axis, its third axis), made from a model evaluated on a finer
     grid (oversampling times finer along each axis): the primary beam
     attenuates it, the PSF and the LSF convolve it, it is downscaled to

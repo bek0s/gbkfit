@@ -12,7 +12,8 @@ __all__ = [
 # configurations of 2026-10-25 on, 3, of 2026-10-28 on, 4, of 2026-11-04
 # on, 5, of 2026-11-05 on, 6, of 2026-11-08 on, 7, of 2026-11-09 on,
 # 8, of 2026-11-11 on, 9, of 2026-11-12, 10, of 2026-11-12 on (the
-# likelihoods of setups), and 11, of 2026-11-14 on (no lines of sight: the
-# components decide, and the option depth); gbkfit.migration rewrites the
+# likelihoods of setups), 11, of 2026-11-14 on (no lines of sight: the
+# components decide, and the option depth), and 12, of 2026-11-14 on (the
+# observable merged into the observation); gbkfit.migration rewrites the
 # older ones
-FORMAT_VERSION = 11
+FORMAT_VERSION = 12

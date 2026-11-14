@@ -744,8 +744,8 @@ class ComparisonGauss(Comparison):
         linear in the model (see Comparison.linear_form), or None if they
         are: a data item with an upper limit, whose residuals of the
         values below it are not. (The residual of a value missing from
-        the model is a constant: the models of observables linear in the
-        light have every value, see Observable.linear_in_light.)
+        the model is a constant: the models of observations linear in the
+        light have every value, see ObservationSky.linear_in_light.)
         """
         for key in keys:
             if key in self._upper_limits:

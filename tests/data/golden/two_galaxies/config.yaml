@@ -1,6 +1,6 @@
 # two_galaxies: Two named galaxies (their parameters prefixed by their names): a cube of both through radiative transfer, the dust of the one in front (section depth_order) dimming the one behind; and moment maps of the one behind alone (option galaxies).
 # (written by make_golden.py; do not edit)
-version: 11
+version: 12
 driver: {type: host}
 galaxies:
 - name: front
@@ -38,7 +38,7 @@ galaxies:
 depth_order: [front, back]
 observations:
 - name: observation0
-  type: sky
+  type: pixel_spectra
   galaxies: [front, back]
   dataset:
     type: pixel_spectra
@@ -56,11 +56,12 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20.0 km s-1}
-  observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
+  smooth_weights: false
+  median_size: null
   oversampling: [1, 1, 1]
   fft_dtype: float64
 - name: observation1
-  type: sky
+  type: pixel_moments
   galaxies: [back]
   dataset:
     type: pixel_moments
@@ -69,10 +70,8 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation1_moment0_d.fits, error: observation1_moment0_e.fits}
-    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits,
-      error: observation1_moment1_e.fits}
-    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits,
-      error: observation1_moment2_e.fits}
+    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits, error: observation1_moment1_e.fits}
+    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits, error: observation1_moment2_e.fits}
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}
@@ -80,12 +79,10 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20.0 km s-1}
-  observable:
-    type: pixel_moments
-    spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
-    flux_floor: 1.0e-06
-    method: moments
-    median_size: null
+  spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
+  flux_floor: 1.0e-06
+  method: moments
+  median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
 likelihoods:

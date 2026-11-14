@@ -19,7 +19,7 @@ from gbkfit.grid import make_grid
 from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from .observables import HostModelData, ModelData, ModelItem, ObservablePlan
+from .plan import HostModelData, ModelData, ModelItem, ObservationPlan
 from .observation import Observation, SeenGalaxies
 
 if TYPE_CHECKING:
@@ -380,7 +380,7 @@ class ObservationProfile(Observation):
                 u.arcsec, u.dimensionless_angles()), None
         return None, self._radii.to_value(u.kpc)
 
-    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
+    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservationPlan:
         """
         Plan the evaluation of its model (see ObservationGroup.plan): the
         functions of the galaxy it sees at its radii (see
@@ -395,7 +395,7 @@ class ObservationProfile(Observation):
 
         Returns
         -------
-        ObservablePlan
+        ObservationPlan
             The plan.
         """
         galaxy, mapping = seen.galaxies[0], seen.mappings[0]
@@ -474,7 +474,7 @@ def _checked_data(
         None if distance is None else distance.to_value(u.Mpc))
 
 
-class _ProfilePlan(ObservablePlan):
+class _ProfilePlan(ObservationPlan):
     """
     The evaluation of a profile (see ObservationProfile): the functions of
     its galaxy, the mapping of the parameters of the galaxy to those of

@@ -43,7 +43,7 @@ def image(driver, spheroid, dtype='float32', size=64):
     """
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_brightness', size=[size, size], step=[STEP, STEP],
             dtype=dtype),
         depth=dict(step=0.25),
@@ -202,7 +202,7 @@ def test_the_cusp_of_a_sersic_sphere_keeps_its_light(
     properties = dict(xpos=0, ypos=0, ie=1, re=2, n=4)
     force_evaluation('depth')
     case = image(driver, spheroid, dtype)
-    case['observable'] |= dict(oversampling=[3, 3])
+    case['observation'] |= dict(oversampling=[3, 3])
     data, _ = evaluate_cases([case], properties)
     model = data[0]['brightness'].data
     assert np.isfinite(model).all()
@@ -397,7 +397,7 @@ def test_the_mass_of_an_mge_is_that_of_its_gaussians():
 def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
     # The same rotation as in the mass spheroid of the same profile
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra)
+        ObservationGroup, ObservationPixelSpectra)
     from gbkfit.params import ParamSpace
     disk = dict(
         type='thin_disk', name='gas', rnodes=list(range(0, 13, 2)),
@@ -412,11 +412,10 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
     def evaluate(mass, properties):
         galaxy = galaxy_parser.load(dict(
             components=[BULGE, disk], mass=[mass], distance=DISTANCE))
-        group = ObservationGroup([galaxy], [ObservationSky(
-            PixelSpectra(
-                size=(24, 24), step=(1, 1),
-                spectral=SpectralAxis(
-                    size=41, step=10, convention='relativistic')))])
+        group = ObservationGroup([galaxy], [ObservationPixelSpectra(
+            size=(24, 24), step=(1, 1),
+            spectral=SpectralAxis(
+                size=41, step=10, convention='relativistic'))])
         params = ParamSpace.from_properties(
             group.pdescs(), light | disk_properties | properties)
         return group.plan(driver).model_h(params.evaluate())[0][
@@ -624,7 +623,7 @@ def stars_cube(driver, spheroid):
     """
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[32, 32], step=[2, 2],
             spectral=dict(size=181, step=10, convention='relativistic'),
             dtype='float64'),
@@ -643,8 +642,8 @@ def test_float32_stars_keep_their_dispersion_at_a_large_vsys(
     cubes = []
     for dtype in ('float32', 'float64'):
         case = stars_cube(driver, spheroid)
-        case['observable'] |= dict(dtype=dtype)
-        case['observable']['spectral'] |= dict(rval=15000)
+        case['observation'] |= dict(dtype=dtype)
+        case['observation']['spectral'] |= dict(rval=15000)
         data, _ = evaluate_cases([case], properties)
         cubes.append(data[0]['spectra'].data[:, 14:18, 14:18])
     # (the cubes have the light of each pixel: their channels are about
@@ -856,7 +855,7 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
         dptraits=dict(type='uniform'))
     case = stars_cube(driver, spheroid)
     case['galaxy'] = dict(components=[spheroid])
-    case['observable'] = dict(
+    case['observation'] = dict(
         type='region_moments',
         regions=dict(type='bins', file=str(tmp_path / 'bins.fits')),
         orders=[0, 1, 2, 3, 4], method='gauss_hermite',

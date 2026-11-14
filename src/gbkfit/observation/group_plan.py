@@ -23,7 +23,7 @@ from gbkfit.params import (
     ParamFunctions, ParamValues, ParamView, StageCache, with_elements)
 from gbkfit.utils import threadutils, timeutils
 from .orbits import OrbitRecording, OrbitSeries, orbit_recordings
-from .observables import HostModelData, ModelData, ModelItem, ObservablePlan
+from .plan import HostModelData, ModelData, ModelItem, ObservationPlan
 
 if TYPE_CHECKING:
     from .group import ObservationGroup
@@ -435,7 +435,7 @@ class GroupPlan:
                     self._recordings, self._recording_caches)]
 
     @contextlib.contextmanager
-    def borrow_plans(self) -> Iterator[tuple[ObservablePlan, ...]]:
+    def borrow_plans(self) -> Iterator[tuple[ObservationPlan, ...]]:
         """
         Lend the plans of the observations (see Observation.plan), under
         its lock (see lock), to evaluate them apart from its evaluations
@@ -445,7 +445,7 @@ class GroupPlan:
 
         Yields
         ------
-        tuple of ObservablePlan
+        tuple of ObservationPlan
             The plan of each observation, on its driver.
         """
         with self._lock:

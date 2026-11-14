@@ -17,8 +17,8 @@ from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
     FittedNoise, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationSky, PixelBrightness, PixelMoments, UpperLimit,
-    observable_parser)
+    ObservationPixelBrightness, ObservationPixelMoments, UpperLimit,
+    observation_parser)
 from gbkfit.params import (
     ParamSpace, SolveGauss, solve_together, solve_together_rows)
 
@@ -39,8 +39,8 @@ def make_objective(driver, data, likelihood=None, name=None, **values):
     and the given values).
     """
     dataset = DatasetPixelBrightness(data)
-    observation = ObservationSky(
-        PixelBrightness.from_data(dataset), dataset=dataset,
+    observation = ObservationPixelBrightness(
+        dataset=dataset,
         name=name)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
     likelihoods = Likelihoods(group, likelihood)
@@ -330,9 +330,7 @@ def test_a_fitted_noise_has_parameters_of_the_observation():
 
 
 def test_an_objective_needs_an_observation_with_data(driver):
-    dataset = DatasetPixelBrightness(Data(np.ones((24, 32))))
-    observation = ObservationSky(
-        PixelBrightness.from_data(dataset))
+    observation = ObservationPixelBrightness(size=(32, 24))
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
     with pytest.raises(ValueError, match="no observation has data"):
         Objective(group.plan(driver))
@@ -344,11 +342,9 @@ def test_an_objective_compares_the_observations_with_data(driver):
     rng = np.random.default_rng(2)
     data = Data(rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5))
     dataset = DatasetPixelBrightness(data)
-    observable = PixelBrightness.from_data(dataset)
     observations = [
-        ObservationSky(observable, name='band'),
-        ObservationSky(
-            observable, dataset=dataset, name='image')]
+        ObservationPixelBrightness(size=(32, 24), name='band'),
+        ObservationPixelBrightness(dataset=dataset, name='image')]
     group = ObservationGroup(galaxy_parser.load(GALAXY), observations)
     alone, params = make_objective(driver, data, name='image')
     objective = Objective(group.plan(driver))
@@ -387,12 +383,10 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     # A model can no longer lower the chi-square by having no flux (and so
     # no velocity) where the data have some: its moment 0 there is 0, and
     # its moments 1 and 2 count as misses of 3 errors (they counted 0)
-    def group(observable, dataset=None):
-        observation = ObservationSky(
-            observable, dataset=dataset)
+    def group(observation):
         return ObservationGroup(
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
-    image = group(observable_parser.load(dict(
+    image = group(observation_parser.load(dict(
         type='pixel_moments', size=[24, 24], orders=[0, 1, 2],
         spectral=dict(convention='relativistic'))))
     model = image.model_h(
@@ -402,9 +396,8 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
         order: Data(model[f'moment{order}'].data, error=np.full(
             (24, 24), errors[f'moment{order}']))
         for order in (0, 1, 2)})
-    observable = PixelMoments.from_data(
-        dataset, spectral=SpectralAxis(convention='relativistic'))
-    plan = group(observable, dataset)
+    plan = group(ObservationPixelMoments(
+        SpectralAxis(convention='relativistic'), dataset=dataset))
     objective = Objective(plan, Likelihoods(
         plan.group(), LikelihoodGauss(missing_residual=3)))
     truth = ParamSpace.from_properties(objective.pdescs(), DISK).evaluate()
@@ -431,22 +424,20 @@ def test_missing_values_take_the_noise_of_their_error(driver):
     # (f_min e)^2) over the values the model has) that of their error,
     # log(1 / f_min^2), which the scale does not change; the chi-square
     # and -2 log L differ by one constant, however many are missing
-    def group(observable, dataset=None):
-        observation = ObservationSky(
-            observable, dataset=dataset, name='obs')
+    def group(observation):
         return ObservationGroup(
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
-    image = group(observable_parser.load(dict(
+    image = group(observation_parser.load(dict(
         type='pixel_moments', size=[24, 24], orders=[0, 1],
-        spectral=dict(convention='relativistic'))))
+        spectral=dict(convention='relativistic'), name='obs')))
     model = image.model_h(
         ParamSpace.from_properties(image.group().pdescs(), DISK).evaluate())[0]
     dataset = DatasetPixelMoments({
         order: Data(model[f'moment{order}'].data, error=np.full((24, 24), 5.0))
         for order in (0, 1)})
-    observable = PixelMoments.from_data(
-        dataset, spectral=SpectralAxis(convention='relativistic'))
-    plan = group(observable, dataset)
+    plan = group(ObservationPixelMoments(
+        SpectralAxis(convention='relativistic'), dataset=dataset,
+        name='obs'))
     objective = Objective(plan, Likelihoods(plan.group(), LikelihoodGauss(
         missing_residual=3, fitted_noise=dict(
             moment1=FittedNoise(scale=True, scale_min=0.1)))))
@@ -569,8 +560,8 @@ def test_the_residuals_of_the_fit_are_written_where_they_differ(driver):
     assert set(residual_products(objective, params, 'observation0')) == {
         'residual', 'wresidual'}
     dataset = DatasetPixelBrightness(data)
-    observation = ObservationSky(
-        PixelBrightness.from_data(dataset), dataset=dataset,
+    observation = ObservationPixelBrightness(
+        dataset=dataset,
         pixel_weights=Weights('disk', WeightAzimuthPower(2)))
     group = ObservationGroup(galaxy_parser.load(dict(components=[
         GALAXY['components'][0] | dict(name='disk')])), observation)
@@ -1003,9 +994,9 @@ def test_an_objective_evaluates_only_the_observations_it_compares(driver):
     # prediction, is evaluated by the outputs, not at each step)
     rng = np.random.default_rng(13)
     dataset = DatasetPixelBrightness(Data(rng.normal(0, 1, (24, 32))))
-    observed = ObservationSky(
-        PixelBrightness.from_data(dataset), dataset=dataset, name='data')
-    predicted = ObservationSky(PixelBrightness(size=(16, 16)), name='model')
+    observed = ObservationPixelBrightness(
+        dataset=dataset, name='data')
+    predicted = ObservationPixelBrightness(size=(16, 16), name='model')
     group = ObservationGroup(
         galaxy_parser.load(GALAXY), [observed, predicted])
     likelihoods = Likelihoods(group)

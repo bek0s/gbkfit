@@ -98,7 +98,7 @@ class Scene:
     of each whose light is drawn (its emitters; the opacity of all
     components applies), the emission lines drawn (all if None) or the
     band (if known), the type of the emission it is seen in (see
-    Observable.emission of gbkfit.observation: BandEmission for an image,
+    ObservationSky.emission of gbkfit.observation: BandEmission for an image,
     LineEmission for a spectral cube), the order of the galaxies along the
     line of sight, front to back (in units: galaxies or groups of them;
     those it leaves out after them, in their order), and the unit of the

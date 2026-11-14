@@ -30,7 +30,7 @@ PROPERTIES = dict(
 def evaluate(driver, observable):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=GALAXY,
-        observable=copy.deepcopy(observable))])
+        observation=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
@@ -200,17 +200,17 @@ def test_gauss_fit_of_bins(driver):
     (dict(method='gauss_hermite', orders=[1, 5]), ValueError,
      "between 0 and 4")])
 def test_method_options_are_checked(options, error, message):
-    from gbkfit.observation import PixelMoments
+    from gbkfit.observation import ObservationPixelMoments
     with pytest.raises(error, match=message):
-        PixelMoments(
+        ObservationPixelMoments(
             size=(8, 8), **options,
             spectral=SpectralAxis(convention='relativistic'))
 
 
 def test_method_round_trip():
-    from gbkfit.observation import observable_parser
+    from gbkfit.observation import observation_parser
     info = dict(
         type='pixel_moments', size=[8, 8], method='gauss_fit',
         spectral=dict(convention='relativistic'))
-    dumped = observable_parser.dump(observable_parser.load(dict(info)))
+    dumped = observation_parser.dump(observation_parser.load(dict(info)))
     assert dumped['method'] == 'gauss_fit'

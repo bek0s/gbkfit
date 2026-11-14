@@ -1,9 +1,9 @@
 """
 The observations: how the model of galaxies gives the data of a dataset
 (see Observation and observation_parser). An observation on the sky
-(ObservationSky) sees galaxies as an observable (see
-gbkfit.observation.observables, whose observables it exports too),
-along the line of sight (on a depth axis if what it sees needs one, see
+(see ObservationSky, of one kind for each kind of data: see
+gbkfit.observation.sky, whose kinds it exports too) sees galaxies along
+the line of sight (on a depth axis if what it sees needs one, see
 Depth), through a foreground (e.g. a gravitational lens; see
 gbkfit.observation.lensing) and an instrument; an observation of
 profiles (ObservationProfile) gives values of functions of a galaxy at
@@ -15,7 +15,7 @@ of gbkfit.objective), and draw mock data (see draw_mocks).
 
 from . import (
     depth, foreground, group, group_plan, lensing, likelihoods, mocks,
-    noise, observables, observation, profile, sky, weights)
+    noise, observation, plan, profile, sky, weights)
 from .depth import *
 from .foreground import *
 from .group import *
@@ -24,8 +24,8 @@ from .lensing import *
 from .likelihoods import *
 from .mocks import *
 from .noise import *
-from .observables import *
 from .observation import *
+from .plan import *
 from .profile import *
 from .sky import *
 from .weights import *
@@ -40,8 +40,8 @@ __all__ += lensing.__all__
 __all__ += likelihoods.__all__
 __all__ += mocks.__all__
 __all__ += noise.__all__
-__all__ += observables.__all__
 __all__ += observation.__all__
+__all__ += plan.__all__
 __all__ += profile.__all__
 __all__ += sky.__all__
 __all__ += weights.__all__
@@ -51,8 +51,15 @@ def _register_observations() -> None:
     from gbkfit.observation.observation import (
         observation_parser as abstract_parser)
     abstract_parser.register([
+        ObservationPixelBrightness,
+        ObservationPixelMoments,
+        ObservationPixelSpectra,
         ObservationProfile,
-        ObservationSky
+        ObservationRegionMoments,
+        ObservationRegionSpectra,
+        ObservationSlitSpectra,
+        ObservationSlitlessSpectra,
+        ObservationVisibilities
     ])
 
 

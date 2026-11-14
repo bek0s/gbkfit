@@ -1,5 +1,5 @@
 // The sections of the dock of an observation on the sky: its data, its
-// observable, its instrument, the light it sees, and its other options
+// kind of data, its instrument, the light it sees, and its other options
 // (e.g. its depth axis, for the galaxies that need one: what they are
 // made of decides how they are seen along the line of sight). The common
 // choices are made by hand; the options of each choice are a form of the
@@ -10,7 +10,7 @@ import { useState, type ReactNode } from 'react';
 import { membersOf, propertiesOf, SchemaForm, typeOf, type Defs, type Options, type Schema } from '../../components/SchemaForm';
 import { Button } from '../../components/ui/basics';
 import { Choice, NumberField, Segments } from '../../components/ui/inputs';
-import { dataHaveChannels, gridOptions, isObject, isSpectral, objectAt, observableMember, withKey, type Ellipse } from './model';
+import { dataHaveChannels, gridOptions, isObject, isSpectral, objectAt, observationMember, skyKeys, withKey, type Ellipse } from './model';
 
 interface Common {
   defs: Defs;
@@ -39,10 +39,9 @@ export function DataFields({ defs, options, onChange, blocks, openBlock, dataset
           value={value}
           label="The dataset of the observation"
           onChange={(name) => {
-            // (the data give the grid: the observable's own goes)
-            const observable = objectAt(options, 'observable');
-            const pruned = name ? Object.fromEntries(Object.entries(observable).filter(([key]) => !gridOptions(defs, observable).includes(key))) : observable;
-            onChange({ ...withKey(options, 'dataset', name || undefined), observable: pruned });
+            // (the data give the grid: the observation's own goes)
+            const own = name ? gridOptions(defs, options) : [];
+            onChange(withKey(Object.fromEntries(Object.entries(options).filter(([key]) => !own.includes(key))), 'dataset', name || undefined));
           }}
         />
       </Row>
@@ -54,59 +53,60 @@ export function DataFields({ defs, options, onChange, blocks, openBlock, dataset
           </button>
         </p>
       )}
-      {options.dataset == null && <p className="ob-text">Without data, the observation makes a model on a grid of its own (see Observable), or mock data.</p>}
+      {options.dataset == null && <p className="ob-text">Without data, the observation makes a model on a grid of its own (see Kind), or mock data.</p>}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// The observable
+// The kind of data: the type of the observation, and the options of its kind
 
-// The options of the observable set by hand: its grid on the sky and its
-// channels
+// The options of the kind set by hand: its grid on the sky and its channels
 const GRID_KEYS = ['size', 'step', 'spectral'];
 
-export function ObservableFields({ defs, project, options, onChange, blocks, datasetType, titleOf }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string }) {
-  const observable = objectAt(options, 'observable');
+export function KindFields({ defs, project, options, onChange, blocks, datasetType, titleOf }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string }) {
   const withData = options.dataset != null;
   // (the channels of data of a spectral axis are those of the model; moment
   // maps have none, and the model needs its own)
   const fromData = withData && dataHaveChannels(datasetType);
-  const extra = withData ? gridOptions(defs, observable) : [];
-  const types = membersOf(defs.observable ?? {}, defs)
+  const extra = withData ? gridOptions(defs, options) : [];
+  const sky = skyKeys(defs);
+  const types = membersOf(defs.observation ?? {}, defs)
     .map((m) => typeOf(m))
-    .filter((type, i, all): type is string => type !== undefined && all.indexOf(type) === i);
-  const member = observableMember(defs, observable.type, withData);
-  const properties = member ? propertiesOf(member) : {};
-  const set = (next: Options) => onChange({ ...options, observable: next });
-  const setKey = (key: string, value: unknown) => set(withKey(observable, key, value));
-  const spectral = objectAt(observable, 'spectral');
+    .filter((type, i, all): type is string => type !== undefined && type !== 'profile' && all.indexOf(type) === i);
+  const member = observationMember(defs, options.type);
+  // (the options of its kind: those of its type that every observation on
+  // the sky does not have)
+  const properties = Object.fromEntries(Object.entries(member ? propertiesOf(member) : {}).filter(([key]) => !sky.includes(key)));
+  const setKey = (key: string, value: unknown) => onChange(withKey(options, key, value));
+  // Another type: the options of every observation on the sky, and the
+  // grid and the channels, stay
+  const setType = (type: string) => {
+    const kept = [...sky, ...GRID_KEYS];
+    onChange({ ...Object.fromEntries(Object.entries(options).filter(([key]) => kept.includes(key))), type });
+  };
+  const spectral = objectAt(options, 'spectral');
   const setSpectral = (key: string, value: unknown) => setKey('spectral', withKey(spectral, key, value));
   const others = Object.fromEntries(Object.entries(properties).filter(([key]) => key !== 'type' && !GRID_KEYS.includes(key)));
-  const size = pair(observable.size);
-  const step = pair(observable.step);
+  const size = pair(options.size);
+  const step = pair(options.step);
   return (
     <div className="ob-form">
       <Row label="Type">
-        <Choice
-          items={types.map((type) => ({ value: type, label: titleOf(type) }))}
-          value={String(observable.type ?? '')}
-          label="The type of the observable"
-          onChange={(type) => set({ type, ...pick(observable, GRID_KEYS) })}
-        />
+        <Choice items={types.map((type) => ({ value: type, label: titleOf(type) }))} value={String(options.type ?? '')} label="The kind of data of the observation" onChange={setType} />
       </Row>
-      {withData && datasetType !== undefined && datasetType !== observable.type && (
+      {withData && datasetType !== undefined && datasetType !== options.type && (
         <div className="ob-warn">
           The data are {titleOf(datasetType)}.{' '}
-          <Button kind="small" onClick={() => set({ type: datasetType })}>
+          <Button kind="small" onClick={() => setType(datasetType)}>
             Make it {titleOf(datasetType)}
           </Button>
         </div>
       )}
       {extra.length > 0 && (
         <div className="ob-warn">
-          The data give the grid, but the observable has its own {extra.join(', ')}.{' '}
-          <Button kind="small" onClick={() => set(Object.fromEntries(Object.entries(observable).filter(([key]) => !extra.includes(key))))}>
+          The data give the grid, but the observation has its own {extra.join(', ')}.{' '}
+          <Button kind="small" onClick={() => onChange(Object.fromEntries(Object.entries(options).filter(([key]) => !extra.includes(key))))}>
             Remove them
           </Button>
         </div>
@@ -115,21 +115,21 @@ export function ObservableFields({ defs, project, options, onChange, blocks, dat
         <>
           <Row label="Pixels" unit="px">
             <span className="ob-pair">
-              <NumberOption value={size[0]} placeholder="nx" label="The number of pixels along x" onChange={(nx) => setKey('size', joined(nx, size[1]))} />
+              <NumberOption value={size[0]} placeholder={withData ? 'from the data' : 'nx'} label="The number of pixels along x" onChange={(nx) => setKey('size', joined(nx, size[1]))} />
               <span>×</span>
-              <NumberOption value={size[1]} placeholder="ny" label="The number of pixels along y" onChange={(ny) => setKey('size', joined(size[0], ny))} />
+              <NumberOption value={size[1]} placeholder={withData ? 'from the data' : 'ny'} label="The number of pixels along y" onChange={(ny) => setKey('size', joined(size[0], ny))} />
             </span>
           </Row>
           <Row label="Pixel size" unit="″">
             <span className="ob-pair">
-              <NumberOption value={step[0]} placeholder="1" label="The size of a pixel along x" onChange={(sx) => setKey('step', joined(sx, step[1]))} />
+              <NumberOption value={step[0]} placeholder={withData ? 'from the data' : '1'} label="The size of a pixel along x" onChange={(sx) => setKey('step', joined(sx, step[1]))} />
               <span>×</span>
-              <NumberOption value={step[1]} placeholder="1" label="The size of a pixel along y" onChange={(sy) => setKey('step', joined(step[0], sy))} />
+              <NumberOption value={step[1]} placeholder={withData ? 'from the data' : '1'} label="The size of a pixel along y" onChange={(sy) => setKey('step', joined(step[0], sy))} />
             </span>
           </Row>
         </>
       )}
-      {'spectral' in properties && isSpectral(observable.type) && (
+      {'spectral' in properties && isSpectral(options.type) && (
         <>
           <div className="ob-sub">{withData ? 'Channels of the model' : 'Channels'}</div>
           <Row label="Channels">
@@ -156,13 +156,13 @@ export function ObservableFields({ defs, project, options, onChange, blocks, dat
         </>
       )}
       {Object.keys(others).length > 0 && (
-        <More title="More of the observable" count={Object.keys(pick(observable, Object.keys(others))).length}>
+        <More title={`More of ${titleOf(options.type).toLowerCase()}`} count={Object.keys(pick(options, Object.keys(others))).length}>
           <SchemaForm
             defs={defs}
             node={{ type: 'object', properties: others, required: [] }}
             project={project}
-            value={pick(observable, Object.keys(others))}
-            onChange={(next) => set({ ...pick(observable, ['type', ...GRID_KEYS]), ...next })}
+            value={pick(options, Object.keys(others))}
+            onChange={(next) => onChange({ ...Object.fromEntries(Object.entries(options).filter(([key]) => !(key in others))), ...next })}
             blocks={blocks}
           />
         </More>
@@ -212,7 +212,7 @@ export function InstrumentFields({
           </Button>
         </div>
       )}
-      {isSpectral(objectAt(options, 'observable').type) && (
+      {isSpectral(options.type) && (
         <Response family="lsf" folder="lsfs" title="LSF" value={instrument.lsf} onChange={(value) => set('lsf', value)} defs={defs} project={project} blocks={blocks} openBlock={openBlock} titleOf={titleOf} />
       )}
       <More title="Primary beam" count={instrument.primary_beam == null ? 0 : 1}>

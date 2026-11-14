@@ -211,8 +211,8 @@ def test_functions_of_a_galaxy_of_mass_alone():
     # (e.g. for its rotation curve) Its parameters are those of its mass
     # and its distance; observations on the sky see nothing of it
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky)
-    from gbkfit.observation import PixelBrightness
+        ObservationGroup)
+    from gbkfit.observation import ObservationPixelBrightness
     info = dict(mass=copy.deepcopy(MASS), distance=dict(type='parameter'))
     galaxy = galaxy_parser.load(copy.deepcopy(info))
     assert galaxy.components() == ()
@@ -227,7 +227,7 @@ def test_functions_of_a_galaxy_of_mass_alone():
     with pytest.raises(ValueError, match="it sees none"):
         ObservationGroup(
             galaxy,
-            ObservationSky(PixelBrightness(size=(4, 4)))
+            ObservationPixelBrightness(size=(4, 4))
         ).plan()
     with pytest.raises(ValueError, match="at least one component, or mass"):
         galaxy_parser.load(dict())
@@ -243,13 +243,12 @@ def test_radii_outside_refused():
 
 def test_functions_of_a_group_prefixed():
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra)
+        ObservationGroup, ObservationPixelSpectra)
     galaxy = gas_galaxy(name='north')
-    group = ObservationGroup([galaxy], [ObservationSky(
-        PixelSpectra(
-            size=(8, 8), step=(1, 1),
-            spectral=SpectralAxis(
-                size=5, step=10, convention='relativistic')))])
+    group = ObservationGroup([galaxy], [ObservationPixelSpectra(
+        size=(8, 8), step=(1, 1),
+        spectral=SpectralAxis(
+            size=5, step=10, convention='relativistic'))])
     functions = group.plan().functions()
     assert functions.names() == group.function_names() == ('G',) + tuple(
         f'north_{name}' for name in galaxy.plan_functions().names())
@@ -266,13 +265,12 @@ def test_derived_values_of_a_group():
     # The derived values of a configuration read the functions of its
     # galaxies (see ParamSpace)
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra)
+        ObservationGroup, ObservationPixelSpectra)
     from gbkfit.params import param_space_parser
-    group = ObservationGroup([gas_galaxy()], [ObservationSky(
-        PixelSpectra(
-            size=(8, 8), step=(1, 1),
-            spectral=SpectralAxis(
-                size=5, step=10, convention='relativistic')))])
+    group = ObservationGroup([gas_galaxy()], [ObservationPixelSpectra(
+        size=(8, 8), step=(1, 1),
+        spectral=SpectralAxis(
+            size=5, step=10, convention='relativistic'))])
     params = param_space_parser.load(
         dict(properties=PARAMS, derived=dict(
             v_bh='vcirc_bh(2.0)', m_bh='v_bh ** 2 * 2.0 / G',

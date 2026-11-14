@@ -42,38 +42,32 @@ def _disk(**options: Any) -> dict[str, Any]:
 
 def _cube(
         size: list[int], step: list[float],
-        spectral: dict[str, Any] | None = None, **observable: Any
+        spectral: dict[str, Any] | None = None, **options: Any
 ) -> dict[str, Any]:
     """
     An observation of a spectral cube of the size and the step (x, y and
     the spectral axis), float64, with a psf and an lsf, and the given
-    options of its observable and of its spectral axis (of relativistic
-    velocities by default).
+    options and options of its spectral axis (of relativistic velocities
+    by default).
     """
     spectral = spectral or dict(convention='relativistic')
     return dict(
-        type='sky', dtype='float64',
-        observable=dict(
-            type='pixel_spectra', size=size[:2], step=step[:2],
-            spectral=dict(size=size[2], step=step[2]) | spectral)
-        | observable,
-        instrument=dict(psf=_PSF, lsf=_LSF))
+        type='pixel_spectra', size=size[:2], step=step[:2],
+        spectral=dict(size=size[2], step=step[2]) | spectral,
+        dtype='float64', instrument=dict(psf=_PSF, lsf=_LSF)) | options
 
 
 def _moments(
-        size: list[int], step: list[float], **observable: Any
+        size: list[int], step: list[float], **options: Any
 ) -> dict[str, Any]:
     """
     An observation of moment maps, float64, with a psf and an lsf, and the
-    given options of its observable.
+    given options.
     """
     return dict(
-        type='sky', dtype='float64',
-        observable=dict(
-            type='pixel_moments', size=size, step=step,
-            spectral=dict(
-                size=60, step=10, convention='relativistic')) | observable,
-        instrument=dict(psf=_PSF, lsf=_LSF))
+        type='pixel_moments', size=size, step=step,
+        spectral=dict(size=60, step=10, convention='relativistic'),
+        dtype='float64', instrument=dict(psf=_PSF, lsf=_LSF)) | options
 
 
 def _image(
@@ -84,8 +78,8 @@ def _image(
     options.
     """
     return dict(
-        type='sky', dtype='float64',
-        observable=dict(type='pixel_brightness', size=size, step=step),
+        type='pixel_brightness', dtype='float64',
+        size=size, step=step,
         instrument=dict(psf=_PSF)) | options
 
 
@@ -387,14 +381,13 @@ def _write_image(folder: pathlib.Path) -> None:
         rptraits=dict(type='exponential'),
         emission=dict(type='band'))])
     observation = dict(
-        type='sky',
-        observable=dict(
-            type='pixel_brightness', size=[40, 40], step=0.4, rval=_SKY))
+        type='pixel_brightness',
+        size=[40, 40], step=0.4, rval=_SKY)
     group = ObservationGroup(
         galaxy_parser.load(galaxy), observation_parser.load(observation))
     params = dict(xpos=0.27, ypos=-0.38, posa=40, incl=55, rpt_a=1, rpt_s=2.5)
     image = group.plan(DriverHost()).model_h(params)[0]['brightness'].data
-    coords = group.observations()[0].observable().grid().coords
+    coords = group.observations()[0].grid().coords
     write_data(
         str(folder / 'image.fits'), image.astype(np.float32), coords,
         overwrite=True)

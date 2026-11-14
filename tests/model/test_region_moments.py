@@ -42,7 +42,7 @@ def evaluate(driver, observable):
     """The model data of an observable of the tests, by data item."""
     plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
-             observable=copy.deepcopy(observable))])
+             observation=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
@@ -109,10 +109,10 @@ def test_region_moments_of_apertures(driver):
 
 
 def test_region_moments_output_is_a_map_of_the_bins():
-    from gbkfit.observation import RegionMoments
+    from gbkfit.observation import ObservationRegionMoments
     index = np.array([[0, 0, -1], [1, 2, 2]])
-    bmaps = RegionMoments(
-        RegionsBins(index, step=2, rota=10),
+    bmaps = ObservationRegionMoments(
+        regions=RegionsBins(index, step=2, rota=10),
         spectral=SpectralAxis(convention='relativistic'))
     output = bmaps.output(np.array([1.0, 2.0, 3.0], dtype=np.float32))
     np.testing.assert_array_equal(output.data, [[1, 1, np.nan], [2, 3, 3]])
@@ -153,42 +153,37 @@ def test_region_moments_observation_from_data(tmp_path):
     assert loaded.regions() == dataset.regions()
     np.testing.assert_array_equal(loaded['moment1'].data(), [1400, 1500, 1600])
     info = dict(
-        type='sky',
+        type='region_moments',
         dataset=dict(type='region_moments') | data_info,
-        observable=dict(
-            type='region_moments',
-            spectral=dict(step=2, convention='relativistic')))
+        spectral=dict(step=2, convention='relativistic'))
     observation = observation_parser.load(copy.deepcopy(info))
-    observable = observation.observable()
-    assert observable.size() == (3, 2)
-    assert observable.spectral().rval() == 1500
+    assert observation.size() == (3, 2)
+    assert observation.spectral().rval() == 1500
     # A dump of the observation does not repeat what the data give
     dumped = observation_parser.dump(
         observation, prefix=str(tmp_path / 'dump_'))
-    assert 'regions' not in dumped['observable']
-    assert 'size' not in dumped['observable']
+    assert 'regions' not in dumped
+    assert 'size' not in dumped
     with pytest.raises(Exception, match=(
             r"gives the options \['size'\], which its data give too, but "
             r"not all")):
-        observation_parser.load(info | dict(observable=dict(
-            type='region_moments', size=[3, 2],
-            spectral=dict(convention='relativistic'))))
-
+        observation_parser.load(info | dict(
+            size=[3, 2], spectral=dict(convention='relativistic')))
 
 
 def test_region_moments_observation_dumps_its_bins_with_the_prefix(tmp_path):
-    # Without data, the bins are options of the observable: their file is
+    # Without data, the bins are options of the observation: their file is
     # named with the prefix of the dump, which can be dumped again
     from gbkfit.observation import (
-        ObservationSky, RegionMoments, observation_parser)
-    observation = ObservationSky(RegionMoments(
-        RegionsBins(np.arange(16).reshape(4, 4) % 3),
-        spectral=SpectralAxis(size=11, convention='relativistic')))
+        ObservationRegionMoments, observation_parser)
+    observation = ObservationRegionMoments(
+        regions=RegionsBins(np.arange(16).reshape(4, 4) % 3),
+        spectral=SpectralAxis(size=11, convention='relativistic'))
     prefix = str(tmp_path / 'out_')
     for _ in range(2):
         dumped = observation_parser.dump(
             observation, prefix=prefix, overwrite=True)
-    assert dumped['observable']['regions']['file'] == f'{prefix}bins.fits'
+    assert dumped['regions']['file'] == f'{prefix}bins.fits'
 
 def test_region_moments_objective_residual(driver):
     # Data equal to the model plus 1, with errors of 2: every residual
@@ -198,17 +193,17 @@ def test_region_moments_objective_residual(driver):
     from gbkfit.instrument import instrument_parser
     from gbkfit.observation import (
         LikelihoodGauss, Likelihoods, ObservationGroup,
-        ObservationSky, RegionMoments)
+        ObservationRegionMoments)
     index = np.full((41, 32), -1)
     index[10:20, 5:15] = 0
     index[20:30, 10:25] = 1
     regions = RegionsBins(index)
-    observable = RegionMoments(
-        regions, SpectralAxis(**SPECTRAL), orders=[1, 2])
-    instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
+    moments = dict(
+        regions=regions, spectral=SpectralAxis(**SPECTRAL), orders=[1, 2],
+        instrument=instrument_parser.load(copy.deepcopy(INSTRUMENT)))
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
-        [ObservationSky(observable, instrument=instrument)])
+        [ObservationRegionMoments(**moments)])
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
     model = {
@@ -220,9 +215,7 @@ def test_region_moments_objective_residual(driver):
         for key, value in model.items()}, regions)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
-        [ObservationSky(
-            observable, instrument=instrument,
-            dataset=dataset)])
+        [ObservationRegionMoments(**moments, dataset=dataset)])
     residual = Objective(group.plan(driver), Likelihoods(
         group, LikelihoodGauss(missing_residual=3))).residual_nddata_h(
         params.evaluate())
@@ -284,13 +277,13 @@ def test_the_moments_above_2_are_those_of_the_method(method, other, message):
     # h3 of a Gauss-Hermite series and the central moment of order 3 are
     # items of their own: the method that measures the other refuses one
     # (audit 2026-10-31 #12: they were both moment3, picked by the method)
-    from gbkfit.observation import RegionMoments
+    from gbkfit.observation import ObservationRegionMoments
     regions = RegionsBins(np.array([[0, 1]]))
-    observable = RegionMoments(
-        regions, orders=[3], method=method,
+    observation = ObservationRegionMoments(
+        regions=regions, orders=[3], method=method,
         spectral=SpectralAxis(convention='relativistic'))
-    observable.check_dataset(observable.make_dataset(
-        {observable.keys()[0]: Data(np.zeros(2))}))
+    observation.check_dataset(observation.make_dataset(
+        {observation.keys()[0]: Data(np.zeros(2))}))
     with pytest.raises(ValueError, match=message):
-        observable.check_dataset(
+        observation.check_dataset(
             DatasetRegionMoments(regions=regions, **other))

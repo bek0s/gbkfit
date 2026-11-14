@@ -42,7 +42,7 @@ export function Sky({ data, grid, psf, beam }: { data: SkyData | null; grid: { s
         <span>On the sky</span>
         <Legend psf={psf} beam={beam} />
       </figcaption>
-      {data ? <DataSky data={data} psf={psf} beam={beam} /> : grid ? <GridSky grid={grid} psf={psf} /> : <p className="ob-empty">Give the data, or the grid of the observable, to see the sky.</p>}
+      {data ? <DataSky data={data} psf={psf} beam={beam} /> : grid ? <GridSky grid={grid} psf={psf} /> : <p className="ob-empty">Give the data, or the grid of the observation, to see the sky.</p>}
     </figure>
   );
 }
@@ -98,7 +98,7 @@ function DataSky({ data, psf, beam }: { data: SkyData; psf: Ellipse | null; beam
   );
 }
 
-// The grid of an observable without data: a frame of its size on the sky
+// The grid of an observation without data: a frame of its size on the sky
 function GridSky({ grid, psf }: { grid: { size: [number, number]; step: [number, number] }; psf: Ellipse | null }) {
   const [nx, ny] = grid.size;
   const fitted = useFitted(nx, ny, 0);

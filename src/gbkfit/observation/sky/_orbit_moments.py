@@ -17,33 +17,33 @@ from gbkfit.moments import MomentsPlan
 from gbkfit.params import ParamValues
 from . import _moments, _orbit_outputs
 from ._orbit_sky import PixelCube, bins_sky_grid
-from .base import (
-    HostModelData, ModelData, ModelItem, ObservablePlan, ObservationSetup)
+from ..plan import HostModelData, ModelData, ModelItem, ObservationPlan
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
     from gbkfit.model.components.spheroids import (
         OrbitLibraryState, OrbitRecords)
     from ..noise import Noise
-    from .region_moments import RegionMoments
+    from .base import SkyOptions
+    from .region_moments import ObservationRegionMoments
 
 
 def check_orbits(
-        moments: 'RegionMoments',
+        moments: 'ObservationRegionMoments',
         scene: 'Scene',
-        setup: ObservationSetup
+        options: 'SkyOptions'
 ) -> None:
     """
     Raise ValueError unless moments of regions can see stars on orbits
-    whose weights are solved (see OrbitMomentsPlan) in a scene, as an
-    observation of the given setup sees them (see Observable.check_scene):
-    only them, in bins, of the method gauss_hermite and the orders 1 to M
-    (V, sigma, h3 ... hM), without a flux scale; through a PSF that does
-    not vary, without an LSF (pPXF takes it out of their kinematics), a
-    primary beam, a lens or dust, which the recording of the orbits does
-    not apply.
+    whose weights are solved (see OrbitMomentsPlan) in a scene, as the
+    observation sees them with its options (see
+    ObservationSky._check_scene): only them, in bins, of the method
+    gauss_hermite and the orders 1 to M (V, sigma, h3 ... hM), without a
+    flux scale; through a PSF that does not vary, without an LSF (pPXF
+    takes it out of their kinematics), a primary beam, a lens or dust,
+    which the recording of the orbits does not apply.
     """
-    instrument = setup.instrument
+    instrument = options.instrument
     # (refused here, before the plan: it ignored them, or failed on a
     # varying PSF before the objective refused it)
     for applies, what in (
@@ -52,7 +52,7 @@ def check_orbits(
             (instrument.psf() is not None and instrument.psf().varies(),
              "a PSF that varies"),
             (instrument.primary_beam() is not None, "a primary beam"),
-            (setup.foreground.lens() is not None, "a lens"),
+            (options.foreground.lens() is not None, "a lens"),
             (scene.has_dust(), "dust in the galaxies it sees")):
         if applies:
             raise ValueError(
@@ -79,13 +79,13 @@ def check_orbits(
             f"Gauss-Hermite series (method gauss_hermite) of the orders "
             f"1 to M (V, sigma, h3 ... hM); they are of the method "
             f"{moments.method()!r} and the orders {list(orders)}")
-    if setup.flux_scale_param is not None:
+    if options.flux_scale_param is not None:
         raise ValueError(
             "moments of stars on orbits whose weights are solved have "
             "no flux scale")
 
 
-class OrbitMomentsPlan(ObservablePlan):
+class OrbitMomentsPlan(ObservationPlan):
     """
     The moments of the bins of stars on orbits whose weights are solved
     (see Component.orbit_weights), at given weights: the orbits of the
@@ -116,26 +116,26 @@ class OrbitMomentsPlan(ObservablePlan):
 
     Parameters
     ----------
-    moments : RegionMoments
+    moments : ObservationRegionMoments
         The moments.
     driver : Driver
         The driver.
     scene : Scene
         What they see: the stars of one component, on orbits.
-    setup : ObservationSetup
-        The setup of their observation: its instrument, the oversampling
+    options : SkyOptions
+        The options of their observation: its instrument, the oversampling
         of its model (along x and y) and its precision.
     """
 
     def __init__(
             self,
-            moments: 'RegionMoments',
+            moments: 'ObservationRegionMoments',
             driver: Driver,
             scene: 'Scene',
-            setup: ObservationSetup
+            options: 'SkyOptions'
     ):
-        instrument, oversampling = setup.instrument, setup.oversampling
-        dtype = setup.dtype
+        instrument, oversampling = options.instrument, options.oversampling
+        dtype = options.dtype
         (galaxy, component), = scene.orbit_emitters()
         self._galaxy = galaxy
         self._component = component

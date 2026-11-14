@@ -58,10 +58,10 @@ class Serializable(abc.ABC):
     # configurations name instead of giving the Drivers)
     config_options: ClassVar[Mapping[str, Any]] = {}
 
-    # The parameters of its config_constructors that the caller of its
-    # load gives, not its configurations (e.g. the data of an observable,
-    # which its observation gives)
-    given_options: tuple[str, ...] = ()
+    # The options of its configurations that are required only without
+    # another option, by that option (e.g. the size of the grid of an
+    # observation without its dataset, which gives it); its schema says so
+    config_required_without: ClassVar[Mapping[str, tuple[str, ...]]] = {}
 
     # The modules it needs beyond those GBKFIT always has (e.g. optional
     # packages), each with how to install it: without them it can be
@@ -203,8 +203,7 @@ def config_constructor(
     params = {}
     for name in names:
         func = _constructor_function(cls, name)
-        params[name] = set(funcutils.parameter_names(func).all) \
-            - set(cls.given_options)
+        params[name] = set(funcutils.parameter_names(func).all)
     own = {
         name: params[name].difference(
             *(params[other] for other in names if other != name))
@@ -304,13 +303,13 @@ def make_typed_desc(
     cls : type
         The class.
     label : str, optional
-        What the class is (e.g. 'observable').
+        What the class is (e.g. 'observation').
 
     Returns
     -------
     str
-        The description (e.g. 'observable pixel_moments
-        (class=PixelMoments)').
+        The description (e.g. 'observation pixel_moments
+        (class=ObservationPixelMoments)').
     """
     desc = f'{cls.type()} (class={cls.__qualname__})'
     return f'{label} {desc}' if label else desc

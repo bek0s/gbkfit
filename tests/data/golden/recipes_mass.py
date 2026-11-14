@@ -50,10 +50,9 @@ def _moments(
 ) -> dict[str, Any]:
     """A sky observation of moment maps, float64."""
     return dict(
-        type='sky', dtype='float64',
-        observable=dict(
-            type='pixel_moments', size=[size, size],
-            spectral=dict(size=60, step=10, convention='relativistic')),
+        type='pixel_moments', dtype='float64',
+        size=[size, size],
+        spectral=dict(size=60, step=10, convention='relativistic'),
         instrument=_INSTRUMENT) | options
 
 
@@ -69,11 +68,10 @@ def _cube(
     A sky observation of a spectral cube of the size (nx, ny, nz), float64.
     """
     return dict(
-        type='sky', dtype='float64',
-        observable=dict(
-            type='pixel_spectra', size=size[:2], step=[1, 1],
-            spectral=dict(
-                size=size[2], step=15, convention='relativistic')),
+        type='pixel_spectra', dtype='float64',
+        size=size[:2], step=[1, 1],
+        spectral=dict(
+            size=size[2], step=15, convention='relativistic'),
         instrument=_INSTRUMENT) | options
 
 

@@ -246,7 +246,7 @@ def _emits_hi(emission: 'Emission') -> TypeGuard['LineEmission']:
 class DataUnit(NamedTuple):
     """
     The unit of the light in the data of an observation, which its model
-    takes (see Observable.data_unit): the unit (None if the data have
+    takes (see ObservationSky.data_unit): the unit (None if the data have
     none); the solid angle of a pixel of the data (arcsec^2), for units
     per pixel; that of the beam of the data (arcsec^2), for units per
     beam: one, or one for each of the spectral points beam_spectral

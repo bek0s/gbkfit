@@ -57,7 +57,7 @@ def _cube(driver, galaxy, observable, properties, depth=None):
     """
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
-        observable=observable | dict(dtype='float64'),
+        observation=observable | dict(dtype='float64'),
         **({} if depth is None else dict(depth=depth)))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
@@ -275,7 +275,7 @@ def test_an_elliptical_blob(driver, posa, incl):
             rptraits=dict(type='mixture_gauss', nblobs=1),
             vptraits=dict(type='uniform', direction='tan'),
             dptraits=dict(type='uniform'))]),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[n, n], step=[step, step],
             spectral=dict(size=21, step=5, convention='relativistic')))])
     params = gbkfit.params.ParamSpace.from_properties(

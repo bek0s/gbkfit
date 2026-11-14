@@ -1,5 +1,5 @@
 """
-Tests of the median filter of observables (option median_size): the
+Tests of the median filter of observations (option median_size): the
 model is smoothed on the sky as the data were.
 """
 
@@ -10,8 +10,8 @@ import scipy.ndimage
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
-    ObservationGroup, ObservationSky, PixelBrightness,
-    PixelMoments, PixelSpectra, observable_parser)
+    ObservationGroup, ObservationPixelBrightness, ObservationPixelMoments,
+    ObservationPixelSpectra, observation_parser)
 from gbkfit.params import ParamSpace
 
 
@@ -32,10 +32,9 @@ PARAMS = dict(
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 
-def model(driver, observable, galaxy, item, out_extra=None):
+def model(driver, observation, galaxy, item, out_extra=None):
     """The model data of an item of an observation of a galaxy."""
-    group = ObservationGroup(
-        galaxy, ObservationSky(observable))
+    group = ObservationGroup(galaxy, observation)
     params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()
@@ -51,18 +50,19 @@ def zero_padded_median(data, size):
 
 def test_images_and_cubes_are_filtered_on_the_sky(driver):
     image = model(
-        driver, PixelBrightness(size=(24, 20), median_size=3), disk('band'),
-        'brightness')
+        driver, ObservationPixelBrightness(size=(24, 20), median_size=3),
+        disk('band'), 'brightness')
     plain = model(
-        driver, PixelBrightness(size=(24, 20)), disk('band'), 'brightness')
+        driver, ObservationPixelBrightness(size=(24, 20)), disk('band'),
+        'brightness')
     np.testing.assert_array_equal(image, zero_padded_median(plain, 3))
     cube = model(
-        driver, PixelSpectra(
+        driver, ObservationPixelSpectra(
             size=(24, 20), step=(1, 1),
             spectral=SpectralAxis(size=41, step=10, convention='relativistic'),
             median_size=5), disk('lines'), 'spectra')
     plain = model(
-        driver, PixelSpectra(
+        driver, ObservationPixelSpectra(
             size=(24, 20), step=(1, 1),
             spectral=SpectralAxis(
                 size=41, step=10, convention='relativistic')),
@@ -73,14 +73,14 @@ def test_images_and_cubes_are_filtered_on_the_sky(driver):
 def test_moment_maps_are_of_the_filtered_spectra(driver):
     # (the cube of the spectra, an extra output, is that of the filter)
     filtered, plain = Extras(), Extras()
-    model(driver, PixelMoments(
+    model(driver, ObservationPixelMoments(
         size=(24, 20), orders=(0, 1), median_size=3,
         spectral=SpectralAxis(convention='relativistic')),
-          disk('lines'), 'moment1', filtered)
-    model(driver, PixelMoments(
+        disk('lines'), 'moment1', filtered)
+    model(driver, ObservationPixelMoments(
         size=(24, 20), orders=(0, 1),
         spectral=SpectralAxis(convention='relativistic')), disk('lines'),
-          'moment1', plain)
+        'moment1', plain)
     np.testing.assert_array_equal(
         filtered.get('dcube_lo').data,
         zero_padded_median(plain.get('dcube_lo').data, 3))
@@ -92,13 +92,14 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
     # are the scatter of draws, about 0.41 of the noise for 3 x 3 pixels
     # (not the noise itself, 2.4 times too large)
     from gbkfit.observation import MockOptions, NoiseGauss, draw_mocks
-    assert PixelBrightness(size=(8, 8)).linear_in_light()
-    assert not PixelBrightness(size=(8, 8), median_size=3).linear_in_light()
-    assert not PixelSpectra(
+    assert ObservationPixelBrightness(size=(8, 8)).linear_in_light()
+    assert not ObservationPixelBrightness(
+        size=(8, 8), median_size=3).linear_in_light()
+    assert not ObservationPixelSpectra(
         size=(8, 8), spectral=SpectralAxis(size=5, convention='relativistic'),
         median_size=3).linear_in_light()
-    group = ObservationGroup(disk('band'), ObservationSky(
-        PixelBrightness(size=(24, 20), median_size=3)))
+    group = ObservationGroup(disk('band'), ObservationPixelBrightness(
+        size=(24, 20), median_size=3))
     params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()
@@ -109,14 +110,14 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
 
 
 def test_the_median_size_is_an_odd_number_of_at_least_3():
-    observable = PixelSpectra(
+    observation = ObservationPixelSpectra(
         size=(8, 8), spectral=SpectralAxis(size=5, convention='relativistic'),
         median_size=3)
-    assert observable_parser.load(observable.dump()).dump() \
-        == observable.dump()
+    assert observation_parser.load(observation.dump()).dump() \
+        == observation.dump()
     for size, error, message in (
             (1, ValueError, "at least 3"),
             (4, ValueError, "odd number of pixels"),
             (2.0, TypeError, "of type int")):
         with pytest.raises(error, match=message):
-            PixelBrightness(size=(8, 8), median_size=size)
+            ObservationPixelBrightness(size=(8, 8), median_size=size)

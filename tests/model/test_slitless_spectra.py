@@ -41,7 +41,7 @@ SLITLESS = dict(
 def evaluate(driver, observable, properties=PROPERTIES):
     plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
-             observable=copy.deepcopy(observable))])
+             observation=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
@@ -143,15 +143,13 @@ def test_slitless_spectra_objective_residual(driver):
     from gbkfit.dataset import Data, DatasetSlitlessSpectra
     from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
-    from gbkfit.observation import (
-        ObservationGroup, ObservationSky, observable_parser)
+    from gbkfit.observation import ObservationGroup, observation_parser
     model = evaluate(driver, SLITLESS)
     dataset = DatasetSlitlessSpectra(
         Data(model + 1, error=np.full_like(model, 2)))
-    options = {k: v for k, v in SLITLESS.items() if k not in ('type', 'size')}
-    observable = observable_parser.load(
-        dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
-    observation = ObservationSky(observable, dataset=dataset)
+    # (on the grid of the data, that of SLITLESS)
+    observation = observation_parser.load(
+        copy.deepcopy(SLITLESS)).with_dataset(dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     objective = Objective(group.plan(driver))
@@ -165,12 +163,12 @@ def test_slitless_spectra_refuse_an_lsf_and_frequencies():
     with pytest.raises(ValueError, match="no LSF"):
         observation_group([dict(
             driver=dict(type='host'), galaxy=GALAXY,
-            observable=SLITLESS | dict(lsf=dict(
+            observation=SLITLESS | dict(lsf=dict(
                 type='gauss', sigma='15 km/s')))])
     with pytest.raises(ValueError, match="rest wavelength"):
         observation_group([dict(
             driver=dict(type='host'), galaxy=GALAXY,
-            observable=SLITLESS | dict(spectral=dict(
+            observation=SLITLESS | dict(spectral=dict(
                 size=NZ, step=STEP, rest='1420 MHz')))])
 
 
@@ -246,10 +244,10 @@ def test_traces_that_vary_across_the_detector_move_each_pixel():
     # light of each pixel and channel lands about the middle of its
     # segment, at its own offset
     from gbkfit.instrument import traces
-    from gbkfit.observation import SlitlessSpectra
+    from gbkfit.observation import ObservationSlitlessSpectra
     trace = traces.TraceGrismConf(
         displ=[[4], [1e-4]], dispx=[[0, 0.05, 0], [4]], dispy=[[0]])
-    observable = SlitlessSpectra(
+    observable = ObservationSlitlessSpectra(
         size=[40, 6], spectral=SpectralAxis(size=3, step=30, rest='4 um'),
         trace=trace)
     edges = observable._channel_edges()
@@ -279,19 +277,16 @@ def test_slitless_spectra_have_flux_scales_per_row(driver):
     from gbkfit.dataset import Data, DatasetSlitlessSpectra
     from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
-    from gbkfit.observation import (
-        ObservationGroup, ObservationSky, observable_parser)
+    from gbkfit.observation import ObservationGroup, observation_parser
     model = evaluate(driver, SLITLESS)
     scales = 1 + 0.3 * np.sin(np.arange(model.shape[0]))
     error = 1e-3
     dataset = DatasetSlitlessSpectra(Data(
         model * scales[:, None], error=np.full_like(model, error)))
-    options = {k: v for k, v in SLITLESS.items() if k not in ('type', 'size')}
-    observable = observable_parser.load(
-        dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
-    assert observable.flux_scales()['per_row'].axis == 1
-    observation = ObservationSky(
-        observable, dataset=dataset, flux_scale='per_row', name='grism')
+    # (on the grid of the data, that of SLITLESS)
+    observation = observation_parser.load(copy.deepcopy(SLITLESS) | dict(
+        flux_scale='per_row', name='grism')).with_dataset(dataset)
+    assert observation.flux_scales()['per_row'].axis == 1
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace.from_properties(
@@ -432,22 +427,22 @@ def test_resampled_spectra_spread_the_light_by_a_pixel_more(driver):
 
 
 def test_slit_masks_and_exposures_from_configurations():
-    from gbkfit.observation import observable_parser
+    from gbkfit.observation import observation_parser
     info = SLITLESS | dict(
         slit_mask=dict(type='shutters', size=[0.2, 0.46], pitch=0.53,
                        count=3, centre=[0.1, 0]),
         exposures=[dict(), dict(sky_offset=[0, 0.53], weight=-1)],
         sky_sampling=4, resampled=True)
-    observable = observable_parser.load(copy.deepcopy(info))
-    assert observable.slit_mask().rectangles().shape == (3, 4)
-    assert [e.weight() for e in observable.exposures()] == [1, -1]
-    dumped = observable_parser.dump(observable)
-    assert observable_parser.dump(observable_parser.load(dumped)) == dumped
+    observation = observation_parser.load(copy.deepcopy(info))
+    assert observation.slit_mask().rectangles().shape == (3, 4)
+    assert [e.weight() for e in observation.exposures()] == [1, -1]
+    dumped = observation_parser.dump(observation)
+    assert observation_parser.dump(observation_parser.load(dumped)) == dumped
     with pytest.raises(ValueError, match="pitch"):
-        observable_parser.load(SLITLESS | dict(slit_mask=dict(
+        observation_parser.load(SLITLESS | dict(slit_mask=dict(
             type='shutters', size=[0.2, 0.46], count=3)))
     with pytest.raises(ConfigError, match="sky_sampling"):
-        observable_parser.load(SLITLESS | dict(sky_sampling=0))
+        observation_parser.load(SLITLESS | dict(sky_sampling=0))
 
 
 def polynomial_table(wave, x, y, dy=0.0):
@@ -476,7 +471,7 @@ def test_trace_tables_interpolate_their_nodes():
 
 def test_trace_tables_disperse_as_their_traces(driver, tmp_path):
     # A table of the trace of SLITLESS, from a file, gives its image
-    from gbkfit.observation import observable_parser
+    from gbkfit.observation import observation_parser
     edges = 4e-6 * (1 + np.array([-1, 1]) * STEP * (NZ / 2 + 1) / 2.99792458e5)
     table = polynomial_table(
         np.linspace(*edges, 12), np.arange(-15.0, 31), np.arange(-3.0, 15))
@@ -487,10 +482,11 @@ def test_trace_tables_disperse_as_their_traces(driver, tmp_path):
     np.testing.assert_allclose(
         evaluate(driver, tabled), expected, rtol=1e-5,
         atol=1e-6 * expected.max())
-    observable = observable_parser.load(copy.deepcopy(tabled))
-    dumped = observable_parser.dump(observable, prefix=str(tmp_path / 'd_'))
+    observation = observation_parser.load(copy.deepcopy(tabled))
+    dumped = observation_parser.dump(
+        observation, prefix=str(tmp_path / 'd_'))
     assert dumped['trace']['file'] == str(tmp_path / 'd_trace.fits')
-    again = observable_parser.load(dumped)
+    again = observation_parser.load(dumped)
     np.testing.assert_allclose(
         again.trace().offsets(4e-6, 3.0, 4.0),
-        observable.trace().offsets(4e-6, 3.0, 4.0))
+        observation.trace().offsets(4e-6, 3.0, 4.0))

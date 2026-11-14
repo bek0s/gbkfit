@@ -28,7 +28,7 @@ PROPERTIES = dict(
 def evaluate(driver, observable):
     plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
-             observable=observable)])
+             observation=observable)])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
@@ -64,7 +64,7 @@ def test_a_slit_sees_the_rotation_along_its_position_angle(
     # and one across it, along the minor axis, no rotation
     properties = PROPERTIES | dict(xpos=0, ypos=0)
     plan = group_plan([dict(
-        driver=dict(type=driver.type()), galaxy=GALAXY, observable=dict(
+        driver=dict(type=driver.type()), galaxy=GALAXY, observation=dict(
             type='slit_spectra', size=[32], step=[1], slit_pa=slit_pa,
             spectral=dict(size=51, step=10, convention='relativistic')))])
     params = gbkfit.params.ParamSpace.from_properties(
@@ -111,11 +111,9 @@ def test_slit_spectra_objective_residual(driver):
         spectral=SpectralAxis(step=10, convention='relativistic'),
         slit_pa=-60)
     from gbkfit.model import galaxy_parser
-    from gbkfit.observation import (
-        ObservationGroup, ObservationSky, observable_parser)
-    observation = ObservationSky(
-        observable_parser.load(copy.deepcopy(observable)),
-        dataset=dataset)
+    from gbkfit.observation import ObservationGroup, observation_parser
+    observation = observation_parser.load(
+        copy.deepcopy(observable)).with_dataset(dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     objective = Objective(group.plan(driver))

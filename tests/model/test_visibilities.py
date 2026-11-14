@@ -46,7 +46,7 @@ GRID = dict(fov=[32, 28], step=1, rval=[150, -30])
 def evaluate(driver, galaxy, observable, properties):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
-        observable=copy.deepcopy(observable))])
+        observation=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
@@ -87,8 +87,8 @@ def test_visibilities_are_the_transform_of_the_flux_of_the_cube(driver):
     # The cube of pixel_spectra on the grid of the visibilities, from the
     # highest frequency: V = sum of its surface brightness times the area
     # of the pixels, at their directions
-    from gbkfit.observation import Visibilities
-    visibilities_ = Visibilities(COVERAGE, **GRID)
+    from gbkfit.observation import ObservationVisibilities
+    visibilities_ = ObservationVisibilities(coverage=COVERAGE, **GRID)
     grid = visibilities_.grid()
     coords = grid.coords
     cube = evaluate(driver, DISK, dict(
@@ -121,10 +121,10 @@ def test_a_point_source_is_its_flux_at_its_phase(driver):
 def test_visibilities_have_no_psf():
     from gbkfit.instrument import Instrument, PSFGauss
     from gbkfit.observation import (
-        ObservationSky, Visibilities)
+        ObservationVisibilities)
     with pytest.raises(ValueError, match="no PSF"):
-        ObservationSky(
-            Visibilities(COVERAGE, 8),
+        ObservationVisibilities(
+            coverage=COVERAGE, fov=8,
             instrument=Instrument(psf=PSFGauss(sigma=1)))
 
 
@@ -144,15 +144,15 @@ def observation_of_data(driver, offset):
     from gbkfit.dataset import Data, DatasetVisibilities
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, Visibilities)
+        ObservationGroup, ObservationVisibilities)
     from gbkfit.params import ParamSpace
     model = visibilities(driver, DISK, DISK_PROPERTIES)
     error = np.ones(model.shape)
     dataset = DatasetVisibilities(
         Data(model.real + offset, error=error),
         Data(model.imag + offset, error=error), COVERAGE)
-    observation = ObservationSky(
-        Visibilities.from_data(dataset, **GRID),
+    observation = ObservationVisibilities(
+        **GRID,
         dataset=dataset)
     group = ObservationGroup(galaxy_parser.load(DISK), observation)
     return (group.plan(driver),
@@ -219,10 +219,10 @@ def test_the_noise_of_visibilities_is_not_correlated_on_the_sky(driver):
 
 def test_the_default_step_samples_the_longest_baseline_five_times():
     # As galario's: 1 / (5 u_max), at the highest frequency
-    from gbkfit.observation import Visibilities
+    from gbkfit.observation import ObservationVisibilities
     uv = np.hypot(*COVERAGE.uvw()[:, :2].T).max()
     u_max = uv * COVERAGE.frequencies().max() / C
-    observable = Visibilities(COVERAGE, 8)
+    observable = ObservationVisibilities(coverage=COVERAGE, fov=8)
     assert observable.step()[0] == pytest.approx(
         np.degrees(1) * 3600 / (5 * u_max))
     assert observable.size()[:2] == tuple(

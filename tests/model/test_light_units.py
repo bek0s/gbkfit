@@ -13,7 +13,7 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
-    ObservationGroup, ObservationSky, PixelSpectra)
+    ObservationGroup, ObservationPixelSpectra)
 from gbkfit.params import ParamSpace
 
 
@@ -50,7 +50,7 @@ def model(
     redshift, if any), seen in data of the given unit (none: without data)
     through the PSF, if given, in the given unit without data, if any.
     """
-    observable = PixelSpectra(
+    cube = dict(
         size=SIZE[:2], step=STEP[:2], rval=(0, 0), spectral=SpectralAxis(
             size=SIZE[2], step=STEP[2], rval=470, rest=HI))
     data = None
@@ -63,8 +63,8 @@ def model(
     if redshift is not None:
         galaxy.update(redshift=redshift)
     group = ObservationGroup(
-        [galaxy_parser.load(galaxy)], [ObservationSky(
-            observable, instrument=Instrument(psf=psf), dataset=data,
+        [galaxy_parser.load(galaxy)], [ObservationPixelSpectra(
+            **cube, instrument=Instrument(psf=psf), dataset=data,
             unit=unit)])
     plan = group.plan(driver)
     space = ParamSpace.from_properties(group.pdescs(), params)

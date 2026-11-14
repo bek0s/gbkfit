@@ -8,7 +8,7 @@ import pytest
 
 from gbkfit.grid import make_grid, sky_positions
 from gbkfit.grid.coords import _to_sky
-from gbkfit.observation.observables._uv_transforms import uv_transforms
+from gbkfit.observation.sky._uv_transforms import uv_transforms
 
 
 C = 299792458.0

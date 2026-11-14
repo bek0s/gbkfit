@@ -46,7 +46,7 @@ def mcdisk(seed=0, **options):
 CASES = dict(
     intensity_2d=(
         dict(
-            observable=dict(type='pixel_brightness', size=[20, 16], rota=10),
+            observation=dict(type='pixel_brightness', size=[20, 16], rota=10),
             galaxy=dict(components=[
                 smdisk(
                     loose=True, tilted=True,
@@ -61,7 +61,7 @@ CASES = dict(
             spt_p=45, spt_s=270)),
     kinematics_2d=(
         dict(
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[20, 16], step=[1, 1],
                 spectral=dict(size=11, step=30, convention='relativistic')),
             galaxy=dict(components=[
@@ -93,7 +93,7 @@ CASES = dict(
             disk2_spt_p=[0, 10, 20, 30, 40], disk2_spt_s=[300] * 5)),
     intensity_3d=(
         dict(
-            observable=dict(type='pixel_brightness', size=[20, 16]),
+            observation=dict(type='pixel_brightness', size=[20, 16]),
             galaxy=dict(components=[
                 smdisk(
                     name='smooth', loose=False, tilted=True,
@@ -129,7 +129,7 @@ CASES = dict(
             dust_clouds_rht_s=0.5)),
     kinematics_3d=(
         dict(
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[20, 16], step=[1, 1],
                 spectral=dict(size=11, step=30, convention='relativistic')),
             depth=dict(extent=14 * 1.5, step=1.5),

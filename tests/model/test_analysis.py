@@ -207,7 +207,7 @@ def test_the_geometry_of_a_model_is_found(driver):
         emission=dict(type='lines'))])
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
-        observable=dict(
+        observation=dict(
             type='pixel_moments', size=[41, 41],
             spectral=dict(size=161, step=5, convention='relativistic'),
             orders=[1], flux_floor=1e-4))])
@@ -227,10 +227,10 @@ def test_the_geometry_of_a_model_is_found(driver):
     observation = plan.group().observations()[0]
     rotated = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
-        observable=observation.observable().dump() | dict(rota=25))])
+        observation=observation.dump() | dict(rota=25))])
     v = rotated.model_h(params.evaluate())[0]['moment1'].data
     sky_x, sky_y = sky_positions(
-        rotated.group().observations()[0].observable().grid())
+        rotated.group().observations()[0].grid())
     assert kinematic_pa(v, sky_x, sky_y, (0, 0)).pa == pytest.approx(
         40, abs=0.5)
     assert kinematic_pa(v, x, y, (20, 20)).pa == pytest.approx(15, abs=0.5)

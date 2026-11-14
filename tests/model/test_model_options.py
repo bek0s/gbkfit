@@ -66,14 +66,13 @@ def config(kind, components=None, depth=None):
     of the given components (by default, the one the observation sees),
     with the given depth axis, if any.
     """
-    observable, component = OBSERVATIONS[kind]
+    kind_options, component = OBSERVATIONS[kind]
     if components is None:
         components = [component]
     return dict(
         galaxies=[dict(components=components)],
-        observations=[dict(
-            type='sky', observable=observable,
-            **({} if depth is None else dict(depth=depth)))])
+        observations=[
+            kind_options | ({} if depth is None else dict(depth=depth))])
 
 
 def evaluation(info):

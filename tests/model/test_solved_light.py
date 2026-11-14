@@ -17,8 +17,8 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective, comparison_of
 from gbkfit.observation import (
-    Depth, LikelihoodGauss, Likelihoods, ObservationGroup, ObservationSky,
-    PixelBrightness)
+    Depth, LikelihoodGauss, Likelihoods, ObservationGroup,
+    ObservationPixelBrightness)
 from gbkfit.params import ParamSpace
 
 
@@ -44,16 +44,12 @@ SOLVE = dict(solve=dict(
     type='gauss', mean=0, sigma=100, min=0, likelihood='profiled'))
 
 
-def observation(size, data=None, observable=None):
+def observation(size, data=None):
     """An image of size pixels of 0.5 arcsec of the given data, if any."""
-    dataset = None if data is None else DatasetPixelBrightness(
-        Data(data, error=np.full_like(data, ERROR)), step=(0.5, 0.5))
-    observable = observable or (
-        PixelBrightness.from_data(dataset) if dataset is not None
-        else PixelBrightness(size=size, step=(0.5, 0.5)))
-    return ObservationSky(
-        observable,
-        dataset=dataset)
+    if data is None:
+        return ObservationPixelBrightness(size=size, step=(0.5, 0.5))
+    return ObservationPixelBrightness(dataset=DatasetPixelBrightness(
+        Data(data, error=np.full_like(data, ERROR)), step=(0.5, 0.5)))
 
 
 def models(driver, sizes, values, galaxy=(CORE, ENVELOPE)):
@@ -128,17 +124,14 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
             if 'mass' in change else [dict(type='point', name='bh')],
             distance=dict(type='parameter'))
     data = np.zeros((16, 16))
-    observable = None
     if 'moments' in change:
         from gbkfit.dataset import DatasetPixelMoments
-        from gbkfit.observation import PixelMoments
+        from gbkfit.observation import ObservationPixelMoments
         core |= dict(vptraits=dict(type='uniform', direction='tan'),
                      dptraits=dict(type='uniform'))
         moments = DatasetPixelMoments({1: Data(data, error=data + 1)})
-        observable = PixelMoments.from_data(
-            moments, spectral=SpectralAxis(convention='relativistic'))
-        obs = ObservationSky(
-            observable, depth=Depth(step=0.5),
+        obs = ObservationPixelMoments(
+            SpectralAxis(convention='relativistic'), depth=Depth(step=0.5),
             dataset=moments, lines=['stars'])
     else:
         obs = observation(None, data)
@@ -160,8 +153,8 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
     # (the model is the scale times the amplitudes: not linear in both)
     data = np.zeros((16, 16))
     dataset = DatasetPixelBrightness(Data(data, error=data + 1))
-    obs = ObservationSky(
-        PixelBrightness.from_data(dataset), dataset=dataset,
+    obs = ObservationPixelBrightness(
+        dataset=dataset,
         flux_scale='one', name='obs')
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=[copy.deepcopy(CORE)]))], [obs])

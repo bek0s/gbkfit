@@ -20,7 +20,7 @@ def image_case(driver, observable, **component):
         type='thin_disk', rptraits=EXPONENTIAL, emission=BAND)
     return dict(
         driver=dict(type=driver.type()),
-        observable=observable,
+        observation=observable,
         galaxy=dict(components=[disk | component]))
 
 
@@ -28,7 +28,7 @@ def spectral_cube_case(driver, **component):
     """A pixel_spectra observation of a galaxy with a thin smooth disk."""
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[32, 32], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
         galaxy=dict(components=[dict(
@@ -72,7 +72,7 @@ def thick_spectral_cube_case(driver, disk, rota, psf=None):
         component['clouds'] = dict(cflux=2e-5)
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[33, 33], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic'),
             rota=rota, psf=psf),
@@ -140,7 +140,7 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_cases):
     def evaluate(psf):
         case = thick_spectral_cube_case(driver, 'smdisk', 0, psf)
         # The convolution pads the grid to 128 x 64
-        case['observable']['size'] = [61, 17]
+        case['observation']['size'] = [61, 17]
         data, _ = evaluate_cases([case], properties)
         return data[0]['spectra'].data.copy()
 

@@ -11,8 +11,8 @@ from astropy.coordinates import SkyCoord
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
-    ObservationGroup, ObservationSky, PixelMoments,
-    SlitSpectra, observable_parser, observation_parser)
+    ObservationGroup, ObservationPixelMoments, ObservationSlitSpectra,
+    observation_parser)
 from gbkfit.params import ParamSpace
 
 
@@ -45,12 +45,11 @@ def moments(driver, offsets=None, origin=ORIGIN, **values):
     values.
     """
     observations = [
-        ObservationSky(
-            PixelMoments(
-                size=(32, 32), rval=rval,
-                spectral=SpectralAxis(
-                    size=81, step=5, convention='relativistic'),
-                orders=(0, 1)), name=name,
+        ObservationPixelMoments(
+            size=(32, 32), rval=rval,
+            spectral=SpectralAxis(
+                size=81, step=5, convention='relativistic'),
+            orders=(0, 1), name=name,
             offsets=offsets if name == 'b' else None)
         for name, rval in (('a', ORIGIN), ('b', origin))]
     group = ObservationGroup([galaxy_parser.load(GALAXY)], observations)
@@ -71,31 +70,27 @@ def test_offsets_move_all_that_an_observation_sees(driver):
 
 
 def test_offsets_are_parameters_of_named_observations():
-    observable = PixelMoments(
+    moments = dict(
         size=(8, 8), spectral=SpectralAxis(size=11, convention='relativistic'),
         orders=(0,))
-    observation = ObservationSky(
-        observable, name='sinfoni',
-        offsets=dict(position=True))
+    observation = ObservationPixelMoments(
+        **moments, name='sinfoni', offsets=dict(position=True))
     assert set(observation.pdescs()) == {'sinfoni_dx', 'sinfoni_dy'}
     loaded = observation_parser.load(observation_parser.dump(observation))
     assert loaded.sky_frame().offsets == ('sinfoni_dx', 'sinfoni_dy', None)
     with pytest.raises(ValueError, match="needs a name"):
-        ObservationSky(
-            observable, offsets=dict(velocity=True))
+        ObservationPixelMoments(**moments, offsets=dict(velocity=True))
     with pytest.raises(ValueError, match="'position' and 'velocity'"):
-        ObservationSky(
-            observable, name='a', offsets=dict(x=True))
+        ObservationPixelMoments(**moments, name='a', offsets=dict(x=True))
 
 
 def test_a_galaxy_needs_an_observation_without_offsets():
     # (offsets alone would move its centre with nothing to place it)
     observations = [
-        ObservationSky(
-            PixelMoments(
-                size=(8, 8),
-                spectral=SpectralAxis(size=11, convention='relativistic'),
-                orders=(0,)),
+        ObservationPixelMoments(
+            size=(8, 8),
+            spectral=SpectralAxis(size=11, convention='relativistic'),
+            orders=(0,),
             name=name, offsets=dict(position=True))
         for name in ('a', 'b')]
     with pytest.raises(ValueError, match="offsets of position; one needs"):
@@ -107,11 +102,10 @@ def test_observations_in_two_frames_of_rest_are_warned_of(caplog):
     # offset of velocity)
     def observations(offsets):
         return [
-            ObservationSky(
-                PixelMoments(
-                    size=(8, 8), spectral=SpectralAxis(
-                        size=11, convention='relativistic', frame=frame),
-                    orders=(0,)), name=name,
+            ObservationPixelMoments(
+                size=(8, 8), spectral=SpectralAxis(
+                    size=11, convention='relativistic', frame=frame),
+                orders=(0,), name=name,
                 offsets=offsets if name == 'b' else None)
             for name, frame in (('a', 'LSRK'), ('b', 'BARYCENT'))]
     ObservationGroup([galaxy_parser.load(GALAXY)], observations(None))
@@ -146,11 +140,11 @@ def test_frames_far_apart_are_warned_of(driver, caplog):
 
 
 def test_slits_have_the_coordinates_of_their_reference_point():
-    slit = SlitSpectra(
+    slit = ObservationSlitSpectra(
         size=(10,), spectral=SpectralAxis(size=11, convention='relativistic'),
         sky_rval=(49.5, -66.5))
     assert slit.sky_rval() == (49.5, -66.5)
-    assert observable_parser.load(slit.dump()).sky_rval() == (49.5, -66.5)
-    slit = SlitSpectra(
+    assert observation_parser.load(slit.dump()).sky_rval() == (49.5, -66.5)
+    slit = ObservationSlitSpectra(
         size=(10,), spectral=SpectralAxis(size=11, convention='relativistic'))
     assert slit.sky_rval() == (0, 0)

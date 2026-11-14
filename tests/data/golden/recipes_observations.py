@@ -1,6 +1,7 @@
 """
-The recipes of the golden cases of observables, instruments and
-likelihoods (see make_golden.Case): mostly a thin disk, seen in each way.
+The recipes of the golden cases of the kinds of observations,
+instruments and likelihoods (see make_golden.Case): mostly a thin disk,
+seen in each way.
 """
 
 import pathlib
@@ -29,11 +30,12 @@ def _named(prefix: str, properties: dict[str, Any]) -> dict[str, Any]:
     return {f'{prefix}_{name}': value for name, value in properties.items()}
 
 
-def _sky(observable: dict[str, Any], **options: Any) -> dict[str, Any]:
-    """An observation on the sky, float64, of an observable."""
-    return dict(
-        type='sky', dtype='float64',
-        observable=observable) | options
+def _sky(kind: dict[str, Any], **options: Any) -> dict[str, Any]:
+    """
+    An observation on the sky, float64, of a kind (its type and its
+    options), with the given options.
+    """
+    return kind | dict(dtype='float64') | options
 
 
 def _gauss(rms: float) -> dict[str, Any]:
@@ -119,7 +121,7 @@ _MGE_STARS_TRUTH = dict(
 def _small_cube(**options: Any) -> dict[str, Any]:
     """
     An observation of a cube smaller than _CUBE (for cases of several
-    observations), with options of its observable.
+    observations), with the given options of its kind.
     """
     return _sky(
         dict(
@@ -194,9 +196,9 @@ def _write_detection_noise(folder: pathlib.Path) -> None:
     beyond, where the spectra are blanked as non-detections.
     """
     from astropy.io import fits
-    from gbkfit.observation import observable_parser
+    from gbkfit.observation import observation_parser
     truth = _DISK_TRUTH
-    grid = observable_parser.load(_MOMENTS['observable']).grid()
+    grid = observation_parser.load(_MOMENTS).grid()
     x, y = (
         zero + step * np.arange(size) for zero, step, size in zip(
             grid.zero(), grid.coords.step, grid.size))
@@ -621,8 +623,7 @@ CASES: list[dict[str, Any]] = [
             _small_cube(rval=[150, -30]) | dict(name='kmos'),
             _MOMENTS | dict(
                 name='sinfoni', offsets=dict(position=True, velocity=True),
-                observable=_MOMENTS['observable']
-                | dict(rval=[150.0004, -29.9998]))],
+                rval=[150.0004, -29.9998])],
         truth=_DISK_TRUTH | dict(
             sinfoni_dx=0.3, sinfoni_dy=-0.2, sinfoni_dv=5),
         trial=_DISK_TRIAL | dict(

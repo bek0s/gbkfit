@@ -46,7 +46,7 @@ def case(component):
     thick = 'rhtraits' in component
     return dict(
         driver=dict(type='host'),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[32, 32], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
         galaxy=dict(components=[component]))

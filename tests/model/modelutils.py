@@ -7,23 +7,17 @@ def split_case(case):
     """
     A galaxy, an observation of it and the configuration of its driver,
     from a case of the tests: a dict with a driver, a galaxy, an
-    observable (with the primary beam, psf and lsf of the instrument, and
-    the oversampling and dtype of the observation), an optional name,
-    which names the galaxy, the optional depth axis, lines or band of the
-    observation, and the unit of the light of its model.
+    observation (its options, with the primary beam, psf and lsf of its
+    instrument among them), an optional name, which names the galaxy, the
+    optional depth axis, lines or band of the observation, and the unit
+    of the light of its model.
     """
     case = dict(case)
     driver = case.pop('driver')
-    observable = dict(case.pop('observable'))
-    observation = dict(
-        type='sky',
-        observable=observable,
-        instrument={k: observable.pop(k)
-                    for k in ('primary_beam', 'psf', 'lsf')
-                    if k in observable})
-    for key in ('oversampling', 'dtype'):
-        if key in observable:
-            observation[key] = observable.pop(key)
+    observation = dict(case.pop('observation'))
+    observation['instrument'] = {
+        k: observation.pop(k) for k in ('primary_beam', 'psf', 'lsf')
+        if k in observation}
     for key in ('depth', 'lines', 'band', 'unit'):
         if key in case:
             observation[key] = case.pop(key)

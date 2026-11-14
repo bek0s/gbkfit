@@ -1,8 +1,8 @@
 """
-The observable of brightness on a grid of pixels: an image.
+The observation of brightness on a grid of pixels: an image.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -11,13 +11,18 @@ from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, grid_options
-from gbkfit.model import BandEmission, DataUnit, LightUnit
+from gbkfit.instrument import Instrument
+from gbkfit.model import Band, BandEmission, DataUnit, LightUnit
+from ..depth import Depth
+from ..foreground import Foreground
+from ..plan import ModelData, ModelItem
+from ..weights import Weights
 from . import _model_cube
-from ._cube_plan import CubeObservablePlan
+from ._cube_plan import CubePlan
 from ._data_units import data_unit
 from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size)
-from .base import ModelData, ModelItem, Observable, ObservationSetup
+from .base import DType, ObservationSky, SkyOptions
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -25,7 +30,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    'PixelBrightness'
+    'ObservationPixelBrightness'
 ]
 
 
@@ -37,23 +42,24 @@ def _image_extra(data: np.ndarray, grid: Grid) -> GridData:
     return GridData(data[0], grid.spatial().coords, None)
 
 
-class PixelBrightness(Observable):
+class ObservationPixelBrightness(ObservationSky):
     """
     Brightness on a grid of pixels: an image of the model, seen through
     the instrument (which has no LSF).
 
-    Its configuration has the options below, but those of the grid when
-    it has data, which give them (see from_data).
+    Its options are those below, then those of every observation on the
+    sky (see ObservationSky). Its data give those of its grid, which are
+    then optional; without data, size is required.
 
     Parameters
     ----------
-    size : int or Sequence of int
+    size : int or Sequence of int, optional
         The number of pixels of the image (nx, ny).
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the image (see Coords); rpix is
-        the centre by default.
+        The world coordinates of the image (see Coords); without data, a
+        step of 1, rval 0, and rpix the centre by default.
     rota : float, optional
-        The rotation of the image on the sky.
+        The rotation of the image on the sky; 0 by default without data.
     median_size : int, optional
         The size (an odd number of pixels, at least 3) of the median filter
         that smoothed the data on the sky, which smooths the model as well:
@@ -63,7 +69,8 @@ class PixelBrightness(Observable):
     Raises
     ------
     ValueError
-        If median_size is not an odd number of at least 3.
+        If median_size is not an odd number of at least 3, or an option of
+        every observation on the sky is not valid (see ObservationSky).
     """
 
     dataset_class = DatasetPixelBrightness
@@ -83,55 +90,54 @@ class PixelBrightness(Observable):
         return 'Pixel brightness (image)'
 
     @classmethod
-    def from_data(
-            cls,
-            dataset: DatasetPixelBrightness,
-            median_size: MedianSize | None = None
-    ) -> 'PixelBrightness':
-        """
-        Make the observable of an image, on its grid.
-
-        Parameters
-        ----------
-        dataset : DatasetPixelBrightness
-            The image.
-        median_size : optional
-            As those of PixelBrightness.
-
-        Returns
-        -------
-        PixelBrightness
-            The observable.
-
-        Raises
-        ------
-        TypeError
-            If the dataset is not of brightness.
-        ValueError
-            If the options are not valid.
-        """
-        check_options(PixelBrightness.from_data, locals())
-        return cls(
-            **grid_options(dataset.grid()), median_size=median_size)
+    def _options_from_data(
+            cls, dataset: DatasetPixelBrightness, options: dict[str, Any]
+    ) -> dict[str, Any]:
+        # (the grid of the image)
+        return grid_options(dataset.grid())
 
     def _dump_options(
             self, prefix: str, dump_path: bool, overwrite: bool
     ) -> dict[str, Any]:
         return dict(median_size=self._median_size)
 
+    def _kind_options(self) -> dict[str, Any]:
+        return grid_options(self.grid()) | dict(median_size=self._median_size)
+
     def __init__(
             self,
-            size: Size,
-            step: Step = (1, 1),
+            size: Size | None = None,
+            step: Step | None = None,
             rpix: Rpix | None = None,
-            rval: Rval = (0, 0),
-            rota: Rota = 0,
-            median_size: MedianSize | None = None
+            rval: Rval | None = None,
+            rota: Rota | None = None,
+            median_size: MedianSize | None = None,
+            foreground: Foreground | None = None,
+            instrument: Instrument | None = None,
+            galaxies: Sequence[str] | None = None,
+            components: Sequence[str] | None = None,
+            lines: Sequence[str] | None = None,
+            band: str | Band | None = None,
+            pixel_weights: Weights | None = None,
+            flux_scale: str | None = None,
+            offsets: Mapping[str, bool] | None = None,
+            dataset: Dataset | None = None,
+            oversampling: Sequence[int] | None = None,
+            depth: Depth | None = None,
+            dtype: DType | None = None,
+            fft_dtype: DType = 'float64',
+            name: str | None = None,
+            unit: str | None = None
     ):
-        check_options(PixelBrightness.__init__, locals())
-        super().__init__(size, step, rpix, rval, rota)
+        check_options(ObservationPixelBrightness.__init__, locals())
+        grid = self._options(dataset, dict(
+            size=size, step=step, rpix=rpix, rval=rval, rota=rota))
         check_median_size(median_size)
         self._median_size = median_size
+        super().__init__(
+            self._make_grid(**grid), foreground, instrument, galaxies,
+            components, lines, band, pixel_weights, flux_scale, offsets,
+            dataset, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def keys(self) -> tuple[str, ...]:
         return ('brightness',)
@@ -142,10 +148,10 @@ class PixelBrightness(Observable):
         return DatasetPixelBrightness(
             items['brightness'], **grid_options(self.grid(), sizes=False))
 
-    def data_unit(
+    def _data_unit(
             self,
             dataset: Dataset | None,
-            light: LightUnit | None = None
+            light: LightUnit | None
     ) -> DataUnit | None:
         return data_unit(
             dataset, 'brightness', abs(self.step()[0] * self.step()[1]),
@@ -162,36 +168,32 @@ class PixelBrightness(Observable):
     def model_can_have_missing_values(self) -> bool:
         return False
 
-    def check_observation(self, setup: ObservationSetup) -> None:
-        if setup.instrument.lsf() is not None:
+    def _check_options(self, options: SkyOptions) -> None:
+        if options.instrument.lsf() is not None:
             raise ValueError(
                 "an image has no spectral axis for an LSF; remove the LSF "
                 "of the instrument")
 
-    def plan(
-            self,
-            driver: Driver,
-            scene: 'Scene',
-            setup: ObservationSetup
-    ) -> 'PixelBrightnessPlan':
+    def _plan(self, driver: Driver, scene: 'Scene') -> 'PixelBrightnessPlan':
+        options = self._sky_options
         # The cube of an image has one channel (of no width)
         coords = self._grid.coords
         model_cube = _model_cube.ModelCube(
             Grid(self._grid.size + (1,), coords._replace(
                 step=coords.step + (0,), rpix=coords.rpix + (0,),
                 rval=coords.rval + (0,)), 2),
-            oversampling=setup.oversampling + (1,),
-            primary_beam=setup.instrument.primary_beam(),
-            psf=setup.instrument.psf(),
+            oversampling=options.oversampling + (1,),
+            primary_beam=options.instrument.primary_beam(),
+            psf=options.instrument.psf(),
             lsf=None,
             smooth_weights=False,
-            dtype=setup.dtype,
-            fft_dtype=setup.fft_dtype,
+            dtype=options.dtype,
+            fft_dtype=options.fft_dtype,
             median_size=self._median_size)
-        return PixelBrightnessPlan(model_cube, driver, scene, setup)
+        return PixelBrightnessPlan(model_cube, driver, scene, options)
 
 
-class PixelBrightnessPlan(CubeObservablePlan):
+class PixelBrightnessPlan(CubePlan):
 
     def _model_grid(self) -> Grid:
         # Image models are evaluated on the x and y axes

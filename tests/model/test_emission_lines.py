@@ -48,7 +48,7 @@ def scube(rest, **options):
 def evaluate(driver, galaxy, observable, properties):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
-        observable=copy.deepcopy(observable))])
+        observation=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     return plan.model_h(params.evaluate())[0]['spectra'].data.copy()
@@ -205,7 +205,7 @@ def evaluate_observation(driver, galaxy, observable, properties, **options):
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     _, observation, _ = split_case(dict(
-        driver=None, galaxy=galaxy, observable=observable))
+        driver=None, galaxy=galaxy, observation=observable))
     observation = observation_parser.load(
         copy.deepcopy(observation | options))
     group = ObservationGroup(
@@ -311,10 +311,9 @@ def test_a_component_must_have_a_selected_line(driver):
 
 def test_line_selection_round_trip():
     from gbkfit.observation import observation_parser
-    info = dict(
-        type='sky',
-        observable={key: value for key, value in scube(
-            '6562.8 Angstrom').items() if key not in INSTRUMENT}, lines=['ha'])
+    info = {key: value for key, value in scube(
+        '6562.8 Angstrom').items() if key not in INSTRUMENT} | dict(
+            lines=['ha'])
     dumped = observation_parser.dump(
         observation_parser.load(dict(info)))
     assert dumped['lines'] == ['ha']

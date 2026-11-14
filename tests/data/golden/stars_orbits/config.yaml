@@ -1,6 +1,6 @@
 # stars_orbits: The kinematics of the stars of a flattened spheroid in Voronoi bins, as pPXF gives them (V, sigma, h3 and h4; log velocities, a PSF and no LSF), as Schwarzschild models are fitted to them: the weights of their orbits solved, of a prior whose width the AICp chooses. The data are of its rotating Jeans kinematics in the gravity of its light and a black hole.
 # (written by make_golden.py; do not edit)
-version: 11
+version: 12
 driver: {type: host}
 galaxies:
 - components:
@@ -16,7 +16,7 @@ galaxies:
   - {type: point, name: bh}
   distance: {type: parameter}
 observations:
-- type: sky
+- type: region_moments
   lines: [stars]
   dataset:
     type: region_moments
@@ -25,7 +25,7 @@ observations:
       file: observation0_bins.fits
       step: [0.49999999999996797, 0.500000000000004]
       rpix: [11.5, 11.5]
-      rval: [4.296495291499102e-31, 0.0]
+      rval: [4.296495291499101e-31, 0.0]
       rota: 0.0
     moment1: {data: observation0_moment1_d.fits, error: observation0_moment1_e.fits}
     moment2: {data: observation0_moment2_d.fits, error: observation0_moment2_e.fits}
@@ -38,11 +38,9 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: null
-  observable:
-    type: region_moments
-    spectral: {size: 101, step: 10.0, rpix: 50.0, rval: 0.0, convention: log}
-    flux_floor: 1.0e-06
-    method: gauss_hermite
+  spectral: {size: 101, step: 10.0, rpix: 50.0, rval: 0.0, convention: log}
+  flux_floor: 1.0e-06
+  method: gauss_hermite
   oversampling: [1, 1]
   fft_dtype: float64
 likelihoods: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}

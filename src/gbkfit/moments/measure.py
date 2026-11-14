@@ -303,11 +303,11 @@ def moment_maps(
         driver: Driver | None = None
 ) -> MomentMaps:
     """
-    Return the moment maps of a spectral cube, measured as the observable
-    of moments (PixelMoments) measures those of its models: the moments
-    of each spectrum (its flux, mean velocity, dispersion, and central
-    moments above 2), or those of a Gaussian or a Gauss-Hermite series
-    fitted to it. A channel without a value (NaN) is missing, not one
+    Return the moment maps of a spectral cube, measured as the observation
+    of moment maps (ObservationPixelMoments) measures those of its models:
+    the moments of each spectrum (its flux, mean velocity, dispersion, and
+    central moments above 2), or those of a Gaussian or a Gauss-Hermite
+    series fitted to it. A channel without a value (NaN) is missing, not one
     without flux: the fits leave it out, and the moments of a spectrum
     with one are masked (NaN, moment 0 too).
 

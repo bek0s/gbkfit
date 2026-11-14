@@ -220,7 +220,7 @@ class UVTransformExact(UVTransform):
     """
     The exact visibilities (see UVTransform): the pixels at their
     directions on the sky, those of a gnomonic (TAN) projection of the grid
-    about its reference pixel, as for all the observables (see
+    about its reference pixel, as for all the observations (see
     pixels_on); the w-term exact. A type-3 NUFFT from the
     (l, m, n - 1) of the pixels to the baselines of each channel.
     """
@@ -434,7 +434,7 @@ class UVTransformSin(_UVTransformGrid):
     The visibilities of the pixels at the directions of an orthographic
     (SIN) projection of the grid about its reference pixel (see
     UVTransform), with the w-term exact: an approximation of the geometry
-    of the other observables (a gnomonic, TAN, projection; see
+    of the other observations (a gnomonic, TAN, projection; see
     UVTransformExact), whose pixels at an angle t from the reference pixel
     are at sin t, not tan t: t^3 / 2 nearer to it (e.g. 5e-4 arcsec at
     0.1 deg, 0.07 arcsec at 0.5 deg). The w-term is its Chebyshev series in
@@ -458,7 +458,7 @@ class UVTransformFlat(_UVTransformGrid):
     _w_term = _NoWTerm
 
 
-# The transforms, by their names in the options of the observables
+# The transforms, by their names in the options of the observations
 uv_transforms = dict(
     exact=UVTransformExact, sin=UVTransformSin, flat=UVTransformFlat)
 

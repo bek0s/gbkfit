@@ -560,7 +560,7 @@ export function useGalaxyRender(
 // A galaxy as an observation of its project sees it (see the server's
 // /views/observed): its model of each item (and the data of the
 // observation, if it has them), each kept by the server for the views of
-// cubes; the type of the observable; and what the library noted. Asked
+// cubes; the type of the observation; and what the library noted. Asked
 // again as the galaxy, its values or the observation change.
 export function useObserved(
   project: string,

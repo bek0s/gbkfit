@@ -46,7 +46,7 @@ def case(driver, galaxy):
     """A galaxy, seen in a cube."""
     return dict(
         driver=dict(type=driver.type()), galaxy=dict(components=[galaxy]),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[48, 48], step=[1, 1],
             spectral=dict(size=50, step=10, convention='relativistic')))
 

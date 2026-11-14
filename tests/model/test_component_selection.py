@@ -44,7 +44,7 @@ SCUBE = dict(
 
 
 def observation(components=None, **options):
-    info = dict(type='sky', observable=SCUBE)
+    info = dict(SCUBE)
     if components is not None:
         info['components'] = components
     return observation_parser.load(copy.deepcopy(info | options))

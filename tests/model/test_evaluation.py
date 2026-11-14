@@ -35,7 +35,7 @@ def nodewise_relative_case(driver):
     """
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[32, 32], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
         galaxy=line_disk(dict(type='nw_uniform', direction='tan')))
@@ -66,7 +66,7 @@ import numpy as np
 from modelutils import group_plan
 plan = group_plan([dict(
     driver=dict(type='host'),
-    observable=dict(
+    observation=dict(
         type='pixel_spectra', size=[24, 24], spectral=dict(
             size=31, step=10, convention='relativistic')),
     galaxy=dict(components=[dict(
@@ -123,8 +123,7 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
     # Observations of one galaxy on grids with different steps each get
     # the galaxy on their own grid
     from gbkfit.model import galaxy_parser
-    from gbkfit.observation import (
-        ObservationGroup, ObservationSky, observable_parser)
+    from gbkfit.observation import ObservationGroup, observation_parser
     galaxy_info, observable_type, size, key, properties = \
         FLAT_OBSERVATIONS[kind]
 
@@ -133,7 +132,7 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
         if len(size) == 3:
             info.update(spectral=dict(
                 size=size[2], step=10, convention='relativistic'))
-        return ObservationSky(observable_parser.load(info))
+        return observation_parser.load(info)
 
     def evaluate(group, i):
         params = gbkfit.params.ParamSpace.from_properties(
@@ -166,7 +165,7 @@ def test_incompatible_observations_are_rejected_before_evaluation(
         component |= dict(vptraits=dict(type='arctan', direction='tan'),
                           dptraits=dict(type='uniform'))
     case = dict(
-        driver=dict(type='host'), observable=observable,
+        driver=dict(type='host'), observation=observable,
         galaxy=dict(components=[component]))
     with pytest.raises(Exception, match="it sees none"):
         group_plan([case])
@@ -180,7 +179,7 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
     # refuses those out of their valid ranges)
     plan = group_plan([dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[16, 16], step=[1, 1],
             spectral=dict(size=21, step=10, convention='relativistic')),
         galaxy=line_disk(
@@ -207,7 +206,7 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
         depth = dict(extent=depth_size * depth_step, step=depth_step)
         plan = group_plan([dict(
             driver=dict(type=driver.type()),
-            observable=dict(type='pixel_brightness', size=[64, 64]),
+            observation=dict(type='pixel_brightness', size=[64, 64]),
             depth=depth,
             galaxy=dict(components=[dict(
                 type='thick_disk', loose=False, tilted=False,
@@ -233,16 +232,15 @@ def two_observations(driver):
     """
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra)
+        ObservationGroup, ObservationPixelSpectra)
     from gbkfit.grid import SpectralAxis
     return ObservationGroup(
         [galaxy_parser.load(line_disk(dict(type='arctan', direction='tan')))],
-        [ObservationSky(
-            PixelSpectra(
-                size=(16, 16), step=(1, 1),
-                spectral=SpectralAxis(
-                    size=11, step=20,
-                    convention='relativistic')),
+        [ObservationPixelSpectra(
+            size=(16, 16), step=(1, 1),
+            spectral=SpectralAxis(
+                size=11, step=20,
+                convention='relativistic'),
             name=name, offsets=dict(position=name == 'b'))
          for name in ('a', 'b')]).plan(driver)
 

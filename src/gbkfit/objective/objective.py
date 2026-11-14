@@ -176,7 +176,7 @@ class Objective:
         with data whose comparison can solve it (see
         Comparison.pointwise_form), nor an amplitude of the light that the
         models of observations with data are linear in (see
-        Component.light_amplitudes, Observable.linear_in_light and
+        Component.light_amplitudes, ObservationSky.linear_in_light and
         Comparison.linear_form), nor a weight of orbits; or the weights of
         the orbits of stars that observations with data see are not solved
         (see OrbitBlock).

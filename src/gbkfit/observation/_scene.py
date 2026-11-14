@@ -33,8 +33,8 @@ def make_scene(
     """
     Return the scene of an observation of the galaxies it sees (see
     Scene), which sees the emission of the given type (see
-    Observable.emission), in the given band if known (an image),
-    and of the unit of its data, if any (see Observable.data_unit). The
+    ObservationSky.emission), in the given band if known (an image),
+    and of the unit of its data, if any (see ObservationSky.data_unit). The
     names of the components it sees (all those with that emission, in its
     band, if None) are qualified by the names of their galaxies
     ('galaxy.component') when it sees several (see named_components). A

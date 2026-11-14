@@ -22,7 +22,7 @@ from gbkfit.grid import GridData, SpectraData
 from gbkfit.io import Beam
 from gbkfit.model import DataUnit, DepthUnit, Galaxy
 from gbkfit.params import ParamDesc
-from .observables import FluxScale, ObservablePlan
+from .plan import FluxScale, ObservationPlan
 
 
 __all__ = [
@@ -63,7 +63,7 @@ class SkyFrame(NamedTuple):
     origin : tuple of float
         The RA and Dec (degrees) of its origin, from which the centres of
         what the observation sees are measured (e.g. the reference pixel
-        of the grid of its data, see Observable.sky_rval).
+        of the grid of its data, see ObservationSky.sky_rval).
     offsets : tuple of (str or None)
         The names of the parameters of the offsets of the frame, of x, y
         and the velocity (see ObservationSky): None for those it does not
@@ -324,7 +324,7 @@ class Observation(TypedSerializable, abc.ABC):
         group: those of the components whose light it sees, of the
         galaxies it sees, each with None if its model is linear in it, or
         why not (also when it is not linear in the light: see
-        Observable.linear_in_light); none here, where it sees no light.
+        ObservationSky.linear_in_light); none here, where it sees no light.
         """
         return {}
 
@@ -361,7 +361,7 @@ class Observation(TypedSerializable, abc.ABC):
         """
 
     @abc.abstractmethod
-    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
+    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservationPlan:
         """
         Plan the evaluation of its model (see ObservationGroup.plan).
 
@@ -374,7 +374,7 @@ class Observation(TypedSerializable, abc.ABC):
 
         Returns
         -------
-        ObservablePlan
+        ObservationPlan
             The plan.
         """
 
@@ -411,8 +411,8 @@ class Observation(TypedSerializable, abc.ABC):
     ) -> dict[str, GridData]:
         """
         Return images of values of its data items, as outputs (e.g. the
-        dirty images of visibilities; see Observable.images), made on a
-        driver; here, none.
+        dirty images of visibilities; see ObservationVisibilities.images),
+        made on a driver; here, none.
 
         Parameters
         ----------
@@ -442,8 +442,8 @@ class Observation(TypedSerializable, abc.ABC):
     ) -> dict[str, GridData]:
         """
         Return images of the PSF of its data (e.g. the dirty beam of
-        visibilities; see Observable.psf_images), which its images are
-        seen through, made on a driver; here, none.
+        visibilities; see ObservationVisibilities.psf_images), which its
+        images are seen through, made on a driver; here, none.
 
         Parameters
         ----------

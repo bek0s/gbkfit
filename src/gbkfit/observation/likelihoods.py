@@ -206,7 +206,7 @@ class LikelihoodGauss(Likelihood):
 
     The value is a choice, with no right answer, so it has no default: an
     observation whose model can have missing values needs it (see
-    Observable.model_can_have_missing_values; e.g. moment maps of order 1
+    ObservationSky.model_can_have_missing_values; e.g. moment maps of order 1
     and above). It is in errors, or in the units of the data where the
     data have no errors (e.g. km/s for velocities). A larger value guards
     better against a model with missing values, but weighs more where the

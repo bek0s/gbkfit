@@ -1,6 +1,6 @@
 # slit_spectra: The spectra of a long slit rotated on the sky, wider than its step.
 # (written by make_golden.py; do not edit)
-version: 11
+version: 12
 driver: {type: host}
 galaxies:
 - components:
@@ -13,7 +13,7 @@ galaxies:
     dptraits: {type: uniform}
     emission: {type: lines}
 observations:
-- type: sky
+- type: slit_spectra
   dataset:
     type: slit_spectra
     step: [0.5]
@@ -30,11 +30,9 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20.0 km s-1}
-  observable:
-    type: slit_spectra
-    slit_width: 1.5
-    sky_rval: [0.0, 0.0]
-    smooth_weights: false
+  slit_width: 1.5
+  sky_rval: [0.0, 0.0]
+  smooth_weights: false
   oversampling: [1, 1]
   fft_dtype: float64
 likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}

@@ -86,7 +86,7 @@ def case(driver, component):
             type='pixel_spectra', spectral=dict(
                 size=41, step=10, convention='relativistic')) | grid
     return dict(
-        driver=dict(type=driver.type()), observable=observable,
+        driver=dict(type=driver.type()), observation=observable,
         depth=dict(step=0.5),
         galaxy=dict(components=[component]))
 
@@ -164,7 +164,7 @@ def test_a_radial_flow_points_away_from_the_centre(driver, evaluate_cases):
         vptraits=dict(type='uniform', direction='rad'),
         dptraits=UNIFORM)
     _, extra = evaluate_cases([dict(
-        driver=dict(type=driver.type()), observable=dict(
+        driver=dict(type=driver.type()), observation=dict(
             type='pixel_spectra', size=[24, 24], step=[0.5, 0.5],
             spectral=dict(size=41, step=10, convention='relativistic')),
         galaxy=dict(components=[component]))],

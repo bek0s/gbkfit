@@ -292,9 +292,8 @@ class SchemaWriter:
         params = inspect.signature(func).parameters
         properties, required = {}, []
         others: Any = False
-        given = getattr(owner, 'given_options', ())
         for name, param in params.items():
-            if name in ('self', 'cls', *given) \
+            if name in ('self', 'cls') \
                     or param.kind is param.VAR_POSITIONAL:
                 continue
             try:
@@ -324,7 +323,14 @@ class SchemaWriter:
             kept = {key: value for key, value in properties.get(
                 name, {}).items() if key in ('description', 'default', 'unit')}
             properties[name] = self.option(type_) | kept
-        return _object(properties, required, others)
+        schema = _object(properties, required, others)
+        # (the options required only without another, see
+        # Serializable.config_required_without)
+        if needed := getattr(owner, 'config_required_without', {}):
+            schema['allOf'] = [
+                {'anyOf': [{'required': [option]}, {'required': list(keys)}]}
+                for option, keys in needed.items()]
+        return schema
 
     def _ref(self, name: str, write: Callable[[], dict]) -> dict[str, Any]:
         """
@@ -413,9 +419,26 @@ def _summary(obj: Any) -> str:
 def _param_docs(cls: type, func: Callable | None) -> dict[str, str]:
     """
     Return the descriptions of the parameters of a constructor, by name,
-    from its numpydoc docstring (of the class for __init__, func None).
+    from its numpydoc docstring: of the class for __init__ (func None),
+    and of its bases for the parameters that it does not describe (e.g.
+    the options of every observation on the sky, which ObservationSky
+    describes for its kinds).
     """
-    lines = inspect.cleandoc((func or cls).__doc__ or '').split('\n')
+    if func is not None:
+        return _docstring_params(func)
+    docs: dict[str, str] = {}
+    # (from the most basic class, so that each class describes its own)
+    for owner in reversed(cls.__mro__):
+        docs |= _docstring_params(owner)
+    return docs
+
+
+def _docstring_params(obj: Any) -> dict[str, str]:
+    """
+    Return the descriptions of the parameters in the numpydoc docstring of
+    a class or a function, by name.
+    """
+    lines = inspect.cleandoc(obj.__doc__ or '').split('\n')
     try:
         start = next(
             i for i in range(len(lines) - 1)

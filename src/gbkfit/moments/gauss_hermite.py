@@ -86,7 +86,7 @@ def gauss_hermite_moments(
 
     The series is exp(-w^2 / 2) (1 + h3 H3(w) + h4 H4(w)), w = (v - V) /
     sigma, with H3 and H4 of van der Marel & Franx (1993), as pPXF and
-    the method gauss_hermite of the observables of moments take it. Of
+    the method gauss_hermite of the observations of moments take it. Of
     the normalisation N = 1 + sqrt(6) / 4 h4 (see gauss_hermite_norm),
     its mean is V + sqrt(3) sigma h3 / N, and its dispersion sigma
     sqrt((1 + 27 / sqrt(24) h4) / N - 3 h3^2 / N^2) (about sigma (1 +

@@ -36,7 +36,7 @@ def case(driver, cone, observable, components=()):
     """
     return dict(
         driver=dict(type=driver.type()),
-        observable=observable,
+        observation=observable,
         depth=dict(step=0.25),
         galaxy=dict(components=[cone, *components]))
 

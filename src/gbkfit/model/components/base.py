@@ -221,7 +221,7 @@ class Component(TypedSerializable, abc.ABC):
         """
         Check whether it is thick: whether it needs a line of sight with a
         depth axis, seen by an observation of emission of the given type
-        (see Observable.emission: BandEmission for an image, LineEmission
+        (see ObservationSky.emission: BandEmission for an image, LineEmission
         for a spectral cube).
         """
         pass

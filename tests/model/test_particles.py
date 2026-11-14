@@ -56,7 +56,7 @@ def evaluate(driver, galaxy, properties, depth=None):
     """
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
-        observable=CUBE, **({} if depth is None else dict(depth=depth)))])
+        observation=CUBE, **({} if depth is None else dict(depth=depth)))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     return plan.model_h(params.evaluate())[0]['spectra'].data.astype(float)
@@ -124,7 +124,7 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
         type='particles', file=disk_particles(tmp_path / 'disk.npz'),
         emission=dict(type='lines'))])
     plan = group_plan([dict(
-        driver=dict(type='host'), galaxy=particles, observable=CUBE)])
+        driver=dict(type='host'), galaxy=particles, observation=CUBE)])
     values = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), GEOMETRY).evaluate()
     peak = plan.model_h(values)[0]['spectra'].data.max()
@@ -132,7 +132,7 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
         plan, values, MockOptions(NoiseGauss(rms=0.01 * peak), seed=2))
     disk = observation_group([dict(
         driver=dict(type='host'), galaxy=DISK,
-        observable=CUBE | dict(oversampling=[4, 4, 1]))])
+        observation=CUBE | dict(oversampling=[4, 4, 1]))])
     objective = Objective(ObservationGroup(
         disk.galaxies(), disk.observations()[0].with_dataset(mock)).plan())
     properties = DISK_PROPERTIES | dict(
@@ -162,7 +162,7 @@ def test_particles_in_an_image(driver, tmp_path):
         type='particles', file=str(tmp_path / 'three.npz'),
         emission=dict(type='band'))])
     plan = group_plan([dict(
-        driver=dict(type=driver.type()), galaxy=galaxy, observable=dict(
+        driver=dict(type=driver.type()), galaxy=galaxy, observation=dict(
             type='pixel_brightness', size=[10, 8], step=[0.5, 0.5]))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), dict(

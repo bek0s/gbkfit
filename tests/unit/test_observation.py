@@ -1,5 +1,5 @@
 """
-Tests for the making of observations: their observables from data, the
+Tests for the making of observations: their options from data, the
 checks of their options, and the likelihoods of the observations of a
 group (see Likelihoods).
 """
@@ -14,39 +14,65 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
     FittedNoise, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationSky, PixelBrightness, PixelMoments, UpperLimit,
-    observable_parser, observation_parser)
+    ObservationPixelBrightness, ObservationPixelMoments, UpperLimit,
+    observation_parser)
 
 
-def test_observable_from_data():
-    # The data give the observable its grid and the orders of its
+def test_options_from_data():
+    # The data give the observation its grid and the orders of its
     # moments, and its spectral axis covers their velocities
     data = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))},
         step=2, rota=30)
-    observable = PixelMoments.from_data(
-        data, spectral=SpectralAxis(step=5, convention='relativistic'))
-    assert observable.grid() == data.grid()
-    assert observable.orders() == (0, 1)
-    assert observable.spectral().rval() == 1500
-    ObservationSky(observable, dataset=data)
+    observation = ObservationPixelMoments(
+        spectral=SpectralAxis(step=5, convention='relativistic'),
+        dataset=data)
+    assert observation.grid() == data.grid()
+    assert observation.orders() == (0, 1)
+    assert observation.spectral().rval() == 1500
 
 
-@pytest.mark.parametrize('dataset_class, observable_class, shape', [
-    ('DatasetPixelSpectra', 'PixelSpectra', (10, 4, 4)),
-    ('DatasetSlitSpectra', 'SlitSpectra', (10, 4))])
+def test_options_given_with_data_are_checked_against_them():
+    # The options that the data give, given too, are all those needed
+    # without data (e.g. of a setup of mock data that then takes data),
+    # and those of the data
+    data = DatasetPixelMoments(
+        {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))},
+        step=2)
+    spectral = SpectralAxis(step=5, convention='relativistic')
+    ObservationPixelMoments(
+        spectral, size=(20, 8), step=2, orders=(0, 1), dataset=data)
+    with pytest.raises(ValueError, match=(
+            r"gives the options \['size', 'step', 'orders'\], which its "
+            r"data give too, and they are not those of the data: the data "
+            r"are on the grid")):
+        ObservationPixelMoments(
+            spectral, size=(20, 8), step=1, orders=(0, 1), dataset=data)
+    with pytest.raises(ValueError, match=(
+            r"gives the options \['step'\], which its data give too, but "
+            r"not all those it needs without data \(the options "
+            r"\['size'\]\)")):
+        ObservationPixelMoments(spectral, step=2, dataset=data)
+    with pytest.raises(ValueError, match="without data needs the options"):
+        ObservationPixelMoments(spectral)
+
+
+@pytest.mark.parametrize('dataset_class, observation_class, shape', [
+    ('DatasetPixelSpectra', 'ObservationPixelSpectra', (10, 4, 4)),
+    ('DatasetSlitSpectra', 'ObservationSlitSpectra', (10, 4))])
 def test_spectra_keep_the_convention_of_their_data(
-        dataset_class, observable_class, shape):
-    # Spectra on an axis of log velocities (WAVE-LOG) make an observable of
-    # their grid, its convention included
+        dataset_class, observation_class, shape):
+    # Spectra on an axis of log velocities (WAVE-LOG) make an observation
+    # of their grid, its convention included
     import gbkfit.dataset
     import gbkfit.observation
     data = getattr(gbkfit.dataset, dataset_class)(
         Data(np.zeros(shape)),
         spectral=SpectralAxis(convention='log', rest='6564.61 Angstrom'))
-    observable = getattr(gbkfit.observation, observable_class).from_data(data)
-    assert observable.grid() == data.grid()
-    assert observable.grid().coords.convention == 'log'
+    observation = getattr(gbkfit.observation, observation_class)(
+        dataset=data)
+    assert observation.grid() == data.grid()
+    assert observation.grid().coords.convention == 'log'
 
 
 def moments_group(names=('maps',), data=True):
@@ -61,12 +87,13 @@ def moments_group(names=('maps',), data=True):
         dptraits=dict(type='uniform'), emission=dict(type='lines'))]))
     dataset = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
-    observable = PixelMoments.from_data(
-        dataset, spectral=SpectralAxis(step=5, convention='relativistic'))
+    maps = ObservationPixelMoments(
+        SpectralAxis(step=5, convention='relativistic'), dataset=dataset)
+    # (without data, of the options the data gave)
     return ObservationGroup(galaxy, [
-        ObservationSky(
-            observable, name=name,
-            dataset=dataset if data else None)
+        ObservationPixelMoments(
+            maps.spectral(), size=maps.size(), orders=maps.orders(),
+            name=name, dataset=dataset if data else None)
         for name in names])
 
 
@@ -86,14 +113,14 @@ def test_a_model_that_can_have_missing_values_needs_their_residual():
         Likelihoods(group, LikelihoodGauss())
 
 
-def test_observable_options_are_checked():
+def test_the_options_of_a_kind_are_checked():
     with pytest.raises(ValueError, match="'flux_floor' must be at least 0 and less than 1"):
-        PixelMoments(
+        ObservationPixelMoments(
             size=(8, 8), flux_floor=1,
             spectral=SpectralAxis(convention='relativistic'))
     with pytest.raises(ValueError, match="no spectral axis for an LSF"):
-        ObservationSky(
-            PixelBrightness(size=(8, 8)),
+        ObservationPixelBrightness(
+            size=(8, 8),
             instrument=Instrument(lsf=LSFGauss(10 * u.km / u.s)))
 
 
@@ -101,22 +128,24 @@ def test_grid_options_take_one_value_or_one_for_each_axis():
     # (audit 2026-10-31 #52) In Python as in configurations: a value for
     # both axes on the sky, or one for each; more (e.g. for the channels
     # of a cube) are an error that names the option
-    observable = PixelBrightness(size=8, step=0.5)
-    assert observable.size() == (8, 8)
-    assert observable.step() == (0.5, 0.5)
+    observation = ObservationPixelBrightness(size=8, step=0.5)
+    assert observation.size() == (8, 8)
+    assert observation.step() == (0.5, 0.5)
     with pytest.raises(ValueError, match="option 'size' must have one"):
-        PixelBrightness(size=(8, 8, 10))
+        ObservationPixelBrightness(size=(8, 8, 10))
     with pytest.raises(ValueError, match="option 'size' must have one"):
-        observable_parser.load(dict(type='pixel_brightness', size=[8, 8, 10]))
+        observation_parser.load(
+            dict(type='pixel_brightness', size=[8, 8, 10]))
 
 
 def test_observations_need_their_type():
-    info = dict(
-        observable=dict(type='pixel_brightness', size=[4, 4]))
-    with pytest.raises(ConfigError, match="missing required options: 'type'.*'sky'"):
+    info = dict(size=[4, 4])
+    with pytest.raises(
+            ConfigError,
+            match="missing required options: 'type'.*'pixel_brightness'"):
         observation_parser.load(info)
-    observation = observation_parser.load(info | dict(type='sky'))
-    assert observation_parser.dump(observation)['type'] == 'sky'
+    observation = observation_parser.load(info | dict(type='pixel_brightness'))
+    assert observation_parser.dump(observation)['type'] == 'pixel_brightness'
 
 
 def test_instrument_warnings_have_the_path_of_the_configuration(caplog):
@@ -124,12 +153,12 @@ def test_instrument_warnings_have_the_path_of_the_configuration(caplog):
     # warnings have the path of the observation
     with config_path('observations'):
         observation_parser.load([dict(
-            type='sky',
-            observable=dict(
-                type='pixel_spectra', size=[4, 4],
-                spectral=dict(size=4, convention='relativistic'),
-                smooth_weights=True))])
-    assert "observations[0] [sky]: smooth_weights is true" in caplog.text
+            type='pixel_spectra',
+            size=[4, 4],
+            spectral=dict(size=4, convention='relativistic'),
+            smooth_weights=True)])
+    assert "observations[0] [pixel_spectra]: smooth_weights is true" \
+        in caplog.text
 
 
 @pytest.mark.parametrize('dtype', ['float16', 'int32', 'complex'])
@@ -137,16 +166,16 @@ def test_dtypes_without_kernels_are_errors(dtype):
     # (they failed later, in the native code)
     dataset = Data(np.ones((8, 8)))
     from gbkfit.dataset import DatasetPixelBrightness
-    observable = PixelBrightness.from_data(DatasetPixelBrightness(dataset))
     with pytest.raises(ValueError, match="'dtype' must be one of 'float32', 'float64'"):
-        ObservationSky(observable, dtype=dtype)
+        ObservationPixelBrightness(
+            dataset=DatasetPixelBrightness(dataset), dtype=dtype)
 
 
 def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
-    observable = PixelBrightness(size=(8, 8))
-    assert ObservationSky(observable).fft_dtype() == np.float64
+    assert ObservationPixelBrightness(size=(8, 8)).fft_dtype() == np.float64
     with pytest.raises(ValueError, match=r"fft_dtype \(float32\) is less"):
-        ObservationSky(observable, dtype='float64', fft_dtype='float32')
+        ObservationPixelBrightness(
+            size=(8, 8), dtype='float64', fft_dtype='float32')
 
 
 def brightness(unit=None, spatial_correlation=None):
@@ -163,12 +192,11 @@ def test_the_data_choose_the_dtype_unless_it_is_given():
     # copy kept the first choice, and dumps fixed it: audit 2026-11-11)
     from gbkfit.instrument import PSFGauss
     correlated = brightness(spatial_correlation=PSFGauss(1.0))
-    observable = PixelBrightness.from_data(correlated)
-    chosen = ObservationSky(observable)
+    chosen = ObservationPixelBrightness(size=(8, 8))
     assert chosen.dtype() == np.float32
     assert 'dtype' not in chosen.dump()
     assert chosen.with_dataset(correlated).dtype() == np.float64
-    given = ObservationSky(observable, dtype='float32')
+    given = ObservationPixelBrightness(size=(8, 8), dtype='float32')
     assert given.with_dataset(correlated).dtype() == np.float32
     assert given.dump()['dtype'] == 'float32'
 
@@ -183,12 +211,10 @@ def image_group(*names, data=(True,)):
         type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
         emission=dict(type='band'))]))
     dataset = brightness('Jy')
-    observable = PixelBrightness.from_data(dataset)
     names = names or (None,) * len(data)
     return ObservationGroup([galaxy], [
-        ObservationSky(
-            observable, name=name,
-            dataset=dataset if with_data else None)
+        ObservationPixelBrightness(
+            size=(8, 8), name=name, dataset=dataset if with_data else None)
         for name, with_data in zip(names, data, strict=True)])
 
 
@@ -289,8 +315,8 @@ def test_likelihoods_have_parameters_of_names_of_their_own():
         type='thin_disk', name='disk', rnodes=[0, 1, 2],
         rptraits=dict(type='exponential'), emission=dict(type='band'))]))
     dataset = brightness()
-    group = ObservationGroup(galaxy, ObservationSky(
-        PixelBrightness.from_data(dataset), dataset=dataset,
+    group = ObservationGroup(galaxy, ObservationPixelBrightness(
+        dataset=dataset,
         name='disk'))
     clash = LikelihoodUser(lambda *args: 0.0, 'log_likelihood', ['rpt_a'])
     with pytest.raises(ValueError, match=r"names of parameters of the group:"
@@ -330,12 +356,12 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
     from gbkfit.dataset import DatasetPixelSpectra
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.objective import comparison_of
-    from gbkfit.observation import PixelSpectra
+    from gbkfit.observation import ObservationPixelSpectra
     data = DatasetPixelSpectra(
         Data(np.ones((10, 4, 4))),
         spectral=SpectralAxis(convention='relativistic'))
-    observation = ObservationSky(
-        PixelSpectra.from_data(data), dataset=data)
+    observation = ObservationPixelSpectra(
+        dataset=data)
     comparison_ = comparison_of(observation, LikelihoodGauss(
         upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))),
         DriverHost())
@@ -350,7 +376,7 @@ def test_the_psf_must_be_the_beam_of_data_of_a_beam(caplog):
     from gbkfit.dataset import DatasetPixelSpectra
     from gbkfit.instrument import PSFGauss, PSFMoffat, SpectralTable
     from gbkfit.io import Beam
-    from gbkfit.observation import PixelSpectra
+    from gbkfit.observation import ObservationPixelSpectra
     hi = 1420.405752 * u.MHz
     spectral = SpectralAxis(size=3, step=10, rval=0, rest=hi)
 
@@ -359,8 +385,8 @@ def test_the_psf_must_be_the_beam_of_data_of_a_beam(caplog):
         data = DatasetPixelSpectra(
             Data(np.zeros((3, 4, 4)), unit='Jy/beam', beam=beam),
             spectral=SpectralAxis(step=10, rval=0, rest=hi))
-        ObservationSky(
-            PixelSpectra(size=(4, 4), spectral=spectral),
+        ObservationPixelSpectra(
+            size=(4, 4), spectral=spectral,
             instrument=Instrument(psf=psf), dataset=data)
         return caplog.text
     beam = Beam(6.0, 3.0, 30.0)

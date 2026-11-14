@@ -38,7 +38,7 @@ def image_case(driver, components, band, depth=None, redshift=0):
     """
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(type='pixel_brightness', size=[24, 24]),
+        observation=dict(type='pixel_brightness', size=[24, 24]),
         galaxy=dict(components=components, redshift=redshift),
         **({} if band is None else dict(band=band)),
         **({} if depth is None else dict(depth=depth)))
@@ -81,7 +81,7 @@ def test_images_see_components_in_their_band(driver, band, message):
 def test_only_images_have_a_band(driver):
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[8, 8],
             spectral=dict(size=10, convention='relativistic')),
         galaxy=dict(components=[dict(
@@ -132,8 +132,8 @@ def test_configurations_name_bands():
         galaxies=[dict(components=[dict(
             STARS, emission=dict(type='band', bands=['sdss_g', 'mine']))])],
         observations=[dict(
-            type='sky',
-            observable=dict(type='pixel_brightness', size=[8, 8]),
+            type='pixel_brightness',
+            size=[8, 8],
             band='mine')])
     plan = config_group_plan(config)
     observation, = plan.group().observations()

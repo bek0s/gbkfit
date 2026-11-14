@@ -48,7 +48,7 @@ def plan_of(driver, observable):
         else 'lines'
     return group_plan([dict(
         driver=dict(type=driver.type()), galaxy=dict(
-            components=[disk(emission)]), observable=observable)])
+            components=[disk(emission)]), observation=observable)])
 
 
 def evaluate(plan):
@@ -182,7 +182,7 @@ def test_mocks_without_data_have_the_unit_and_beam_of_their_model(
         type='lines', lines=['hi21'], unit='Msun/pc2'))
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=dict(components=[hi]),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', psf=psf) | RECORDED['pixel_spectra']
         | dict(spectral=dict(
             size=31, step=20, rest='1420.405751768 MHz')),
@@ -315,8 +315,8 @@ def named_images(*names):
     return ObservationGroup(
         galaxy_parser.load(dict(components=[disk('band')])),
         observation_parser.load([
-            dict(type='sky', name=name,
-                 observable=dict(type='pixel_brightness', size=[4, 4]))
+            dict(type='pixel_brightness', name=name,
+                 size=[4, 4])
             for name in names]))
 
 
@@ -374,7 +374,7 @@ def test_data_without_a_unit_take_no_light_of_a_unit(driver):
     _, _, params = evaluate(plan)
     [dataset] = mock_data(plan, params, NoiseGauss(rms=0.01))
     lit = group_plan([dict(
-        driver=dict(type=driver.type()), observable=image,
+        driver=dict(type=driver.type()), observation=image,
         galaxy=dict(components=[disk('band') | dict(
             emission=dict(type='band', unit='MJy/sr'))]),
         unit='MJy/sr')])
@@ -392,7 +392,7 @@ def mock_setup_config(observable, likelihoods=None):
     return dict(
         version=FORMAT_VERSION, driver=dict(type='host'),
         galaxies=[dict(components=[disk(emission)])],
-        observations=[dict(type='sky', name='img', observable=observable)],
+        observations=[observable | dict(name='img')],
         params=dict(properties=dict(PROPERTIES)),
         mock=dict(noise=dict(type='gauss', rms=0.01), seed=1)) | (
         {} if likelihoods is None else dict(likelihoods=likelihoods))

@@ -57,10 +57,8 @@ CASES = {
 def evaluate(driver, case, dtype, fft_dtype='float64'):
     galaxy, observable, instrument = CASES[case]
     group = ObservationGroup([galaxy_parser.load(galaxy)], [
-        observation_parser.load(dict(
-            type='sky',
-            observable=observable, instrument=instrument, dtype=dtype,
-            fft_dtype=fft_dtype))])
+        observation_parser.load(observable | dict(
+            instrument=instrument, dtype=dtype, fft_dtype=fft_dtype))])
     # (the disk on a grid is thick: it has a scale height)
     properties = PROPERTIES | (dict(rht_s=0.5) if '3d' in case else {})
     params = gbkfit.params.ParamSpace.from_properties(

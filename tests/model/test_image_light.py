@@ -16,9 +16,8 @@ from gbkfit.observation import ObservationGroup, observation_parser
 
 # An image of 64 x 64 pixels of 0.2 arcsec, at RA 150 and Dec 2 degrees
 IMAGE = dict(
-    type='sky',
-    observable=dict(
-        type='pixel_brightness', size=[64, 64], step=0.2, rval=[150.0, 2.0]))
+    type='pixel_brightness',
+    size=[64, 64], step=0.2, rval=[150.0, 2.0])
 GEOMETRY = dict(xpos=0.3, ypos=-0.2, posa=30, incl=60)
 EXPONENTIAL = dict(type='exponential')
 EXPONENTIAL_PARAMS = dict(rpt_a=1, rpt_s=1.5)
@@ -46,7 +45,7 @@ def write_truth(path, rval=None):
     return it.
     """
     group, truth = image_of(disk(EXPONENTIAL), GEOMETRY | EXPONENTIAL_PARAMS)
-    coords = group.observations()[0].observable().grid().coords
+    coords = group.observations()[0].grid().coords
     if rval is not None:
         coords = coords._replace(rval=tuple(rval))
     write_data(str(path), truth, coords, overwrite=True)

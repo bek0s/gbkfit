@@ -350,13 +350,12 @@ def test_observations_have_their_own_dtype(tmp_path):
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20), np.float64))
     observation = observation_parser.load(dict(
-        type='sky',
-        observable=dict(type='pixel_brightness'),
+        type='pixel_brightness',
         dataset=dict(
             type='pixel_brightness', data=str(tmp_path / 'image.fits'))))
     assert observation.dtype() == np.float32
     assert observation.dataset().dtype() == np.float64
-    assert observation.observable().size() == (20, 8)
+    assert observation.size() == (20, 8)
 
 
 def test_dataset_steps_must_be_positive():
@@ -454,62 +453,56 @@ def test_relabelled_velocities_keep_the_line_of_their_rest(
         assert coords.rest.value == pytest.approx(expected.value, rel=1e-5)
 
 
-def test_observable_grid_comes_from_the_data(tmp_path):
+def test_observation_grid_comes_from_the_data(tmp_path):
     # The grid comes from the data, and a dump of the observation does not
-    # repeat it; the observable can give it too, as without data (e.g. that
-    # of mock data, which then takes the data), and it is checked against
-    # the data
+    # repeat it; the observation can give it too, as without data (e.g.
+    # that of mock data, which then takes the data), and it is checked
+    # against the data
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
     info = dict(
-        type='sky',
+        type='pixel_brightness',
         dataset=dict(
             type='pixel_brightness', data=str(tmp_path / 'image.fits')))
-    observation = observation_parser.load(
-        info | dict(observable=dict(type='pixel_brightness')))
-    assert observation.observable().size() == (20, 8)
-    observable_info = observation_parser.dump(
-        observation, prefix=str(tmp_path / 'dump_'))['observable']
-    assert observable_info == dict(
-        type='pixel_brightness',
-        median_size=None)
-    given = observation_parser.load(info | dict(observable=dict(
-        type='pixel_brightness', size=[20, 8], step=1, median_size=3)))
-    assert given.observable().grid() == observation.observable().grid()
-    assert given.observable().dump(
-        given.dataset())['median_size'] == 3
-    with pytest.raises(ConfigError, match=(
+    observation = observation_parser.load(info)
+    assert observation.size() == (20, 8)
+    dumped = observation_parser.dump(
+        observation, prefix=str(tmp_path / 'dump_'))
+    assert not {'size', 'step', 'rpix', 'rval', 'rota'} & set(dumped)
+    assert dumped['median_size'] is None
+    given = observation_parser.load(
+        info | dict(size=[20, 8], step=1, median_size=3))
+    assert given.grid() == observation.grid()
+    assert given.dump()['median_size'] == 3
+    with pytest.raises(ValueError, match=(
             r"gives the options \['size', 'step'\], which its data give "
             r"too, and they are not those of the data: the data are on the "
             r"grid")):
-        observation_parser.load(info | dict(observable=dict(
-            type='pixel_brightness', size=[20, 8], step=0.5)))
-    with pytest.raises(ConfigError, match=(
+        observation_parser.load(info | dict(size=[20, 8], step=0.5))
+    with pytest.raises(ValueError, match=(
             r"gives the options \['step'\], which its data give too, but "
-            r"not all those it needs without data \(missing required "
-            r"options: 'size'\)")):
-        observation_parser.load(
-            info | dict(observable=dict(type='pixel_brightness', step=1)))
+            r"not all those it needs without data \(the options "
+            r"\['size'\]\)")):
+        observation_parser.load(info | dict(step=1))
 
 
-def test_observation_data_must_be_on_the_grid_of_the_observable():
-    from gbkfit.observation import (
-        ObservationSky, PixelBrightness)
+def test_observation_data_must_be_on_its_grid():
+    from gbkfit.observation import ObservationPixelBrightness
     data = DatasetPixelBrightness(Data(np.ones((8, 20))), rota=30)
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
     with pytest.raises(ValueError, match="the data are on the grid"):
-        ObservationSky(
-            PixelBrightness(size=(20, 8)), dataset=data)
+        ObservationPixelBrightness(
+            size=(20, 8), dataset=data)
     with pytest.raises(ValueError, match="cannot be compared"):
-        ObservationSky(
-            PixelBrightness(size=(20, 8)), dataset=moments)
-    ObservationSky(
-        PixelBrightness(size=(20, 8), rota=30), dataset=data)
+        ObservationPixelBrightness(
+            size=(20, 8), dataset=moments)
+    ObservationPixelBrightness(
+        size=(20, 8), rota=30, dataset=data)
 
 
 def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
-    # The rest of the spectral axis of the data is that of the observable,
-    # which gives it only with its whole grid, as without data
+    # The rest of the spectral axis of the data is that of the
+    # observation, which gives it only with its whole grid, as without data
     from gbkfit.observation import observation_parser
     dataset = DatasetPixelSpectra(
         Data(np.ones((6, 8, 20))), step=(1, 1),
@@ -519,17 +512,16 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     loaded = dataset_parser.load(dict(type='pixel_spectra') | dict(data_info))
     assert loaded.grid().coords.rest == dataset.grid().coords.rest
     info = dict(
-        type='sky',
+        type='pixel_spectra',
         dataset=dict(type='pixel_spectra') | dict(data_info))
-    observation = observation_parser.load(
-        info | dict(observable=dict(type='pixel_spectra')))
-    assert observation.observable().spectral().rest() \
+    observation = observation_parser.load(info)
+    assert observation.spectral().rest() \
         == dataset.grid().coords.rest
-    with pytest.raises(ConfigError, match=(
+    with pytest.raises(ValueError, match=(
             r"gives the options \['spectral'\], which its data give too, "
             r"but not all")):
-        observation_parser.load(info | dict(observable=dict(
-            type='pixel_spectra', spectral=dict(rest='6562.8 Angstrom'))))
+        observation_parser.load(
+            info | dict(spectral=dict(rest='6562.8 Angstrom')))
 
 
 def test_pixel_brightness_has_no_rest(tmp_path):

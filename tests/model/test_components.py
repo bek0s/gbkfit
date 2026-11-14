@@ -177,7 +177,7 @@ def test_a_shared_height_trait_is_one_for_each_polar_trait(
             'band_smdisk_thick', rptraits=rptraits, rhtraits=rhtraits)
         case = dict(
             driver=dict(type=driver.type()), galaxy=dict(components=[disk]),
-            observable=dict(
+            observation=dict(
                 type='pixel_brightness', size=[24, 24], step=[1, 1]),
             depth=dict(step=0.5))
         data, _ = evaluate_cases([case], dict(

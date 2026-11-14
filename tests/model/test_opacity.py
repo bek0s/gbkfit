@@ -47,7 +47,7 @@ def spectral_cube_case(driver, with_opacity):
             THICK_DISK, name='dust', opacity=DUST))
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[32, 32], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
         galaxy=dict(components=components))
@@ -116,7 +116,7 @@ def face_on_optical_depth(
     stars = dict(THICK_DISK, name='stars', emission=BAND)
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(type='pixel_brightness', size=[24, 24]),
+        observation=dict(type='pixel_brightness', size=[24, 24]),
         depth=dict(extent=40 * 0.25, step=0.25),
         galaxy=dict(components=[stars, dust]))
     properties = dict(
@@ -181,7 +181,7 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
     def evaluate(components, properties):
         case = dict(
             driver=dict(type=driver.type()),
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[32, 32], step=[1, 1],
                 spectral=dict(size=41, step=10, convention='relativistic')),
             galaxy=dict(components=components))
@@ -213,7 +213,7 @@ def image_and_optical_depth(driver, evaluate_cases, opacity, depth_step):
     """
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(type='pixel_brightness', size=[32, 32]),
+        observation=dict(type='pixel_brightness', size=[32, 32]),
         depth=dict(extent=24.0, step=depth_step),
         galaxy=dict(components=[
             dict(THICK_DISK, name='stars', emission=BAND),
@@ -280,7 +280,7 @@ def test_a_depth_axis_sees_a_thin_disk_as_the_sky_does(
     for evaluation in ('plane', 'depth'):
         force_evaluation(evaluation)
         models.append(evaluate_cases([dict(
-            driver=dict(type=driver.type()), observable=observable,
+            driver=dict(type=driver.type()), observation=observable,
             galaxy=dict(components=[component]))], properties)[0][0])
     np.testing.assert_array_equal(models[1][key].data, models[0][key].data)
 
@@ -294,7 +294,7 @@ def face_on_dust_case(driver, components):
     dust = dict(THICK_DISK, name='dust', opacity=DUST)
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(type='pixel_brightness', size=[24, 24]),
+        observation=dict(type='pixel_brightness', size=[24, 24]),
         depth=dict(extent=40 * 0.25, step=0.25),
         galaxy=dict(components=list(components) + [dust]))
 
@@ -391,7 +391,7 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
         properties[f'dust{i}_rpt_a'] = opacity
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1], rval=[0, 0],
             spectral=dict(
                 size=81, step=25, rval=500, rest='6564.61 Angstrom')),

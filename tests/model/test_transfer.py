@@ -181,10 +181,9 @@ def cubes_of(
     The model data of a galaxy of the given components seen on a depth
     axis and through radiative transfer (a spectral cube by default).
     """
-    observation = dict(
-        observable=dict(
-            type='pixel_spectra', size=[24, 24], step=[1, 1],
-            spectral=dict(size=31, step=10, convention='relativistic'))
+    observation = dict(observation=dict(
+        type='pixel_spectra', size=[24, 24], step=[1, 1],
+        spectral=dict(size=31, step=10, convention='relativistic'))
     ) | observation
     models = []
     for evaluation in ('depth', 'transfer'):
@@ -246,7 +245,7 @@ def test_transfer_dims_each_line_by_its_law(
         if key.startswith('dust_')}
     grid, transfer = cubes_of(
         evaluate_cases, force_evaluation, driver, [gas] + dusts, properties,
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1], rval=[0, 0],
             spectral=dict(
                 size=81, step=25, rval=500, rest='6564.61 Angstrom')))
@@ -262,7 +261,7 @@ def test_transfer_gives_what_a_depth_axis_gives_for_an_image(
         stars_rpt_a=1, stars_rpt_s=3, stars_rht_s=1)
     grid, transfer = cubes_of(
         evaluate_cases, force_evaluation, driver, [stars, DUST], properties,
-        observable=dict(type='pixel_brightness', size=[24, 24]))
+        observation=dict(type='pixel_brightness', size=[24, 24]))
     assert_same_model(transfer, grid)
 
 
@@ -273,7 +272,7 @@ def test_transfer_keeps_the_moments_of_monte_carlo_clouds(
     gas = GAS | dict(type='thick_disk', clouds=dict(cflux=1e-3))
     grid, transfer = cubes_of(
         evaluate_cases, force_evaluation, driver, [gas, DUST], PROPERTIES,
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=61, step=10, convention='relativistic')))
     velocity = (np.arange(61) - 30) * 10.0
@@ -301,7 +300,7 @@ def transfer_cube(evaluate_cases, driver, components, properties):
     """The spectral cube of components seen through radiative transfer."""
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=61, step=10, convention='relativistic')),
         galaxy=dict(components=components))
@@ -401,7 +400,7 @@ def test_line_opacity_errors(driver, component, message):
     from modelutils import group_plan
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=31, step=10, convention='relativistic')),
         galaxy=dict(components=[component]))
@@ -431,7 +430,7 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
         case = dict(
             driver=dict(type=driver.type()),
             **({} if slab is None else dict(depth=dict(slab=slab))),
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[24, 24], step=[1, 1],
                 spectral=dict(size=31, step=10, convention='relativistic')),
             galaxy=dict(components=components))
@@ -458,12 +457,13 @@ def names(extra):
 
 def galaxies_model(
         driver, galaxies, properties, depth_order=None, with_extras=True,
-        **observation):
+        kind=None, **observation):
     """
     The model data of an observation of several galaxies through
-    radiative transfer (a spectral cube by default), front to back in the
-    given order (that of the galaxies if None), and its extras (none
-    without with_extras: the evaluation of fits). The galaxies take those
+    radiative transfer, of a kind (its type and options; a spectral cube
+    by default) and the given options, front to back in the given order
+    (that of the galaxies if None), and its extras (none without
+    with_extras: the evaluation of fits). The galaxies take those
     of the properties that they have (see of_model). Its depth axis holds
     the tails of the disks (beyond their last ring) on every line of
     sight: on the default one, the diagonal of the grid, a group of
@@ -472,11 +472,10 @@ def galaxies_model(
     """
     import gbkfit.params
     from gbkfit.observation import ObservationGroup, observation_parser
-    observation = dict(
-        type='sky',
-        observable=dict(
-            type='pixel_spectra', size=[24, 24], step=[1, 1],
-            spectral=dict(size=31, step=10, convention='relativistic')),
+    kind = kind or dict(
+        type='pixel_spectra', size=[24, 24], step=[1, 1],
+        spectral=dict(size=31, step=10, convention='relativistic'))
+    observation = kind | dict(
         depth=dict(extent=120),
         galaxies=[galaxy['name'] for galaxy in galaxies]) | observation
     if depth_order is None:
@@ -522,8 +521,7 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
         dust_rpt_s=4, dust_rht_s=1))
     order = ['front', 'back'] if dust_in_front else ['back', 'front']
     image = dict(
-        observable=dict(type='pixel_brightness', size=[24, 24]),
-        band='sdss_r')
+        kind=dict(type='pixel_brightness', size=[24, 24]), band='sdss_r')
     clear, _ = galaxies_model(driver, galaxies[:1], properties, **image)
     model, extra = galaxies_model(
         driver, galaxies, properties, order, **image)
@@ -651,7 +649,7 @@ def transfer_case(driver, components, nchannels=31, step=10, **depth):
     return dict(
         driver=dict(type=driver.type()),
         **({} if not depth else dict(depth=depth)),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(
                 size=nchannels, step=step, convention='relativistic')),
@@ -768,7 +766,7 @@ def test_a_coarse_depth_axis_warns_about_the_light(
     if depth_step is not None:
         case['depth'] = dict(step=depth_step)
     if lsf_sigma is not None:
-        case['observable'] |= dict(lsf=dict(
+        case['observation'] |= dict(lsf=dict(
             type='gauss', sigma=f'{lsf_sigma} km/s'))
     caplog.set_level(logging.WARNING)
     evaluate_transfer(evaluate_cases, case, PROPERTIES | dict(

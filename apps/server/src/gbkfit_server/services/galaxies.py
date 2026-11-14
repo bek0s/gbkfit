@@ -32,7 +32,7 @@ __all__ = [
 _OBSERVATIONS = (
     ruamel.yaml.YAML(typ='safe').load(
         gbkfit.project.TEMPLATES['observations']),
-    dict(type='sky', observable=dict(type='pixel_brightness', size=[48, 48])))
+    dict(type='pixel_brightness', size=[48, 48]))
 
 
 @dataclasses.dataclass

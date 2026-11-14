@@ -15,7 +15,7 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.model import GalaxyState
 from gbkfit.params import ParamValues
 from .noise import INSTRUMENT, Noise, noise_parser
-from .observables import HostModelData, ObservablePlan
+from .plan import HostModelData, ObservationPlan
 from .observation import Observation
 from .sky import ObservationSky
 
@@ -175,7 +175,7 @@ def draw_mocks(
     """
     Draw mock data of the observations of a group plan, by the options:
     their model data measured from what their instruments record of the
-    model plus noise (see ObservablePlan.mock), with their errors.
+    model plus noise (see ObservationPlan.mock), with their errors.
 
     The data that are what the instrument records plus the noise (e.g.
     spectra) have its dispersion as their errors, and declare its
@@ -233,7 +233,7 @@ def draw_mocks(
 
 def _draw(
         plan: 'GroupPlan',
-        observable_plan: ObservablePlan,
+        observation_plan: ObservationPlan,
         index: int,
         params: ParamValues,
         states: Sequence[GalaxyState],
@@ -250,9 +250,9 @@ def _draw(
     observation = group.observations()[index]
     nmocks = options.nmocks()
     with config_path('observations', index):
-        exact = observable_plan.has_exact_errors()
+        exact = observation_plan.has_exact_errors()
         items = _data_options(observation, noise, exact)
-        draws, errors = observable_plan.mock(
+        draws, errors = observation_plan.mock(
             group.moved(index, params),
             [states[g] for g in group.seen_galaxies(index)],
             noise, np.random.default_rng(stream),

@@ -17,9 +17,7 @@ PIECES = {
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(8)),
         rptraits=dict(type='exponential'),
         emission=dict(type='band'))]),
-    'observations/image.yaml': dict(
-        type='sky',
-        observable=dict(type='pixel_brightness', size=[16, 12])),
+    'observations/image.yaml': dict(type='pixel_brightness', size=[16, 12]),
     'params/disk.yaml': dict(properties=dict(
         xpos=0, ypos=0, posa=30, incl=dict(value=45, min=0, max=90),
         rpt_a=1, rpt_s=3)),

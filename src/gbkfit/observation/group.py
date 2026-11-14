@@ -129,7 +129,7 @@ class ObservationGroup:
     The centres of the components (xpos, ypos) are measured from the
     origin of the frame of the first observation on the sky (see
     Observation.sky_frame): its reference pixel, at the RA and Dec of its
-    grid (see Observable.sky_rval). The other observations on the sky
+    grid (see ObservationSky.sky_rval). The other observations on the sky
     see them moved by where that origin is in their frames, from their
     RA and Dec: e.g. a cube whose reference pixel is 2 arcsec west of that
     of the first sees them at xpos - 2 in its frame (2 arcsec further east

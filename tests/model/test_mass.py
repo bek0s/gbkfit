@@ -1701,13 +1701,12 @@ def evaluate(driver, galaxy, properties):
     Evaluate a spectral cube of a galaxy (on a depth axis if it is thick).
     """
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra)
+        ObservationGroup, ObservationPixelSpectra)
     from gbkfit.params import ParamSpace
-    group = ObservationGroup([galaxy], [ObservationSky(
-        PixelSpectra(
-            size=(32, 32), step=(1, 1),
-            spectral=SpectralAxis(
-                size=51, step=10, convention='relativistic')))])
+    group = ObservationGroup([galaxy], [ObservationPixelSpectra(
+        size=(32, 32), step=(1, 1),
+        spectral=SpectralAxis(
+            size=51, step=10, convention='relativistic'))])
     params = ParamSpace.from_properties(group.pdescs(), properties)
     return group.plan(driver).model_h(
         params.evaluate())[0]['spectra'].data.copy()
@@ -2603,7 +2602,7 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.model._galaxy_stage import GalaxyStage
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra)
+        ObservationGroup, ObservationPixelSpectra)
     from gbkfit.params import ParamSpace
     calls = []
     evaluate_stage = GalaxyStage.evaluate
@@ -2617,11 +2616,10 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
         'smooth', dict(type='mass'), MASS, DISTANCE,
         pressure_support=dict(type='jeans'))
     group = ObservationGroup([galaxy], [
-        ObservationSky(
-            PixelSpectra(
-                size=(32, 32), step=(1, 1),
-                spectral=SpectralAxis(
-                    size=51, step=10, convention='relativistic')), dtype=dtype,
+        ObservationPixelSpectra(
+            size=(32, 32), step=(1, 1),
+            spectral=SpectralAxis(
+                size=51, step=10, convention='relativistic'), dtype=dtype,
             name=name)
         for name, dtype in (('single', 'float32'), ('double', 'float64'))])
     params = ParamSpace.from_properties(

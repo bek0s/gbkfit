@@ -1,6 +1,6 @@
 # user_likelihoods: Three observations of user likelihoods of parameters: a cube and moment maps of residuals (Cauchy and Student's t noise), and moment maps of a log-likelihood (Gaussian noise of a free jitter).
 # (written by make_golden.py; do not edit)
-version: 11
+version: 12
 driver: {type: host}
 galaxies:
 - components:
@@ -13,7 +13,7 @@ galaxies:
     dptraits: {type: uniform}
     emission: {type: lines}
 observations:
-- type: sky
+- type: pixel_spectra
   name: cube
   dataset:
     type: pixel_spectra
@@ -31,10 +31,11 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20.0 km s-1}
-  observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
+  smooth_weights: false
+  median_size: null
   oversampling: [1, 1, 1]
   fft_dtype: float64
-- type: sky
+- type: pixel_moments
   name: maps
   dataset:
     type: pixel_moments
@@ -52,15 +53,13 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20.0 km s-1}
-  observable:
-    type: pixel_moments
-    spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
-    flux_floor: 1.0e-06
-    method: moments
-    median_size: null
+  spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
+  flux_floor: 1.0e-06
+  method: moments
+  median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
-- type: sky
+- type: pixel_moments
   name: jittered
   dataset:
     type: pixel_moments
@@ -78,12 +77,10 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20.0 km s-1}
-  observable:
-    type: pixel_moments
-    spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
-    flux_floor: 1.0e-06
-    method: moments
-    median_size: null
+  spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
+  flux_floor: 1.0e-06
+  method: moments
+  median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
 likelihoods:

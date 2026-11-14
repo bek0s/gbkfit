@@ -19,7 +19,7 @@ import { frameOf } from '../../components/sky';
 import { Curves, type CurvesFocus } from './Curves';
 import type { Options } from './options';
 
-// (the kinds of observables shown, on a grid of pixels: a cube, an image,
+// (the kinds of observations shown, on a grid of pixels: a cube, an image,
 // moment maps)
 const SHOWN = ['pixel_spectra', 'pixel_brightness', 'pixel_moments'];
 
@@ -84,10 +84,10 @@ function Shown({ observed }: { observed: Observed }) {
   const [selection, setSelection] = useState<Region | null>(null);
   const [band, setBand] = useState<[number, number] | null>(null);
   const models = observed.arrays.filter((array) => array.kind === 'model');
-  if (!SHOWN.includes(observed.observable) || models.length === 0) {
-    return <p className="note">The Studio does not show this kind of observation ({observed.observable.replaceAll('_', ' ')}) yet.</p>;
+  if (!SHOWN.includes(observed.type) || models.length === 0) {
+    return <p className="note">The Studio does not show this kind of observation ({observed.type.replaceAll('_', ' ')}) yet.</p>;
   }
-  if (observed.observable === 'pixel_spectra') {
+  if (observed.type === 'pixel_spectra') {
     const [model] = models;
     return (
       <CubeViewer
