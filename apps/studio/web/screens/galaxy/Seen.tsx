@@ -6,17 +6,15 @@
 // (an image, or moment maps, measured as the observation measures them).
 // What the library notes as it sets them up shows over it, and why the
 // observation cannot see the galaxy, if it cannot (e.g. a band of an
-// image that none of its components emits in). Under it, the curves of the
-// galaxy.
+// image that none of its components emits in).
 import { useDebouncedValue } from '@mantine/hooks';
 import { useMemo, useState } from 'react';
-import { useGalaxyRender, useObserved, usePiece } from '../../api/queries';
+import { useObserved, usePiece } from '../../api/queries';
 import { CubeViewer } from '../../components/CubeViewer';
 import { joinPath } from '../../components/FilePicker';
 import { MapsViewer, type MapItem } from '../../components/MapsViewer';
 import type { Region } from '../../components/MapView';
 import { frameOf } from '../../components/sky';
-import { Curves, type CurvesFocus } from './Curves';
 import type { Options } from './options';
 
 // (the kinds of observations shown, on a grid of pixels: a cube, an image,
@@ -26,31 +24,12 @@ const SHOWN = ['pixel_spectra', 'pixel_brightness', 'pixel_moments'];
 // (as the edits settle, ms)
 const SETTLE_MS = 300;
 
-// (the height of the curves under it, px)
-const CURVES_HEIGHT = 170;
-
-export function SeenView({
-  project,
-  galaxy,
-  properties,
-  observation,
-  curves,
-  components,
-}: {
-  project: string;
-  galaxy: Options;
-  properties: Record<string, unknown>;
-  observation: string;
-  curves: CurvesFocus;
-  components: { name: string; colour: string }[];
-}) {
+export function SeenView({ project, galaxy, properties, observation }: { project: string; galaxy: Options; properties: Record<string, unknown>; observation: string }) {
   // (a key of text, so that the same galaxy, settled, is not asked again)
   const [settledKey] = useDebouncedValue(JSON.stringify([galaxy, properties]), SETTLE_MS);
   const [settledGalaxy, settledProperties] = useMemo(() => JSON.parse(settledKey) as [Options, Record<string, unknown>], [settledKey]);
   const seen = usePiece(joinPath(project, `observations/${observation}.yaml`));
   const observed = useObserved(project, settledGalaxy, settledProperties, observation, seen.data);
-  // (the curves: of the galaxy as it is, whatever sees it)
-  const render = useGalaxyRender(project, settledGalaxy, settledProperties, 'sky', 64);
   return (
     <div className="gx-seen">
       <div className="gx-seen-view">
@@ -72,7 +51,6 @@ export function SeenView({
         {!observed.error && !observed.data && <div className="gx-map-wait gx-seen-wait" />}
         {!observed.error && observed.data && <Shown key={observation} observed={observed.data} />}
       </div>
-      {render.data && <Curves render={render.data} focus={curves} components={components} height={CURVES_HEIGHT} />}
     </div>
   );
 }

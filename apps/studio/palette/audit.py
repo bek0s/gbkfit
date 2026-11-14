@@ -11,8 +11,8 @@ colours). The floors:
 - the accent and the states, as text and as fills, told apart at a glance,
   and not alike with red or green colour blindness;
 - a selection seen on a panel, and apart from a hovered row;
-- the surfaces apart in steps that show, tinted little, neither black nor
-  white;
+- the surfaces apart in steps that show (the frame below the window),
+  tinted little, neither black nor white;
 - the colours of things told apart: in the band of lightness in which a
   mark reads, of chroma enough to read as a colour, neighbours apart (with
   colour blindness too), and at least 3:1 on the panel (WCAG's floor for
@@ -45,7 +45,7 @@ __all__ = [
 ]
 
 
-SURFACES = ('bg', 'field', 'panel', 'panel2', 'raise')
+SURFACES = ('chrome', 'bg', 'field', 'panel', 'panel2', 'raise')
 
 # The accent and the states, as fills and as text; and the floors of their
 # pairs, at a glance and with colour blindness: clearly apart at a glance
@@ -180,6 +180,8 @@ def _audit(theme: dict[str, Any], kind: str) -> list[Finding]:
 
     at('panel above the window (lightness)',
        abs(L('panel') - L('bg')), floor=0.035)
+    at('frame below the window (lightness)',
+       L('bg') - L('chrome'), floor=0.02)
     at('field apart from the panel (lightness)',
        abs(L('panel') - L('field')), floor=0.012)
     at('raised apart from the panel (lightness)',
@@ -193,6 +195,7 @@ def _audit(theme: dict[str, Any], kind: str) -> list[Finding]:
        ceiling=0.035 if kind == 'dark' else 0.015)
     if kind == 'dark':
         at('window not black (lightness)', L('bg'), floor=0.15)
+        at('frame not black (lightness)', L('chrome'), floor=0.12)
     else:
         at('panel not white (lightness)', L('panel'), ceiling=0.98)
 

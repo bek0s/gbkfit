@@ -1,10 +1,8 @@
-// The view of a galaxy as it is built (see the server's /views/galaxy and
-// /views/galaxy-cube): a map of its light, velocity or dispersion, of all
-// its components or of one, as seen, face-on (its motions in its plane as
-// arrows) or edge-on; or seen by an observation of the project (see Seen:
-// its cube, or its maps, as the observation records them). The map is in a
-// map panel (see MapPanel: as every map of the Studio), rendered at about
-// its size on the screen; its place on the sky is in arcsec from its
+// A map of a galaxy as it is built (see the server's /views/galaxy): its
+// light, velocity or dispersion, of all its components or of one, as
+// seen, face-on (its motions in its plane as arrows) or edge-on. The map
+// is in a map panel (see MapPanel: as every map of the Studio), rendered at
+// about its size on the screen; its place on the sky is in arcsec from its
 // centre. Light can be shown on a linear, square-root or logarithmic
 // scale.
 import { useDebouncedValue, useElementSize } from '@mantine/hooks';
@@ -12,9 +10,6 @@ import { useMemo, useRef, useState } from 'react';
 import { useGalaxyRender, type GalaxyRender } from '../../api/queries';
 import { MapPanel } from '../../components/MapPanel';
 import type { Region } from '../../components/MapView';
-import { Choice, Segments } from '../../components/ui/inputs';
-import { Curves, type CurvesFocus } from './Curves';
-import { SeenView } from './Seen';
 import type { Options } from './options';
 
 export type Orientation = 'sky' | 'face-on' | 'edge-on';
@@ -53,7 +48,7 @@ function hasDepth(galaxy: Options): boolean {
 // Whether a galaxy has height (a thick disk, a cone, a spheroid,
 // particles): one of thin disks and points alone lies in a plane, and is
 // a line seen edge-on
-function hasHeight(galaxy: Options): boolean {
+export function hasHeight(galaxy: Options): boolean {
   const components = Array.isArray(galaxy.components) ? galaxy.components : [galaxy.components];
   return components.some((c) => {
     const component = c as Options | undefined;
@@ -61,137 +56,26 @@ function hasHeight(galaxy: Options): boolean {
   });
 }
 
-// (what "Seen by" lists first: nothing, the galaxy as it is)
-const IDEAL = '@ideal';
-
 // (a change within this long of the last is one of a gesture: see
 // renderSize)
 const SETTLE_MS = 350;
 
-// The heights of the plot of the curves (its least and most), and of the
-// rest of their card (pixels)
-const CURVES_LEAST = 170;
-const CURVES_MOST = 300;
-const CURVES_FRAME = 44;
-
-export interface ViewerProps {
+export interface RenderMapProps {
   project: string;
-  // What sees it: none (it as it is), or an observation of the project, by
-  // name; and the observations there are
-  seenBy: string | null;
-  onSeenBy: (observation: string | null) => void;
-  observations: string[];
   // The options and the properties (for the render; see params.forRender)
   // of the galaxy, as they settle
-  galaxy: Options | undefined;
+  galaxy: Options;
   properties: Record<string, unknown>;
   orientation: Orientation;
-  onOrientation: (orientation: Orientation) => void;
   quantity: Quantity;
-  onQuantity: (quantity: Quantity) => void;
-  // The components (their names and colours), and the one shown alone
-  components: { name: string; colour: string }[];
+  // The component shown alone, if any
   isolated: string | null;
-  onIsolated: (name: string | null) => void;
-  // What the curves under the map are of: the motions, or the mass; and
-  // the radii of the rings of the component chosen, marked on them
-  curves: CurvesFocus;
 }
 
-export function Viewer(props: ViewerProps) {
-  const { galaxy, onOrientation, quantity, onQuantity, components, isolated, onIsolated, seenBy, onSeenBy, observations } = props;
-  // (one no longer there: none)
-  const seen = seenBy !== null && observations.includes(seenBy) ? seenBy : null;
-  // (edge-on, as seen, of a galaxy with no height: see hasHeight)
-  const flat = useMemo(() => galaxy !== undefined && !hasHeight(galaxy), [galaxy]);
-  const orientation = flat && props.orientation === 'edge-on' ? 'sky' : props.orientation;
-  return (
-    <div className="gx-view">
-      <div className="gx-toolbar">
-        <label className="gx-seen-by" title="As it is (fine pixels, no instrument), or as an observation of the project records it: its grid, PSF and LSF">
-          <span>Seen by</span>
-          <Choice
-            items={[{ value: IDEAL, label: 'Nothing: as it is' }, ...observations.map((name) => ({ value: name, label: name }))]}
-            value={seen ?? IDEAL}
-            onChange={(next) => onSeenBy(next === IDEAL ? null : next)}
-            label="What sees the galaxy"
-          />
-        </label>
-        <Segments
-          items={[
-            { value: 'sky', label: 'As seen' },
-            { value: 'face-on', label: 'Face-on', disabled: seen !== null, title: seen ? 'An observation sees it on the sky' : undefined },
-            {
-              value: 'edge-on',
-              label: 'Edge-on',
-              disabled: flat || seen !== null,
-              title: seen
-                ? 'An observation sees it on the sky'
-                : flat
-                  ? 'Its disks are thin, with no height: edge-on, a line. Make a disk thick to see it edge-on.'
-                  : undefined,
-            },
-          ]}
-          value={seen ? 'sky' : orientation}
-          onChange={onOrientation}
-          label="How the galaxy is seen"
-        />
-        {seen === null && <Segments
-          items={[
-            { value: 'light', label: 'Light' },
-            { value: 'velocity', label: 'Velocity' },
-            { value: 'dispersion', label: 'Dispersion' },
-          ]}
-          value={quantity}
-          onChange={onQuantity}
-          label="What is shown"
-        />}
-        {components.length > 1 && seen === null && (
-          <div className="gx-isolate" role="group" aria-label="The components shown">
-            <button className="gx-chip" data-on={isolated === null || undefined} onClick={() => onIsolated(null)}>
-              All
-            </button>
-            {components.map((c) => (
-              <button key={c.name} className="gx-chip" data-on={isolated === c.name || undefined} onClick={() => onIsolated(isolated === c.name ? null : c.name)}>
-                <i style={{ background: `var(--${c.colour})` }} />
-                {c.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="gx-stage">
-        {galaxy === undefined ? (
-          <div className="gx-empty">
-            <p>An empty galaxy.</p>
-            <p className="note">Add its first component in the outline to see it.</p>
-          </div>
-        ) : seen !== null ? (
-          <SeenView project={props.project} galaxy={galaxy} properties={props.properties} observation={seen} curves={props.curves} components={components} />
-        ) : (
-          <RenderPane {...props} galaxy={galaxy} quantity={quantity} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// A render of the galaxy: its map, in a map panel, and its curves under it
-function RenderPane({
-  project,
-  galaxy,
-  properties,
-  orientation,
-  quantity,
-  isolated,
-  components,
-  curves,
-}: ViewerProps & { galaxy: Options; quantity: Quantity }) {
-  // (the map as large as the column allows, over curves of their least
-  // height; the curves taller where the map leaves room)
-  const { ref: column, width, height } = useElementSize();
-  const side = Math.max(160, Math.min(width - 76, height - CURVES_LEAST - CURVES_FRAME - 40));
-  const curvesHeight = Math.max(CURVES_LEAST, Math.min(CURVES_MOST, height - side - CURVES_FRAME - 40));
+// A render of the galaxy: its map, in a map panel, as large as its place
+export function RenderMap({ project, galaxy, properties, orientation, quantity, isolated }: RenderMapProps) {
+  const { ref: box, width, height } = useElementSize();
+  const side = Math.max(120, Math.min(width - 76, height - 40));
   const key = JSON.stringify([galaxy, properties, orientation]);
   const [settledKey] = useDebouncedValue(key, SETTLE_MS);
   const size = renderSize(side || 400, useMemo(() => hasDepth(galaxy), [galaxy]), settledKey !== key);
@@ -212,7 +96,7 @@ function RenderPane({
   // measures positions from)
   const frame = useMemo(() => (shown ? { step: [shown.step, shown.step] as [number, number], rpix: [(n - 1) / 2, (n - 1) / 2] as [number, number] } : null), [shown, n]);
   return (
-    <div className="gx-render" ref={column}>
+    <div className="gx-render" ref={box}>
       <MapPanel
         values={map?.shown ?? null}
         read={map?.values}
@@ -252,7 +136,6 @@ function RenderPane({
           )
         }
       />
-      {shown && <Curves render={shown} focus={curves} components={components} height={curvesHeight} />}
     </div>
   );
 }

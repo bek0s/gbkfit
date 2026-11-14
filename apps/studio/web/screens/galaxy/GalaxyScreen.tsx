@@ -1,28 +1,28 @@
-// The screen of a galaxy, built as it is seen: its outline (the galaxy as
-// a whole, and its components, each of its parts), its view (its maps or
-// its cube, and its curves) and the inspector of the part chosen (its
-// types, its parameters and its options). Its options and the values of
-// its parameters (the params block of the same name) are edited as one
-// draft, with undo and redo, and saved together (see draft.ts).
+// The screen of a galaxy: its sheet, the model (the galaxy as a whole, its
+// components and its mass, see Model), beside its picture, the views (its
+// maps or its cube, and its curves, see Viewer). Its options and the
+// values of its parameters (the params block of the same name) are edited
+// as one draft, with undo and redo, and saved together (see draft.ts).
 //
 // Keys: Ctrl+Z undoes, Ctrl+Shift+Z (or Ctrl+Y) redoes, Ctrl+S saves.
 import { useDebouncedValue } from '@mantine/hooks';
 import { useEffect, useMemo, useState } from 'react';
 import { useProject } from '../../api/queries';
 import { Button } from '../../components/ui/basics';
+import { SheetLayout } from '../../components/ui/sheet';
 import { useBlockHead } from '../../shell/BlockMenu';
+import { BlockLinks } from '../../shell/BlockLinks';
 import { useRemembered } from '../../shell/remember';
 import { useStudio } from '../../studio';
-import { BlockLinks } from '../../shell/BlockLinks';
 import { useUnsaved } from '../editing';
-import { COMPONENT_STARTS, GALAXY_PARTS, isSpheroid, nameBase, partsOf, withThickness, type Part } from './catalogue';
 import { useGalaxyDraft } from './draft';
-import { Inspector, inPlace, removedFrom } from './Inspector';
-import { componentName, componentsOf, freshName, getAt, ringRadii, setAt } from './options';
-import { Outline, type Selected } from './Outline';
-import { forRender, ownedBy } from './params';
-import { startOf } from './schema';
-import { Viewer, type Orientation, type Quantity } from './Viewer';
+import { kpcPerArcsecOf, Model, type Open } from './Model';
+import { Params } from './Params';
+import { useComponentTypes } from '../../api/queries';
+import type { ComponentTypes } from './types';
+import { componentName, componentsOf, ringRadii } from './options';
+import { forRender } from './params';
+import { Views } from './Views';
 
 // The colours of the components, in turn (tokens)
 const COLOURS = ['cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6'];
@@ -39,10 +39,11 @@ export function GalaxyScreen({ name }: { name: string }) {
   const draft = useGalaxyDraft(project ?? '.', name);
   const head = useBlockHead(project ?? '', 'galaxies', name);
   useUnsaved(draft.dirty);
-  const [selected, setSelected] = useState<Selected | null>(null);
-  const [orientation, setOrientation] = useState<Orientation>('sky');
-  const [quantity, setQuantity] = useState<Quantity>('light');
+  const [open, setOpen] = useState<Open>({ kind: 'component', index: 0 });
   const [isolated, setIsolated] = useState<string | null>(null);
+  // (the tab of the sheet: the model, or the list of the parameters)
+  const [tab, setTab] = useRemembered<'model' | 'params'>('galaxy-sheet-tab', 'model');
+  const types = useComponentTypes().data as ComponentTypes | undefined;
   const options = useMemo(() => draft.state?.options ?? {}, [draft.state]);
   const components = componentsOf(options);
   const colours = components.map((_, i) => COLOURS[i % COLOURS.length]);
@@ -51,13 +52,6 @@ export function GalaxyScreen({ name }: { name: string }) {
   const [rendered] = useDebouncedValue(draft.consistent, 60);
   const renderedComponents = rendered ? componentsOf(rendered.options) : [];
   const renderProperties = useMemo(() => (rendered ? forRender(rendered.properties, draft.params) : {}), [rendered, draft.params]);
-
-  // (the part chosen: of a component that is there, else none; at first,
-  // the geometry of the first component)
-  const valid = selected !== null && (selected.component === null || selected.component < components.length);
-  const shown: Selected | null = valid ? selected : components.length ? { component: 0, part: 'geometry' } : null;
-  const part = shown === null ? undefined : (shown.component === null ? GALAXY_PARTS : partsOf(components[shown.component])).find((p) => p.key === shown.part);
-  const partThere = part !== undefined && (shown?.component === null ? getAt(options, part.option) !== undefined : part.key === 'geometry' || getAt(components[shown!.component!], part.option) !== undefined);
 
   // (keys: undo, redo and save, but in a field of text, whose own undo it is)
   const { undo, redo, save } = draft;
@@ -90,93 +84,12 @@ export function GalaxyScreen({ name }: { name: string }) {
 
   // The field of the view (half its width, arcsec), for the reach of the
   // sliders of lengths and positions
-  const radii = components.flatMap((c) => (isSpheroid(c.type) ? [Number(c.rmax) || 0] : ringRadii(c.rnodes).slice(-1)));
+  const radii = components.flatMap((c) => (typeof c.rmax === 'number' ? [c.rmax] : ringRadii(c.rnodes).slice(-1)));
   const field = Math.max(...radii, 0) * MARGIN || 20;
 
-  const addPart = (component: number | null, p: Part) => {
-    draft.edit((s) => {
-      const base = component === null ? [] : ['components', component];
-      let next = s.options;
-      // (mass comes with a distance, which it needs)
-      if (p.key === 'mass' && next.distance === undefined) next = setAt(next, ['distance'], { type: 'parameter' });
-      if (p.key === 'mass') {
-        next = setAt(next, ['mass'], [startOf(draft.defs, 'mass_component', 'halo', [], { name: 'halo' })]);
-      } else next = setAt(next, [...base, ...p.option], p.start ?? {});
-      return { ...s, options: next };
-    });
-    setSelected({ component, part: p.key });
-  };
-
-  const addComponent = (type: string) => {
-    const index = components.length;
-    draft.edit(
-      (s) => {
-        const list = componentsOf(s.options);
-        // (several components are all named: one without a name is named
-        // after its type, and its parameters with it)
-        const named = list.map((c, i) => (typeof c.name === 'string' && c.name ? c : { ...c, name: freshName(list.map((o) => o.name), c.type ? nameBase(String(c.type)) : `component${i + 1}`) }));
-        const added = { type, name: freshName(named.map((c) => c.name), nameBase(type)), ...COMPONENT_STARTS[type] };
-        return { ...s, options: { ...s.options, components: [...named, added] } };
-      },
-      { moved: inPlace },
-    );
-    setSelected({ component: index, part: 'geometry' });
-  };
-
-  const renameComponent = (index: number, next: string) => {
-    if (components.some((c, i) => i !== index && c.name === next)) return;
-    const old = componentName(components[index], index);
-    draft.edit((s) => ({ ...s, options: setAt(s.options, ['components', index, 'name'], next) }), { moved: inPlace });
-    if (isolated === old) setIsolated(next);
-  };
-
-  const duplicateComponent = (index: number) => {
-    const original = components[index];
-    const oldName = typeof original.name === 'string' ? original.name : null;
-    const copyName = freshName(
-      components.map((c) => c.name),
-      `${oldName ?? String(original.type)}_copy`.replace(/^_/, ''),
-    );
-    draft.edit(
-      (s) => {
-        const list = componentsOf(s.options);
-        // (its values too: the parameters of a named component are
-        // named after it)
-        const properties = { ...s.properties };
-        if (oldName) {
-          for (const p of ownedBy(draft.params, ['components', index])) {
-            if (p.name.startsWith(`${oldName}_`) && p.name in s.properties) properties[`${copyName}${p.name.slice(oldName.length)}`] = s.properties[p.name];
-          }
-        }
-        return { options: { ...s.options, components: [...list.slice(0, index + 1), { ...structuredClone(original), name: copyName }, ...list.slice(index + 1)] }, properties };
-      },
-      // (those after it, a place on)
-      { moved: (owner) => (owner[0] === 'components' && typeof owner[1] === 'number' && owner[1] > index ? ['components', owner[1] + 1, ...owner.slice(2)] : owner) },
-    );
-    setSelected({ component: index + 1, part: shown?.part ?? 'geometry' });
-  };
-
-  // (a disk made thin or thick: its density shown, where it changes)
-  const changeThickness = (index: number, thick: boolean) => {
-    draft.edit((s) => ({ ...s, options: setAt(s.options, ['components', index], withThickness(componentsOf(s.options)[index], thick)) }));
-    setSelected({ component: index, part: 'density' });
-  };
-
-  const removeComponent = (index: number) => {
-    const removed = componentName(components[index], index);
-    draft.edit((s) => ({ ...s, options: setAt(s.options, ['components', index], undefined) }), { moved: removedFrom(['components'], index) });
-    if (isolated === removed) setIsolated(null);
-    if (shown?.component !== null && shown?.component !== undefined) {
-      if (shown.component === index) setSelected(null);
-      else if (shown.component > index) setSelected({ ...shown, component: shown.component - 1 });
-    }
-  };
-
-  const focusComponent = shown?.component ?? null;
-  const curves = {
-    mode: shown?.component === null && (shown.part === 'mass' || shown.part === 'gravity' || shown.part === 'distance') ? ('mass' as const) : ('motions' as const),
-    rings: focusComponent === null ? null : ringRadii(components[focusComponent]?.rnodes),
-  };
+  // (the rings of the component open, marked on the profiles)
+  const openComponent = open?.kind === 'component' && open.index < components.length ? open.index : null;
+  const rings = openComponent === null ? null : ringRadii(components[openComponent]?.rnodes);
 
   return (
     <section className="screen gx-screen">
@@ -216,89 +129,54 @@ export function GalaxyScreen({ name }: { name: string }) {
       </div>
       {draft.error && <p className="error screen-error">{draft.error.message}</p>}
       {!draft.loaded ? (
-        <div className="gx-body gx-loading" aria-busy="true">
-          <div className="gx-outline" />
-          <div className="gx-view">
-            <div className="gx-map-wait" />
-          </div>
-          <aside className="gx-side" />
+        <div className="gx-loading" aria-busy="true">
+          <div className="gx-map-wait" />
         </div>
       ) : (
-      <div className="gx-body">
-        <Outline
-          options={options}
-          defs={draft.defs}
-          problems={draft.problems}
-          colours={colours}
-          selected={shown}
-          isolated={isolated}
-          onSelect={setSelected}
-          onAddPart={addPart}
-          onAddComponent={addComponent}
-          onRenameComponent={renameComponent}
-          onDuplicateComponent={duplicateComponent}
-          onThickness={changeThickness}
-          onRemoveComponent={removeComponent}
-          onIsolate={setIsolated}
-        />
-        <Viewer
-          project={project}
-          seenBy={seenBy}
-          onSeenBy={setSeenBy}
-          observations={observations}
-          galaxy={components.length && renderedComponents.length ? rendered?.options : undefined}
-          properties={renderProperties}
-          orientation={orientation}
-          onOrientation={setOrientation}
-          quantity={quantity}
-          onQuantity={setQuantity}
-          components={renderedComponents.map((c, i) => ({ name: componentName(c, i), colour: COLOURS[i % COLOURS.length] }))}
-          isolated={isolated}
-          onIsolated={setIsolated}
-          curves={curves}
-        />
-        <aside className="gx-side">
-          {part && partThere && shown ? (
-            <Inspector
-              key={`${shown.component}/${shown.part}`}
-              draft={draft}
-              options={options}
-              defs={draft.defs}
-              params={draft.params}
+        <SheetLayout
+          className="gx-body"
+          width={480}
+          sheet={
+            <section className="gm-sheet" aria-label="The galaxy">
+              <div className="gm-tabs" role="tablist">
+                <button role="tab" aria-selected={tab === 'model'} onClick={() => setTab('model')}>
+                  Model
+                </button>
+                <button role="tab" aria-selected={tab === 'params'} onClick={() => setTab('params')}>
+                  Parameters <span>{draft.params.length}</span>
+                </button>
+                <span className="gm-tabs-hint">{tab === 'model' ? 'every component, closed until you open it' : 'every parameter, by what owns it'}</span>
+              </div>
+              <div className="gm-scroll">
+                {tab === 'model' ? (
+                  <Model draft={draft} project={project} field={field} colours={colours} open={open} onOpen={setOpen} isolated={isolated} onIsolate={setIsolated} />
+                ) : (
+                  <Params draft={draft} field={field} colours={colours} types={types} defs={draft.defs} />
+                )}
+              </div>
+            </section>
+          }
+          picture={
+            <Views
               project={project}
-              field={field}
-              component={shown.component}
-              part={part}
-              problems={draft.problems}
-              onClose={() => setSelected(null)}
+              seenBy={seenBy}
+              onSeenBy={setSeenBy}
+              observations={observations}
+              galaxy={components.length && renderedComponents.length ? rendered?.options : undefined}
+              why={components.length === 0 ? 'empty' : draft.problems.length > 0 ? 'problems' : 'waiting'}
+              properties={renderProperties}
+              components={renderedComponents.map((c, i) => ({ name: componentName(c, i), colour: COLOURS[i % COLOURS.length] }))}
+              isolated={isolated}
+              options={options}
+              params={draft.params}
+              draftProperties={draft.state?.properties ?? {}}
+              kpcPerArcsec={kpcPerArcsecOf(draft)}
+              rings={rings}
             />
-          ) : (
-            <div className="gx-side-empty">
-              <p>{components.length ? 'Choose a part in the outline to set it.' : 'Add a component in the outline to start the galaxy.'}</p>
-            </div>
-          )}
-          {draft.problems.length > 0 && <OtherProblems problems={draft.problems} />}
-          {draft.describeError && (
-            <div className="gx-problems">
-              <p>{draft.describeError.message}</p>
-            </div>
-          )}
-        </aside>
-      </div>
+          }
+        />
       )}
     </section>
   );
 }
 
-// The problems of the galaxy that are not of a part (e.g. of it as a whole)
-function OtherProblems({ problems }: { problems: { path: (string | number)[]; message: string }[] }) {
-  const general = problems.filter((p) => p.path.length === 0);
-  if (general.length === 0) return null;
-  return (
-    <div className="gx-problems">
-      {general.map((p, i) => (
-        <p key={i}>{p.message}</p>
-      ))}
-    </div>
-  );
-}

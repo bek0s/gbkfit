@@ -2,8 +2,7 @@
 // screen reads it: the types of a family (e.g. the velocity traits), what
 // each is, the options a new item of a type starts with, and the options
 // of an item that the screen leaves to a form of the schema.
-import { choicesOf, membersOf, resolve, typeOf, type Defs, type Schema } from '../../components/SchemaForm';
-import { ITEM_STARTS, NUMBER_STARTS } from './catalogue';
+import { membersOf, resolve, startOfMember, typeOf, type Defs, type Schema } from '../../components/SchemaForm';
 import { freshName, isObject, type Options } from './options';
 
 export interface TypeChoice {
@@ -61,51 +60,26 @@ export function propertiesOf(node: Schema | undefined, defs: Defs): { properties
   };
 }
 
-// The options of an object of the schema with those it requires: at their
-// first choice (e.g. the direction of a velocity trait), of the first type
-// of a family (with what it requires), or a name not taken (names)
-function filled(defs: Defs, node: Schema, given: Options, names: string[]): Options {
-  const { properties, required } = propertiesOf(node, defs);
-  const result: Options = { ...given };
-  for (const key of required) {
-    if (key in result) continue;
-    if (key === 'name') {
-      result.name = freshName(names, String(result.type ?? 'item'));
-      continue;
-    }
-    const property = resolve(properties[key] ?? {}, defs);
-    const branches = ((property.anyOf as Schema[] | undefined) ?? [property]).map((b) => resolve(b, defs)).filter((b) => b.type !== 'null');
-    const first = branches[0];
-    if (!first) continue;
-    const choices = choicesOf(first);
-    if (choices) result[key] = choices[0].value;
-    else if (first.type === 'number' || first.type === 'integer') {
-      const start = NUMBER_STARTS[key] ?? property.default ?? first.default ?? first.minimum ?? first.exclusiveMinimum;
-      if (typeof start === 'number') result[key] = start;
-    } else if (membersOf(first, defs).length) {
-      const member = membersOf(first, defs)[0];
-      result[key] = filled(defs, member, { type: typeOf(member) }, []);
-    } else if (first.type === 'object') result[key] = filled(defs, first, {}, []);
-  }
-  return result;
-}
-
-// A new item of a type of a family, with what it requires (see filled),
-// named apart from the names given (those of its list)
+// A new item of a type of a family: what the library starts it with (see
+// startOfMember), and the options given; named apart from the names given
+// (those of its list), if it must be named
 export function startOf(defs: Defs | undefined, family: string, type: string, names: string[] = [], extra: Options = {}): Options {
   const member = memberOf(defs, family, type);
-  const start = { type, ...(ITEM_STARTS[family]?.[type] ?? {}), ...extra };
-  return defs && member ? filled(defs, member, start, names) : start;
+  const start: Options = { type, ...startOfMember(member), ...extra };
+  if (defs && member && propertiesOf(member, defs).required.includes('name') && start.name === undefined) start.name = freshName(names, type);
+  return start;
 }
 
 // An item given another type: it keeps the options of the old that the
 // new type has too (e.g. the zmax and name of a height trait), and starts
-// the others (see startOf)
+// those it requires that it does not have (see startOf)
 export function retyped(defs: Defs | undefined, family: string, item: unknown, type: string): Options {
   const member = memberOf(defs, family, type);
-  const has = member && defs ? propertiesOf(member, defs).properties : {};
-  const kept = isObject(item) ? Object.entries(item).filter(([key]) => key !== 'type' && key in has) : [];
-  return { ...startOf(defs, family, type), ...Object.fromEntries(kept) };
+  if (!defs || !member) return { type };
+  const { properties, required } = propertiesOf(member, defs);
+  const kept = isObject(item) ? Object.entries(item).filter(([key]) => key !== 'type' && key in properties) : [];
+  const start = Object.entries(startOf(defs, family, type)).filter(([key]) => key === 'type' || required.includes(key));
+  return { ...Object.fromEntries(start), ...Object.fromEntries(kept) };
 }
 
 // The options of a member that a form shows, without those the screen

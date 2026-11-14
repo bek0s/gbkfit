@@ -30,7 +30,7 @@ export interface ParamFieldProps {
 // The units as they are written here
 export function unitText(unit: string | null): string {
   if (unit === null) return '';
-  return { 'km / s': 'km/s', deg: '°', arcsec: '″', 'km / (Mpc s)': 'km/s/Mpc' }[unit] ?? unit.replaceAll(' ', '');
+  return { 'km / s': 'km/s', deg: '°', arcsec: '″', 'km / (Mpc s)': 'km/s/Mpc', solMass: 'M☉', 'dex(solMass)': 'dex M☉', 'solMass / solLum': 'M☉/L☉' }[unit] ?? unit.replaceAll(' ', '');
 }
 
 // (profiles of more values than this have only the slider of all)

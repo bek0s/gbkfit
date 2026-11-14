@@ -11,7 +11,8 @@ import palette from './themes.json';
 // The steps of a ramp (seq0 to seq16, div0 to div16)
 type Steps<P extends string> = Record<`${P}${0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16}`, string>;
 
-// The tokens of a scheme: the background of the window, the fields (the
+// The tokens of a scheme: the frame (the bar and the rail, a step darker
+// than the window), the background of the window, the fields (the
 // inputs, sunk into the panels), the panels on the background (and those
 // raised over them), their lines; the text (and quieter text); the accent
 // (what is chosen, focused, or done: as a mark, e.g. a line, an outline, a
@@ -28,6 +29,7 @@ type Steps<P extends string> = Record<`${P}${0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 // of things told apart by colour
 // alone (e.g. the components of a galaxy, their curves: cat1 to cat6)
 export type Scheme = {
+  chrome: string;
   bg: string;
   field: string;
   panel: string;

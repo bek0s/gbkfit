@@ -127,15 +127,17 @@ CHOICES: list[dict[str, Any]] = [
 
 # The lightness of the surfaces, the same in every theme (but for the lift
 # of its dark ones): the window darkest, the fields sunk below the panels,
-# which stand clear of it, and what is raised over them lighter still; no
-# black by night (light text on it blurs), no white by day (it glares)
+# which stand clear of it, and what is raised over them lighter still; the
+# frame (the bar and the rail) a step darker than the window, so that the
+# work stands forward of it; no black by night (light text on it blurs),
+# no white by day (it glares)
 SURFACES = dict(
     dark=dict(
-        bg=0.165, field=0.19, panel=0.222, panel2=0.255, raise_=0.29,
-        line=0.322, line2=0.395),
+        chrome=0.135, bg=0.165, field=0.19, panel=0.222, panel2=0.255,
+        raise_=0.29, line=0.322, line2=0.395),
     light=dict(
-        bg=0.932, field=0.958, panel=0.972, panel2=0.95, raise_=0.988,
-        line=0.875, line2=0.81))
+        chrome=0.9, bg=0.932, field=0.958, panel=0.972, panel2=0.95,
+        raise_=0.988, line=0.875, line2=0.81))
 
 # The targets the lightness of the colours is solved to, on the surface
 # least in contrast with them (of the window, the fields, the panels, what
@@ -272,8 +274,9 @@ def _scheme(choices: dict[str, Any], kind: str) -> dict[str, str]:
     lift = choices.get('lift', 0) if kind == 'dark' else 0
     surface = {name.rstrip('_'): oklch(light + lift, chroma, hue)
                for name, light in SURFACES[kind].items()}
-    bg, field, panel, panel2, raise_ = (
-        surface[name] for name in ('bg', 'field', 'panel', 'panel2', 'raise'))
+    chrome, bg, field, panel, panel2, raise_ = (
+        surface[name]
+        for name in ('chrome', 'bg', 'field', 'panel', 'panel2', 'raise'))
 
     def target(name):
         return choices.get('targets', {}).get(name, {}).get(
@@ -284,7 +287,7 @@ def _scheme(choices: dict[str, Any], kind: str) -> dict[str, str]:
     accent_hue = choices['accent']['hue']
     given = choices['accent'].get('lightness')
     dark_text = oklch(0.2, 0.03, accent_hue[0])
-    plain = [bg, field, panel, panel2, raise_]
+    plain = [chrome, bg, field, panel, panel2, raise_]
     if given:
         accent = accent_fill = oklch(given[kind], accent_hue[1], accent_hue[0])
     elif kind == 'dark':

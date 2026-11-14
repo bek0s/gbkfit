@@ -202,6 +202,8 @@ export function useGalaxyDraft(project: string, name: string) {
     loaded,
     error: (galaxyPiece.error ?? schema.error) as Error | null,
     state,
+    // The state as saved (its properties: what Changed compares with)
+    saved,
     edit,
     undo,
     redo,

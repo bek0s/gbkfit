@@ -100,13 +100,25 @@ export function membersOf(node: Schema, defs: Defs): Schema[] {
   // (the forms of a member, e.g. a beam by its axes or by a file, have its
   // title and description; their own, of their constructors, is kept as
   // form)
+  // (and what a new one starts with, the example of the member; see the
+  // library's start_config)
   return choices.flatMap((choice) =>
     membersOf(choice, defs).map((member) => ({
       ...member,
       ...(resolved.title === undefined ? {} : { title: resolved.title }),
       ...(resolved.description === undefined ? {} : { description: resolved.description, form: member.description }),
+      ...(resolved.examples === undefined ? {} : { examples: resolved.examples }),
     })),
   );
+}
+
+// The options a new member of a family starts with but its type (its
+// example, see membersOf), if any
+export function startOfMember(member: Schema | undefined): Options {
+  const example = (member?.examples as unknown[] | undefined)?.[0];
+  if (!isObject(example)) return {};
+  const { type: _, ...rest } = example;
+  return rest;
 }
 
 // The title of a type of a family (that of its members), or the type
@@ -234,15 +246,15 @@ function MemberField({
   const chooseForm = (index: number) => {
     const target = ofType[index];
     setChosen(index);
-    const start = Object.entries(starts[family]?.[type!] ?? {}).filter(([key]) => key in propertiesOf(target));
+    const start = Object.entries(starts[family]?.[type!] ?? startOfMember(target)).filter(([key]) => key in propertiesOf(target));
     const kept = Object.entries(options).filter(([key]) => key !== 'type' && key in propertiesOf(target));
     onChange({ type, ...Object.fromEntries(start), ...Object.fromEntries(kept) });
   };
   const choose = (next: string) => {
     if (next === '') return onChange(undefined);
     if (next.startsWith('block:')) return onChange(next.slice(6));
-    const start = starts[family]?.[next] ?? {};
     const target = members.find((m) => typeOf(m) === next);
+    const start = starts[family]?.[next] ?? startOfMember(target);
     const kept = Object.fromEntries(Object.entries(options).filter(([key]) => key !== 'type' && target && key in propertiesOf(target)));
     onChange({ type: next, ...start, ...kept });
   };
@@ -354,10 +366,12 @@ function isPlainObject(node: Schema, defs: Defs): boolean {
 function Row({ name, node, required, children }: { name: string; node: Schema; required: boolean; children: ReactNode }) {
   const unit = typeof node.unit === 'string' ? node.unit : null;
   const description = typeof node.description === 'string' ? node.description : undefined;
+  // (by its title, if it has one; its option in the description)
+  const title = typeof node.title === 'string' ? node.title : null;
   return (
-    <div className="schema-row" title={description}>
+    <div className="schema-row" title={title ? `${name}${description ? `: ${description}` : ''}` : description}>
       <span className="schema-label">
-        {name}
+        {title ?? name}
         {required && <span className="schema-required" title="It must be given">*</span>}
       </span>
       <div className="schema-field">

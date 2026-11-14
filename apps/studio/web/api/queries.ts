@@ -395,10 +395,11 @@ export function useLines() {
   return useQuery({ queryKey: ['lines'], staleTime: Infinity, queryFn: () => data(api.GET('/api/v1/lines')) });
 }
 
-// The traits each type of component takes (see the server's /components):
-// by its type, the types of its traits of each kind (e.g. 'vpt'), and the
-// directions of its velocity and dispersion traits
-export function useComponentTraits() {
+// The types of components (see the server's /components), in the order of
+// the library: by its type, its parts in the order people read them, and
+// the traits it takes (the types of its traits of each kind, e.g. 'vpt',
+// and the directions of its velocity and dispersion traits)
+export function useComponentTypes() {
   return useQuery({ queryKey: ['components'], staleTime: Infinity, queryFn: () => data(api.GET('/api/v1/components')) });
 }
 
@@ -507,6 +508,79 @@ export interface GalaxyRender {
   step: number;
   curves: Record<string, (number | null)[]>;
   problems: string[];
+  // The extra outputs of its evaluation (see the library's Extras)
+  extras: GalaxyExtraInfo[];
+}
+
+// An extra output of the evaluation of a galaxy, as a render lists it
+export interface GalaxyExtraInfo {
+  name: string;
+  ids: Record<string, string>;
+  title: string;
+  description: string;
+  unit: string;
+  ndim: number;
+}
+
+// The light of a galaxy in 3d, face-on (see the server's
+// /views/galaxy-volume): its values (z, y, x; z along its axis), the size
+// of its voxels across and along z (arcsec), and the voxel of its plane
+export interface GalaxyVolume {
+  values: Float32Array;
+  shape: [number, number, number];
+  step: number;
+  depthStep: number;
+  zero: number;
+}
+
+export function useGalaxyVolume(project: string, galaxy: Record<string, unknown> | undefined, properties: Record<string, unknown>, size = 96, enabled = true) {
+  return useQuery({
+    queryKey: keys.view('galaxy-volume', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), size),
+    enabled: enabled && galaxy !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: async (): Promise<GalaxyVolume> => {
+      const frame = decodeFrame(await data(api.POST('/api/v1/views/galaxy-volume', { body: { project, galaxy: galaxy ?? {}, properties, size }, parseAs: 'arrayBuffer' })));
+      const header = frame.header as { step: number; depth_step: number; zero: number };
+      const [array] = frame.arrays;
+      return { values: array.values, shape: array.shape as [number, number, number], step: header.step, depthStep: header.depth_step, zero: header.zero };
+    },
+  });
+}
+
+// An extra output of a galaxy rendered (see the server's /views/galaxy-extra)
+export interface GalaxyExtra {
+  values: Float32Array;
+  shape: number[];
+  title: string;
+  description: string;
+  unit: string;
+  step: number;
+  depthStep: number | null;
+}
+
+export function useGalaxyExtra(
+  project: string,
+  galaxy: Record<string, unknown> | undefined,
+  properties: Record<string, unknown>,
+  extra: { name: string; ids: Record<string, string> } | null,
+  view: 'sky' | 'face-on' | 'edge-on' = 'sky',
+  size = 128,
+) {
+  return useQuery({
+    queryKey: keys.view('galaxy-extra', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), JSON.stringify(extra), view, size),
+    enabled: galaxy !== undefined && extra !== null,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: async (): Promise<GalaxyExtra> => {
+      const frame = decodeFrame(
+        await data(api.POST('/api/v1/views/galaxy-extra', { body: { project, galaxy: galaxy ?? {}, properties, name: extra?.name ?? '', ids: extra?.ids ?? {}, view, size }, parseAs: 'arrayBuffer' })),
+      );
+      const header = frame.header as { title: string; description: string; unit: string; step: number; depth_step: number | null };
+      const [array] = frame.arrays;
+      return { values: array.values, shape: array.shape as number[], title: header.title, description: header.description, unit: header.unit, step: header.step, depthStep: header.depth_step };
+    },
+  });
 }
 
 // The cube of a galaxy rendered (see the server's /views/galaxy-cube): the
@@ -551,9 +625,9 @@ export function useGalaxyRender(
           }),
         ),
       );
-      const header = frame.header as { size: number; step: number; curves: GalaxyRender['curves']; problems: string[] };
+      const header = frame.header as { size: number; step: number; curves: GalaxyRender['curves']; problems: string[]; extras?: GalaxyExtraInfo[] };
       const maps = Object.fromEntries(frame.arrays.map((a) => [String(a.info.name), a.values]));
-      return { maps, size: header.size, step: header.step, curves: header.curves, problems: header.problems };
+      return { maps, size: header.size, step: header.step, curves: header.curves, problems: header.problems, extras: header.extras ?? [] };
     },
   });
 }
