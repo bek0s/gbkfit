@@ -48,7 +48,8 @@ class ObservationPixelMoments(ObservationSky):
 
     Its options are those below, then those of every observation on the
     sky (see ObservationSky). Its data give those of its grid and its
-    orders, which are then optional; without data, size is required.
+    orders (given too, they serve only without data); without data, size
+    is required.
 
     Parameters
     ----------

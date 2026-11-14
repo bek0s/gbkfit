@@ -101,9 +101,9 @@ class ObservationVisibilities(ObservationSky):
     smoothing), and its primary beam attenuates the cube.
 
     Its options are those below, then those of every observation on the
-    sky (see ObservationSky). Its data give its coverage, which is then
-    optional; without data, the coverage is required, a file of its
-    arrays (see UVCoverage.from_file).
+    sky (see ObservationSky). Its data give its coverage (given too, it
+    serves only without data); without data, the coverage is required, a
+    file of its arrays (see UVCoverage.from_file).
 
     The spatial weights of data do not apply (the data are not pixels);
     a mosaic is one observation for each pointing, fitted jointly. Not

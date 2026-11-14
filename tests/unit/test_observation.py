@@ -4,6 +4,8 @@ checks of their options, and the likelihoods of the observations of a
 group (see Likelihoods).
 """
 
+import logging
+
 import astropy.units as u
 import numpy as np
 import pytest
@@ -33,27 +35,24 @@ def test_options_from_data():
     assert observation.spectral().rval() == 1500
 
 
-def test_options_given_with_data_are_checked_against_them():
-    # The options that the data give, given too, are all those needed
-    # without data (e.g. of a setup of mock data that then takes data),
-    # and those of the data
+def test_options_given_with_data_serve_only_without_data(caplog):
+    # The options that the data give, given too, are those of the
+    # observation without data (e.g. one that renders galaxies on its own
+    # grid, and is fitted to data of any grid): with data, those of the
+    # data, with a line in the log
     data = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))},
         step=2)
     spectral = SpectralAxis(step=5, convention='relativistic')
-    ObservationPixelMoments(
-        spectral, size=(20, 8), step=2, orders=(0, 1), dataset=data)
-    with pytest.raises(ValueError, match=(
-            r"gives the options \['size', 'step', 'orders'\], which its "
-            r"data give too, and they are not those of the data: the data "
-            r"are on the grid")):
-        ObservationPixelMoments(
-            spectral, size=(20, 8), step=1, orders=(0, 1), dataset=data)
-    with pytest.raises(ValueError, match=(
-            r"gives the options \['step'\], which its data give too, but "
-            r"not all those it needs without data \(the options "
-            r"\['size'\]\)")):
-        ObservationPixelMoments(spectral, step=2, dataset=data)
+    of_data = ObservationPixelMoments(spectral, dataset=data)
+    with caplog.at_level(logging.INFO, 'gbkfit.observation.sky.base'):
+        for given in (dict(size=(28, 28), step=1, orders=(0, 1, 2)),
+                      dict(step=0.5)):
+            observation = ObservationPixelMoments(
+                spectral, **given, dataset=data)
+            assert observation.grid() == of_data.grid()
+            assert observation.keys() == of_data.keys()
+    assert caplog.text.count("those given are used only without data") == 2
     with pytest.raises(ValueError, match="without data needs the options"):
         ObservationPixelMoments(spectral)
 

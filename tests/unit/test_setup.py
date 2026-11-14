@@ -210,8 +210,9 @@ def test_a_setup_without_data_states_the_likelihoods_of_its_fit():
 
 
 def test_an_observation_of_mocks_takes_data_in_one_line(tmp_path):
-    # (its grid, as without data, is checked against the data: one
-    # configuration of an observation draws mocks and fits data)
+    # (its grid serves without data, e.g. to draw mocks; with data, that
+    # of the data: one configuration of an observation draws mocks and
+    # fits data of any grid)
     fits.writeto(tmp_path / 'image.fits', np.zeros((8, 8)))
     data = dict(type='pixel_brightness', data='image.fits')
     config = dict(
@@ -220,9 +221,9 @@ def test_an_observation_of_mocks_takes_data_in_one_line(tmp_path):
     with gbkfit.load(config | dict(
             observations=[observation(dataset=data)])) as loaded:
         assert loaded.objective().observations() == (0,)
-    with pytest.raises(ValueError, match="are not those of the data"):
-        gbkfit.load(config | dict(observations=[observation(
-            dataset=data, size=[8, 6])]))
+    with gbkfit.load(config | dict(observations=[observation(
+            dataset=data, size=[8, 6])])) as loaded:
+        assert loaded.group().observations()[0].size() == (8, 8)
 
 
 def test_a_setup_takes_likelihoods_of_its_group():

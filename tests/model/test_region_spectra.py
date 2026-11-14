@@ -300,20 +300,20 @@ def test_region_spectra_observation_from_data(tmp_path):
         observation, prefix=str(tmp_path / 'dump_'))
     assert {'size', 'step', 'rpix', 'rval', 'rota'} <= set(dumped)
     assert not {'regions', 'spectral'} & set(dumped)
-    # (it can give them too, as without data, whole: they are checked)
-    with pytest.raises(Exception, match=(
-            r"gives the options \['spectral'\], which its data give too, "
-            r"but not all")):
-        observation_parser.load(info | dict(spectral=dict(step=10)))
+    # (given too, they serve only without data)
+    assert observation_parser.load(
+        info | dict(spectral=dict(step=10))).spectral_grid() \
+        == dataset.spectral_grid()
 
 
-def test_region_spectra_of_spectra_with_another_spectral_axis_is_an_error():
+def test_other_region_spectra_with_another_spectral_axis_are_an_error():
+    # (a copy with other data, e.g. mock data, is the same observation)
     case = aspec_of_apertures(APERTURES)
     dataset = DatasetRegionSpectra(
         Data(np.ones((51, 3))), observation_of(case).regions(),
         spectral=SpectralAxis(step=5, convention='relativistic'))
     with pytest.raises(ValueError, match="spectral axis"):
-        observation_of(case, dataset=dataset)
+        observation_of(case).with_dataset(dataset)
 
 
 

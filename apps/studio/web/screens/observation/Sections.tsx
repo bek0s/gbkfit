@@ -24,7 +24,7 @@ interface Common {
 // ---------------------------------------------------------------------------
 // The data
 
-export function DataFields({ defs, options, onChange, blocks, openBlock, datasetType, titleOf }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string }) {
+export function DataFields({ options, onChange, blocks, openBlock, datasetType, titleOf }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string }) {
   const datasets = blocks.datasets ?? [];
   const value = typeof options.dataset === 'string' ? options.dataset : options.dataset ? '(in place)' : '';
   return (
@@ -38,11 +38,8 @@ export function DataFields({ defs, options, onChange, blocks, openBlock, dataset
           ]}
           value={value}
           label="The dataset of the observation"
-          onChange={(name) => {
-            // (the data give the grid: the observation's own goes)
-            const own = name ? gridOptions(defs, options) : [];
-            onChange(withKey(Object.fromEntries(Object.entries(options).filter(([key]) => !own.includes(key))), 'dataset', name || undefined));
-          }}
+          // (the observation keeps its own grid, which serves without data)
+          onChange={(name) => onChange(withKey(options, 'dataset', name || undefined))}
         />
       </Row>
       {typeof options.dataset === 'string' && datasets.includes(options.dataset) && (
@@ -103,14 +100,7 @@ export function KindFields({ defs, project, options, onChange, blocks, datasetTy
           </Button>
         </div>
       )}
-      {extra.length > 0 && (
-        <div className="ob-warn">
-          The data give the grid, but the observation has its own {extra.join(', ')}.{' '}
-          <Button kind="small" onClick={() => onChange(Object.fromEntries(Object.entries(options).filter(([key]) => !extra.includes(key))))}>
-            Remove them
-          </Button>
-        </div>
-      )}
+      {extra.length > 0 && <p className="ob-text">The data give the grid: the observation's own {extra.join(', ')} serve only without data.</p>}
       {'size' in properties && (
         <>
           <Row label="Pixels" unit="px">

@@ -5,6 +5,7 @@ spectral cubes and others), along a line of sight, through a foreground.
 """
 
 import abc
+import logging
 from collections.abc import Mapping, Sequence
 from typing import (
     TYPE_CHECKING, Annotated, Any, ClassVar, Literal, NamedTuple, Self,
@@ -39,6 +40,9 @@ from ._checks import (
     light_unit)
 from ._flux_scale import FluxScaledPlan
 from ._options import GRID_OPTIONS, dump_grid, without_options_from_data
+
+
+_log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from gbkfit.dataset import Data
@@ -116,12 +120,12 @@ class ObservationSky(Observation, abc.ABC):
 
     Its data (the option dataset), of the dataset class of its kind, give
     the options of its kind of options_from_data (e.g. its grid; see
-    _options_from_data): those are then optional. The configuration can
-    give those too, as without data (e.g. that of mock data, which then
-    takes the data): they are checked against the data (see
-    check_dataset). Without data, those of config_required_without (by
-    'dataset') are required, and the others take their values of
-    defaults_without_data.
+    _options_from_data). The configuration can give those too, for the
+    observation without data (e.g. one that renders galaxies on its own
+    grid, and is fitted to data of any grid): with data, they are left
+    out, with a line in the log. Without data, those of
+    config_required_without (by 'dataset') are required, and the others
+    take their values of defaults_without_data.
     The files of its options (e.g. regions without data) are named with
     the prefix of the dump, as those of the datasets.
 
@@ -451,11 +455,11 @@ class ObservationSky(Observation, abc.ABC):
         where not given), completed, before it is made.
 
         With data, those that the data give (see options_from_data) are
-        theirs (see _options_from_data), unless some of them are given:
-        then all those needed without data must be, and those not given
-        take their values without data; they are checked against the data
-        when it is made (see check_dataset). Without data, those not given
-        take their values of defaults_without_data.
+        theirs (see _options_from_data): those of them given are for the
+        observation without data, and are left out (with a line in the
+        log). Without data, those of config_required_without are
+        required, and those not given take their values of
+        defaults_without_data.
 
         Parameters
         ----------
@@ -473,36 +477,29 @@ class ObservationSky(Observation, abc.ABC):
         ------
         ValueError
             If one required without data (see config_required_without) is
-            not given, without data or with some of those the data give,
-            or the dataset is not of the dataset class of its kind.
+            not given without data, or the dataset is not of the dataset
+            class of its kind.
         """
         desc = make_typed_desc(type(self), 'observation')
-        from_data = () if dataset is None else self.options_from_data(dataset)
-        # (those given that the data give too, checked against the data
-        # when it is made, see __init__)
-        self._given_with_data = [
-            key for key in from_data if options.get(key) is not None]
-        if dataset is None or self._given_with_data:
+        if dataset is None:
             if missing := [
                     key for key in self.config_required_without['dataset']
                     if options.get(key) is None]:
                 raise ValueError(
-                    f"{desc} gives the options {self._given_with_data}, "
-                    f"which its data give too, but not all those it needs "
-                    f"without data (the options {missing}): give them all, "
-                    f"as without data (they are then checked against the "
-                    f"data), or none of them" if dataset is not None else
                     f"{desc} without data needs the options {missing}")
-            options = options | {
+            return options | {
                 key: value for key, value in self.defaults_without_data.items()
                 if options.get(key) is None}
-        if dataset is None:
-            return options
         self._check_dataset_class(dataset)
-        return options | {
-            key: value for key, value in self._options_from_data(
-                dataset, options).items()
-            if key not in from_data or options.get(key) is None}
+        from_data = self.options_from_data(dataset)
+        if given := [key for key in from_data if options.get(key) is not None]:
+            _log.info(
+                "%s: its data give the options %s; those given are used "
+                "only without data", desc, given)
+        options = {
+            key: None if key in from_data else value
+            for key, value in options.items()}
+        return options | self._options_from_data(dataset, options)
 
     @classmethod
     @abc.abstractmethod
@@ -616,18 +613,7 @@ class ObservationSky(Observation, abc.ABC):
                 f"oversampling must have {ndim} values, each at least 1; it "
                 f"is {oversampling}")
         if dataset is not None:
-            try:
-                self.check_dataset(dataset)
-            except ValueError as e:
-                if not self._given_with_data:
-                    raise
-                desc = make_typed_desc(type(self), 'observation')
-                raise ValueError(
-                    f"{desc} gives the options {self._given_with_data}, "
-                    f"which its data give too, and they are not those of "
-                    f"the data: {e}; give those of the data (the world "
-                    f"coordinates of data can be set in the data options), "
-                    f"or none of them") from e
+            self.check_dataset(dataset)
         self._components = components
         self._lines = lines
         self._band = band
@@ -688,9 +674,15 @@ class ObservationSky(Observation, abc.ABC):
         ValueError
             If the data are not of the observation (see check_dataset).
         """
+        # (the same observation with other data, e.g. mock data drawn on
+        # its grid: the data must be of its options, and the copy takes
+        # those that they give from them)
+        self.check_dataset(dataset)
+        from_data = self.options_from_data(dataset)
         options = self._sky_options
         return type(self)(
-            **self._kind_options(),
+            **{key: value for key, value in self._kind_options().items()
+               if key not in from_data},
             foreground=options.foreground, instrument=options.instrument,
             galaxies=self._galaxies, components=self._components,
             lines=self._lines, band=self._band,

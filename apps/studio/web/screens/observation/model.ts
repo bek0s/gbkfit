@@ -194,7 +194,8 @@ export function dataOptions(member: Schema | undefined): string[] {
   return needed.includes('size') ? [...new Set([...GRID, ...needed])] : needed;
 }
 
-// The options of an observation that its data give, but given too
+// The options of an observation that its data give, but given too (they
+// serve only without data)
 export function gridOptions(defs: Defs, options: Options): string[] {
   return dataOptions(observationMember(defs, options.type)).filter((key) => options[key] != null);
 }
@@ -228,8 +229,6 @@ export function needsOf({
   if (withData && datasetType !== undefined && datasetType !== options.type) {
     needs.push({ section: 'ob-kind', text: `The observation is not of the type of the data (${titleOf('observation', datasetType)})` });
   }
-  const extra = withData ? gridOptions(defs, options) : [];
-  if (extra.length) needs.push({ section: 'ob-kind', text: `The data give the grid: the observation cannot have its ${extra.join(', ')}` });
   const required = [...((member?.required as string[] | undefined) ?? []), ...(withData ? [] : requiredWithoutData(member))];
   const missing = required.filter((key) => key !== 'type' && options[key] == null);
   if (missing.length) needs.push({ section: 'ob-kind', text: `Give the observation its ${missing.map((key) => NAMES[key] ?? key).join(', ')}` });

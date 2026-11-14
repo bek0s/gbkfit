@@ -164,11 +164,8 @@ def test_region_moments_observation_from_data(tmp_path):
         observation, prefix=str(tmp_path / 'dump_'))
     assert 'regions' not in dumped
     assert 'size' not in dumped
-    with pytest.raises(Exception, match=(
-            r"gives the options \['size'\], which its data give too, but "
-            r"not all")):
-        observation_parser.load(info | dict(
-            size=[3, 2], spectral=dict(convention='relativistic')))
+    # (given too, they serve only without data)
+    assert observation_parser.load(info | dict(size=[5, 5])).size() == (3, 2)
 
 
 def test_region_moments_observation_dumps_its_bins_with_the_prefix(tmp_path):

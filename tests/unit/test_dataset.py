@@ -455,9 +455,8 @@ def test_relabelled_velocities_keep_the_line_of_their_rest(
 
 def test_observation_grid_comes_from_the_data(tmp_path):
     # The grid comes from the data, and a dump of the observation does not
-    # repeat it; the observation can give it too, as without data (e.g.
-    # that of mock data, which then takes the data), and it is checked
-    # against the data
+    # repeat it; the observation can give it too, for the observation
+    # without data: with data, it is that of the data
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
     info = dict(
@@ -474,35 +473,28 @@ def test_observation_grid_comes_from_the_data(tmp_path):
         info | dict(size=[20, 8], step=1, median_size=3))
     assert given.grid() == observation.grid()
     assert given.dump()['median_size'] == 3
-    with pytest.raises(ValueError, match=(
-            r"gives the options \['size', 'step'\], which its data give "
-            r"too, and they are not those of the data: the data are on the "
-            r"grid")):
-        observation_parser.load(info | dict(size=[20, 8], step=0.5))
-    with pytest.raises(ValueError, match=(
-            r"gives the options \['step'\], which its data give too, but "
-            r"not all those it needs without data \(the options "
-            r"\['size'\]\)")):
-        observation_parser.load(info | dict(step=1))
+    for other in (dict(size=[28, 28], step=0.5), dict(step=1)):
+        assert observation_parser.load(info | other).grid() \
+            == observation.grid()
 
 
-def test_observation_data_must_be_on_its_grid():
+def test_other_data_of_an_observation_must_be_on_its_grid():
+    # (a copy with other data, e.g. mock data, is the same observation)
     from gbkfit.observation import ObservationPixelBrightness
     data = DatasetPixelBrightness(Data(np.ones((8, 20))), rota=30)
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
     with pytest.raises(ValueError, match="the data are on the grid"):
-        ObservationPixelBrightness(
-            size=(20, 8), dataset=data)
+        ObservationPixelBrightness(size=(20, 8)).with_dataset(data)
     with pytest.raises(ValueError, match="cannot be compared"):
-        ObservationPixelBrightness(
-            size=(20, 8), dataset=moments)
-    ObservationPixelBrightness(
-        size=(20, 8), rota=30, dataset=data)
+        ObservationPixelBrightness(size=(20, 8), dataset=moments)
+    copy = ObservationPixelBrightness(size=(20, 8), rota=30).with_dataset(
+        data)
+    assert copy.dataset() is data
 
 
 def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     # The rest of the spectral axis of the data is that of the
-    # observation, which gives it only with its whole grid, as without data
+    # observation (one it gives serves only without data)
     from gbkfit.observation import observation_parser
     dataset = DatasetPixelSpectra(
         Data(np.ones((6, 8, 20))), step=(1, 1),
@@ -517,11 +509,9 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     observation = observation_parser.load(info)
     assert observation.spectral().rest() \
         == dataset.grid().coords.rest
-    with pytest.raises(ValueError, match=(
-            r"gives the options \['spectral'\], which its data give too, "
-            r"but not all")):
-        observation_parser.load(
-            info | dict(spectral=dict(rest='6562.8 Angstrom')))
+    assert observation_parser.load(
+        info | dict(spectral=dict(rest='5006.8 Angstrom'))).spectral().rest() \
+        == dataset.grid().coords.rest
 
 
 def test_pixel_brightness_has_no_rest(tmp_path):

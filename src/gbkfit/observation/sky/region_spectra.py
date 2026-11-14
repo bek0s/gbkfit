@@ -44,12 +44,12 @@ class ObservationRegionSpectra(ObservationRegions):
     region (see Regions), in each channel; that of the whole field is an
     integrated spectrum.
 
-    The spatial axes of the cube are those of the regions if they are on
-    a grid (bins), or given (apertures). Its options are those below,
-    then those of every observation on the sky (see ObservationSky). Its
-    data give its regions and its spectral axis, which are then optional,
-    and regions on a grid give the spatial grid; without data, regions
-    and spectral are required.
+    The spatial axes of the cube are those of the regions if they are on a
+    grid (bins), or given (apertures). Its options are those below, then
+    those of every observation on the sky (see ObservationSky). Its data
+    give its regions and its spectral axis, and regions on a grid give the
+    spatial grid (given too, they serve only without data); without data,
+    regions and spectral are required.
 
     Parameters
     ----------

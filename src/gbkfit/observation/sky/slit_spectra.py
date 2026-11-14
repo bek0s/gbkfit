@@ -70,9 +70,9 @@ class ObservationSlitSpectra(ObservationSky):
     +x axis, the way the positions along it increase.
 
     Its options are those below, then those of every observation on the
-    sky (see ObservationSky). Its data give those of its grid and
-    slit_pa, which are then optional; without data, size and spectral are
-    required.
+    sky (see ObservationSky). Its data give those of its grid and slit_pa
+    (given too, they serve only without data); without data, size and
+    spectral are required.
 
     Parameters
     ----------

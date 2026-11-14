@@ -3,6 +3,7 @@ The observation of profiles of a galaxy: the values of functions of the
 galaxy at radii (e.g. its rotation curve).
 """
 
+import logging
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
@@ -29,6 +30,9 @@ if TYPE_CHECKING:
 __all__ = [
     'ObservationProfile'
 ]
+
+
+_log = logging.getLogger(__name__)
 
 
 # The families of the functions of rotation velocities (see
@@ -77,21 +81,20 @@ class ObservationProfile(Observation):
     dataset) has the form of DatasetProfile (no type; see
     DatasetProfile.from_file).
 
-    The data give its functions, radii and assumed distance; it can give
-    them too, as without data (e.g. a profile of mock data, which then
-    takes the data), and they must then be those of the data.
+    The data give its functions, radii and assumed distance (given too,
+    they serve only without data, and are left out with a line in the
+    log).
 
     Parameters
     ----------
     functions : Sequence of str, optional
         The functions it measures (its data items); with data, those of
-        the data by default.
+        the data.
     radii : Quantity, optional
-        The radii; with data, those of the data by default.
+        The radii; with data, those of the data.
     assumed_distance : Quantity, optional
         The distance of radii in lengths that were measured at one; with
-        data, that of the data by default (when the radii are not
-        given).
+        data, that of the data.
     inclination : float, optional
         The inclination (degrees) at which its rotation velocities were
         deprojected: its parameter '{name}_incl' is then the inclination
@@ -183,14 +186,18 @@ class ObservationProfile(Observation):
                 raise ValueError(
                     f"the data of a profile are a table of it "
                     f"(DatasetProfile); they are {type(dataset).__name__}")
-            # (those it does not give are those of the data; those it
-            # gives are checked against them, see _checked_data)
-            if functions is None:
-                functions = tuple(dataset.keys())
-            if radii is None:
-                radii = dataset.radii()
-                if assumed_distance is None:
-                    assumed_distance = dataset.assumed_distance()
+            # (the data give them: those given serve only without data)
+            if given := [
+                    key for key, value in (
+                        ('functions', functions), ('radii', radii),
+                        ('assumed_distance', assumed_distance))
+                    if value is not None]:
+                _log.info(
+                    "a profile: its data give the options %s; those given "
+                    "are used only without data", given)
+            functions = tuple(dataset.keys())
+            radii = dataset.radii()
+            assumed_distance = dataset.assumed_distance()
         elif functions is None or radii is None:
             raise ValueError(
                 "a profile without data needs its functions and its radii")

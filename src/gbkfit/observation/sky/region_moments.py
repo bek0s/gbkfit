@@ -49,12 +49,13 @@ class ObservationRegionMoments(ObservationRegions):
     each region (see Regions), as the moments of binned data are those of
     their summed spectra.
 
-    The spatial axes of the cube are those of the regions if they are on
-    a grid (bins), or given (apertures); its spectral axis is as that of
+    The spatial axes of the cube are those of the regions if they are on a
+    grid (bins), or given (apertures); its spectral axis is as that of
     ObservationPixelMoments. Its options are those below, then those of
     every observation on the sky (see ObservationSky). Its data give its
-    regions and its orders, which are then optional, and regions on a
-    grid give the spatial grid; without data, regions are required.
+    regions and its orders, and regions on a grid give the spatial grid
+    (given too, they serve only without data); without data, regions are
+    required.
 
     E.g. the kinematics of the stars of a spheroid (lines ['stars'] of its
     observation, see model.StarsEmission) in the Voronoi bins of pPXF.

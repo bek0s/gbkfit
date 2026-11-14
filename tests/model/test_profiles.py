@@ -267,22 +267,18 @@ def test_plans_with_other_data_evaluate_profiles_at_their_radii():
             np.testing.assert_array_equal(copied[key].data, fresh[key].data)
 
 
-def test_a_profile_of_data_can_give_their_functions_and_radii():
-    # (as without data, e.g. that of its mock data: they must be those of
-    # the data, which give them otherwise)
+def test_a_profile_of_data_takes_their_functions_and_radii():
+    # (those given serve only without data)
     radii = [1.0, 3.0] * u.kpc
     data = DatasetProfile({'vcirc': Data([100.0, 150.0])}, radii, 10)
-    given = ObservationProfile(['vcirc'], radii, 10, dataset=data)
-    assert np.array_equal(given.radii(), radii)
-    assert given.keys() == ('vcirc',)
-    assert ObservationProfile(dataset=data).assumed_distance() == 10 * u.Mpc
     for functions, profile_radii, distance in (
-            (['vcirc_halo'], radii, 10), (['vcirc'], [1.0, 2.0] * u.kpc, 10),
-            (['vcirc'], radii, None)):
-        with pytest.raises(ValueError, match=(
-                "has the functions|not at the radii of the profile")):
-            ObservationProfile(
-                functions, profile_radii, distance, dataset=data)
+            (None, None, None), (['vcirc'], radii, 10),
+            (['vcirc_halo'], [1.0, 2.0] * u.kpc, 20)):
+        given = ObservationProfile(
+            functions, profile_radii, distance, dataset=data)
+        assert np.array_equal(given.radii(), radii)
+        assert given.keys() == ('vcirc',)
+        assert given.assumed_distance() == 10 * u.Mpc
 
 
 def test_profile_data_in_another_unit_are_converted():
