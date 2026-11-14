@@ -112,6 +112,10 @@ class Galaxy(Serializable):
         or the redshift is not above -1, or missing where it is required.
     """
 
+    config_titles = dict(
+        components='Components', mass='Mass', distance='Distance',
+        redshift='Redshift', name='Name', gravity='Gravity')
+
     def dump(self) -> dict[str, Any]:
         info = dict(name=self._name) if self._name is not None else {}
         if self.components():

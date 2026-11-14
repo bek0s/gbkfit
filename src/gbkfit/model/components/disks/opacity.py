@@ -65,6 +65,9 @@ class LineOpacity(Opacity):
         If there are no traits, or a line has none.
     """
 
+    config_titles = dict(coefficients='Coefficients')
+    config_start = dict(coefficients=dict(type='uniform'))
+
     @staticmethod
     def type() -> str:
         return 'line'

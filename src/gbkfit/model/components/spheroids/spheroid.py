@@ -39,8 +39,8 @@ from .._native import (
     evaluate_native, make_bands)
 from .._units import mass_per_unit
 from ..base import (
-    Component, ComponentLinks, ComponentState, FieldsLayout, FrameParams,
-    NativeGrid, SceneTarget)
+    Component, ComponentLinks, ComponentPart, ComponentState, FieldsLayout,
+    FrameParams, NativeGrid, SceneTarget)
 from ..geometries import geometry_pdesc
 from ..nodes import Nodes
 from ..parts import kinematic_traits
@@ -332,6 +332,9 @@ class LightMGE(LightProfile):
         If ngauss is not a positive integer.
     """
 
+    config_titles = dict(ngauss='Gaussians')
+    config_start = dict(ngauss=3)
+
     @staticmethod
     def type() -> str:
         return 'mge'
@@ -539,6 +542,15 @@ class Spheroid(Component, abc.ABC):
         has its own axis ratios and a shape is given, or its stars cannot
         move in it (see SpheroidKinematics.motion).
     """
+
+    config_titles = dict(
+        profile='Profile', shape='Shape', rmax='Largest radius')
+    config_start = dict(
+        profile=dict(type='sersic'), rmax=10, emission=dict(type='stars'))
+
+    parts = (
+        ComponentPart('profile'), ComponentPart('shape'),
+        ComponentPart('emission'))
 
     def dump(self) -> dict[str, Any]:
         info = dict(type=self.type()) | dump_name(self) | dict(
@@ -811,6 +823,14 @@ class TraitSpheroid(Spheroid):
         given without traits.
     """
 
+    config_titles = dict(rnodes='Nodes')
+    config_start = dict(emission=dict(type='band'))
+
+    parts = (
+        ComponentPart('profile'), ComponentPart('shape'),
+        ComponentPart('vptraits', 'vhtraits'),
+        ComponentPart('dptraits', 'dhtraits'), ComponentPart('emission'))
+
     @staticmethod
     def type() -> str:
         return 'spheroid'
@@ -913,6 +933,8 @@ class OrbitSpheroid(Spheroid):
         As Spheroid, or if norbits is not a positive integer, turns not a
         positive number, or seed not a non-negative integer.
     """
+
+    config_titles = dict(norbits='Orbits', turns='Turns', seed='Seed')
 
     @staticmethod
     def type() -> str:

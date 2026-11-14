@@ -362,6 +362,10 @@ class SpectralTable(Serializable):
         unit than unit.
     """
 
+    config_titles = dict(
+        points='Points', values='Values', unit='Unit', file='File',
+        column='Column', units='Units')
+
     config_constructors = ('__init__', 'from_file')
 
     @staticmethod

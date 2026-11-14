@@ -61,6 +61,8 @@ class Emission(TypedSerializable, abc.ABC):
     that emit in a band.
     """
 
+    config_titles = dict(unit='Unit')
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())
 
@@ -127,6 +129,8 @@ class LineEmission(Emission):
         repeat, or the unit is not one of lines (see
         _units.check_line_unit).
     """
+
+    config_titles = dict(lines='Lines')
 
     @staticmethod
     def type() -> str:
@@ -210,6 +214,8 @@ class BandEmission(Emission):
         repeat, or the unit is not one of bands (see
         _units.check_band_unit).
     """
+
+    config_titles = dict(bands='Bands')
 
     @staticmethod
     def type() -> str:
@@ -338,6 +344,8 @@ class DustOpacity(Opacity):
         The extinction law; by default, none: the optical depth is the
         same at every wavelength (grey dust).
     """
+
+    config_titles = dict(law='Extinction law')
 
     @staticmethod
     def type() -> str:

@@ -339,6 +339,9 @@ class ProfileNodewise(SpheroidProfile):
         If the nodes are not valid.
     """
 
+    config_titles = dict(nodes='Nodes')
+    config_start = dict(nodes=[0, 1, 2, 5])
+
     @staticmethod
     def type() -> str:
         return 'nodewise'

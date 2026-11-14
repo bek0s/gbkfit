@@ -349,6 +349,8 @@ class Point(Component):
         If the lines are not valid.
     """
 
+    config_titles = dict(depth='Depth a parameter')
+
     @staticmethod
     def type() -> str:
         return 'point'

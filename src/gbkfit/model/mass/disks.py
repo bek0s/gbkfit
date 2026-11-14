@@ -87,6 +87,11 @@ class MassDisk(MassComponent):
         If the name is not valid.
     """
 
+    config_titles = dict(
+        surface='Surface density', vertical='Vertical structure')
+    config_start = dict(
+        surface=dict(type='exponential'), vertical=dict(type='thin'))
+
     @staticmethod
     def type() -> str:
         return 'disk'
@@ -330,6 +335,12 @@ class TracedDisk(MassDisk):
         If the name, the component or rstep is not valid, or vertical is
         the layer of the component itself (the default: leave it out).
     """
+
+    config_titles = dict(component='Component', rstep='Ring width')
+    config_references = dict(component='components')
+
+    # (the layer of its component, not the thin one of a mass disk)
+    config_start = dict(vertical=None)
 
     @staticmethod
     def type() -> str:

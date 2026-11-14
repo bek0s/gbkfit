@@ -233,6 +233,9 @@ class _AnalyticPSF(_detail.AnalyticSpreadFunction, PSF):
         The position angle of the major axis.
     """
 
+    config_titles = dict(
+        fwhm='FWHM', ratio='Axis ratio', posa='Position angle')
+
     def __init__(self, scale: float, ratio: float, posa: float):
         super().__init__(scale)
         self._ratio = ratio
@@ -315,6 +318,11 @@ class PSFGauss(_AnalyticPSF):
     posa : float, optional
         The position angle of the major axis.
     """
+
+    config_titles = dict(
+        sigma='Sigma', bmaj='Major FWHM', bmin='Minor FWHM',
+        bpa='Position angle', file='Header file')
+    config_start = dict(fwhm=1)
 
     config_constructors = ('__init__', 'from_fwhm', 'from_beam', 'from_file')
 
@@ -488,6 +496,9 @@ class PSFGGauss(_AnalyticPSF):
         The position angle of the major axis.
     """
 
+    config_titles = dict(alpha='Scale length', beta='Shape')
+    config_start = dict(fwhm=1, beta=2)
+
     @staticmethod
     def type() -> str:
         return 'ggauss'
@@ -576,6 +587,9 @@ class PSFMoffat(_AnalyticPSF):
     posa : float, optional
         The position angle of the major axis.
     """
+
+    config_titles = dict(alpha='Core scale length', beta='Wing slope')
+    config_start = dict(fwhm=1, beta=3)
 
     @staticmethod
     def type() -> str:
@@ -712,6 +726,8 @@ class PSFImage(PSF):
         square pixels.
     """
 
+    config_titles = dict(file='File', step='Pixel size')
+
     config_constructors = ('from_file',)
 
     @staticmethod
@@ -827,6 +843,8 @@ class PSFImages(_detail.SpreadFunctionImages, PSF):
         one number, square pixels.
     """
 
+    config_titles = dict(file='File', points='Points', step='Pixel size')
+
     config_constructors = ('from_file',)
 
     @staticmethod
@@ -925,6 +943,10 @@ class PSFSum(_detail.SpreadFunctionSum, PSF):
         The weight of each PSF, positive; they are normalised to sum to 1.
     """
 
+    config_titles = dict(psfs='PSFs', weights='Weights')
+    config_start = dict(
+        psfs=[dict(type='gauss', fwhm=1)], weights=[1])
+
     def __init__(self, psfs: Sequence[PSF], weights: Sequence[float]):
         check_options(PSFSum.__init__, locals())
         super().__init__(psfs, weights, "a sum of PSFs")
@@ -963,6 +985,9 @@ class PSFConvolution(_detail.SpreadFunctionConvolution, PSF):
     psfs : Sequence of PSF
         The PSFs, at least one.
     """
+
+    config_titles = dict(psfs='PSFs')
+    config_start = dict(psfs=[dict(type='gauss', fwhm=1)])
 
     def __init__(self, psfs: Sequence[PSF]):
         check_options(PSFConvolution.__init__, locals())

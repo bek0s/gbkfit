@@ -1289,9 +1289,9 @@
     },
     "/api/v1/components": {
       "get": {
-        "summary": "Component Traits",
-        "description": "Return the traits that each type of component takes, by its type (see\ngbkfit.model.components.TRAIT_TABLES): the types of its traits of each\nkind, and the directions of its velocity and dispersion traits. (The\nschema has every type of each kind, as the library reads them; a\ncomponent takes some of them.)",
-        "operationId": "component_traits_api_v1_components_get",
+        "summary": "Component Types",
+        "description": "Return each type of component, by its type, in the order of the\nlibrary (see ComponentType): its parts, and the traits it takes (see\ngbkfit.model.components.TRAIT_TABLES). The schema has the options of\neach type, with their titles; and every type of each kind of trait,\nas the library reads them, of which a component takes some.",
+        "operationId": "component_types_api_v1_components_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1299,10 +1299,10 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": {
-                    "$ref": "#/components/schemas/ComponentTraits"
+                    "$ref": "#/components/schemas/ComponentType"
                   },
                   "type": "object",
-                  "title": "Response Component Traits Api V1 Components Get"
+                  "title": "Response Component Types Api V1 Components Get"
                 }
               }
             }
@@ -2395,8 +2395,41 @@
         "title": "CheckResult",
         "description": "The problems of a text (see the checker of the server)."
       },
-      "ComponentTraits": {
+      "ComponentPartInfo": {
         "properties": {
+          "option": {
+            "type": "string",
+            "title": "Option"
+          },
+          "heights": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heights"
+          }
+        },
+        "type": "object",
+        "required": [
+          "option",
+          "heights"
+        ],
+        "title": "ComponentPartInfo",
+        "description": "A part of a type of component (see gbkfit's ComponentPart): its option,\nand the option of the height traits paired with its traits, if any."
+      },
+      "ComponentType": {
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/ComponentPartInfo"
+            },
+            "type": "array",
+            "title": "Parts"
+          },
           "traits": {
             "additionalProperties": {
               "items": {
@@ -2424,12 +2457,13 @@
         },
         "type": "object",
         "required": [
+          "parts",
           "traits",
           "directions",
           "dispersion_directions"
         ],
-        "title": "ComponentTraits",
-        "description": "The traits a type of component takes (see TraitTable): the types of its\ntraits of each kind (e.g. 'vpt': ['uniform', 'arctan', ...]), and the\ndirections of its velocity and dispersion traits."
+        "title": "ComponentType",
+        "description": "A type of component: its parts, in the order people read them (see\ngbkfit's Component.parts; its other options are its settings), and the\ntraits it takes (see TraitTable), if it takes traits: the types of\nits traits of each kind (e.g. 'vpt': ['uniform', 'arctan', ...]), and\nthe directions of its velocity and dispersion traits."
       },
       "CubeRenderInfo": {
         "properties": {

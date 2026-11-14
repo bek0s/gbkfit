@@ -220,6 +220,8 @@ class MassComponent(TypedSerializable, abc.ABC):
         If the name is not valid (see check_name).
     """
 
+    config_titles = dict(name='Name')
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), name=self._name)
 

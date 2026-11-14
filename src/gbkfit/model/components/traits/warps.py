@@ -101,6 +101,8 @@ class ZPTraitNWHarmonic(ZPTrait):
         If an option is not valid.
     """
 
+    config_start = dict(order=1)
+
     @staticmethod
     def type() -> str:
         return 'nw_harmonic'

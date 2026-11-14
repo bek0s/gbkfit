@@ -57,6 +57,9 @@ class Clouds(Serializable):
         If cflux is not positive, or the seed is not in its range.
     """
 
+    config_titles = dict(cflux='Flux of a cloud', seed='Seed')
+    config_start = dict(cflux=0.001)
+
     def dump(self) -> dict[str, Any]:
         return dict(cflux=self._cflux, seed=self._seed)
 

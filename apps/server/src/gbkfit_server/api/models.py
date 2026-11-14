@@ -14,7 +14,8 @@ __all__ = [
     'ArrayInfo',
     'CheckRequest',
     'CheckResult',
-    'ComponentTraits',
+    'ComponentPartInfo',
+    'ComponentType',
     'Diagnostic',
     'FileEntry',
     'FolderInfo',
@@ -108,12 +109,24 @@ class GalaxyRequest(BaseModel):
     galaxy: dict[str, Any]
 
 
-class ComponentTraits(BaseModel):
+class ComponentPartInfo(BaseModel):
     """
-    The traits a type of component takes (see TraitTable): the types of its
-    traits of each kind (e.g. 'vpt': ['uniform', 'arctan', ...]), and the
-    directions of its velocity and dispersion traits.
+    A part of a type of component (see gbkfit's ComponentPart): its option,
+    and the option of the height traits paired with its traits, if any.
     """
+    option: str
+    heights: str | None
+
+
+class ComponentType(BaseModel):
+    """
+    A type of component: its parts, in the order people read them (see
+    gbkfit's Component.parts; its other options are its settings), and the
+    traits it takes (see TraitTable), if it takes traits: the types of
+    its traits of each kind (e.g. 'vpt': ['uniform', 'arctan', ...]), and
+    the directions of its velocity and dispersion traits.
+    """
+    parts: list[ComponentPartInfo]
     traits: dict[str, list[str]]
     directions: list[str]
     dispersion_directions: list[str]

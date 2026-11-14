@@ -12,7 +12,8 @@ from gbkfit.params import ParamDesc
 from .. import traits
 from .._native import make_bands, make_lines
 from .._common import Interp, RNodes, RStep
-from ..base import Component, ComponentPlan, FrameParams, SceneTarget
+from ..base import (
+    Component, ComponentPart, ComponentPlan, FrameParams, SceneTarget)
 from ..nodes import Nodes, as_nodes
 from ..parts import KinematicTraits, density_traits, kinematic_traits
 from ..roles import STARS, Emission, Opacity
@@ -85,6 +86,21 @@ class Cone(Component):
         take one of the traits, or its parts and roles do not go together
         (e.g. lines without kinematics).
     """
+
+    config_titles = dict(
+        rnodes='Shells', rstep='Shell width',
+        rhtraits='Density across the walls', sides='Sides')
+    config_start = dict(
+        rnodes=dict(max=6, sep=1), rptraits=dict(type='uniform'),
+        rhtraits=dict(type='gauss', zmax=2),
+        vptraits=dict(type='uniform', direction='out'),
+        dptraits=dict(type='uniform'), emission=dict(type='lines'))
+
+    parts = (
+        ComponentPart('rnodes'), ComponentPart('rptraits', 'rhtraits'),
+        ComponentPart('vptraits', 'vhtraits'),
+        ComponentPart('dptraits', 'dhtraits'), ComponentPart('emission'),
+        ComponentPart('sptraits'), ComponentPart('opacity'))
 
     @staticmethod
     def type() -> str:

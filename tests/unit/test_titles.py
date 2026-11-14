@@ -2,8 +2,9 @@
 Tests that what configurations choose and what models fit is named for
 people: the type of each member of a family has a title (see
 TypedSerializable.type_title), every choice of an option has one (see
-Choices), and every parameter that the library declares has a title and
-a description (see ParamDesc).
+Choices), every option of a galaxy has one (see
+Serializable.config_titles), and every parameter that the library
+declares has a title and a description (see ParamDesc).
 """
 
 import ast
@@ -19,7 +20,7 @@ import gbkfit.instrument
 import gbkfit.model
 import gbkfit.observation
 from gbkfit import catalogue
-from gbkfit.config import Choices, option_types
+from gbkfit.config import Choices, option_titles, option_types
 
 
 FAMILIES = catalogue()
@@ -149,3 +150,46 @@ def test_every_parameter_has_a_title_and_a_description(node, where):
     assert desc is not None, f"{where}: no description"
     if isinstance(title, ast.Constant):
         assert _title_problem(title.value) is None, (where, title.value)
+
+
+def _untitled_options(node, defs, seen, where):
+    """
+    Yield the options of the schemas in a node of a schema that have no
+    title or a bad one, with where they are and the problem (the
+    definitions it refers to once).
+    """
+    if isinstance(node, list):
+        for item in node:
+            yield from _untitled_options(item, defs, seen, where)
+        return
+    if not isinstance(node, dict):
+        return
+    if (ref := node.get('$ref')) is not None:
+        name = ref.removeprefix('#/$defs/')
+        if name not in seen:
+            seen.add(name)
+            yield from _untitled_options(defs[name], defs, seen, name)
+    for key, option in node.get('properties', {}).items():
+        # (the type of a member of a family is named by its type's title)
+        if key != 'type' and (problem := _title_problem(option.get('title'))):
+            yield f"{where}.{key}", problem
+    for key, value in node.items():
+        if key not in ('$ref', 'const', 'default', 'enum'):
+            yield from _untitled_options(value, defs, seen, where)
+
+
+def test_every_option_of_a_galaxy_has_a_title():
+    schema = gbkfit.model.Galaxy.schema()
+    problems = dict(_untitled_options(
+        schema, schema['$defs'], set(), 'Galaxy'))
+    assert problems == {}
+
+
+def test_the_titles_of_the_options_of_a_class_are_those_of_its_bases_too():
+    # (a cone gives its nodes a title of its own, over that of the
+    # components, and takes theirs for its velocity)
+    titles = option_titles(gbkfit.model.components.Cone)
+    assert titles['rnodes'] == 'Shells'
+    assert titles['vptraits'] == 'Velocity'
+    assert option_titles(gbkfit.model.components.ThickDisk)['rnodes'] \
+        == 'Rings'

@@ -121,6 +121,9 @@ class RPTraitMap(RPTrait):
         If an option is not valid.
     """
 
+    config_titles = dict(size='Cells', step='Cell size')
+    config_start = dict(size=[10, 10], step=2)
+
     @staticmethod
     def type() -> str:
         return 'map'
@@ -255,6 +258,11 @@ class RPTraitImage(RPTrait):
     ValueError
         If an option is not valid, or the file is not of an image.
     """
+
+    config_titles = dict(
+        file='File', size='Cells', step='Cell size', psf='PSF',
+        offsets='Fitted offsets')
+    config_start = dict(size=[10, 10], step=2)
 
     config_constructors = ('from_file',)
 

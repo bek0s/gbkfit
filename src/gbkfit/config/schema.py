@@ -3,14 +3,18 @@ The JSON Schema (2020-12) of the configurations of GBKFIT, written from
 the signatures of the constructors that configurations call (see
 Serializable.config_constructors): their parameters are the options,
 with the types, ranges and choices of their annotations, their units
-(Unit; the keyword 'unit'), their defaults, and the descriptions of their
-docstrings. Each member of a family is described by the first paragraph
-of the docstring of its class, and named by the title of its type (see
-TypedSerializable.type_title), and each form of the configurations of a
-class of several (see Serializable.config_constructors) by that of its
-named constructor (not __init__, which the class describes). The choices
-of an option with titles (see Choices) are each a constant with its
-title.
+(Unit; the keyword 'unit'), their defaults, the descriptions of their
+docstrings and their titles (see Serializable.config_titles), and what
+they name if they name other things (the keyword 'references', see
+Serializable.config_references). Each member of a family is described
+by the first paragraph of the docstring of its class, and named by the
+title of its type (see TypedSerializable.type_title), and each form of
+the configurations of a class of several (see
+Serializable.config_constructors) by that of its named constructor (not
+__init__, which the class describes). The choices of an option with
+titles (see Choices) are each a constant with its title. The
+configuration that a new object of a class starts with is its example
+(the keyword 'examples', see start_config).
 
 The options of a family (e.g. a PSF) are one of its members, chosen by
 their type (see Family); a member that needs modules that are not
@@ -32,7 +36,8 @@ import numpy as np
 import numpy.typing as npt
 
 from .families import Family, family_of
-from .serializable import Serializable, is_record
+from .serializable import (
+    Serializable, is_record, option_titles, start_config)
 from .types import (
     Choices, DataFile, FilePath, config_form, describe_type, option_types,
     unit_kinds_of, unit_of, varying_table)
@@ -132,14 +137,17 @@ class SchemaWriter:
         if type_ == FilePath:
             return {'type': 'string', 'format': 'path'}
         if type_ == DataFile:
+            file = {'type': 'string', 'format': 'path', 'title': 'File'}
             return {'anyOf': [
                 {'type': 'string', 'format': 'path'},
                 _object(
-                    {'file': {'type': 'string', 'format': 'path'},
-                     'hdu': {'type': ['integer', 'string']}}, ['file']),
+                    {'file': file,
+                     'hdu': {'type': ['integer', 'string'], 'title': 'HDU'}},
+                    ['file']),
                 _object(
-                    {'file': {'type': 'string', 'format': 'path'},
-                     'path': {'type': 'string'}}, ['file', 'path'])]}
+                    {'file': dict(file),
+                     'path': {'type': 'string', 'title': 'Path in it'}},
+                    ['file', 'path'])]}
         if type_ == npt.ArrayLike:
             return {'type': ['number', 'array']}
         if type_ is np.ndarray:
@@ -165,8 +173,9 @@ class SchemaWriter:
                     'additionalProperties': self.option(args[1])}
         if type_ is astropy.units.Quantity:
             return _object({
-                'value': {'type': ['number', 'array']},
-                'unit': {'type': 'string'}}, ['value', 'unit'])
+                'value': {'type': ['number', 'array'], 'title': 'Value'},
+                'unit': {'type': 'string', 'title': 'Unit'}},
+                ['value', 'unit'])
         if isinstance(type_, type) and is_record(type_):
             return self._record(type_)
         if isinstance(type_, type) and (family := family_of(type_)):
@@ -186,17 +195,22 @@ class SchemaWriter:
     ) -> dict[str, Any]:
         """
         Return the schema of the configurations of a class: the options
-        of one of its config_constructors (see config_constructor).
+        of one of its config_constructors (see config_constructor), with
+        the configuration that a new one starts with (see start_config).
         """
         forms = [
             self._constructor(cls, name) for name in cls.config_constructors]
         if len(forms) == 1:
-            return forms[0]
-        for form, name in zip(forms, cls.config_constructors):
-            summary = _summary(getattr(cls, name))
-            if name != '__init__' and summary:
-                form['description'] = summary
-        return {'oneOf': forms}
+            schema = forms[0]
+        else:
+            for form, name in zip(forms, cls.config_constructors):
+                summary = _summary(getattr(cls, name))
+                if name != '__init__' and summary:
+                    form['description'] = summary
+            schema = {'oneOf': forms}
+        if start := start_config(cls):
+            schema['examples'] = [start]
+        return schema
 
     def with_options(
             self,
@@ -290,6 +304,8 @@ class SchemaWriter:
         """
         hints = option_types(func)
         params = inspect.signature(func).parameters
+        titles = option_titles(owner)
+        references = getattr(owner, 'config_references', {})
         properties, required = {}, []
         others: Any = False
         for name, param in params.items():
@@ -310,6 +326,10 @@ class SchemaWriter:
                 schema = {'anyOf': [schema, self.option(table)]}
             if (unit := unit_of(hints.get(name))) is not None:
                 schema['unit'] = unit
+            if name in titles:
+                schema['title'] = titles[name]
+            if name in references:
+                schema['references'] = references[name]
             if name in docs:
                 schema['description'] = docs[name]
             if param.default is param.empty:
@@ -321,7 +341,9 @@ class SchemaWriter:
         # parameters; see Serializable.config_options)
         for name, type_ in getattr(owner, 'config_options', {}).items():
             kept = {key: value for key, value in properties.get(
-                name, {}).items() if key in ('description', 'default', 'unit')}
+                name, {}).items()
+                if key in (
+                    'title', 'references', 'description', 'default', 'unit')}
             properties[name] = self.option(type_) | kept
         schema = _object(properties, required, others)
         # (the options required only without another, see

@@ -448,6 +448,8 @@ class DPTraitNWHarmonic(NWHarmonicShape, DPTrait):
         If an option is not valid.
     """
 
+    config_start = dict(order=2)
+
     def __init__(
             self,
             order: Annotated[int, Ge(0)],

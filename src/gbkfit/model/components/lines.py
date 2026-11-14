@@ -92,6 +92,8 @@ class Line(Serializable):
         If the name or the rest is not valid.
     """
 
+    config_titles = dict(name='Name', rest='Rest')
+
     def dump(self) -> dict[str, str]:
         return dict(
             name=self._name, rest=gbkfit.units.format_quantity(self._rest))
@@ -131,6 +133,8 @@ class Band(Serializable):
     ValueError
         If the name or the wavelength is not valid.
     """
+
+    config_titles = dict(name='Name', wavelength='Wavelength')
 
     def dump(self) -> dict[str, str]:
         return dict(

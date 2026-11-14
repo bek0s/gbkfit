@@ -387,6 +387,9 @@ class VerticalComponent(DiskVertical):
         If the name of the component or rstep is not valid.
     """
 
+    config_titles = dict(component='Component', rstep='Ring width')
+    config_references = dict(component='components')
+
     @staticmethod
     def type() -> str:
         return 'component'

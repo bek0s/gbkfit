@@ -30,7 +30,8 @@ from gbkfit_server.services.sessions import Latest
 from gbkfit_server.services.units import rest_text
 from gbkfit_server.services.views import Cube
 from .models import (
-    ArrayInfo, CatalogueLine, CheckRequest, CheckResult, ComponentTraits,
+    ArrayInfo, CatalogueLine, CheckRequest, CheckResult, ComponentPartInfo,
+    ComponentType,
     CubeRenderInfo,
     FolderInfo,
     GalaxyInfo, HeaderInfo,
@@ -458,23 +459,30 @@ def _catalogue_line(line: Any) -> CatalogueLine:
 
 
 @router.get('/components')
-def component_traits() -> dict[str, ComponentTraits]:
+def component_types() -> dict[str, ComponentType]:
     """
-    Return the traits that each type of component takes, by its type (see
-    gbkfit.model.components.TRAIT_TABLES): the types of its traits of each
-    kind, and the directions of its velocity and dispersion traits. (The
-    schema has every type of each kind, as the library reads them; a
-    component takes some of them.)
+    Return each type of component, by its type, in the order of the
+    library (see ComponentType): its parts, and the traits it takes (see
+    gbkfit.model.components.TRAIT_TABLES). The schema has the options of
+    each type, with their titles; and every type of each kind of trait,
+    as the library reads them, of which a component takes some.
     """
-    return {
-        component: ComponentTraits(
-            traits={
-                kind: [cls.type() for cls in classes]
+    tables = gbkfit.model.components.TRAIT_TABLES
+    registered = gbkfit.model.component_parser.registered_classes()
+    types = {}
+    for type_, cls in registered.items():
+        table = tables.get(type_)
+        types[type_] = ComponentType(
+            parts=[
+                ComponentPartInfo(option=part.option, heights=part.heights)
+                for part in cls.parts],
+            traits={} if table is None else {
+                kind: [trait.type() for trait in classes]
                 for kind, classes in table.classes.items()},
-            directions=list(table.directions),
-            dispersion_directions=list(table.dispersion_directions))
-        for component, table in
-        gbkfit.model.components.TRAIT_TABLES.items()}
+            directions=[] if table is None else list(table.directions),
+            dispersion_directions=[] if table is None
+            else list(table.dispersion_directions))
+    return types
 
 
 @functools.cache

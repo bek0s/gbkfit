@@ -43,6 +43,8 @@ class Nodes(Serializable):
         If the radii, or the options of a form, are not valid.
     """
 
+    config_titles = dict(max='Largest radius', sep='Separation', len='Number')
+
     # The forms of configurations that are dicts, {max, sep} and
     # {max, len}; that of the radii is a list, which the components that
     # take Nodes take too (see as_nodes)

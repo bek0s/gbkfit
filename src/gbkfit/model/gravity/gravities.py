@@ -334,6 +334,9 @@ class GravityMOND(Gravity):
         If the interpolation function or the form is not one of them.
     """
 
+    config_titles = dict(interpolation='Interpolation', form='Form')
+    config_start = dict(interpolation='simple')
+
     @staticmethod
     def type() -> str:
         return 'mond'
@@ -531,6 +534,10 @@ class GravityHuSawicki(Gravity):
     ValueError
         If n is not positive.
     """
+
+    config_titles = dict(
+        n='Index', screened='Screened mass', environment='Environment sources')
+    config_references = dict(screened='mass')
 
     @staticmethod
     def type() -> str:

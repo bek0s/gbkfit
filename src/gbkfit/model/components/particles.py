@@ -377,6 +377,8 @@ class Particles(Component):
         If the table is invalid, or the lines are not valid.
     """
 
+    config_titles = dict(file='File')
+
     config_constructors = ('from_file',)
 
     @staticmethod

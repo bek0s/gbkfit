@@ -4,11 +4,15 @@ and traits), and their errors.
 """
 
 
+import inspect
+
 import numpy as np
 import pytest
 from gbkfit.config import ConfigError, strict_mode
 from gbkfit.grid import Coords, Grid
-from gbkfit.model import BandEmission, LineEmission, SceneTarget, galaxy_parser
+from gbkfit.model import (
+    BandEmission, LineEmission, SceneTarget, component_parser, galaxy_parser)
+from gbkfit.model.components._nodal import HEIGHT_KINDS, TRAIT_OPTIONS
 from gbkfit.model._opacity import opacity_cubes
 from gbkfit.observation import Depth
 from modelutils import located_message
@@ -106,6 +110,25 @@ def component_error(name, **options):
     assert message.startswith(
         f"components[0] [{COMPONENTS[name]['type']}]: ")
     return message
+
+
+@pytest.mark.parametrize(
+    'cls', component_parser.registered_classes().values())
+def test_the_parts_of_a_type_of_component_are_options_of_it(cls):
+    options = set(inspect.signature(cls.__init__).parameters)
+    named = [part.option for part in cls.parts] \
+        + [part.heights for part in cls.parts if part.heights]
+    assert set(named) <= options
+    assert len(set(named)) == len(named)
+    # (heights are paired with the polar traits of their kind; every type
+    # can emit)
+    pairs = {
+        (TRAIT_OPTIONS[polar][0], TRAIT_OPTIONS[height][0])
+        for height, polar in HEIGHT_KINDS.items()}
+    assert {
+        (part.option, part.heights) for part in cls.parts
+        if part.heights} <= pairs
+    assert 'emission' in [part.option for part in cls.parts]
 
 
 @pytest.mark.parametrize('name', COMPONENTS)

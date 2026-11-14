@@ -112,6 +112,9 @@ class DPTraitEquilibrium(DPTrait):
         If an option is not valid.
     """
 
+    config_titles = dict(gravity='Gravity')
+    config_start = dict(gravity='galaxy')
+
     @staticmethod
     def type() -> str:
         return 'equilibrium'
@@ -191,6 +194,9 @@ class RHTraitEquilibrium(RHTrait):
     ValueError
         If an option is not valid.
     """
+
+    config_titles = dict(gravity='Gravity')
+    config_start = dict(gravity='galaxy')
 
     @staticmethod
     def type() -> str:

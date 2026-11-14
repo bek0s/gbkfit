@@ -31,6 +31,8 @@ class ExtinctionLaw(TypedSerializable, abc.ABC):
     the same type and options.
     """
 
+    config_titles = dict(rv='R(V)')
+
     def __eq__(self, other: object) -> bool:
         return isinstance(other, ExtinctionLaw) and self.dump() == other.dump()
 
@@ -199,6 +201,11 @@ class ExtinctionTable(ExtinctionLaw):
         If there are fewer than two wavelengths, they do not increase,
         or there is not a ratio for each.
     """
+
+    config_titles = dict(wavelengths='Wavelengths', ratios='Ratios')
+    config_start = dict(
+        wavelengths=[0.36, 0.44, 0.55, 0.65, 0.8],
+        ratios=[1.53, 1.32, 1.0, 0.82, 0.6])
 
     @staticmethod
     def type() -> str:

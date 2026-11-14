@@ -6,7 +6,7 @@ the cubes of opacity, the fields of radiative transfer).
 
 import abc
 import dataclasses
-from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, TypedDict
 
 import numpy as np
 
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 __all__ = [
     'Component',
     'ComponentLinks',
+    'ComponentPart',
     'ComponentPlan',
     'ComponentStage',
     'ComponentState',
@@ -163,6 +164,19 @@ class ComponentLinks:
     fluid: tuple[str, ...] = ()
 
 
+class ComponentPart(NamedTuple):
+    """
+    A part of a type of component (see Component.parts): one of the
+    options of its configurations, whose value is an item of a family or
+    a list of them (e.g. its velocity traits), or its radial nodes (see
+    Nodes); with the option of the height traits paired with its traits,
+    if any (e.g. those of its velocity traits): one for each trait, or
+    one that they all share.
+    """
+    option: str
+    heights: str | None = None
+
+
 class Component(TypedSerializable, abc.ABC):
     """
     A component of a galaxy: a shape (the subclass) with roles, the light
@@ -185,6 +199,21 @@ class Component(TypedSerializable, abc.ABC):
         If the name is not valid (see check_name), or it has neither
         emission nor opacity.
     """
+
+    # (the titles of the options of its types, those that several share)
+    config_titles = dict(
+        name='Name', rnodes='Rings', rptraits='Density',
+        rhtraits='Density heights', vptraits='Velocity',
+        vhtraits='Velocity heights', dptraits='Dispersion',
+        dhtraits='Dispersion heights', zptraits='Warps', sptraits='Selections',
+        emission='Light', opacity='Opacity', rstep='Ring width',
+        interp='Interpolation')
+    config_start = dict(emission=dict(type='band'))
+
+    # Its parts, in the order people read them (e.g. its density, then its
+    # velocity): the options that it is made of; its other options are its
+    # settings (e.g. how its parameters are interpolated)
+    parts: ClassVar[tuple[ComponentPart, ...]] = (ComponentPart('emission'),)
 
     def __init__(
             self,

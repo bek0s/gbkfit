@@ -258,6 +258,10 @@ class _Blobs(_Shape):
     table, of the amplitudes of its family, and with the shape b of the
     7-parameter mixtures, of the valid range _SHAPE (None without b).
     """
+
+    config_titles = dict(nblobs='Blobs')
+    config_start = dict(nblobs=1)
+
     _SHAPE: dict | None = None
 
     def axisymmetric(self) -> bool:

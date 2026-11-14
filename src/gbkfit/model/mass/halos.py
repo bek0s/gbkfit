@@ -163,6 +163,8 @@ class ScaledHaloProfile(HaloProfile, abc.ABC):
         If the parameterisation is not valid.
     """
 
+    config_titles = dict(parameterisation='Parameterisation')
+
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(parameterisation=self._parameterisation)
 
@@ -766,6 +768,9 @@ class ProfileNodewiseHalo(HaloProfile):
     ValueError
         If the nodes are not valid.
     """
+
+    config_titles = dict(nodes='Nodes')
+    config_start = dict(nodes=[1, 5, 10, 20])
 
     @staticmethod
     def type() -> str:

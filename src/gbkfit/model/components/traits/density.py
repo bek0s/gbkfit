@@ -762,6 +762,8 @@ class RPTraitNWHarmonic(NWHarmonicShape, RPTrait):
         If an option is not valid.
     """
 
+    config_start = dict(order=2)
+
     def __init__(
             self,
             order: Annotated[int, Ge(0)],
@@ -864,6 +866,10 @@ class RPTraitSpiral(RPTrait):
     ValueError
         If an option is not valid.
     """
+
+    config_titles = dict(
+        order='Arms', winding='Winding', wavenumber='Wavenumber')
+    config_start = dict(order=2)
 
     @staticmethod
     def type() -> str:

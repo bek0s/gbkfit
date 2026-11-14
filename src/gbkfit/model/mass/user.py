@@ -61,6 +61,10 @@ class MassUser(MassComponent):
         If a parameter name is not valid or repeats.
     """
 
+    config_titles = dict(
+        file='File', func='Squared speed function', params='Parameters',
+        forces='Forces function', mass='Mass function')
+
     config_constructors = ('from_file',)
 
     @staticmethod

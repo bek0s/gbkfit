@@ -19,7 +19,8 @@ from .._needs import Need
 from .._common import Interp, RNodes, RStep
 from .._native import make_bands, make_lines
 from ..base import (
-    Component, ComponentLinks, ComponentPlan, FrameParams, SceneTarget)
+    Component, ComponentLinks, ComponentPart, ComponentPlan, FrameParams,
+    SceneTarget)
 from ..nodes import Nodes, as_nodes
 from ..roles import STARS, Emission, Opacity
 from . import _build, _nodal, _stage
@@ -134,6 +135,12 @@ class Disk(Component, abc.ABC):
     traits.RPTrait.tail_scale), and its other node-wise parameters keep
     their values there.
     """
+
+    config_titles = dict(
+        pressure_support='Pressure support', fluid='Gas disks of the mass',
+        loose='Centre per ring', tilted='Orientation per ring',
+        clouds='Clouds')
+    config_references = dict(fluid='mass')
 
     def dump(self) -> dict[str, Any]:
         info = _build.dump_disk_component(
@@ -372,6 +379,18 @@ class ThinDisk(Disk):
         roles do not go together (e.g. lines without kinematics).
     """
 
+    config_titles = dict(rhtraits='Vertical equilibrium')
+    config_start = dict(
+        rnodes=dict(max=16, sep=2), rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'), emission=dict(type='lines'))
+
+    parts = (
+        ComponentPart('rnodes'), ComponentPart('rptraits'),
+        ComponentPart('vptraits'), ComponentPart('dptraits'),
+        ComponentPart('emission'), ComponentPart('sptraits'),
+        ComponentPart('pressure_support'), ComponentPart('rhtraits'))
+
     @staticmethod
     def type() -> str:
         return 'thin_disk'
@@ -495,6 +514,17 @@ class ThickDisk(Disk):
         If the options are not valid (e.g. the rings), or its parts and
         roles do not go together (e.g. lines without kinematics).
     """
+
+    config_start = ThinDisk.config_start | dict(
+        rhtraits=dict(type='sech2', zmax=6))
+
+    parts = (
+        ComponentPart('rnodes'), ComponentPart('rptraits', 'rhtraits'),
+        ComponentPart('vptraits', 'vhtraits'),
+        ComponentPart('dptraits', 'dhtraits'), ComponentPart('emission'),
+        ComponentPart('zptraits'), ComponentPart('sptraits'),
+        ComponentPart('opacity'), ComponentPart('clouds'),
+        ComponentPart('pressure_support'))
 
     @staticmethod
     def type() -> str:

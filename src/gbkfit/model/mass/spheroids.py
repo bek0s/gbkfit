@@ -77,6 +77,8 @@ class _ShapedMass(MassComponent, abc.ABC):
         Its shape; by default, a sphere.
     """
 
+    config_titles = dict(profile='Profile', shape='Shape')
+
     def __init__(self, name: str, shape: SpheroidShape | None):
         super().__init__(name)
         self._shape = ShapeSphere() if shape is None else shape
@@ -176,6 +178,8 @@ class MassSpheroid(_ShapedMass):
     ValueError
         If the name is not valid.
     """
+
+    config_start = dict(profile=dict(type='sersic'))
 
     @staticmethod
     def type() -> str:
@@ -294,6 +298,12 @@ class Halo(_ShapedMass):
         baryons, or has baryons for neither of these nor SIDM; or the
         parameters of its profile, shape, contraction and SIDM repeat.
     """
+
+    config_titles = dict(
+        overdensity='Overdensity', baryons='Baryons',
+        contraction='Contraction', sidm='Self-interacting')
+    config_references = dict(baryons='mass')
+    config_start = dict(profile=dict(type='nfw'))
 
     @staticmethod
     def type() -> str:
@@ -658,6 +668,9 @@ class TracedSpheroid(MassComponent):
     ValueError
         If the name or the name of the component is not valid.
     """
+
+    config_titles = dict(component='Component')
+    config_references = dict(component='components')
 
     @staticmethod
     def type() -> str:

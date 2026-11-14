@@ -238,6 +238,8 @@ class Column(NamedTuple):
         default, the unit of the file.
     """
 
+    config_titles = dict(column='Column', unit='Unit')
+
     column: str
     unit: str | None = None
 

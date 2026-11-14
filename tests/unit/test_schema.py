@@ -12,7 +12,9 @@ import pytest
 import ruamel.yaml
 
 import gbkfit
-from gbkfit.config import Column, DataFile, TypedParser, TypedSerializable
+from gbkfit.config import (
+    Column, DataFile, TypedParser, TypedSerializable, start_config,
+    strict_mode)
 from gbkfit.config import Family, Member
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.instrument import PSF, PSFGauss
@@ -54,6 +56,19 @@ def test_members_of_families_have_their_options():
     assert sigma['unit'] == 'arcsec'
     assert sigma['description'].startswith('The standard deviation')
     assert by_sigma['properties']['ratio']['default'] == 1.0
+
+
+def test_options_have_titles_and_say_what_they_name():
+    writer = SchemaWriter()
+    writer.option(Galaxy)
+    traced = next(
+        x for x in writer.defs()['mass_component']['oneOf']
+        if x['title'] == 'Traced spheroid')
+    # (the component that it follows is one of those of its galaxy)
+    component = traced['properties']['component']
+    assert component['title'] == 'Component'
+    assert component['references'] == 'components'
+    assert 'references' not in traced['properties']['name']
 
 
 def test_options_have_the_forms_of_configurations():
@@ -152,3 +167,57 @@ def test_classes_have_the_schemas_of_their_configurations():
     path = GOLDEN_DIR / 'params_features' / 'config.yaml'
     galaxy, = ruamel.yaml.YAML(typ='safe').load(path)['galaxies']
     jsonschema.validate(galaxy, Galaxy.schema())
+
+
+def _families_of(schema):
+    """Return the names of the families that a schema refers to."""
+    families = gbkfit.catalogue()
+    defs, names, todo = schema['$defs'], set(), [schema]
+    while todo:
+        node = todo.pop()
+        if isinstance(node, list):
+            todo.extend(node)
+        elif isinstance(node, dict):
+            if (ref := node.get('$ref')) and ref.split('/')[-1] not in names:
+                names.add(name := ref.split('/')[-1])
+                todo.append(defs[name])
+            todo.extend(node.values())
+    return [name for name in sorted(names) if name in families]
+
+
+def _is_file(option):
+    """Whether an option is a file (or one of the forms of a file)."""
+    return any(
+        x.get('format') == 'path' for x in [option, *option.get('anyOf', [])])
+
+
+GALAXY_MEMBERS = [
+    (name, member) for name in _families_of(Galaxy.schema())
+    for member in gbkfit.catalogue()[name].members]
+
+
+@pytest.mark.parametrize(
+    'name, member', GALAXY_MEMBERS,
+    ids=[f'{name}-{member.type}' for name, member in GALAXY_MEMBERS])
+def test_a_new_member_of_a_family_of_a_galaxy_starts_valid(name, member):
+    start = start_config(member.cls)
+    schema = SchemaWriter().constructors(member.cls)
+    assert schema['examples'] == [start]
+    assert start['type'] == member.type
+    # (it has every option it requires, but those that only a
+    # configuration can give: its name, the names of other things, and a
+    # file with what is in it; with the names, it loads)
+    for form in schema.get('oneOf', [schema]):
+        lacks = {
+            key: form['properties'][key] for key in form['required']
+            if key not in start}
+        if any(_is_file(option) for option in lacks.values()):
+            return
+        if all(key == 'name' or 'references' in option
+               for key, option in lacks.items()):
+            break
+    else:
+        pytest.fail(f"{start} lacks options it requires")
+    with strict_mode():
+        gbkfit.catalogue()[name].parser.load(
+            start | dict.fromkeys(lacks, 'other'))

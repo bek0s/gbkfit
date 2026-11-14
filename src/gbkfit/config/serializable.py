@@ -7,6 +7,7 @@ parse_options_for_callable).
 """
 
 import abc
+import copy
 import importlib.util
 import inspect
 import typing
@@ -37,7 +38,10 @@ __all__ = [
     'is_record',
     'make_typed_desc',
     'missing_modules',
-    'parse_options_for_callable'
+    'option_names',
+    'option_titles',
+    'parse_options_for_callable',
+    'start_config'
 ]
 
 
@@ -62,6 +66,28 @@ class Serializable(abc.ABC):
     # another option, by that option (e.g. the size of the grid of an
     # observation without its dataset, which gives it); its schema says so
     config_required_without: ClassVar[Mapping[str, tuple[str, ...]]] = {}
+
+    # The titles of its options for people, by option (e.g. 'Rings' for
+    # rnodes): sentence case, ASCII, at most 40 characters. Those of its
+    # bases are its own too (see option_titles); its schema gives them
+    config_titles: ClassVar[Mapping[str, str]] = {}
+
+    # The options of its configurations that name other things of the
+    # configuration that holds it, by option, with the option there whose
+    # items they name (e.g. 'components' for the component that a mass
+    # component follows, one of those of its galaxy); its schema says so
+    config_references: ClassVar[Mapping[str, str]] = {}
+
+    # The options that a new one starts with (see start_config): those
+    # that it requires and no default gives (e.g. the zmax of a height
+    # trait), but those that only its configuration can give (the files of
+    # its data, its name, the names of the things it refers to), and those
+    # that make it of use at once (e.g. the motions of a disk of lines).
+    # Those of its bases that it takes are its own too, its own over
+    # theirs (a base can start an option that only some of its subclasses
+    # take, e.g. the direction of the velocity traits), but those it gives
+    # None (left to their defaults); its schema gives them
+    config_start: ClassVar[Mapping[str, Any]] = {}
 
     # The modules it needs beyond those GBKFIT always has (e.g. optional
     # packages), each with how to install it: without them it can be
@@ -158,6 +184,60 @@ def missing_modules(cls: type[Serializable]) -> dict[str, str]:
     return {
         module: how for module, how in cls.requires.items()
         if not _is_installed(module)}
+
+
+def option_titles(cls: type) -> dict[str, str]:
+    """
+    Return the titles of the options of a class for people, by option:
+    its config_titles and those of its bases, its own over theirs (e.g.
+    'Shells' for the rnodes of a cone, over the 'Rings' of components
+    of nodes). A record (see is_record) has them as a class attribute
+    too.
+    """
+    return _merged(cls, 'config_titles')
+
+
+def start_config(cls: type[Serializable]) -> dict[str, Any]:
+    """
+    Return the configuration that a new object of a class starts with:
+    its type, of a member of a family (see TypedSerializable), and its
+    config_start and those of its bases that it takes, its own over
+    theirs, but those of None (see Serializable.config_start). It loads,
+    unless the class requires options that only a configuration can give
+    (e.g. a file).
+    """
+    start = {'type': cls.type()} \
+        if issubclass(cls, TypedSerializable) else {}
+    options = option_names(cls)
+    return start | copy.deepcopy({
+        key: value for key, value in _merged(cls, 'config_start').items()
+        if key in options and value is not None})
+
+
+def option_names(cls: type[Serializable]) -> set[str]:
+    """
+    Return the names of the options of the configurations of a class:
+    the parameters of its config_constructors and its config_options.
+    """
+    names = set(cls.config_options)
+    for name in cls.config_constructors:
+        params = inspect.signature(_constructor_function(cls, name)).parameters
+        names.update(
+            key for key, param in params.items()
+            if key not in ('self', 'cls') and param.kind not in (
+                param.VAR_POSITIONAL, param.VAR_KEYWORD))
+    return names
+
+
+def _merged(cls: type, attribute: str) -> dict[str, Any]:
+    """
+    Return the dicts of an attribute of a class and of its bases, merged,
+    its own over theirs.
+    """
+    merged: dict[str, Any] = {}
+    for owner in reversed(cls.__mro__):
+        merged |= vars(owner).get(attribute, {})
+    return merged
 
 
 def _is_installed(module: str) -> bool:

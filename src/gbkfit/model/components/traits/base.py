@@ -170,6 +170,8 @@ class Trait(TypedSerializable, abc.ABC):
         If the name is invalid.
     """
 
+    config_titles = dict(name='Name', sampling='Sampling')
+
     @staticmethod
     @abc.abstractmethod
     def uid() -> int:
@@ -239,6 +241,8 @@ class PTrait(Trait, abc.ABC):
     surface of its component.
     """
 
+    config_titles = dict(direction='Direction', order='Order')
+
     def azimuthal_edges(
             self,
             r: np.ndarray,
@@ -271,6 +275,9 @@ class HTrait(Trait, abc.ABC):
     ValueError
         If the name is invalid, or it has a sampling without nodewise.
     """
+
+    config_titles = dict(nodewise='Per ring', zmax='Largest height')
+    config_start = dict(zmax=6)
 
     def __init__(self, *options: TraitOption, name: str | None = None):
         check_options(HTrait.__init__, locals())
@@ -419,6 +426,8 @@ class VPTrait(PTrait, abc.ABC):
     package docstring).
     """
 
+    config_start = dict(direction='tan')
+
     def direction(self) -> str:
         """Return the direction of its speed (see VPT_DIRECTIONS)."""
         return self._option(Direction).name
@@ -524,6 +533,9 @@ class ZPTrait(PTrait, abc.ABC):
     along z, so that the depth axis of an observation can hold all of it
     (see Depth).
     """
+
+    config_titles = dict(zmax='Largest displacement')
+    config_start = dict(zmax=6)
 
     def zmax(self) -> float:
         """Return its zmax (arcsec): a bound along z."""

@@ -844,6 +844,8 @@ class VPTraitNWHarmonic(VPTrait):
         If an option is not valid.
     """
 
+    config_start = dict(order=2)
+
     @staticmethod
     def type() -> str:
         return 'nw_harmonic'
@@ -1112,6 +1114,10 @@ class VPTraitSpiral(VPTraitPlanar):
     ValueError
         If an option is not valid.
     """
+
+    config_titles = dict(
+        order='Arms', winding='Winding', wavenumber='Wavenumber')
+    config_start = dict(order=2)
 
     @staticmethod
     def type() -> str:

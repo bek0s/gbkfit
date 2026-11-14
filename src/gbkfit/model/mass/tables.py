@@ -82,6 +82,14 @@ class MassTable(MassComponent):
         increasing, or the velocities are not finite and one per radius.
     """
 
+    config_titles = dict(
+        radii='Radii', velocities='Velocities',
+        assumed_distance='Assumed distance', file='File',
+        radius='Radius column', velocity='Velocity column', format='Format')
+    config_start = dict(
+        radii=dict(value=[1, 2, 4, 8], unit='kpc'),
+        velocities=[60, 90, 110, 120])
+
     config_constructors = ('__init__', 'from_file')
 
     @staticmethod

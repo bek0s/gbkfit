@@ -509,14 +509,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Component Traits
-         * @description Return the traits that each type of component takes, by its type (see
-         *     gbkfit.model.components.TRAIT_TABLES): the types of its traits of each
-         *     kind, and the directions of its velocity and dispersion traits. (The
-         *     schema has every type of each kind, as the library reads them; a
-         *     component takes some of them.)
+         * Component Types
+         * @description Return each type of component, by its type, in the order of the
+         *     library (see ComponentType): its parts, and the traits it takes (see
+         *     gbkfit.model.components.TRAIT_TABLES). The schema has the options of
+         *     each type, with their titles; and every type of each kind of trait,
+         *     as the library reads them, of which a component takes some.
          */
-        get: operations["component_traits_api_v1_components_get"];
+        get: operations["component_types_api_v1_components_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1021,12 +1021,27 @@ export interface components {
             diagnostics: components["schemas"]["Diagnostic"][];
         };
         /**
-         * ComponentTraits
-         * @description The traits a type of component takes (see TraitTable): the types of its
-         *     traits of each kind (e.g. 'vpt': ['uniform', 'arctan', ...]), and the
-         *     directions of its velocity and dispersion traits.
+         * ComponentPartInfo
+         * @description A part of a type of component (see gbkfit's ComponentPart): its option,
+         *     and the option of the height traits paired with its traits, if any.
          */
-        ComponentTraits: {
+        ComponentPartInfo: {
+            /** Option */
+            option: string;
+            /** Heights */
+            heights: string | null;
+        };
+        /**
+         * ComponentType
+         * @description A type of component: its parts, in the order people read them (see
+         *     gbkfit's Component.parts; its other options are its settings), and the
+         *     traits it takes (see TraitTable), if it takes traits: the types of
+         *     its traits of each kind (e.g. 'vpt': ['uniform', 'arctan', ...]), and
+         *     the directions of its velocity and dispersion traits.
+         */
+        ComponentType: {
+            /** Parts */
+            parts: components["schemas"]["ComponentPartInfo"][];
             /** Traits */
             traits: {
                 [key: string]: string[];
@@ -2503,7 +2518,7 @@ export interface operations {
             };
         };
     };
-    component_traits_api_v1_components_get: {
+    component_types_api_v1_components_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2519,7 +2534,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: components["schemas"]["ComponentTraits"];
+                        [key: string]: components["schemas"]["ComponentType"];
                     };
                 };
             };

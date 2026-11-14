@@ -317,9 +317,26 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
     assert "channels of 0.001 km/s" in response.json()['detail']
 
 
+def test_each_type_of_component_is_given_with_its_parts(client):
+    types = client.get('/api/v1/components').json()
+    assert list(types) == [
+        'thin_disk', 'thick_disk', 'cone', 'spheroid', 'jeans_spheroid',
+        'orbit_spheroid', 'point', 'particles']
+    # (in the order people read them, with the heights of its traits)
+    parts = [
+        (part['option'], part['heights'])
+        for part in types['thick_disk']['parts']]
+    assert parts[:3] == [
+        ('rnodes', None), ('rptraits', 'rhtraits'), ('vptraits', 'vhtraits')]
+    # (a type without traits takes none)
+    assert [part['option'] for part in types['point']['parts']] \
+        == ['emission']
+    assert types['point']['traits'] == {}
+    assert types['point']['directions'] == []
+
+
 def test_the_traits_each_type_of_component_takes_are_given(client):
     takes = client.get('/api/v1/components').json()
-    assert set(takes) == {'thin_disk', 'thick_disk', 'cone', 'spheroid'}
     # (a cone takes only some density traits, and flows out or around)
     assert 'spiral' in takes['thin_disk']['traits']['rpt']
     assert 'spiral' not in takes['cone']['traits']['rpt']

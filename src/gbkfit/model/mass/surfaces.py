@@ -563,6 +563,9 @@ class SurfaceNodewise(DiskSurface):
         If the nodes are not valid.
     """
 
+    config_titles = dict(nodes='Nodes')
+    config_start = dict(nodes=[0, 2, 5, 10])
+
     # The surface density falls to 0 at the last node rather than being a
     # parameter there, and is given by its log10 elsewhere: values at every
     # node (linear, from 0) would be more flexible (e.g. 0 at inner nodes),
