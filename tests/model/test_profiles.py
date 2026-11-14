@@ -15,8 +15,8 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    LineOfSightFlat, MockOptions, NoiseGauss, ObservationGroup,
-    ObservationProfile, ObservationSky, PixelBrightness, PixelSpectra,
+    MockOptions, NoiseGauss, ObservationGroup,
+    ObservationProfile, ObservationPixelBrightness, ObservationPixelSpectra,
     draw_mocks, observation_parser)
 
 
@@ -71,7 +71,7 @@ def test_rotation_curve_of_a_mass_model():
     data = observation.make_dataset(
         {'vcirc': Data(vcirc(radii), error=np.ones(3))})
     objective = Objective(
-        ObservationGroup(galaxy, observation.with_data(data)).plan())
+        ObservationGroup(galaxy, observation.with_dataset(data)).plan())
     assert objective.chi2(PARAMS) == pytest.approx(0, abs=1e-20)
 
 
@@ -104,12 +104,12 @@ def test_profile_of_a_table_file(tmp_path):
         "4.0 170.0 nan\n")
     info = dict(
         type='profile', name='rc',
-        data=dict(
+        dataset=dict(
             file=str(file), format='ascii.no_header',
             radius=dict(column='col1', unit='kpc'), assumed_distance=20,
             vcirc=dict(column='col2', error='col3')))
     observation = observation_parser.load(copy.deepcopy(info))
-    data = observation.data()
+    data = observation.dataset()
     assert observation.keys() == ('vcirc',)
     np.testing.assert_array_equal(observation.radii(), [1, 2, 4] * u.kpc)
     assert observation.assumed_distance() == 20 * u.Mpc
@@ -120,11 +120,11 @@ def test_profile_of_a_table_file(tmp_path):
     again = observation_parser.load(dumped)
     np.testing.assert_array_equal(again.radii(), observation.radii())
     np.testing.assert_array_equal(
-        again.data()['vcirc'].data(), data['vcirc'].data())
+        again.dataset()['vcirc'].data(), data['vcirc'].data())
     assert again.assumed_distance() == observation.assumed_distance()
     # (one error for all the values must be positive, not a bool)
     for error, message in ((0, "must be positive"), (True, "is True")):
-        info['data']['vcirc']['error'] = error
+        info['dataset']['vcirc']['error'] = error
         with pytest.raises((ConfigError, ValueError), match=message):
             observation_parser.load(copy.deepcopy(info))
 
@@ -136,12 +136,11 @@ def test_profile_beside_a_sky_observation():
     galaxy = mass_galaxy(components=[copy.deepcopy(GAS)])
     radii = np.array([2.0, 6.0, 10.0])
     profile = ObservationProfile(['rotation_gas'], radii * u.arcsec)
-    cube = ObservationSky(
-        PixelSpectra(
-            size=(8, 8), step=(1, 1),
-            spectral=SpectralAxis(
-                size=5, step=10,
-                convention='relativistic')), LineOfSightFlat())
+    cube = ObservationPixelSpectra(
+        size=(8, 8), step=(1, 1),
+        spectral=SpectralAxis(
+            size=5, step=10,
+            convention='relativistic'))
     group = ObservationGroup(galaxy, [profile, cube])
     params = PARAMS | GAS_PARAMS
     plan = group.plan()
@@ -165,8 +164,8 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
         components=[light], distance=dict(type='parameter'),
         mass=[dict(type='traced_disk', name='stellar', component='stars',
                    vertical=dict(type='thin'))]))
-    image = ObservationSky(
-        PixelBrightness(size=(8, 8), step=(1, 1)), LineOfSightFlat())
+    image = ObservationPixelBrightness(
+        size=(8, 8), step=(1, 1))
     profile = ObservationProfile(['vcirc'], np.array([2.0, 6.0]) * u.arcsec)
     group = ObservationGroup(galaxy, [image, profile])
     params = dict(
@@ -213,7 +212,7 @@ def test_profiles_refuse_what_they_cannot_measure():
         ObservationGroup(
             galaxy, ObservationProfile(['rotation_gas'], radii)).plan()
     with pytest.raises(ValueError, match="in a unit of km / s"):
-        ObservationProfile(data=DatasetProfile(
+        ObservationProfile(dataset=DatasetProfile(
             {'vcirc': Data(np.ones(2), unit='kpc')}, radii))
     # (a galaxy of mass alone needs no distance for radii in kpc; at radii
     # in angles, or lengths measured at a distance, it does)
@@ -237,11 +236,11 @@ def test_groups_with_other_data_check_what_their_profiles_see():
         return DatasetProfile({key: Data(np.ones(2)) for key in keys}, radii)
     alone = galaxy_parser.load(dict(mass=copy.deepcopy(MASS)))
     group = ObservationGroup(alone, ObservationProfile(
-        data=dataset(['vcirc'], [1.0, 3.0] * u.kpc)))
+        dataset=dataset(['vcirc'], [1.0, 3.0] * u.kpc)))
     with pytest.raises(ValueError, match="needs a distance"):
-        group.with_data({0: dataset(['vcirc'], [1.0, 3.0] * u.arcsec)})
+        group.with_datasets({0: dataset(['vcirc'], [1.0, 3.0] * u.arcsec)})
     with pytest.raises(ValueError, match="has no functions"):
-        group.with_data({0: dataset(['vcirc_disk'], [1.0, 3.0] * u.kpc)})
+        group.with_datasets({0: dataset(['vcirc_disk'], [1.0, 3.0] * u.kpc)})
 
 
 def test_plans_with_other_data_evaluate_profiles_at_their_radii():
@@ -253,45 +252,41 @@ def test_plans_with_other_data_evaluate_profiles_at_their_radii():
     alone = galaxy_parser.load(dict(mass=copy.deepcopy(MASS)))
     params = {k: v for k, v in PARAMS.items() if k != 'distance'}
     plan = ObservationGroup(alone, ObservationProfile(
-        data=dataset(['vcirc'], [1.0, 3.0] * u.kpc))).plan()
-    assert plan.with_data(
+        dataset=dataset(['vcirc'], [1.0, 3.0] * u.kpc))).plan()
+    assert plan.with_datasets(
         {0: dataset(['vcirc'], [1e3, 3e3] * u.pc)})._plans[0] \
         is plan._plans[0]
     for keys, radii in [(['vcirc'], [5.0, 7.0] * u.kpc),
                         (['vcirc_halo'], [1.0, 3.0] * u.kpc)]:
         other = dataset(keys, radii)
         fresh = ObservationGroup(
-            alone, ObservationProfile(data=other)).plan().model_h(params)[0]
-        copied = plan.with_data({0: other}).model_h(params)[0]
+            alone, ObservationProfile(dataset=other)).plan().model_h(params)[0]
+        copied = plan.with_datasets({0: other}).model_h(params)[0]
         assert copied.keys() == fresh.keys()
         for key in keys:
             np.testing.assert_array_equal(copied[key].data, fresh[key].data)
 
 
-def test_a_profile_of_data_can_give_their_functions_and_radii():
-    # (as without data, e.g. that of its mock data: they must be those of
-    # the data, which give them otherwise)
+def test_a_profile_of_data_takes_their_functions_and_radii():
+    # (those given serve only without data)
     radii = [1.0, 3.0] * u.kpc
     data = DatasetProfile({'vcirc': Data([100.0, 150.0])}, radii, 10)
-    given = ObservationProfile(['vcirc'], radii, 10, data=data)
-    assert np.array_equal(given.radii(), radii)
-    assert given.keys() == ('vcirc',)
-    assert ObservationProfile(data=data).assumed_distance() == 10 * u.Mpc
     for functions, profile_radii, distance in (
-            (['vcirc_halo'], radii, 10), (['vcirc'], [1.0, 2.0] * u.kpc, 10),
-            (['vcirc'], radii, None)):
-        with pytest.raises(ValueError, match=(
-                "has the functions|not at the radii of the profile")):
-            ObservationProfile(
-                functions, profile_radii, distance, data=data)
+            (None, None, None), (['vcirc'], radii, 10),
+            (['vcirc_halo'], [1.0, 2.0] * u.kpc, 20)):
+        given = ObservationProfile(
+            functions, profile_radii, distance, dataset=data)
+        assert np.array_equal(given.radii(), radii)
+        assert given.keys() == ('vcirc',)
+        assert given.assumed_distance() == 10 * u.Mpc
 
 
 def test_profile_data_in_another_unit_are_converted():
     # (to the unit of the function: m/s to km/s, values and errors)
     radii = [1.0, 3.0] * u.kpc
-    observation = ObservationProfile(data=DatasetProfile({'vcirc': Data(
+    observation = ObservationProfile(dataset=DatasetProfile({'vcirc': Data(
         [1e5, 2e5], error=[5e3, 5e3], unit='m/s')}, radii))
-    vcirc = observation.data()['vcirc']
+    vcirc = observation.dataset()['vcirc']
     assert vcirc.unit() == u.km / u.s
     np.testing.assert_allclose(vcirc.data(), [100, 200])
     np.testing.assert_allclose(vcirc.error(), [5, 5])
@@ -302,7 +297,8 @@ def test_outputs_of_profiles_are_tables():
     observation = ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc, name='rc')
     data = observation.make_dataset({'vcirc': Data(
         [100.0, 150.0], error=[5.0, 5.0], unit='km/s')})
-    plan = ObservationGroup(mass_galaxy(), observation.with_data(data)).plan()
+    plan = ObservationGroup(
+        mass_galaxy(), observation.with_dataset(data)).plan()
     # (with the extra outputs of the gravity of a galaxy of mass alone)
     outputs = gbkfit.setup.evaluation_outputs(
         plan, Objective(plan), PARAMS, True, True)
@@ -368,7 +364,7 @@ def test_rotation_curve_of_sparc(tmp_path):
         distance=dict(type='parameter')))
     observation = observation_parser.load(dict(
         type='profile', name='rc', inclination=60,
-        data=dict(
+        dataset=dict(
             file=str(file), format='ascii.no_header',
             radius=dict(column='col1', unit='kpc'), assumed_distance=10,
             vcirc=dict(column='col2', error='col3'))))

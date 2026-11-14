@@ -12,8 +12,7 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray
 from gbkfit.model import Extras
-from gbkfit.observation import (
-    GroupPlan, Likelihoods, ModelData, ObservationGroup)
+from gbkfit.observation import GroupPlan, ModelData, ObservationGroup
 from gbkfit.params import (
     ParamDesc, ParamValues, Solution, Solve, with_elements)
 from gbkfit.utils import threadutils
@@ -22,6 +21,7 @@ from ._block import Block
 from ._comparisons import comparison_of
 from ._orbit_blocks import orbit_blocks
 from ._scale_blocks import scale_blocks
+from .likelihoods import Likelihoods
 
 
 __all__ = [
@@ -111,10 +111,11 @@ class Objective:
     a comparison of its kind of likelihood (see Comparison and
     comparison_of), its residuals, of each value of its data, and the
     terms of the chi-square beyond them (e.g. the noise residuals of a
-    fitted noise; see LikelihoodGauss). The objective sums them. The
-    models of the observations without data are evaluated alongside (e.g.
-    a prediction of a band without data, at the values a fit finds; see
-    GroupPlan.model_d), and compare nothing.
+    fitted noise; see LikelihoodGauss). The objective sums them. It
+    evaluates the models of those observations only: those of the others
+    (e.g. a prediction of a band without data, at the values a fit finds)
+    are evaluated by who wants them (see GroupPlan.model_h, and the
+    outputs of a setup).
 
     The elements of parameters can be solved at each evaluation, rather
     than fitted (see Solve and ParamSpace): those that the models are
@@ -175,7 +176,7 @@ class Objective:
         with data whose comparison can solve it (see
         Comparison.pointwise_form), nor an amplitude of the light that the
         models of observations with data are linear in (see
-        Component.light_amplitudes, Observable.linear_in_light and
+        Component.light_amplitudes, ObservationSky.linear_in_light and
         Comparison.linear_form), nor a weight of orbits; or the weights of
         the orbits of stars that observations with data see are not solved
         (see OrbitBlock).
@@ -207,7 +208,7 @@ class Objective:
         # comparison of each, by index
         self._observed = likelihoods.observations()
         self._datasets = tuple(
-            observations[i].data() for i in self._observed)
+            observations[i].dataset() for i in self._observed)
         self._comparisons = {
             i: comparison_of(observations[i], likelihood, drivers[i])
             for i, likelihood in likelihoods.items()}
@@ -277,12 +278,12 @@ class Objective:
         """Return the plan of the observations."""
         return self._group_plan
 
-    def with_data(self, datasets: Sequence[Dataset]) -> 'Objective':
+    def with_datasets(self, datasets: Sequence[Dataset]) -> 'Objective':
         """
         Return a copy of it with other data of the observations it compares
         (e.g. those of a bootstrap): one dataset for each, in the order of
         observations. Its plan shares what it can with its own (see
-        GroupPlan.with_data), and its comparisons share what they can with
+        GroupPlan.with_datasets), and its comparisons share what they can with
         its own (see Comparison.share): e.g. the refits of a bootstrap work
         out the whitening of correlated noise once.
 
@@ -297,7 +298,8 @@ class Objective:
                 f"the copy takes one dataset for each observation the "
                 f"objective compares ({len(self._observed)}); there are "
                 f"{len(datasets)}")
-        plan = self._group_plan.with_data(dict(zip(self._observed, datasets)))
+        plan = self._group_plan.with_datasets(
+            dict(zip(self._observed, datasets)))
         objective = Objective(
             plan, self._likelihoods.with_group(plan.group()), self._solves)
         for i, comparison_ in objective._comparisons.items():
@@ -348,7 +350,7 @@ class Objective:
             _, scale = observation.flux_scale()
             shape = tuple(
                 1 if scale.axis in (None, k) else n
-                for k, n in enumerate(observation.data().shape()))
+                for k, n in enumerate(observation.dataset().shape()))
             driver = self._group_plan.observation_drivers()[i]
             (self._h_scales[i],
              self._d_scales[i]) = driver.mem_alloc_s(
@@ -817,7 +819,7 @@ class Objective:
             if self._orbit_blocks:
                 with group_plan.timers().measure('objective_orbits'):
                     values = self._solve_orbits(values, solutions)
-            models = group_plan.model_d(values, out_extra)
+            models = group_plan.model_d(values, out_extra, self._observed)
             with group_plan.timers().measure('objective_residual_eval'):
                 scales = self._solve_scales(models, values, solutions)
                 for i, comparison_ in self._comparisons.items():

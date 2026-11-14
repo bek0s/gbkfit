@@ -380,7 +380,7 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     config['driver'] = dict(type=driver.type())
     observation = config['observations'][0]
     observation['instrument'] = {}
-    observation['observable'] = dict(
+    observation |= dict(
         type='pixel_spectra', size=[48, 48], step=[1, 1],
         spectral=dict(size=120, step=5, convention='relativistic'))
     plan = config_group_plan(config)
@@ -484,8 +484,7 @@ def test_the_clouds_of_a_pool_stay_when_another_changes(driver):
     from modelutils import group_plan
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(type='pixel_brightness', size=[40, 40], step=0.5),
-        line_of_sight=dict(type='grid'),
+        observation=dict(type='pixel_brightness', size=[40, 40], step=0.5),
         galaxy=dict(components=[dict(
             type='thick_disk', clouds=dict(cflux=1e-3, seed=3), loose=False,
             tilted=False,

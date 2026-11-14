@@ -17,7 +17,7 @@ from gbkfit.config import Family, Member
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.instrument import PSF, PSFGauss
 from gbkfit.model import Galaxy
-from gbkfit.observation import FittedNoise
+from gbkfit.objective import FittedNoise
 
 
 def test_members_of_families_have_their_options():

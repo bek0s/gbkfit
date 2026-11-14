@@ -1,6 +1,6 @@
 # fr_gravity_response: A gas disk rotating in Hu-Sawicki f(R) gravity (log_fr0) of a stellar disk, and an NFW halo contracted by it (gnedin04, screened); a profile observation of vcirc and the rotation of the gas at radii in arcsec, and small moment maps.
 # (written by make_golden.py; do not edit)
-version: 10
+version: 12
 driver: {type: host}
 galaxies:
 - components:
@@ -30,14 +30,14 @@ galaxies:
 observations:
 - type: profile
   name: rc
-  data:
+  dataset:
     file: rc_profile.ecsv
     radius: {column: radius}
     vcirc: {column: vcirc, mask: vcirc_mask, error: vcirc_error}
     rotation_gas: {column: rotation_gas, mask: rotation_gas_mask, error: rotation_gas_error}
-- type: sky
+- type: pixel_moments
   name: maps
-  data:
+  dataset:
     type: pixel_moments
     step: [1, 1]
     rpix: [7.5, 7.5]
@@ -47,18 +47,16 @@ observations:
     moment1: {data: maps_moment1_d.fits, mask: maps_moment1_m.fits, error: maps_moment1_e.fits}
     moment2: {data: maps_moment2_d.fits, mask: maps_moment2_m.fits, error: maps_moment2_e.fits}
   dtype: float64
-  line_of_sight: {type: flat}
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20.0 km s-1}
-  observable:
-    type: pixel_moments
-    spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
-    flux_floor: 1.0e-06
-    method: moments
-    median_size: null
+  spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
+  flux_floor: 1.0e-06
+  method: moments
+  median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
 likelihoods:

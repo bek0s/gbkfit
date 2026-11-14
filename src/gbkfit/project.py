@@ -5,7 +5,8 @@ setups, one piece per file:
     gbkfit-project.yaml       the marker of the project (its format)
     galaxies/<name>.yaml      a galaxy (an item of the section 'galaxies')
     observations/<name>.yaml  an observation (of 'observations')
-    datasets/<name>.yaml      a dataset (the option 'data' of an observation)
+    datasets/<name>.yaml      a dataset (the option 'dataset' of an
+                              observation)
     psfs/<name>.yaml          a PSF (the option 'psf' of an instrument)
     lsfs/<name>.yaml          an LSF (the option 'lsf' of an instrument)
     noise/<name>.yaml         a noise (the option 'noise' of the mock data)
@@ -18,7 +19,7 @@ setups, one piece per file:
 The name of a piece is the path of its file in the folder of its kind,
 without .yaml, and can have folders (e.g. 'ngc1313/hi'). In the sections
 galaxies, observations, params and fitter of a configuration in a
-project, in the options data, instrument.psf and instrument.lsf of its
+project, in the options dataset, instrument.psf and instrument.lsf of its
 observations, and in the option noise of its section mock, a string
 names a piece, and a dictionary is one in place. Of the pieces, only
 observations name others (their dataset, PSF and LSF). The section
@@ -61,7 +62,7 @@ MARKER = 'gbkfit-project.yaml'
 # The folders of the pieces, by the sections and options of the
 # configurations that name them (see the module)
 _FOLDERS = dict(
-    galaxies='galaxies', observations='observations', data='datasets',
+    galaxies='galaxies', observations='observations', dataset='datasets',
     psf='psfs', lsf='lsfs', noise='noise', params='params',
     fitter='fitters')
 
@@ -130,24 +131,21 @@ components:
 # An observation: here a cube of 48 x 48 spaxels of 1 arcsec and 40
 # channels of 10 km/s of radio velocities (as of HI; optical for lines of
 # ionised gas), with Gaussian PSF and LSF. To fit data, name a dataset of
-# the project (data: <name>), whose grid the grid here must then be (or
-# leave the grid out); the PSF and the LSF can be named too (psf: <name>,
-# lsf: <name>).
-type: sky
-observable:
-  type: pixel_spectra
-  size: [48, 48]
-  step: [1, 1]
-  spectral: {size: 40, step: 10, convention: radio}
-line_of_sight: {type: flat}
+# the project (dataset: <name>), whose grid the grid here must then be
+# (or leave the grid out); the PSF and the LSF can be named too (psf:
+# <name>, lsf: <name>).
+type: pixel_spectra
+size: [48, 48]
+step: [1, 1]
+spectral: {size: 40, step: 10, convention: radio}
 instrument:
   psf: {type: gauss, sigma: 1.5}
   lsf: {type: gauss, sigma: 15 km/s}
 """,
     'datasets': """\
 # A dataset: here a cube and its errors (FITS files; paths relative to the
-# project), of the type of the observable of the observations that name it
-# (data: <name>).
+# project), of the type of the observations that name it (dataset:
+# <name>).
 type: pixel_spectra
 data: data/cube.fits
 error: data/error.fits
@@ -248,7 +246,7 @@ class Project:
         ----------
         section : str
             The section, or the option, that names it (see the module):
-            'galaxies', 'observations', 'data', 'psf', 'lsf', 'noise',
+            'galaxies', 'observations', 'dataset', 'psf', 'lsf', 'noise',
             'params' or 'fitter'.
         name : str
             The name of the piece.
@@ -638,7 +636,7 @@ class Resolved(NamedTuple):
     sources, relative to its project: its file ('file'), the file of each
     item of its sections galaxies, observations and params (a list, of the
     layers), and of its fitter; the file of the dataset, the PSF and the
-    LSF of each observation ('data', 'psf' and 'lsf': lists, None for an
+    LSF of each observation ('dataset', 'psf' and 'lsf': lists, None for an
     observation without one), if any has one; the file of the noise of its
     mock data ('noise'; a dict by observation name if it is given by
     name); and the
@@ -702,7 +700,7 @@ def resolve(
                 _parts(project, item, i, sources[section][i], base)
                 for i, item in enumerate(loaded)]
             loaded = [observation for observation, _ in parts]
-            for key in ('data', 'psf', 'lsf'):
+            for key in ('dataset', 'psf', 'lsf'):
                 if any(key in found for _, found in parts):
                     sources[key] = [found.get(key) for _, found in parts]
         if section != 'params':
@@ -742,7 +740,7 @@ def _parts(
 ) -> tuple[Any, dict[str, str]]:
     """
     Return an observation (the item of the section observations at an
-    index) with the pieces that its options data, instrument.psf and
+    index) with the pieces that its options dataset, instrument.psf and
     instrument.lsf name in place, and the source of each of those options
     that it has, by name: the file of its piece, or that of the
     observation (source) if it is in place.
@@ -758,8 +756,8 @@ def _parts(
             else os.path.relpath(project.piece_file(key, value), base)
 
     with config_path('observations', index):
-        if 'data' in observation:
-            part(observation, 'data')
+        if 'dataset' in observation:
+            part(observation, 'dataset')
         if isinstance(observation.get('instrument'), Mapping):
             instrument = observation['instrument'] = dict(
                 observation['instrument'])
@@ -912,7 +910,7 @@ def _named(folder: str, content: Any) -> Iterator[tuple[Any, Any, str]]:
     def observation(options: Any) -> Iterator[Any]:
         if not isinstance(options, Mapping):
             return
-        yield from names(options, 'data', 'datasets')
+        yield from names(options, 'dataset', 'datasets')
         for key, target in (('psf', 'psfs'), ('lsf', 'lsfs')):
             yield from names(options.get('instrument'), key, target)
 

@@ -129,7 +129,7 @@ class ObservationGroup:
     The centres of the components (xpos, ypos) are measured from the
     origin of the frame of the first observation on the sky (see
     Observation.sky_frame): its reference pixel, at the RA and Dec of its
-    grid (see Observable.sky_rval). The other observations on the sky
+    grid (see ObservationSky.sky_rval). The other observations on the sky
     see them moved by where that origin is in their frames, from their
     RA and Dec: e.g. a cube whose reference pixel is 2 arcsec west of that
     of the first sees them at xpos - 2 in its frame (2 arcsec further east
@@ -153,8 +153,9 @@ class ObservationGroup:
     evaluation is planned on devices by plan (see GroupPlan), where the
     stage of each galaxy is evaluated once for all the observations of
     it. An objective compares the models of the observations with data
-    with them (see Objective), and evaluates those of the others
-    alongside (e.g. a prediction of a band without data).
+    with them (see Objective); those of the others are evaluated by who
+    wants them (e.g. a prediction of a band without data, see the outputs
+    of a setup).
 
     Options of setups that are given by observation (e.g. their
     likelihoods, see Likelihoods, or the noise of their mock data, see
@@ -170,11 +171,11 @@ class ObservationGroup:
     depth_order : Sequence of str or DepthGroup, optional
         The galaxies along the line of sight, front to back, by name, or
         in groups of galaxies that can pass through each other (see
-        DepthGroup): an observation of several galaxies through radiative
-        transfer (see LineOfSightTransfer) marches them in this order,
-        which it needs when one of them has opacity (the light of each is
-        dimmed by the opacity of those in front of it), and then of all of
-        them. In configurations, a group is {name: [galaxies]}.
+        DepthGroup): an observation of several galaxies of which one has
+        opacity marches them in this order by radiative transfer (the
+        light of each is dimmed by the opacity of those in front of it;
+        see Scene.evaluation), and needs it then of all of them. In
+        configurations, a group is {name: [galaxies]}.
     cosmology : Cosmology, optional
         The cosmology of the galaxies, that of their setup (see
         Galaxy.plan_stage); Planck18 by default (see
@@ -367,7 +368,7 @@ class ObservationGroup:
         """
         return tuple(
             i for i, member in enumerate(self._members)
-            if member.observation.data() is not None)
+            if member.observation.dataset() is not None)
 
     def per_observation[T](
             self,
@@ -558,11 +559,11 @@ class ObservationGroup:
         """
         return self._galaxies[index].mass_model() is None
 
-    def with_data(self, datasets: Mapping[int, Dataset]) -> Self:
+    def with_datasets(self, datasets: Mapping[int, Dataset]) -> Self:
         """
         Return a copy of the group with other data of some of its
         observations (e.g. those of a bootstrap, or mock data; see
-        Observation.with_data): the others keep theirs, or have none. Its
+        Observation.with_dataset): the others keep theirs, or have none. Its
         parameters are those of this one (the data do not change them).
 
         Parameters
@@ -589,7 +590,7 @@ class ObservationGroup:
         group = copy.copy(self)
         group._members = tuple(
             member if i not in datasets else member._replace(
-                observation=member.observation.with_data(datasets[i]))
+                observation=member.observation.with_dataset(datasets[i]))
             for i, member in enumerate(self._members))
         # (what an observation can see may depend on its data: e.g. the
         # radii of a profile are those of its data, and radii in angles

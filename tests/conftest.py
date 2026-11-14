@@ -75,3 +75,22 @@ def _run_in_tmp_path(tmp_path, monkeypatch):
     gbkfit write their output files to the current working directory.
     """
     monkeypatch.chdir(tmp_path)
+
+
+@pytest.fixture
+def force_evaluation(monkeypatch):
+    """
+    Return a function that makes the scenes of the observations planned
+    from then on in the test be evaluated as given (a SceneEvaluation of
+    gbkfit.model, or its value: 'plane', 'depth' or 'transfer') instead
+    of as their components need (see Scene.evaluation): for the tests
+    that compare the evaluations of one scene that can evaluate it (e.g.
+    a thin disk on the plane of the sky and on a depth axis, which give
+    the same model).
+    """
+    from gbkfit.model import Scene, SceneEvaluation
+
+    def force(evaluation):
+        evaluation = SceneEvaluation(evaluation)
+        monkeypatch.setattr(Scene, 'evaluation', lambda self: evaluation)
+    return force

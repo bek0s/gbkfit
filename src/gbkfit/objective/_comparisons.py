@@ -12,11 +12,11 @@ from typing import NamedTuple
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.observation import (
-    Likelihood, LikelihoodGauss, LikelihoodUser, LinearPieces, ModelData,
-    Observation, UpperLimit, channel_mask)
+from gbkfit.observation import LinearPieces, ModelData, Observation
 from gbkfit.params import ParamValues
 from ._whitening import Whitener, whitening
+from .likelihoods import (
+    Likelihood, LikelihoodGauss, LikelihoodUser, UpperLimit, channel_mask)
 
 
 __all__ = [
@@ -75,7 +75,7 @@ class Comparison(abc.ABC):
         self._observation = observation
         self._likelihood = likelihood
         self._driver = driver
-        self._dataset = observation.data()
+        self._dataset = observation.dataset()
         # The number of values of each data item that the data do not mask
         # (over which the pixel weights of the model are normalised; see
         # _pixel_weight)
@@ -162,7 +162,7 @@ class Comparison(abc.ABC):
     def share(self, other: 'Comparison') -> None:
         """
         Take what it can share with a comparison of the same observation
-        with other data, before it is prepared (see Objective.with_data):
+        with other data, before it is prepared (see Objective.with_datasets):
         nothing here.
         """
 
@@ -744,8 +744,8 @@ class ComparisonGauss(Comparison):
         linear in the model (see Comparison.linear_form), or None if they
         are: a data item with an upper limit, whose residuals of the
         values below it are not. (The residual of a value missing from
-        the model is a constant: the models of observables linear in the
-        light have every value, see Observable.linear_in_light.)
+        the model is a constant: the models of observations linear in the
+        light have every value, see ObservationSky.linear_in_light.)
         """
         for key in keys:
             if key in self._upper_limits:

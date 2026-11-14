@@ -1,5 +1,5 @@
 """
-Helpers shared by the observables of moments: what needs their scene,
+Helpers shared by the observations of moments: what needs their scene,
 instrument or model cube (the moments themselves, their names and their
 measurement, are those of gbkfit.moments).
 """
@@ -17,12 +17,13 @@ from gbkfit.model import STARS, LineEmission, StarsEmission
 from gbkfit.moments import DeviceMomentMaps
 from gbkfit.utils import numutils
 from . import _model_cube
-from .base import ModelData, ModelItem, ObservationSetup
+from ..plan import ModelData, ModelItem
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
-    from .pixel_moments import PixelMoments
-    from .region_moments import RegionMoments
+    from .base import SkyOptions
+    from .pixel_moments import ObservationPixelMoments
+    from .region_moments import ObservationRegionMoments
 
 
 _log = logging.getLogger(__name__)
@@ -132,30 +133,30 @@ def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
 
 
 def spectra_model_cube(
-        observable: 'PixelMoments | RegionMoments',
-        setup: ObservationSetup,
+        observation: 'ObservationPixelMoments | ObservationRegionMoments',
+        options: 'SkyOptions',
         median_size: int | None = None
 ) -> _model_cube.ModelCube:
     """
-    Return the ModelCube of the spectra that the moments of an observable are
-    measured from, as an observation of the given setup sees them (see
-    ObservationSetup): on its spatial grid and its spectral axis (see
+    Return the ModelCube of the spectra that the moments of an
+    observation are measured from, as it sees them with its options (see
+    SkyOptions): on its spatial grid and its spectral axis (see
     spectral_axis), smoothed by the median filter of median_size (if
     given; see ModelCube).
     """
-    grid = observable.grid()
+    grid = observation.grid()
     coords = grid.coords
     return _model_cube.ModelCube(
         make_cube_grid(
             grid.size, coords.step, coords.rpix, coords.rval, coords.rota,
-            observable.spectral()),
-        oversampling=setup.oversampling + (1,),
-        primary_beam=setup.instrument.primary_beam(),
-        psf=setup.instrument.psf(),
-        lsf=setup.instrument.lsf(),
+            observation.spectral()),
+        oversampling=options.oversampling + (1,),
+        primary_beam=options.instrument.primary_beam(),
+        psf=options.instrument.psf(),
+        lsf=options.instrument.lsf(),
         smooth_weights=False,
-        dtype=setup.dtype,
-        fft_dtype=setup.fft_dtype,
+        dtype=options.dtype,
+        fft_dtype=options.fft_dtype,
         median_size=median_size)
 
 

@@ -108,7 +108,7 @@ export function Viewer(props: ViewerProps) {
   return (
     <div className="gx-view">
       <div className="gx-toolbar">
-        <label className="gx-seen-by" title="As it is (fine pixels, no instrument), or as an observation of the project records it: its grid, PSF, LSF and line of sight">
+        <label className="gx-seen-by" title="As it is (fine pixels, no instrument), or as an observation of the project records it: its grid, PSF and LSF">
           <span>Seen by</span>
           <Choice
             items={[{ value: IDEAL, label: 'Nothing: as it is' }, ...observations.map((name) => ({ value: name, label: name }))]}

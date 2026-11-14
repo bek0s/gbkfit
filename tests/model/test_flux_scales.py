@@ -15,11 +15,11 @@ from gbkfit.dataset import Data, DatasetPixelMoments, DatasetPixelSpectra
 from gbkfit.fitting import FitProblem
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective
+from gbkfit.objective import (
+    FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods, Objective)
 from gbkfit.observation import (
-    FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods,
-    ObservationGroup, ObservationSky, PixelMoments, PixelSpectra,
-    line_of_sight_parser, noise_parser)
+    ObservationGroup, ObservationPixelMoments, ObservationPixelSpectra,
+    noise_parser)
 from gbkfit.params import ParamSpace, SolveGauss
 
 
@@ -51,9 +51,8 @@ def group_plan(driver, data, error):
         Data(data, error=np.full_like(data, error)), step=STEP[:2],
         spectral=SpectralAxis(step=STEP[2], convention='relativistic'))
     return ObservationGroup(
-        [galaxy_parser.load(GALAXY)], [ObservationSky(
-            PixelSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), data=dataset,
+        [galaxy_parser.load(GALAXY)], [ObservationPixelSpectra(
+            dataset=dataset,
             flux_scale='per_spectrum', name='obs')]
     ).plan(driver)
 
@@ -97,16 +96,15 @@ def best_scales(spectra, data, error):
     return np.maximum(b, 0) / a
 
 
-def config(driver, observables, flux_scale):
+def config(driver, kinds, flux_scale):
     """
-    A configuration of the disk seen as the given observables, by
-    observations named 'first' and 'second'; the first with the given
-    flux scale.
+    A configuration of the disk seen by observations of the given kinds
+    (their types and options), named 'first' and 'second'; the first with
+    the given flux scale.
     """
     observations = [
-        dict(type='sky', observable=observable,
-             line_of_sight=dict(type='flat'), name=name)
-        for observable, name in zip(observables, ['first', 'second'])]
+        kind | dict(name=name)
+        for kind, name in zip(kinds, ['first', 'second'])]
     observations[0]['flux_scale'] = flux_scale
     return dict(
         driver=dict(type=driver.type()), galaxies=[GALAXY],
@@ -116,7 +114,7 @@ def config(driver, observables, flux_scale):
 def test_a_flux_scale_of_one_value_scales_the_flux(driver):
     # Moment 0 of a scaled observation is times its scale; the velocities
     # (moment 1) and the other observations are not
-    observables = [
+    kinds = [
         dict(
             type='pixel_moments', size=[24, 24], orders=[0, 1],
             spectral=dict(convention='relativistic')),
@@ -125,7 +123,7 @@ def test_a_flux_scale_of_one_value_scales_the_flux(driver):
             spectral=dict(size=21, step=20, convention='relativistic'))]
 
     def evaluate(flux_scale):
-        plan = config_group_plan(config(driver, observables, flux_scale))
+        plan = config_group_plan(config(driver, kinds, flux_scale))
         scale = dict(first_flux_scale=2) if flux_scale else {}
         data = plan.model_h(
             ParamSpace.from_properties(
@@ -148,12 +146,10 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
             0: Data(moment0, error=np.full_like(moment0, 1e-3)),
             1: Data(moment1, error=np.full_like(moment1, 1.0))})
         return ObservationGroup(
-            [galaxy_parser.load(GALAXY)], [ObservationSky(
-                PixelMoments.from_data(
-                    dataset,
-                    spectral=SpectralAxis(size=21, step=20, convention='relativistic')),
-                line_of_sight_parser.load(dict(type='flat')), data=dataset,
-                flux_scale='one', name='obs')]
+            [galaxy_parser.load(GALAXY)], [ObservationPixelMoments(
+                spectral=SpectralAxis(
+                size=21, step=20, convention='relativistic'),
+                dataset=dataset, flux_scale='one', name='obs')]
         ).plan(driver)
     blank = moments(np.zeros(SIZE[1::-1]), np.zeros(SIZE[1::-1]))
     model = blank.model_h(ParamSpace.from_properties(
@@ -274,18 +270,15 @@ def test_a_likelihood_of_no_weight_has_no_terms_of_solved_scales(driver):
 
 def test_flux_scales_need_light_and_a_name():
     data = DatasetPixelMoments({1: Data(np.zeros((4, 4)))})
-    observable = PixelMoments.from_data(
-        data, spectral=SpectralAxis(convention='relativistic'))
     with pytest.raises(ValueError, match=r"has the flux scales \[\]"):
-        ObservationSky(
-            observable, line_of_sight_parser.load(dict(type='flat')),
-            data=data, flux_scale='one', name='obs')
+        ObservationPixelMoments(
+            SpectralAxis(convention='relativistic'), dataset=data,
+            flux_scale='one', name='obs')
     with pytest.raises(ValueError, match="needs a name"):
-        ObservationSky(
-            PixelSpectra.from_data(DatasetPixelSpectra(
+        ObservationPixelSpectra(
+            dataset=DatasetPixelSpectra(
                 Data(np.zeros((5, 4, 4))),
-                spectral=SpectralAxis(convention='relativistic'))),
-            line_of_sight_parser.load(dict(type='flat')),
+                spectral=SpectralAxis(convention='relativistic')),
             flux_scale='per_spectrum')
 
 

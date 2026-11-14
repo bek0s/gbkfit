@@ -1,6 +1,7 @@
 """
-Tests for the options of the galaxies and of the lines of sight of their
-observations: which components each kind of observation sees, and which
+Tests for the options of the galaxies and of the depth axes of their
+observations: which components each kind of observation sees, how the
+components decide its evaluation along the line of sight, and which
 options they accept and reject.
 """
 
@@ -10,10 +11,10 @@ import re
 import pytest
 from gbkfit.config import ConfigError, config_path, strict_mode
 from gbkfit.grid import Coords, Grid
-from gbkfit.model import Nodes, galaxy_parser
+from gbkfit.model import Nodes, SceneEvaluation, galaxy_parser
 from gbkfit.model.components._nodal import parse_component_rnode_args
 from gbkfit.observation import Depth
-from modelutils import config_group_plan, located_message
+from modelutils import config_group, config_group_plan, located_message
 
 
 EXPONENTIAL = dict(type='exponential')
@@ -40,46 +41,47 @@ COMPONENTS = dict(
     band_thin=BAND_THIN, band_thick=BAND_THICK, lines_thin=LINES_THIN,
     lines_thick=LINES_THICK, dust=DUST)
 
-FLAT = dict(type='flat')
-GRID = dict(type='grid')
-
 IMAGE = dict(type='pixel_brightness', size=[8, 8])
 CUBE = dict(
     type='pixel_spectra', size=[8, 8],
     spectral=dict(size=8, convention='relativistic'))
 
-# Each kind of observation (an image or a spectral cube, along a flat or
-# a grid line of sight): its observable and line of sight, and a
-# component it sees
+# Each kind of observation (an image or a spectral cube, of thin or
+# thick components): its observable, and a component it sees
 OBSERVATIONS = dict(
-    image_flat=(IMAGE, FLAT, BAND_THIN),
-    image_grid=(IMAGE, GRID, BAND_THICK),
-    cube_flat=(CUBE, FLAT, LINES_THIN),
-    cube_grid=(CUBE, GRID, LINES_THICK))
+    image_thin=(IMAGE, BAND_THIN),
+    image_thick=(IMAGE, BAND_THICK),
+    cube_thin=(CUBE, LINES_THIN),
+    cube_thick=(CUBE, LINES_THICK))
 
-FLAT_KINDS = ['image_flat', 'cube_flat']
-GRID_KINDS = ['image_grid', 'cube_grid']
+THIN_KINDS = ['image_thin', 'cube_thin']
 
-# A depth axis of a grid line of sight, other than the default one
+# A depth axis other than the default one
 DEPTH = dict(extent=10, step=1)
 
 
-def config(kind, components=None, line_of_sight=None):
+def config(kind, components=None, depth=None):
     """
     The configuration of an observation of the given kind, of a galaxy
     of the given components (by default, the one the observation sees),
-    with the given line of sight (by default, that of the kind).
+    with the given depth axis, if any.
     """
-    observable, default_line_of_sight, component = OBSERVATIONS[kind]
+    kind_options, component = OBSERVATIONS[kind]
     if components is None:
         components = [component]
-    if line_of_sight is None:
-        line_of_sight = default_line_of_sight
     return dict(
         galaxies=[dict(components=components)],
-        observations=[dict(
-            type='sky',
-            observable=observable, line_of_sight=line_of_sight)])
+        observations=[
+            kind_options | ({} if depth is None else dict(depth=depth))])
+
+
+def evaluation(info):
+    """
+    How the observation of a configuration is evaluated along the line of
+    sight (see Scene.evaluation), which the components it sees decide.
+    """
+    group = config_group(info)
+    return group.observations()[0]._scene(group.seen_by(0)).evaluation()
 
 
 def with_dust(kind):
@@ -87,7 +89,7 @@ def with_dust(kind):
     The components of a galaxy with dust: the one that the given kind of
     observation sees, and the dust (with names: there are two).
     """
-    _, _, component = OBSERVATIONS[kind]
+    _, component = OBSERVATIONS[kind]
     return [component | dict(name='stars'), DUST | dict(name='dust')]
 
 
@@ -123,15 +125,66 @@ def test_galaxies_without_components_need_mass(info):
     assert "a galaxy needs at least one component, or mass" in message
 
 
-@pytest.mark.parametrize('kind', FLAT_KINDS)
-def test_flat_lines_of_sight_do_not_see_mcdisks(kind):
+@pytest.mark.parametrize('kind, expected', [
+    ('image_thin', SceneEvaluation.PLANE),
+    ('cube_thin', SceneEvaluation.PLANE),
+    ('image_thick', SceneEvaluation.DEPTH),
+    ('cube_thick', SceneEvaluation.DEPTH)])
+def test_thick_components_need_a_depth_axis(kind, expected):
+    # Thin components are seen on the plane of the sky, thick ones on a
+    # depth axis
+    assert evaluation(config(kind)) is expected
+
+
+@pytest.mark.parametrize('kind', THIN_KINDS)
+def test_monte_carlo_disks_need_a_depth_axis(kind):
     # A Monte Carlo disk is thick
-    _, _, component = OBSERVATIONS[kind]
+    _, component = OBSERVATIONS[kind]
     mcdisk = component | dict(
         type='thick_disk', clouds=dict(cflux=1e-3), **THICK)
-    message = load_error(config(kind, [mcdisk]))
-    assert "a thick component needs a line of sight with a depth axis" \
-        in message
+    assert evaluation(config(kind, [mcdisk])) is SceneEvaluation.DEPTH
+
+
+@pytest.mark.parametrize('kind', OBSERVATIONS)
+def test_dust_needs_a_depth_axis(kind):
+    # Each galaxy is dimmed by its own dust on a depth axis, even when it
+    # is seen by thin components only
+    assert evaluation(config(kind, with_dust(kind))) \
+        is SceneEvaluation.DEPTH
+
+
+def test_line_opacity_needs_radiative_transfer():
+    gas = LINES_THICK | dict(opacity=dict(
+        type='line', coefficients=dict(type='uniform')))
+    assert evaluation(config('cube_thick', [gas])) \
+        is SceneEvaluation.TRANSFER
+
+
+def two_galaxies(kind, depth_order):
+    """
+    The configuration of an observation of the given kind of two
+    galaxies, a and b, of the component it sees, and b of dust too, in
+    the given order along the line of sight, if any.
+    """
+    _, component = OBSERVATIONS[kind]
+    info = config(kind)
+    info['galaxies'] = [
+        dict(name='a', components=[component]),
+        dict(name='b', components=with_dust(kind))]
+    info['observations'][0]['galaxies'] = ['a', 'b']
+    if depth_order is not None:
+        info['depth_order'] = depth_order
+    return info
+
+
+@pytest.mark.parametrize('kind', OBSERVATIONS)
+def test_galaxies_that_dim_one_another_need_radiative_transfer(kind):
+    # The dust of each dims the light of those behind it: radiative
+    # transfer marches them front to back, in their order, of all of them
+    assert evaluation(two_galaxies(kind, ['b', 'a'])) \
+        is SceneEvaluation.TRANSFER
+    message = load_error(two_galaxies(kind, None))
+    assert "must place the galaxies ['a', 'b']" in message
 
 
 IMAGE_SEES_NONE = (
@@ -140,26 +193,21 @@ IMAGE_SEES_NONE = (
 CUBE_SEES_NONE = (
     "the observation is a spectral cube, which sees the components that "
     "emit lines (and stars, when its lines name 'stars'); it sees none")
-FLAT_SEES_NO_THICK = (
-    "a thick component needs a line of sight with a depth axis "
-    "(grid or transfer)")
 
 
 @pytest.mark.parametrize('kind, component, message', [
-    ('image_flat', LINES_THIN, IMAGE_SEES_NONE),
-    ('image_grid', LINES_THICK, IMAGE_SEES_NONE),
-    ('cube_flat', BAND_THIN, CUBE_SEES_NONE),
-    ('cube_grid', BAND_THICK, CUBE_SEES_NONE),
-    ('image_grid', DUST, IMAGE_SEES_NONE),
-    ('cube_grid', DUST, CUBE_SEES_NONE),
-    ('cube_flat', LINES_THICK, FLAT_SEES_NO_THICK),
-    ('image_flat', BAND_THICK, FLAT_SEES_NO_THICK)])
+    ('image_thin', LINES_THIN, IMAGE_SEES_NONE),
+    ('image_thick', LINES_THICK, IMAGE_SEES_NONE),
+    ('cube_thin', BAND_THIN, CUBE_SEES_NONE),
+    ('cube_thick', BAND_THICK, CUBE_SEES_NONE),
+    ('image_thick', DUST, IMAGE_SEES_NONE),
+    ('cube_thick', DUST, CUBE_SEES_NONE)])
 def test_observations_reject_components_of_other_kinds(
         kind, component, message):
     assert message in load_error(config(kind, [component]))
 
 
-@pytest.mark.parametrize('kind', GRID_KINDS)
+@pytest.mark.parametrize('kind', OBSERVATIONS)
 def test_opacity_cannot_be_selected(kind):
     # The opacity of every component applies: an observation selects the
     # components whose light it sees
@@ -170,27 +218,11 @@ def test_opacity_cannot_be_selected(kind):
         in message
 
 
-@pytest.mark.parametrize('kind', GRID_KINDS)
-def test_grids_have_depth_options(kind):
-    config_group_plan(
-        config(kind, with_dust(kind), GRID | dict(depth=DEPTH)))
-
-
-@pytest.mark.parametrize('kind', FLAT_KINDS)
-def test_flat_lines_of_sight_have_no_depth(kind):
-    line_of_sight = FLAT | dict(depth=DEPTH)
-    message = load_error(config(kind, line_of_sight=line_of_sight))
-    assert message.startswith(
-        "observations[0].line_of_sight [flat]: unknown options")
-    assert "'depth'" in message
-
-
-@pytest.mark.parametrize('kind', FLAT_KINDS)
-def test_flat_lines_of_sight_see_no_opacity(kind):
-    message = load_error(config(kind, with_dust(kind)))
-    assert "component 'dust': " in message
-    assert "needs a line of sight with a depth axis (grid or transfer)" \
-        in message
+@pytest.mark.parametrize('kind', OBSERVATIONS)
+def test_depth_options_are_taken(kind):
+    # (those of an observation that needs no depth axis apply to nothing)
+    config_group_plan(config(kind, depth=DEPTH | dict(slab=2)))
+    config_group_plan(config(kind, with_dust(kind), DEPTH))
 
 
 @pytest.mark.parametrize('options, message', [
@@ -199,9 +231,8 @@ def test_flat_lines_of_sight_see_no_opacity(kind):
     (dict(extent='half'), "'extent' must be 'galaxy', 'legacy' or"),
     (dict(step=0), "'step' must be greater than 0")])
 def test_invalid_depths_are_rejected(options, message):
-    line_of_sight = GRID | dict(depth=options)
-    error = load_error(config('image_grid', line_of_sight=line_of_sight))
-    assert error.startswith("observations[0].line_of_sight.depth: ")
+    error = load_error(config('image_thick', depth=options))
+    assert error.startswith("observations[0].depth: ")
     assert message in error
 
 

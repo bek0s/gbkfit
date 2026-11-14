@@ -160,10 +160,9 @@ def case_and_properties(driver, kind, dust, config):
         properties |= prefixed('dust', GEOMETRY | dust_values)
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[32, 32], step=[1, 1],
             spectral=dict(size=40, step=10, convention='relativistic')),
-        line_of_sight=dict(type='grid'),
         galaxy=dict(components=components))
     tested = 'dust' if dust else 'disk'
     return case, properties, f'{tested}_{kind}_'

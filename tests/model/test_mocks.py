@@ -9,7 +9,7 @@ import gbkfit.params
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
+from gbkfit.config import FORMAT_VERSION, ConfigError
 from gbkfit.model import Extras
 from gbkfit.observation import (
     MockOptions, NoiseGauss, NoisePoisson, draw_mocks)
@@ -48,8 +48,7 @@ def plan_of(driver, observable):
         else 'lines'
     return group_plan([dict(
         driver=dict(type=driver.type()), galaxy=dict(
-            components=[disk(emission)]),
-        line_of_sight=dict(type='flat'), observable=observable)])
+            components=[disk(emission)]), observation=observable)])
 
 
 def evaluate(plan):
@@ -120,14 +119,15 @@ def test_setups_mock_observations_for_fits_under_their_likelihoods(
     # (the likelihoods of a setup without data are those of the fits of
     # its mocks, as a configuration of them takes them)
     from gbkfit import Setup
-    from gbkfit.observation import (
-        LikelihoodGauss, Likelihoods, ObservationGroup)
+    from gbkfit.objective import LikelihoodGauss, Likelihoods
+    from gbkfit.observation import ObservationGroup
     plan = plan_of(
         driver, dict(type='pixel_brightness') | RECORDED['pixel_brightness'])
     group = plan.group()
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
-    likelihoods = Likelihoods(group, LikelihoodGauss(white_floor=0.2))
+    likelihoods = Likelihoods(
+        group, LikelihoodGauss(white_floor=0.2), mocked=True)
     options = MockOptions(NoiseGauss(rms=0.01), nmocks=2, seed=1)
     with Setup(
             group, params, likelihoods, driver=driver,
@@ -135,7 +135,7 @@ def test_setups_mock_observations_for_fits_under_their_likelihoods(
         mocks = setup.mock(params.evaluate())
     assert [len(mock) for mock in mocks] == [1, 1]
     for [mock] in mocks:
-        assert mock.data() is not None
+        assert mock.dataset() is not None
         fitted = likelihoods.with_group(
             ObservationGroup(group.galaxies(), [mock]))
         assert fitted.observations() == (0,)
@@ -156,7 +156,7 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
     data = observation.make_dataset({'spectra': Data(
         model['spectra'], error=np.full_like(model['spectra'], 0.01),
         unit='Jy/beam', beam=dict(bmaj=4, bmin=3, bpa=10))})
-    plan = plan.with_data({0: data})
+    plan = plan.with_datasets({0: data})
     [mock] = mock_data(
         plan, params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
         seed=1)
@@ -164,7 +164,7 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
     assert mock['spectra'].beam() == data['spectra'].beam()
     assert mock['spectra'].spatial_correlation() \
         == observation.instrument().psf()
-    with Objective(plan.with_data({0: mock})) as objective:
+    with Objective(plan.with_datasets({0: mock})) as objective:
         assert objective.nindependent() < objective.nresiduals()
 
 
@@ -182,7 +182,7 @@ def test_mocks_without_data_have_the_unit_and_beam_of_their_model(
         type='lines', lines=['hi21'], unit='Msun/pc2'))
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=dict(components=[hi]),
-        line_of_sight=dict(type='flat'), observable=dict(
+        observation=dict(
             type='pixel_spectra', psf=psf) | RECORDED['pixel_spectra']
         | dict(spectral=dict(
             size=31, step=20, rest='1420.405751768 MHz')),
@@ -199,7 +199,7 @@ def test_mocks_without_data_have_the_unit_and_beam_of_their_model(
     else:
         assert beam.bmaj == beam.bmin
     mocked = ObservationGroup(
-        plan.group().galaxies(), [observation.with_data(mock)])
+        plan.group().galaxies(), [observation.with_dataset(mock)])
     np.testing.assert_allclose(
         evaluate(mocked.plan(driver))[0]['spectra'], model['spectra'],
         rtol=1e-6)
@@ -218,7 +218,7 @@ def test_mocks_of_correlated_noise_have_float64_models(driver):
     [mock] = mock_data(
         plan, params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
         seed=1)
-    mocked = evaluate(plan.with_data({0: mock}))[0]['spectra']
+    mocked = evaluate(plan.with_datasets({0: mock}))[0]['spectra']
     assert mocked.dtype == np.float64
     np.testing.assert_allclose(
         mocked, model['spectra'], rtol=1e-5,
@@ -315,8 +315,8 @@ def named_images(*names):
     return ObservationGroup(
         galaxy_parser.load(dict(components=[disk('band')])),
         observation_parser.load([
-            dict(type='sky', name=name, line_of_sight=dict(type='flat'),
-                 observable=dict(type='pixel_brightness', size=[4, 4]))
+            dict(type='pixel_brightness', name=name,
+                 size=[4, 4])
             for name in names]))
 
 
@@ -351,3 +351,83 @@ def test_mock_options_dump_the_noise_of_each_observation(tmp_path):
     noises = MockOptions.load(info).noises(named_images('hi', 'ha'))
     for noise, error in zip(noises, errors):
         np.testing.assert_array_equal(noise.error(), error)
+
+
+@pytest.mark.parametrize('name', ['pixel_brightness', 'pixel_spectra'])
+def test_mocks_of_an_observation_without_data_share_its_plan(driver, name):
+    # (its plan takes nothing of mock data without a unit: the light of
+    # the components as it is, as without data; see Observation.same_plan)
+    plan = plan_of(driver, dict(type=name) | RECORDED[name])
+    model, _, params = evaluate(plan)
+    [dataset] = mock_data(plan, params, NoiseGauss(rms=0.01))
+    copy = plan.with_datasets({0: dataset})
+    assert copy._plans[0] is plan._plans[0]
+    np.testing.assert_array_equal(
+        next(iter(copy.model_h(params)[0].values())).data,
+        next(iter(model.values())))
+
+
+def test_data_without_a_unit_take_no_light_of_a_unit(driver):
+    # (checked with the observation, also of a copy that shares its plan)
+    image = dict(type='pixel_brightness') | RECORDED['pixel_brightness']
+    plan = plan_of(driver, image)
+    _, _, params = evaluate(plan)
+    [dataset] = mock_data(plan, params, NoiseGauss(rms=0.01))
+    lit = group_plan([dict(
+        driver=dict(type=driver.type()), observation=image,
+        galaxy=dict(components=[disk('band') | dict(
+            emission=dict(type='band', unit='MJy/sr'))]),
+        unit='MJy/sr')])
+    with pytest.raises(ValueError, match="the data have no unit"):
+        lit.with_datasets({0: dataset})
+
+
+def mock_setup_config(observable, likelihoods=None):
+    """
+    A configuration of mock data of an observation 'img' of a disk, with
+    the given section likelihoods, if any.
+    """
+    emission = 'band' if observable['type'] == 'pixel_brightness' \
+        else 'lines'
+    return dict(
+        version=FORMAT_VERSION, driver=dict(type='host'),
+        galaxies=[dict(components=[disk(emission)])],
+        observations=[observable | dict(name='img')],
+        params=dict(properties=dict(PROPERTIES)),
+        mock=dict(noise=dict(type='gauss', rms=0.01), seed=1)) | (
+        {} if likelihoods is None else dict(likelihoods=likelihoods))
+
+
+def test_fits_of_mocks_have_the_parameters_of_their_likelihoods():
+    # A fitted noise of an observation without data, in a setup of mock
+    # data: its parameter is the setup's, and that of the fit of a mock
+    import gbkfit
+    from gbkfit import Setup
+    from gbkfit.observation import ObservationGroup
+    image = dict(type='pixel_brightness') | RECORDED['pixel_brightness']
+    config = mock_setup_config(image, dict(
+        type='gauss',
+        fitted_noise=dict(brightness=dict(scale=True, scale_min=0.1))))
+    config['params']['properties'] |= dict(
+        img_noise_scale_brightness=dict(value=1, min=0.5, max=2))
+    with gbkfit.load(config) as setup:
+        assert 'img_noise_scale_brightness' in setup.params().pdescs()
+        [[mock]] = setup.mock(setup.evaluate().values)
+        group = ObservationGroup(setup.group().galaxies(), [mock])
+        with Setup(group, setup.params(),
+                   setup.likelihoods().with_group(group)) as fit:
+            evaluation = fit.evaluate()
+    assert np.isfinite(evaluation.objective.merits.chi2)
+
+
+def test_a_setup_of_mocks_checks_the_likelihoods_of_their_fits():
+    # The Gaussian of moment maps, by default, needs a missing_residual:
+    # the setup of mock data says so, rather than the fit of its mocks
+    import gbkfit
+    moments = dict(type='pixel_moments', size=[16, 17], spectral=dict(
+        size=31, step=20, convention='relativistic'))
+    with pytest.raises(ValueError, match="missing_residual"):
+        gbkfit.load(mock_setup_config(moments))
+    with gbkfit.load(mock_setup_config(
+            moments, dict(type='gauss', missing_residual=3))) as setup:
+        assert setup.likelihoods().of(0).takes_missing_values()

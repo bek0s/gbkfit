@@ -69,14 +69,12 @@ def unbalanced(disk, dptraits):
 def evaluate(driver, galaxy_, properties):
     """Evaluate a spectral cube of a galaxy, along a line of sight grid."""
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
+        ObservationGroup, ObservationPixelSpectra)
     from gbkfit.params import ParamSpace
-    group = ObservationGroup([galaxy_], [ObservationSky(
-        PixelSpectra(
-            size=(32, 32), step=(1, 1),
-            spectral=SpectralAxis(
-                size=51, step=10, convention='relativistic')),
-        line_of_sight_parser.load(dict(type='grid')))])
+    group = ObservationGroup([galaxy_], [ObservationPixelSpectra(
+        size=(32, 32), step=(1, 1),
+        spectral=SpectralAxis(
+            size=51, step=10, convention='relativistic'))])
     params = ParamSpace.from_properties(group.pdescs(), properties)
     return group.plan(driver).model_h(
         params.evaluate())[0]['spectra'].data.copy()

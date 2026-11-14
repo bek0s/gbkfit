@@ -33,20 +33,20 @@ GEOMETRY = dict(xpos=1.5, ypos=-1, posa=30, incl=60)
 STEP = 0.5
 
 
-def image(driver, spheroid, dtype='float32', size=64, flat=False):
+def image(driver, spheroid, dtype='float32', size=64):
     """
     A case of an image of size by size pixels of STEP arcsec of a
-    spheroid, with a depth axis of voxels of 0.25 arcsec, or without one
-    (flat).
+    spheroid, with a depth axis of voxels of 0.25 arcsec, if it is
+    evaluated on one: an image sees the projection of a spheroid on the
+    plane of the sky, unless the tests force a depth axis (see
+    force_evaluation), or another component needs one.
     """
-    line_of_sight = dict(type='flat') if flat \
-        else dict(type='grid', depth=dict(step=0.25))
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_brightness', size=[size, size], step=[STEP, STEP],
             dtype=dtype),
-        line_of_sight=line_of_sight,
+        depth=dict(step=0.25),
         galaxy=dict(components=[spheroid]))
 
 
@@ -76,7 +76,8 @@ def sersic_light(n, ie, re):
         * scipy.special.gamma(2 * n)
 
 
-def test_a_flattened_sersic_spheroid_projects_exactly(driver, evaluate_cases):
+def test_a_flattened_sersic_spheroid_projects_exactly(
+        driver, evaluate_cases, force_evaluation):
     # Seen at the inclination i, the density rho_sph(m) / q of axis ratio q
     # projects to Sigma_sph(m') / q', m'^2 = x'^2 + y'^2 / q'^2: the Sersic
     # profile of the sphere, of the axis ratio q'. Away from the centre
@@ -88,6 +89,7 @@ def test_a_flattened_sersic_spheroid_projects_exactly(driver, evaluate_cases):
         type='spheroid', profile=dict(type='sersic'),
         shape=dict(type='flattened'), rmax=21, emission=BAND)
     properties = GEOMETRY | dict(ie=2, re=3, n=1, q=0.6)
+    force_evaluation('depth')
     data, _ = evaluate_cases(
         [image(driver, spheroid, size=96)], properties)
     major, minor, projected = sky_frame(**GEOMETRY, size=96)
@@ -102,7 +104,8 @@ def test_a_flattened_sersic_spheroid_projects_exactly(driver, evaluate_cases):
     assert flux == pytest.approx(sersic_light(1, 2, 3), rel=2e-3)
 
 
-def test_an_mge_spheroid_projects_exactly(driver, evaluate_cases):
+def test_an_mge_spheroid_projects_exactly(
+        driver, evaluate_cases, force_evaluation):
     # Gaussian k of axis ratio q_k projects to i0_k / q'_k exp(-(x'^2 +
     # y'^2 / q'_k^2) / (2 sigma_k^2)), of the light 2 pi i0_k sigma_k^2.
     # The voxels within 3 voxel diagonals (2.25 arcsec) of the centre hold
@@ -114,6 +117,7 @@ def test_an_mge_spheroid_projects_exactly(driver, evaluate_cases):
         emission=BAND)
     i0, sigma, q = [3, 1], [0.8, 2.5], [0.9, 0.4]
     properties = GEOMETRY | dict(i0=i0, sigma=sigma, q=q)
+    force_evaluation('depth')
     data, _ = evaluate_cases([image(driver, spheroid)], properties)
     major, minor, projected = sky_frame(**GEOMETRY)
     expected = sum(
@@ -143,7 +147,7 @@ def test_without_a_depth_axis_a_spheroid_is_its_exact_projection(
     spheroid = dict(
         type='spheroid', profile=profile, rmax=1, emission=BAND) | shape
     data, _ = evaluate_cases(
-        [image(driver, spheroid, 'float64', flat=True)],
+        [image(driver, spheroid, 'float64')],
         GEOMETRY | properties)
     major, minor, projected = sky_frame(**GEOMETRY)
     if profile['type'] == 'sersic':
@@ -164,16 +168,19 @@ def test_without_a_depth_axis_a_spheroid_is_its_exact_projection(
 
 
 def test_with_and_without_a_depth_axis_a_spheroid_agrees(
-        driver, evaluate_cases):
-    # Its voxels, summed along the line of sight, and its projection
+        driver, evaluate_cases, force_evaluation):
+    # Its voxels, summed along the line of sight, and its projection (that
+    # of an image of it alone)
     spheroid = dict(
         type='spheroid', profile=dict(type='sersic'),
         shape=dict(type='flattened'), rmax=21, emission=BAND)
     properties = GEOMETRY | dict(ie=2, re=3, n=1, q=0.6)
+    force_evaluation('depth')
     (grid,), _ = evaluate_cases(
         [image(driver, spheroid, size=96)], properties)
+    force_evaluation('plane')
     (flat,), _ = evaluate_cases(
-        [image(driver, spheroid, size=96, flat=True)], properties)
+        [image(driver, spheroid, size=96)], properties)
     grid, flat = grid['brightness'].data, flat['brightness'].data
     bright = flat > 1e-2 * flat.max()
     np.testing.assert_allclose(grid[bright], flat[bright], rtol=5e-3)
@@ -181,7 +188,7 @@ def test_with_and_without_a_depth_axis_a_spheroid_agrees(
 
 @pytest.mark.parametrize('dtype', ['float32', 'float64'])
 def test_the_cusp_of_a_sersic_sphere_keeps_its_light(
-        driver, evaluate_cases, dtype):
+        driver, evaluate_cases, force_evaluation, dtype):
     # The density of n = 4 is infinite at the centre: the voxels there hold
     # its mean along the line of sight, and the image is finite, with the
     # light of the sphere within rmax: the total times the share of the
@@ -193,8 +200,9 @@ def test_the_cusp_of_a_sersic_sphere_keeps_its_light(
         type='spheroid', profile=dict(type='sersic'), rmax=12,
         emission=BAND)
     properties = dict(xpos=0, ypos=0, ie=1, re=2, n=4)
+    force_evaluation('depth')
     case = image(driver, spheroid, dtype)
-    case['observable'] |= dict(oversampling=[3, 3])
+    case['observation'] |= dict(oversampling=[3, 3])
     data, _ = evaluate_cases([case], properties)
     model = data[0]['brightness'].data
     assert np.isfinite(model).all()
@@ -205,7 +213,7 @@ def test_the_cusp_of_a_sersic_sphere_keeps_its_light(
 
 @pytest.mark.parametrize('q', [0.5, 1.6])
 def test_rmax_cuts_each_term_at_its_spheroidal_radius(
-        driver, evaluate_cases, q):
+        driver, evaluate_cases, force_evaluation, q):
     # A Gaussian of sigma 3 arcsec cut at m = rmax / max(1, q) (rmax 6):
     # the light left is the total times one minus the share that the
     # warning reports (see LightMGE.cut), up to the voxels along the edge
@@ -213,6 +221,7 @@ def test_rmax_cuts_each_term_at_its_spheroidal_radius(
         type='spheroid', profile=dict(type='mge', ngauss=1), rmax=6,
         emission=BAND)
     properties = GEOMETRY | dict(i0=[1], sigma=[3], q=[q])
+    force_evaluation('depth')
     data, _ = evaluate_cases([image(driver, spheroid)], properties)
     flux = data[0]['brightness'].data.sum() * STEP ** 2
     _, cut = component_parser.load(dict(spheroid)).extent_cut(properties)
@@ -222,12 +231,13 @@ def test_rmax_cuts_each_term_at_its_spheroidal_radius(
 
 @pytest.mark.parametrize('rmax, warns', [(4, True), (12, False)])
 def test_a_warning_says_when_rmax_cuts_the_light(
-        driver, evaluate_cases, caplog, rmax, warns):
+        driver, evaluate_cases, force_evaluation, caplog, rmax, warns):
     # A sphere of n = 1 has 25% of its light beyond 2 re (rmax 4 for re of
     # 2 arcsec), and 0.1% beyond 6 re (rmax 12)
     spheroid = dict(
         type='spheroid', profile=dict(type='sersic'), rmax=rmax,
         emission=BAND)
+    force_evaluation('depth')
     evaluate_cases(
         [image(driver, spheroid)], dict(xpos=0, ypos=0, ie=1, re=2, n=1))
     assert ('its rmax cuts' in caplog.text) == warns
@@ -239,7 +249,7 @@ def test_a_warning_says_when_rmax_cuts_the_light(
     (dict(type='mge', ngauss=2), dict(i0=[1, 2], sigma=[1, 2], q=[0, 0.9])),
 ])
 def test_a_scale_or_an_axis_ratio_of_zero_gives_no_model(
-        driver, evaluate_cases, profile, properties):
+        driver, evaluate_cases, force_evaluation, profile, properties):
     # Out of the valid ranges of their parameters, and an error of the
     # light if a tie gives one (audit 2026-10-31 #8: its NaN light was
     # scored as a model without values)
@@ -248,6 +258,7 @@ def test_a_scale_or_an_axis_ratio_of_zero_gives_no_model(
         if profile['type'] == 'sersic' else {}
     spheroid = dict(
         type='spheroid', profile=profile, rmax=8, emission=BAND) | shape
+    force_evaluation('depth')
     with pytest.raises(ConfigError, match="invalid parameter properties"):
         evaluate_cases([image(driver, spheroid)], GEOMETRY | properties)
     with pytest.raises(ModelEvaluationError, match="above 0"):
@@ -386,7 +397,7 @@ def test_the_mass_of_an_mge_is_that_of_its_gaussians():
 def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
     # The same rotation as in the mass spheroid of the same profile
     from gbkfit.observation import (
-        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
+        ObservationGroup, ObservationPixelSpectra)
     from gbkfit.params import ParamSpace
     disk = dict(
         type='thin_disk', name='gas', rnodes=list(range(0, 13, 2)),
@@ -401,12 +412,10 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
     def evaluate(mass, properties):
         galaxy = galaxy_parser.load(dict(
             components=[BULGE, disk], mass=[mass], distance=DISTANCE))
-        group = ObservationGroup([galaxy], [ObservationSky(
-            PixelSpectra(
-                size=(24, 24), step=(1, 1),
-                spectral=SpectralAxis(
-                    size=41, step=10, convention='relativistic')),
-            line_of_sight_parser.load(dict(type='flat')))])
+        group = ObservationGroup([galaxy], [ObservationPixelSpectra(
+            size=(24, 24), step=(1, 1),
+            spectral=SpectralAxis(
+                size=41, step=10, convention='relativistic'))])
         params = ParamSpace.from_properties(
             group.pdescs(), light | disk_properties | properties)
         return group.plan(driver).model_h(params.evaluate())[0][
@@ -606,21 +615,19 @@ def test_a_jeans_rotation_beyond_the_motion_of_the_stars_is_capped(kappa):
     assert capped.any()
     assert (np.sign(tables.vphi[capped]) == np.sign(kappa)).all()
 
-def stars_cube(driver, spheroid, line_of_sight='grid'):
+def stars_cube(driver, spheroid):
     """
     A case of a spectral cube of the stars of a spheroid (lines: [stars]),
     of 32 by 32 pixels of 2 arcsec and 181 channels of 10 km/s, with a
     depth axis of voxels of 1 arcsec.
     """
-    los = dict(type='grid', depth=dict(step=1)) \
-        if line_of_sight == 'grid' else dict(type=line_of_sight)
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[32, 32], step=[2, 2],
             spectral=dict(size=181, step=10, convention='relativistic'),
             dtype='float64'),
-        line_of_sight=los, lines=['stars'],
+        depth=dict(step=1), lines=['stars'],
         galaxy=dict(components=[spheroid], mass=[dict(
             type='point', name='bh')], distance=DISTANCE))
 
@@ -635,8 +642,8 @@ def test_float32_stars_keep_their_dispersion_at_a_large_vsys(
     cubes = []
     for dtype in ('float32', 'float64'):
         case = stars_cube(driver, spheroid)
-        case['observable'] |= dict(dtype=dtype)
-        case['observable']['spectral'] |= dict(rval=15000)
+        case['observation'] |= dict(dtype=dtype)
+        case['observation']['spectral'] |= dict(rval=15000)
         data, _ = evaluate_cases([case], properties)
         cubes.append(data[0]['spectra'].data[:, 14:18, 14:18])
     # (the cubes have the light of each pixel: their channels are about
@@ -695,8 +702,6 @@ def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
 @pytest.mark.parametrize('change, message', [
     # (a cube sees the stars only when its lines name them)
     (dict(lines=None), "it sees none"),
-    # (in a cube, their velocities change along the line of sight)
-    (dict(line_of_sight='flat'), "needs a line of sight with a depth axis"),
     # (a cube needs their kinematics: a spheroid without traits)
     (dict(kinematics=None), "with kinematics only"),
 ])
@@ -706,8 +711,7 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
     if 'kinematics' in change:
         spheroid['type'] = 'spheroid'
 
-    case = stars_cube(
-        driver, spheroid, change.get('line_of_sight', 'grid'))
+    case = stars_cube(driver, spheroid)
     if 'lines' in change:
         del case['lines']
     properties = {
@@ -736,7 +740,7 @@ def test_a_cube_sees_only_stars_that_move(driver, component, message):
 def test_an_image_sees_the_stars_of_a_spheroid(driver, evaluate_cases):
     # (as band light: its projection, without a depth axis)
     spheroid = dict(JEANS_SPHEROID)
-    case = image(driver, spheroid, 'float64', flat=True)
+    case = image(driver, spheroid, 'float64')
     case['galaxy'] |= dict(
         mass=[dict(type='point', name='bh')], distance=DISTANCE)
     data, _ = evaluate_cases([case], JEANS_PROPERTIES)
@@ -851,7 +855,7 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
         dptraits=dict(type='uniform'))
     case = stars_cube(driver, spheroid)
     case['galaxy'] = dict(components=[spheroid])
-    case['observable'] = dict(
+    case['observation'] = dict(
         type='region_moments',
         regions=dict(type='bins', file=str(tmp_path / 'bins.fits')),
         orders=[0, 1, 2, 3, 4], method='gauss_hermite',
@@ -975,7 +979,7 @@ def test_the_stars_of_a_cube_have_the_second_moments_of_the_exact_mock(
     galaxy, properties = hernquist_galaxy()
     case = stars_cube(driver, galaxy['components'][0])
     case['galaxy'] = galaxy
-    case['line_of_sight'] = dict(type='grid', depth=dict(step=2))
+    case['depth'] = dict(step=2)
     data, _ = evaluate_cases([case], properties)
     cube = data[0]['spectra'].data
     velocity = (np.arange(181) - 90) * 10.0

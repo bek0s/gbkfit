@@ -37,10 +37,9 @@ def face_on_disk(driver, evaluate_cases, key, trait):
         dptraits=dict(type=trait if key == 'd' else 'uniform'))
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[33, 33], step=[0.5, 0.5],
             spectral=dict(size=61, step=5, convention='relativistic')),
-        line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
             type='thin_disk', loose=False, tilted=False,
             rnodes=list(range(0, 10)), **density,
@@ -110,10 +109,9 @@ def test_map_lies_where_blobs_lie(driver, evaluate_cases):
     for ptraits, values in cases:
         case = dict(
             driver=dict(type=driver.type()),
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[121, 121], step=[0.05, 0.05],
                 spectral=dict(size=61, step=5, convention='relativistic')),
-            line_of_sight=dict(type='flat'),
             galaxy=dict(components=[map_component(ptraits).dump()]))
         properties = dict(
             vsys=0, xpos=0, ypos=0, posa=30, incl=60, vpt_vt=0,

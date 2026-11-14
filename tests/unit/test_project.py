@@ -16,7 +16,7 @@ from gbkfit.config import FORMAT_VERSION, ConfigError
 yaml = ruamel.yaml.YAML(typ='safe')
 
 GALAXY = dict(components=[dict(type='thin_disk', name='disk')])
-OBSERVATION = dict(data=dict(data='data/ngc1313/hi.fits'))
+OBSERVATION = dict(dataset=dict(data='data/ngc1313/hi.fits'))
 DATASET = dict(type='pixel_spectra', data='data/ngc1313/hi.fits')
 PSF = dict(type='gauss', sigma=1.5)
 LSF = dict(type='gauss', sigma=15)
@@ -66,7 +66,7 @@ def test_a_setup_has_its_pieces_in_place(study):
         file='setups/ngc1313/arctan.yaml',
         galaxies=['galaxies/arctan.yaml', 'setups/ngc1313/arctan.yaml'],
         observations=['observations/ngc1313/hi.yaml'],
-        data=['observations/ngc1313/hi.yaml'],
+        dataset=['observations/ngc1313/hi.yaml'],
         params=[
             'params/bounds.yaml', 'params/ngc1313.yaml',
             'setups/ngc1313/arctan.yaml'],
@@ -84,7 +84,7 @@ def test_observations_name_their_parts_and_mock_data_their_noise(study):
     write(path / 'psfs/beam.yaml', PSF)
     write(path / 'noise/radio.yaml', NOISE)
     write(path / 'observations/named.yaml', dict(
-        data='ngc1313/hi', instrument=dict(psf='beam', lsf=LSF)))
+        dataset='ngc1313/hi', instrument=dict(psf='beam', lsf=LSF)))
     in_place = dict(type='gauss', rms=0.5)
     setup = dict(
         observations=['named', 'ngc1313/hi'],
@@ -93,11 +93,11 @@ def test_observations_name_their_parts_and_mock_data_their_noise(study):
     config, sources = project.resolve(setup, filename, study)
     assert config == dict(
         observations=[
-            dict(data=DATASET, instrument=dict(psf=PSF, lsf=LSF)),
+            dict(dataset=DATASET, instrument=dict(psf=PSF, lsf=LSF)),
             OBSERVATION],
         mock=dict(noise=dict(named=NOISE, hi=in_place), seed=1))
     # (the parts in place are from the files of their observations)
-    assert sources['data'] == [
+    assert sources['dataset'] == [
         'datasets/ngc1313/hi.yaml', 'observations/ngc1313/hi.yaml']
     assert sources['psf'] == ['psfs/beam.yaml', None]
     assert sources['lsf'] == ['observations/named.yaml', None]
@@ -183,7 +183,7 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
     write(path / 'psfs/beam.yaml', PSF)
     (path / 'observations/ngc1313/hi.yaml').write_text(
         "# The HI of NGC 1313\n"
-        "data: ngc1313/hi\n"
+        "dataset: ngc1313/hi\n"
         "# its instrument\n"
         "instrument: {psf: beam, lsf: {type: gauss, sigma: 15}}\n")
     (path / 'setups').mkdir(exist_ok=True)
@@ -191,7 +191,7 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
         "galaxies: [arctan]\n"
         "observations:\n"
         "- ngc1313/hi\n"
-        "- {data: ngc1313/hi, instrument: {psf: beam}}\n"
+        "- {dataset: ngc1313/hi, instrument: {psf: beam}}\n"
         "params: [bounds, ngc1313]\n"
         "fitter: nautilus\n"
         "mock:\n"
@@ -222,11 +222,11 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
     assert not (path / 'datasets/ngc1313').exists()
     assert (path / 'observations/ngc1313/hi.yaml').read_text() == (
         "# The HI of NGC 1313\n"
-        "data: hi\n"
+        "dataset: hi\n"
         "# its instrument\n"
         "instrument: {psf: beam, lsf: {type: gauss, sigma: 15}}\n")
     assert yaml.load(path / 'setups/fit.yaml')['observations'] == [
-        'ngc1313/hi', dict(data='hi', instrument=dict(psf='beam'))]
+        'ngc1313/hi', dict(dataset='hi', instrument=dict(psf='beam'))]
     study.rename_piece('observations', 'ngc1313/hi', 'hi')
     assert yaml.load(path / 'setups/fit.yaml')['observations'][0] == 'hi'
     # (and of the noises of mock data by observation name)

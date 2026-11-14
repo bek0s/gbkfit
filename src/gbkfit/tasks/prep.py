@@ -653,8 +653,8 @@ def prep_gauss_hermite_moments(
     _log.info(
         f"the mean and the dispersion are in {filename}; use them as the "
         f"data of region_moments (file: {filename}, moment1: {{column: "
-        f"{moment1}}}, moment2: {{column: {moment2}}}), of the observable "
-        f"method moments")
+        f"{moment1}}}, moment2: {{column: {moment2}}}), of an observation "
+        f"of the method moments")
 
 
 def prep_psf_muse(

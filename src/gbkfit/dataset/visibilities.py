@@ -178,7 +178,7 @@ class UVCoverage(Serializable):
             raise ValueError(
                 f"the baselines must be finite, one (u, v, w) for each row; "
                 f"their shape is {uvw.shape}")
-        # TODO: continuum visibilities, of one channel (an observable of
+        # TODO: continuum visibilities, of one channel (an observation of
         # their images, without a spectral axis)
         steps = np.diff(frequencies)
         if frequencies.ndim != 1 or frequencies.size < 2 \

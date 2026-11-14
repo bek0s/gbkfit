@@ -621,10 +621,10 @@ class VelocityConvention:
 
 class SpectralAxis(Serializable):
     """
-    The spectral axis of an observable or of data: its channels, of
+    The spectral axis of an observation or of data: its channels, of
     velocities (km/s) of a convention, and what light is at each velocity
     (see VelocityConvention). The options not given are those of the
-    data, or the defaults of the observable.
+    data, or the defaults of the observation.
 
     Parameters
     ----------

@@ -29,18 +29,16 @@ VERSION = FORMAT_VERSION
 def observation(**options):
     """The configuration of an observation of GALAXY, with options."""
     return dict(
-        type='sky',
-        line_of_sight=dict(type='flat'),
-        observable=dict(type='pixel_brightness', size=[8, 8])) | options
+        type='pixel_brightness',
+        size=[8, 8]) | options
 
 
 def image(path):
     """Write an image of 8 x 8 zeros, and return its observation."""
     fits.writeto(path, np.zeros((8, 8)))
     return dict(
-        type='sky', line_of_sight=dict(type='flat'),
-        observable=dict(type='pixel_brightness'),
-        data=dict(type='pixel_brightness', data=path.name))
+        type='pixel_brightness',
+        dataset=dict(type='pixel_brightness', data=path.name))
 
 
 def test_the_front_door_is_gbkfit_load():
@@ -68,7 +66,7 @@ def test_a_setup_in_python_is_that_of_its_configuration(tmp_path):
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     from gbkfit.params import ParamSpace
-    obs = image(tmp_path / 'image.fits') | dict(data=dict(
+    obs = image(tmp_path / 'image.fits') | dict(dataset=dict(
         type='pixel_brightness', data=str(tmp_path / 'image.fits')))
     with gbkfit.load(dict(
             version=VERSION, galaxies=[GALAXY], observations=[obs],
@@ -106,9 +104,8 @@ def noisy_image(path, seed=1):
     rng = np.random.default_rng(seed)
     fits.writeto(path, rng.normal(0, 0.1, (8, 8)))
     return dict(
-        type='sky', line_of_sight=dict(type='flat'),
-        observable=dict(type='pixel_brightness'),
-        data=dict(type='pixel_brightness', data=path.name, error=0.1))
+        type='pixel_brightness',
+        dataset=dict(type='pixel_brightness', data=path.name, error=0.1))
 
 
 def test_the_likelihoods_are_one_for_all_or_by_observation_name(tmp_path):
@@ -213,26 +210,26 @@ def test_a_setup_without_data_states_the_likelihoods_of_its_fit():
 
 
 def test_an_observation_of_mocks_takes_data_in_one_line(tmp_path):
-    # (its grid, as without data, is checked against the data: one
-    # configuration of an observation draws mocks and fits data)
+    # (its grid serves without data, e.g. to draw mocks; with data, that
+    # of the data: one configuration of an observation draws mocks and
+    # fits data of any grid)
     fits.writeto(tmp_path / 'image.fits', np.zeros((8, 8)))
     data = dict(type='pixel_brightness', data='image.fits')
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         params=PARAMS)
     with gbkfit.load(config | dict(
-            observations=[observation(data=data)])) as loaded:
+            observations=[observation(dataset=data)])) as loaded:
         assert loaded.objective().observations() == (0,)
-    with pytest.raises(ConfigError, match="are not those of the data"):
-        gbkfit.load(config | dict(observations=[observation(
-            data=data, observable=dict(
-                type='pixel_brightness', size=[8, 6]))]))
+    with gbkfit.load(config | dict(observations=[observation(
+            dataset=data, size=[8, 6])])) as loaded:
+        assert loaded.group().observations()[0].size() == (8, 8)
 
 
 def test_a_setup_takes_likelihoods_of_its_group():
     from gbkfit.model import galaxy_parser
-    from gbkfit.observation import (
-        Likelihoods, ObservationGroup, observation_parser)
+    from gbkfit.objective import Likelihoods
+    from gbkfit.observation import ObservationGroup, observation_parser
     from gbkfit.params import ParamSpace
 
     def group():
@@ -355,11 +352,9 @@ MASSIVE = dict(
     distance=dict(type='parameter'))
 
 CUBE = dict(
-    type='sky',
-    line_of_sight=dict(type='flat'),
-    observable=dict(
-        type='pixel_spectra', size=[8, 8],
-        spectral=dict(size=5, convention='relativistic')))
+    type='pixel_spectra',
+    size=[8, 8],
+    spectral=dict(size=5, convention='relativistic'))
 
 
 def test_galaxies_with_mass_use_the_drivers_of_the_configuration():
@@ -494,9 +489,9 @@ def test_a_configuration_is_described_without_devices(tmp_path):
     assert description.problems == ()
     assert set(description.params.pdescs()) >= {'xpos', 'rpt_s'}
     stars = dict(
-        type='sky', lines=['stars'], line_of_sight=dict(type='flat'),
-        observable=dict(type='pixel_spectra', size=[8, 8], spectral=dict(
-            size=11, convention='relativistic')))
+        type='pixel_spectra', lines=['stars'],
+        size=[8, 8], spectral=dict(
+        size=11, convention='relativistic'))
     described = gbkfit.describe(config | dict(observations=[stars]))
     (problem,) = described.problems
     assert problem.severity == 'error' and problem.path == ['observations', 0]
@@ -595,11 +590,10 @@ def test_configurations_in_python_take_quantities_and_numpy_values():
     config = dict(
         version=VERSION, galaxies=[GALAXY], params=PARAMS,
         lines=dict(line=6563 * u.AA), observations=[observation(
-            observable=dict(type='pixel_brightness', size=size),
-            oversampling=[np.int64(2), np.int64(2)])])
+            size=size, oversampling=[np.int64(2), np.int64(2)])])
     plain = _config._config_file(config).config
     assert plain['lines']['line'] == 6563 * u.AA
-    assert plain['observations'][0]['observable']['size'] == [8, 8]
+    assert plain['observations'][0]['size'] == [8, 8]
     with gbkfit.load(config) as loaded:
         model = loaded.group_plan().model_h(loaded.evaluate().values)[0]
         assert model['brightness'].data.shape == (8, 8)
@@ -613,11 +607,11 @@ def test_the_units_of_a_configuration_are_read_as_fits_reads_them(tmp_path):
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         observations=[data], params=PARAMS)
-    data['data']['unit'] = 'erg/s/cm2/Angstrom'
+    data['dataset']['unit'] = 'erg/s/cm2/Angstrom'
     with gbkfit.load(config) as loaded:
-        dataset = loaded.group().observations()[0].data()
+        dataset = loaded.group().observations()[0].dataset()
         assert next(iter(dataset.values())).unit() == (
             u.erg / u.s / u.cm ** 2 / u.Angstrom)
-    data['data']['unit'] = 'ERG/S'
+    data['dataset']['unit'] = 'ERG/S'
     with pytest.raises(ValueError, match="not a valid unit"):
         gbkfit.load(config)

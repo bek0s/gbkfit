@@ -26,15 +26,13 @@ __all__ = [
 
 
 # The observations a galaxy is described through, in turn: that of the
-# template (a cube), and an image (e.g. for a galaxy of a band); both with
-# radiative transfer along a depth axis, which sees every component (thick
-# ones, and the opacity of their own lines)
+# template (a cube), and an image (e.g. for a galaxy of a band); each sees
+# every component that emits what it sees (thick ones, and the opacity of
+# their own lines, too: see Scene.evaluation of gbkfit.model)
 _OBSERVATIONS = (
     ruamel.yaml.YAML(typ='safe').load(
-        gbkfit.project.TEMPLATES['observations'])
-    | dict(line_of_sight=dict(type='transfer')),
-    dict(type='sky', observable=dict(type='pixel_brightness', size=[48, 48]),
-         line_of_sight=dict(type='transfer')))
+        gbkfit.project.TEMPLATES['observations']),
+    dict(type='pixel_brightness', size=[48, 48]))
 
 
 @dataclasses.dataclass

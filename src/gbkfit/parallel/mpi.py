@@ -19,8 +19,7 @@ from annotated_types import Ge
 from gbkfit.config import check_options
 from gbkfit.control import StopControl
 from gbkfit.driver import Driver
-from gbkfit.objective import Objective
-from gbkfit.observation import Likelihoods
+from gbkfit.objective import Likelihoods, Objective
 from gbkfit.params import Solve
 from ._detail import (
     Drivers, Item, PolledFlag, Result, Worker, dump_placements,

@@ -21,10 +21,9 @@ def line_flux(driver, evaluate_cases, dispersion):
     """
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=61, step=10, convention='relativistic')),
-        line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
             type='thin_disk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
@@ -80,11 +79,9 @@ def lines_config(lines, catalogue=None):
             dptraits=dict(type='uniform'),
             emission=dict(type='lines', lines=lines))])],
         observations=[dict(
-            type='sky',
-            observable=dict(
-                type='pixel_spectra', size=[8, 8],
-                spectral=dict(size=10, rest='6564.61 Angstrom')),
-            line_of_sight=dict(type='flat'))])
+            type='pixel_spectra',
+            size=[8, 8],
+            spectral=dict(size=10, rest='6564.61 Angstrom'))])
     if catalogue is not None:
         config['lines'] = catalogue
     return config
@@ -206,11 +203,10 @@ def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
         centre = C * (1 - 1 / doppler)
         case = dict(
             driver=dict(type=driver.type()),
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[8, 8], step=[1, 1], rval=[0, 0],
                 spectral=dict(
                     size=201, step=2, rval=centre, rest='1420.405751768 MHz')),
-            line_of_sight=dict(type='flat'),
             galaxy=dict(components=[dict(
                 type='thin_disk', loose=False, tilted=False,
                 rnodes=list(range(0, 5)),
@@ -244,13 +240,12 @@ def test_the_lsf_is_in_km_s_of_the_light(driver, evaluate_cases):
         centre = C * (k - 1)
         case = dict(
             driver=dict(type=driver.type()),
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[8, 8], step=[1, 1], rval=[0, 0],
                 spectral=dict(
                     size=201, step=step, rval=centre,
                     rest=f'{rest} Angstrom', medium='vacuum'),
                 lsf=dict(type='gauss', sigma='32 km/s')),
-            line_of_sight=dict(type='flat'),
             galaxy=dict(redshift=1.5, components=[dict(
                 type='thin_disk', loose=False, tilted=False,
                 rnodes=list(range(0, 5)),

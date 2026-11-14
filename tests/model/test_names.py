@@ -91,9 +91,8 @@ def galaxy(name=None, components=None):
 
 def observation(galaxies=None, name=None):
     return dict(
-        type='sky',
-        observable=dict(type='pixel_brightness', size=[8, 8]),
-        line_of_sight=dict(type='flat')) \
+        type='pixel_brightness',
+        size=[8, 8]) \
         | (dict(galaxies=galaxies) if galaxies is not None else {}) \
         | (dict(name=name) if name is not None else {})
 

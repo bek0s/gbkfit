@@ -1,5 +1,5 @@
 """
-The observable of interferometric visibilities: the Fourier transform
+The observation of interferometric visibilities: the Fourier transform
 of the cube of the model at the baselines of each channel.
 """
 
@@ -15,15 +15,20 @@ from gbkfit.config import Choices, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
-from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
+from gbkfit.instrument import Instrument
+from gbkfit.model import (
+    Band, DataUnit, Extras, GalaxyState, LightUnit, LineEmission)
 from gbkfit.params import ParamValues
+from ..depth import Depth
+from ..foreground import Foreground
+from ..plan import HostModelData, ModelData, ModelItem
+from ..weights import Weights
 from . import _model_cube
-from ._cube_plan import CubeObservablePlan
+from ._cube_plan import CubePlan
 from ._data_units import flux_data_unit
 from ._options import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
-from .base import (
-    HostModelData, ModelData, ModelItem, Observable, ObservationSetup)
+from .base import DType, ObservationSky, SkyOptions
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -31,7 +36,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    'Visibilities'
+    'ObservationVisibilities'
 ]
 
 
@@ -69,7 +74,7 @@ _STEP_TOLERANCE = 1e-2
 _EDGE_TOLERANCE = 1e-3
 
 
-class Visibilities(Observable):
+class ObservationVisibilities(ObservationSky):
     """
     Interferometric visibilities: the Fourier transform of the model
     cube, seen through the instrument, at the baselines of each channel.
@@ -95,9 +100,10 @@ class Visibilities(Observable):
     themselves); its LSF is the response of the correlator (e.g. Hanning
     smoothing), and its primary beam attenuates the cube.
 
-    Its configuration has the options below, but the coverage when it has
-    data, which give it; without data, the coverage is a file of its
-    arrays (see UVCoverage.from_file).
+    Its options are those below, then those of every observation on the
+    sky (see ObservationSky). Its data give its coverage (given too, it
+    serves only without data); without data, the coverage is required, a
+    file of its arrays (see UVCoverage.from_file).
 
     The spatial weights of data do not apply (the data are not pixels);
     a mosaic is one observation for each pointing, fitted jointly. Not
@@ -106,11 +112,11 @@ class Visibilities(Observable):
 
     Parameters
     ----------
-    coverage : UVCoverage
-        Where the visibilities are measured.
     fov : float or Sequence of float
         The field of the cube on the sky (arcsec), of x and y (or one for
         both); its pixels cover it.
+    coverage : UVCoverage, optional
+        Where the visibilities are measured.
     step : float or Sequence of float, optional
         The size of the pixels (arcsec); by default 1 / (5 u_max), of the
         longest baseline at the highest frequency.
@@ -133,7 +139,8 @@ class Visibilities(Observable):
     ------
     ValueError
         If the field is not positive, the transform is not one of those,
-        or eps is not positive.
+        eps is not positive, or an option of every observation on the sky
+        is not valid (see ObservationSky).
     """
 
     # TODO: averaging the visibilities in time or frequency, as an opt-in
@@ -160,55 +167,22 @@ class Visibilities(Observable):
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
         return ('coverage',)
 
+    config_required_without = dict(dataset=('coverage',))
+    defaults_without_data = {}
+
     @classmethod
-    def from_data(
-            cls,
-            dataset: DatasetVisibilities,
-            fov: _Lengths,
-            step: _Lengths | None = None,
-            rpix: Rpix | None = None,
-            rval: Rval | None = None,
-            rota: Rota = 0,
-            transform: _Transform = 'exact',
-            eps: Annotated[float, Gt(0)] | None = None
-    ) -> 'Visibilities':
-        """
-        Make the observable of visibilities, of their coverage.
+    def _options_from_data(
+            cls, dataset: DatasetVisibilities, options: dict[str, Any]
+    ) -> dict[str, Any]:
+        return dict(coverage=dataset.coverage())
 
-        Parameters
-        ----------
-        dataset : DatasetVisibilities
-            The visibilities.
-        fov, step, rpix, rval, rota, transform, eps : optional
-            As those of Visibilities.
-
-        Returns
-        -------
-        Visibilities
-            The observable.
-
-        Raises
-        ------
-        TypeError
-            If the dataset is not of visibilities.
-        ValueError
-            If the options are not valid.
-        """
-        check_options(Visibilities.from_data, locals())
-        return cls(
-            dataset.coverage(), fov, step, rpix, rval, rota, transform, eps)
-
-    def dump(
-            self,
-            data: DatasetVisibilities | None = None,
-            prefix: str = '',
-            dump_path: bool = True,
-            overwrite: bool = False
+    def _dump_kind(
+            self, prefix: str, dump_path: bool, overwrite: bool
     ) -> dict[str, Any]:
         # (the dump of the coverage writes a file: only without data,
         # which give it; the grid is that of the field, without its size)
-        info = dict(type=self.type())
-        if data is None:
+        info = {}
+        if self._dataset is None:
             info.update(coverage=self._coverage.dump(
                 prefix, dump_path, overwrite))
         return info | self._dump_options(prefix, dump_path, overwrite)
@@ -225,18 +199,40 @@ class Visibilities(Observable):
             transform=self._transform,
             eps=self._eps)
 
+    def _kind_options(self) -> dict[str, Any]:
+        return dict(coverage=self._coverage) \
+            | self._dump_options('', True, False)
+
     def __init__(
             self,
-            coverage: UVCoverage,
             fov: _Lengths,
+            coverage: UVCoverage | None = None,
             step: _Lengths | None = None,
             rpix: Rpix | None = None,
             rval: Rval | None = None,
             rota: Rota = 0,
             transform: _Transform = 'exact',
-            eps: Annotated[float, Gt(0)] | None = None
+            eps: Annotated[float, Gt(0)] | None = None,
+            foreground: Foreground | None = None,
+            instrument: Instrument | None = None,
+            galaxies: Sequence[str] | None = None,
+            components: Sequence[str] | None = None,
+            lines: Sequence[str] | None = None,
+            band: str | Band | None = None,
+            pixel_weights: Weights | None = None,
+            flux_scale: str | None = None,
+            offsets: Mapping[str, bool] | None = None,
+            dataset: Dataset | None = None,
+            oversampling: Sequence[int] | None = None,
+            depth: Depth | None = None,
+            dtype: DType | None = None,
+            fft_dtype: DType = 'float64',
+            name: str | None = None,
+            unit: str | None = None
     ):
-        check_options(Visibilities.__init__, locals())
+        check_options(ObservationVisibilities.__init__, locals())
+        coverage = self._options(dataset, dict(coverage=coverage))[
+            'coverage']
         fov = (fov,) * 2 if np.ndim(fov) == 0 else tuple(fov)
         if len(fov) != 2 or not all(value > 0 for value in fov):
             raise ValueError(
@@ -260,7 +256,7 @@ class Visibilities(Observable):
         rest = coverage.rest().value
         channel = _C_KMS * abs(frequencies[1] - frequencies[0]) / rest
         velocity = _C_KMS * (1 - frequencies.max() / rest)
-        super().__init__(
+        grid = self._make_grid(
             size, step, rpix, rval, rota, SpectralAxis(
                 size=coverage.nchannels(), step=channel, rpix=0,
                 rval=velocity, convention='radio', rest=coverage.rest()))
@@ -268,6 +264,10 @@ class Visibilities(Observable):
         self._coverage = coverage
         self._transform = transform
         self._eps = eps
+        super().__init__(
+            grid, foreground, instrument, galaxies, components, lines, band,
+            pixel_weights, flux_scale, offsets, dataset, oversampling, depth,
+            dtype, fft_dtype, name, unit)
 
     def fov(self) -> tuple[float, float]:
         """Return the field of the cube on the sky (arcsec)."""
@@ -291,10 +291,10 @@ class Visibilities(Observable):
     def make_dataset(self, items: Mapping[str, Data]) -> DatasetVisibilities:
         return DatasetVisibilities(items['re'], items['im'], self._coverage)
 
-    def data_unit(
+    def _data_unit(
             self,
             dataset: Dataset | None,
-            light: LightUnit | None = None
+            light: LightUnit | None
     ) -> DataUnit | None:
         # (the visibilities are sums of the flux of the pixels: of their
         # surface brightness times their area, see VisibilitiesPlan)
@@ -311,20 +311,20 @@ class Visibilities(Observable):
     def model_can_have_missing_values(self) -> bool:
         return False
 
-    def check_observation(self, setup: ObservationSetup) -> None:
-        if setup.instrument.psf() is not None:
+    def _check_options(self, options: SkyOptions) -> None:
+        if options.instrument.psf() is not None:
             raise ValueError(
                 "visibilities have no PSF: their baselines sample the "
                 "transform of the sky itself (the dirty beam is their "
                 "sampling); remove the psf of the instrument")
-        if setup.oversampling[:2] != (1, 1):
+        if options.oversampling[:2] != (1, 1):
             raise ValueError(
                 f"the pixels of visibilities are the points of their "
                 f"transform, not oversampled (the means of their subpixels "
                 f"would damp the long baselines): give a smaller step "
                 f"instead; the spatial oversampling is "
-                f"{setup.oversampling[:2]}")
-        if setup.pixel_weights is not None:
+                f"{options.oversampling[:2]}")
+        if options.pixel_weights is not None:
             raise ValueError(
                 "pixel_weights do not apply to visibilities, which are not "
                 "on pixels")
@@ -334,9 +334,9 @@ class Visibilities(Observable):
     ) -> None:
         if dataset.coverage() != self._coverage:
             raise ValueError(
-                "the data and the observable have different coverages")
+                "the data and the observation have different coverages")
 
-    def output(self, data: np.ndarray) -> np.ndarray:
+    def _output(self, data: np.ndarray) -> np.ndarray:
         return data
 
     def images(
@@ -395,47 +395,44 @@ class Visibilities(Observable):
                 / w.sum(axis=1)[:, None, None]
         return GridData(image, self._grid.coords, 2)
 
-    def plan(
-            self,
-            driver: Driver,
-            scene: 'Scene',
-            setup: ObservationSetup
-    ) -> 'VisibilitiesPlan':
+    def _plan(self, driver: Driver, scene: 'Scene') -> 'VisibilitiesPlan':
+        options = self._sky_options
         # (of the same field at half the step, with the same reference
         # point, for the check of the first evaluation)
-        refined = Visibilities(
-            self._coverage, self._fov, tuple(x / 2 for x in self.step()[:2]),
+        refined = ObservationVisibilities(
+            self._fov, self._coverage, tuple(x / 2 for x in self.step()[:2]),
             tuple(2 * x + 0.5 for x in self.rpix()[:2]), self.rval()[:2],
             self.rota(), self._transform, self._eps)
-        return self._plan(
-            driver, scene, setup,
-            lambda: refined._plan(driver, scene, setup, None))
+        return self._plan_checked(
+            driver, scene, options,
+            lambda: refined._plan_checked(driver, scene, options, None))
 
-    def _plan(
+    def _plan_checked(
             self,
             driver: Driver,
             scene: 'Scene',
-            setup: ObservationSetup,
+            options: SkyOptions,
             refinement: Callable[[], 'VisibilitiesPlan'] | None
     ) -> 'VisibilitiesPlan':
         """
-        Return its plan (see plan), with the plan of it at half its step
-        that checks its first evaluation (refinement, made then), if any.
+        Return its plan (see _plan), with its options, and with the plan of
+        it at half its step that checks its first evaluation (refinement,
+        made then), if any.
         """
         model_cube = _model_cube.ModelCube(
             self._grid,
-            oversampling=setup.oversampling,
-            primary_beam=setup.instrument.primary_beam(),
+            oversampling=options.oversampling,
+            primary_beam=options.instrument.primary_beam(),
             psf=None,
-            lsf=setup.instrument.lsf(),
+            lsf=options.instrument.lsf(),
             smooth_weights=False,
-            dtype=setup.dtype,
-            fft_dtype=setup.fft_dtype)
+            dtype=options.dtype,
+            fft_dtype=options.fft_dtype)
         transform, increasing_frequency = self._make_transform(
-            driver, setup.dtype)
+            driver, options.dtype)
         return VisibilitiesPlan(
             transform, abs(self.step()[0] * self.step()[1]),
-            increasing_frequency, model_cube, driver, scene, setup,
+            increasing_frequency, model_cube, driver, scene, options,
             refinement)
 
     def _make_transform(
@@ -459,24 +456,24 @@ class Visibilities(Observable):
         return transform, increasing_frequency
 
 
-class VisibilitiesPlan(CubeObservablePlan):
+class VisibilitiesPlan(CubePlan):
     """
     The evaluation of visibilities: the transform of the flux of the
     pixels of the cube of the model, recorded as the instrument records it
-    (see CubeObservablePlan): of its surface brightness (per arcsec^2, see
-    Visibilities.data_unit) times the area of its pixels; split into their
-    real and imaginary parts. With the channels of the data in the order
-    of increasing frequency, the transform of the cube (from the highest
-    frequency) goes into them in reverse.
+    (see CubePlan): of its surface brightness (per arcsec^2, see
+    ObservationVisibilities.data_unit) times the area of its pixels; split
+    into their real and imaginary parts. With the channels of the data in
+    the order of increasing frequency, the transform of the cube (from the
+    highest frequency) goes into them in reverse.
 
     Its mock data are the visibilities of the model plus noise, drawn for
     each part on their grid: the rows along x and the channels along y
     (see noise_grid), for a noise correlated along the channels (e.g. by
     Hanning smoothing; not on the sky, which visibilities are not on).
 
-    With refinement, the plan of the observable at half its step, made
+    With refinement, the plan of the observation at half its step, made
     when called, its first evaluation checks the sampling of the model
-    (see Visibilities and _check_sampling).
+    (see ObservationVisibilities and _check_sampling).
     """
 
     def __init__(
@@ -487,12 +484,12 @@ class VisibilitiesPlan(CubeObservablePlan):
             model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
-            setup: ObservationSetup,
+            options: SkyOptions,
             refinement: Callable[[], 'VisibilitiesPlan'] | None = None
     ):
-        # (without pixel weights, which Visibilities.check_observation
-        # refuses)
-        super().__init__(model_cube, driver, scene, setup)
+        # (without pixel weights, which
+        # ObservationVisibilities._check_options refuses)
+        super().__init__(model_cube, driver, scene, options)
         self._refinement = refinement
         self._transform = transform
         self._area = area
@@ -503,8 +500,8 @@ class VisibilitiesPlan(CubeObservablePlan):
             shape[::-1], (1, spectral.step[0]), (0, 0), (0, spectral.rval[0]),
             spectral_axis=1, rest=spectral.rest)
         self._visibilities = driver.mem_alloc_d(shape, np.complex128)
-        self._re = driver.mem_alloc_d(shape, setup.dtype)
-        self._im = driver.mem_alloc_d(shape, setup.dtype)
+        self._re = driver.mem_alloc_d(shape, options.dtype)
+        self._im = driver.mem_alloc_d(shape, options.dtype)
 
     def evaluate(
             self,

@@ -47,10 +47,9 @@ def spectral_cube_case(driver, with_opacity):
             THICK_DISK, name='dust', opacity=DUST))
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[32, 32], step=[1, 1],
             spectral=dict(size=41, step=10, convention='relativistic')),
-        line_of_sight=dict(type='grid'),
         galaxy=dict(components=components))
 
 
@@ -117,9 +116,8 @@ def face_on_optical_depth(
     stars = dict(THICK_DISK, name='stars', emission=BAND)
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(type='pixel_brightness', size=[24, 24]),
-        line_of_sight=dict(
-            type='grid', depth=dict(extent=40 * 0.25, step=0.25)),
+        observation=dict(type='pixel_brightness', size=[24, 24]),
+        depth=dict(extent=40 * 0.25, step=0.25),
         galaxy=dict(components=[stars, dust]))
     properties = dict(
         stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0,
@@ -183,10 +181,9 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
     def evaluate(components, properties):
         case = dict(
             driver=dict(type=driver.type()),
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[32, 32], step=[1, 1],
                 spectral=dict(size=41, step=10, convention='relativistic')),
-            line_of_sight=dict(type='grid'),
             galaxy=dict(components=components))
         data, _ = evaluate_cases([case], properties)
         return data[0]['spectra'].data
@@ -216,9 +213,8 @@ def image_and_optical_depth(driver, evaluate_cases, opacity, depth_step):
     """
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(type='pixel_brightness', size=[32, 32]),
-        line_of_sight=dict(
-            type='grid', depth=dict(extent=24.0, step=depth_step)),
+        observation=dict(type='pixel_brightness', size=[32, 32]),
+        depth=dict(extent=24.0, step=depth_step),
         galaxy=dict(components=[
             dict(THICK_DISK, name='stars', emission=BAND),
             dict(THICK_DISK, name='dust', opacity=DUST)]))
@@ -270,20 +266,22 @@ THIN_GAS_PROPERTIES = dict(
         type='pixel_spectra', size=[32, 32], step=[1, 1],
         spectral=dict(size=41, step=10, convention='relativistic')),
      'spectra')])
-def test_a_grid_sees_a_thin_disk_as_the_sky_does(
-        driver, evaluate_cases, observable, key):
-    # Without dust, the depth of the plane of the disk changes nothing
+def test_a_depth_axis_sees_a_thin_disk_as_the_sky_does(
+        driver, evaluate_cases, force_evaluation, observable, key):
+    # Without dust, the depth of the plane of the disk changes nothing: a
+    # thin disk is seen on the plane of the sky, which gives what a depth
+    # axis would
     component = THIN_GAS if key == 'spectra' else dict(
         THIN_DISK, name='gas', emission=BAND)
     properties = {
         name: value for name, value in THIN_GAS_PROPERTIES.items()
         if key == 'spectra' or not name.startswith(('gas_v', 'gas_d'))}
-    models = [
-        evaluate_cases([dict(
-            driver=dict(type=driver.type()), observable=observable,
-            line_of_sight=line_of_sight,
-            galaxy=dict(components=[component]))], properties)[0][0]
-        for line_of_sight in (dict(type='flat'), dict(type='grid'))]
+    models = []
+    for evaluation in ('plane', 'depth'):
+        force_evaluation(evaluation)
+        models.append(evaluate_cases([dict(
+            driver=dict(type=driver.type()), observation=observable,
+            galaxy=dict(components=[component]))], properties)[0][0])
     np.testing.assert_array_equal(models[1][key].data, models[0][key].data)
 
 
@@ -296,9 +294,8 @@ def face_on_dust_case(driver, components):
     dust = dict(THICK_DISK, name='dust', opacity=DUST)
     return dict(
         driver=dict(type=driver.type()),
-        observable=dict(type='pixel_brightness', size=[24, 24]),
-        line_of_sight=dict(
-            type='grid', depth=dict(extent=40 * 0.25, step=0.25)),
+        observation=dict(type='pixel_brightness', size=[24, 24]),
+        depth=dict(extent=40 * 0.25, step=0.25),
         galaxy=dict(components=list(components) + [dust]))
 
 
@@ -394,12 +391,11 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
         properties[f'dust{i}_rpt_a'] = opacity
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1], rval=[0, 0],
             spectral=dict(
                 size=81, step=25, rval=500, rest='6564.61 Angstrom')),
-        line_of_sight=dict(
-            type='grid', depth=dict(extent=40 * 0.25, step=0.25)),
+        depth=dict(extent=40 * 0.25, step=0.25),
         galaxy=dict(components=[gas] + dusts),
         **({} if lines is None else dict(lines=lines)))
     data, extra = evaluate_cases([case], properties)

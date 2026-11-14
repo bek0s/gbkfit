@@ -11,10 +11,9 @@ from gbkfit.dataset import Data, DatasetPixelSpectra, NoiseCorrelation
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective, whitening
-from gbkfit.observation import (
-    MAX_CORRELATED_PIXELS, LikelihoodGauss, Likelihoods, ObservationGroup,
-    ObservationSky, PixelSpectra, line_of_sight_parser)
+from gbkfit.objective import (
+    MAX_CORRELATED_PIXELS, LikelihoodGauss, Likelihoods, Objective, whitening)
+from gbkfit.observation import ObservationGroup, ObservationPixelSpectra
 from gbkfit.params import ParamSpace
 
 
@@ -36,9 +35,8 @@ def objective(driver, data, likelihood):
     """The objective of a disk seen in a cube, under a likelihood."""
     dataset = DatasetPixelSpectra(data, step=STEP[:2], spectral=SPECTRAL)
     group = ObservationGroup(
-        [galaxy_parser.load(GALAXY)], [ObservationSky(
-            PixelSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), data=dataset)])
+        [galaxy_parser.load(GALAXY)], [ObservationPixelSpectra(
+            dataset=dataset)])
     likelihoods = Likelihoods(group, likelihood)
     return (Objective(group.plan(driver), likelihoods),
             ParamSpace.from_properties(
@@ -138,24 +136,20 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
         noisy_cube(np.random.default_rng(9), None), step=STEP[:2],
         spectral=SPECTRAL)
     group = ObservationGroup(
-        [galaxy_parser.load(GALAXY)], [ObservationSky(
-            PixelSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), data=dataset,
+        [galaxy_parser.load(GALAXY)], [ObservationPixelSpectra(
+            dataset=dataset,
             flux_scale='one', name='obs')])
     with pytest.raises(ValueError, match="has correlated noise"):
         Objective(group.plan(driver),
                   solves=dict(obs_flux_scale=SolveGauss(1, 0.5, 0)))
 
 
-def spectra_objective(driver, dataset, observable, likelihood):
+def spectra_objective(driver, observation, likelihood):
     """
     The objective of a disk seen in spectra that are not of a cube (of
-    a slit, or of regions), under a likelihood.
+    a slit, or of regions), with data, under a likelihood.
     """
-    group = ObservationGroup(
-        [galaxy_parser.load(GALAXY)], [ObservationSky(
-            observable, line_of_sight_parser.load(dict(type='flat')),
-            data=dataset)])
+    group = ObservationGroup([galaxy_parser.load(GALAXY)], [observation])
     likelihoods = Likelihoods(group, likelihood)
     return (Objective(group.plan(driver), likelihoods),
             ParamSpace.from_properties(
@@ -209,12 +203,12 @@ def test_slit_spectra_have_the_chi2_of_their_spectral_correlation(
     # (the positions along a slit, which has no pixels across it, are not
     # correlated)
     from gbkfit.dataset import DatasetSlitSpectra
-    from gbkfit.observation import SlitSpectra
+    from gbkfit.observation import ObservationSlitSpectra
     data = noisy_spectra(np.random.default_rng(11), 14, blank)
     dataset = DatasetSlitSpectra(
         data, step=(1,), spectral=SPECTRAL, slit_pa=-60)
     obj, params = spectra_objective(
-        driver, dataset, SlitSpectra.from_data(dataset),
+        driver, ObservationSlitSpectra(dataset=dataset),
         LikelihoodGauss(white_floor=0.05))
     check_spectral_chi2(obj, params, data)
 
@@ -224,15 +218,15 @@ def test_region_spectra_have_the_chi2_of_their_spectral_correlation(
         driver, blank):
     # (regions, which are not pixels of the sky, are not correlated)
     from gbkfit.dataset import DatasetRegionSpectra, regions_parser
-    from gbkfit.observation import RegionSpectra
+    from gbkfit.observation import ObservationRegionSpectra
     regions = regions_parser.load(dict(type='apertures', apertures=[
         dict(type='circle', x=x, y=y, radius=1.5)
         for x, y in ((0, 0), (3, 1), (-3, -1), (1, -3), (-2, 3), (3, -3))]))
     data = noisy_spectra(np.random.default_rng(12), 6, blank)
     dataset = DatasetRegionSpectra(data, regions, spectral=SPECTRAL)
     obj, params = spectra_objective(
-        driver, dataset,
-        RegionSpectra.from_data(dataset, size=SIZE[:2], step=STEP[:2]),
+        driver, ObservationRegionSpectra(
+            size=SIZE[:2], step=STEP[:2], dataset=dataset),
         LikelihoodGauss(white_floor=0.05))
     check_spectral_chi2(obj, params, data)
 
@@ -242,14 +236,12 @@ def test_spectra_of_correlated_noise_keep_whole_spectra(tmp_path):
     # channel, and is read from a dump with the correlation; their
     # likelihoods check it)
     from gbkfit.dataset import DatasetSlitSpectra, dataset_parser
-    from gbkfit.observation import SlitSpectra
+    from gbkfit.observation import ObservationSlitSpectra
 
     def likelihoods(dataset):
         return Likelihoods(ObservationGroup(
-            [galaxy_parser.load(GALAXY)], [ObservationSky(
-                SlitSpectra.from_data(dataset),
-                line_of_sight_parser.load(dict(type='flat')),
-                data=dataset)]))
+            [galaxy_parser.load(GALAXY)], [ObservationSlitSpectra(
+                dataset=dataset)]))
     data = noisy_spectra(np.random.default_rng(13), 14, [])
     mask = data.mask().copy()
     mask[3, 6] = 0

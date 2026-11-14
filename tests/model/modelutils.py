@@ -6,26 +6,19 @@ Helpers that build observation groups from the cases of the tests.
 def split_case(case):
     """
     A galaxy, an observation of it and the configuration of its driver,
-    from a case of the tests: a dict with a driver, a galaxy, a line of
-    sight, an observable (with the primary beam, psf and lsf of the
-    instrument, and the oversampling and dtype of the observation), an optional
-    name, which names the galaxy, the optional lines or band that the
-    observation sees, and the unit of the light of its model.
+    from a case of the tests: a dict with a driver, a galaxy, an
+    observation (its options, with the primary beam, psf and lsf of its
+    instrument among them), an optional name, which names the galaxy, the
+    optional depth axis, lines or band of the observation, and the unit
+    of the light of its model.
     """
     case = dict(case)
     driver = case.pop('driver')
-    observable = dict(case.pop('observable'))
-    observation = dict(
-        type='sky',
-        observable=observable,
-        line_of_sight=case.pop('line_of_sight'),
-        instrument={k: observable.pop(k)
-                    for k in ('primary_beam', 'psf', 'lsf')
-                    if k in observable})
-    for key in ('oversampling', 'dtype'):
-        if key in observable:
-            observation[key] = observable.pop(key)
-    for key in ('lines', 'band', 'unit'):
+    observation = dict(case.pop('observation'))
+    observation['instrument'] = {
+        k: observation.pop(k) for k in ('primary_beam', 'psf', 'lsf')
+        if k in observation}
+    for key in ('depth', 'lines', 'band', 'unit'):
         if key in case:
             observation[key] = case.pop(key)
     galaxy = dict(case.pop('galaxy'))

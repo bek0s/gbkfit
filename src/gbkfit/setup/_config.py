@@ -27,9 +27,9 @@ import gbkfit.observation
 import gbkfit.project
 from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.fitting import BootstrapOptions, Fitter, fitter_parser
+from gbkfit.objective import Likelihood, Likelihoods
+from gbkfit.observation import DepthGroup, MockOptions, ObservationGroup
 from gbkfit.parallel import Workers, workers_parser
-from gbkfit.observation import (
-    DepthGroup, Likelihood, Likelihoods, MockOptions, ObservationGroup)
 from gbkfit.params import (
     ParamDesc, ParamSpace, ParamSpaceConfig, load_pdescs_dict,
     param_space_parser)
@@ -784,20 +784,24 @@ def _load_likelihoods(
     Return the likelihoods of the observations of a group of a
     configuration: of its section 'likelihoods' (one likelihood, a
     dictionary with its type, or likelihoods by observation name), or by
-    default Gaussian (see Likelihoods), checked against the observations.
+    default Gaussian (see Likelihoods), checked against the observations;
+    of every observation in a configuration of mock data (its section
+    mock), whose fits compare them with its mock data.
 
     Raises
     ------
     ConfigError
         If the section is not of either form.
     """
+    mocked = cfg.get('mock') is not None
     if 'likelihoods' not in cfg:
-        return Likelihoods(group)
+        with config_path('likelihoods'):
+            return Likelihoods(group, mocked=mocked)
     with config_path('likelihoods'):
         given = from_config(cfg['likelihoods'], _LIKELIHOODS)
         if problem := type_problem(given, _LIKELIHOODS):
             raise ConfigError(f"section 'likelihoods' {problem}")
-        return Likelihoods(group, given)
+        return Likelihoods(group, given, mocked)
 
 
 def _without_driver(infos: Sequence[Any]) -> list[Any]:

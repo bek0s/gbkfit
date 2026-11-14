@@ -29,15 +29,15 @@ HOLLOW_PROPERTIES = dict(wall=30, rpt_a=HOLLOW_A, rht_s=0.5)
 GEOMETRY = dict(xpos=1.5, ypos=-1, posa=30, incl=60)
 
 
-def case(driver, cone, observable, line_of_sight='grid', components=()):
+def case(driver, cone, observable, components=()):
     """
     A galaxy of a cone and other components, seen as the observable, with
     a depth axis of voxels of 0.25 arcsec.
     """
     return dict(
         driver=dict(type=driver.type()),
-        observable=observable,
-        line_of_sight=dict(type=line_of_sight, depth=dict(step=0.25)),
+        observation=observable,
+        depth=dict(step=0.25),
         galaxy=dict(components=[cone, *components]))
 
 
@@ -158,9 +158,9 @@ def test_a_uniform_wall_is_a_hard_cone(driver, evaluate_cases):
     np.testing.assert_array_equal((bdata.data > 0)[clear], inside[clear])
 
 
-@pytest.mark.parametrize('line_of_sight', ['grid', 'transfer'])
+@pytest.mark.parametrize('evaluation', ['depth', 'transfer'])
 def test_the_dust_of_the_disk_dims_the_far_cone(
-        driver, evaluate_cases, line_of_sight):
+        driver, evaluate_cases, force_evaluation, evaluation):
     # A face-on cone out of the plane of a thin layer of dust (that of the
     # disk the cone flows out of): its far side (positive) is behind all
     # the dust of each line of sight, its near side in front of it
@@ -176,8 +176,8 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
         dust_incl=0, dust_rpt_a=0.5, dust_rpt_s=4, dust_rht_s=0.2)
     for sides, fraction in (('positive', 1), ('negative', 0)):
         cone = HOLLOW | dict(name='cone', sides=sides, emission=BAND)
-        group = [image(
-            driver, cone, line_of_sight=line_of_sight, components=[dust])]
+        force_evaluation(evaluation)
+        group = [image(driver, cone, components=[dust])]
         clear, _ = evaluate_cases(group, properties | dict(dust_rpt_a=0))
         dimmed, extra = evaluate_cases(group, properties)
         tau = extra.get('total_odata').data.sum(axis=0)

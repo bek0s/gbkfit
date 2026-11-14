@@ -23,7 +23,7 @@ from gbkfit.params import (
     ParamFunctions, ParamValues, ParamView, StageCache, with_elements)
 from gbkfit.utils import threadutils, timeutils
 from .orbits import OrbitRecording, OrbitSeries, orbit_recordings
-from .observables import HostModelData, ModelData, ModelItem, ObservablePlan
+from .plan import HostModelData, ModelData, ModelItem, ObservationPlan
 
 if TYPE_CHECKING:
     from .group import ObservationGroup
@@ -71,7 +71,7 @@ class GroupPlan:
     lock): threads that evaluate it at the same time wait for each other.
     Plans of the group on other drivers have their own memory and lock
     (see ObservationGroup.plan); plans of it with other data share them
-    (see with_data).
+    (see with_datasets).
 
     The orbits of the stars of a spheroid whose weights are solved (see
     Component.orbit_weights) that observations with data see are recorded
@@ -226,7 +226,7 @@ class GroupPlan:
             self._group, self._galaxy_drivers, self._observation_drivers)
 
     def __copy__(self) -> Self:
-        # (shallow copies share them, see with_data)
+        # (shallow copies share them, see with_datasets)
         copied = object.__new__(type(self))
         copied.__dict__.update(self.__dict__)
         return copied
@@ -250,7 +250,7 @@ class GroupPlan:
     def lock(self) -> threading.RLock:
         """
         Return the lock of the memory of its plans, which its plans with
-        other data share (see with_data). Its evaluations hold it; who
+        other data share (see with_datasets). Its evaluations hold it; who
         reads the model data on the devices (see model_d) holds it until
         done with them (e.g. an objective, from the evaluation of the
         models to their residuals), as the next evaluation of a plan that
@@ -258,10 +258,10 @@ class GroupPlan:
         """
         return self._lock
 
-    def with_data(self, datasets: Mapping[int, Dataset]) -> Self:
+    def with_datasets(self, datasets: Mapping[int, Dataset]) -> Self:
         """
         Return a plan of the group with other data of some of its
-        observations (see ObservationGroup.with_data), on the same
+        observations (see ObservationGroup.with_datasets), on the same
         drivers.
 
         The plans of the observations take little from their data (their
@@ -294,7 +294,7 @@ class GroupPlan:
             If an index is not that of an observation, or a dataset does
             not suit its observation.
         """
-        group = self._group.with_data(datasets)
+        group = self._group.with_datasets(datasets)
         olds, news = self._group.observations(), group.observations()
         copied = copy.copy(self)
         copied._group = group
@@ -435,7 +435,7 @@ class GroupPlan:
                     self._recordings, self._recording_caches)]
 
     @contextlib.contextmanager
-    def borrow_plans(self) -> Iterator[tuple[ObservablePlan, ...]]:
+    def borrow_plans(self) -> Iterator[tuple[ObservationPlan, ...]]:
         """
         Lend the plans of the observations (see Observation.plan), under
         its lock (see lock), to evaluate them apart from its evaluations
@@ -445,7 +445,7 @@ class GroupPlan:
 
         Yields
         ------
-        tuple of ObservablePlan
+        tuple of ObservationPlan
             The plan of each observation, on its driver.
         """
         with self._lock:
@@ -475,11 +475,13 @@ class GroupPlan:
     def model_d(
             self,
             params: ParamValues,
-            out_extra: Extras | None = None
+            out_extra: Extras | None = None,
+            observations: Sequence[int] | None = None
     ) -> list[ModelData]:
         """
-        Evaluate the model data of the observations, on their drivers,
-        with BLAS on one thread (see threadutils.single_threaded_blas).
+        Evaluate the model data of the observations (all, or those given),
+        on their drivers, with BLAS on one thread (see
+        threadutils.single_threaded_blas).
         Those of the observations that a recording of orbits models (see
         orbit_series) are of its orbits in the series of their data, at
         the weights of the orbits in the parameters; their extra outputs
@@ -488,12 +490,12 @@ class GroupPlan:
         Without extra outputs, an observation whose parameters (see
         ObservationGroup.model_params) have exactly the values of its last
         evaluation (by this plan, or by one with other data that shares
-        its plans, see with_data) keeps the model data of that evaluation,
-        which nothing else writes; so does each part of the stage of a
-        galaxy (see GalaxyStage) whose parameters, and the parts it takes,
-        are those of its last evaluation (with extra outputs too, but the
-        states of the components). A recording of orbits keeps the orbits
-        of its last recording while the parameters it reads (see
+        its plans, see with_datasets) keeps the model data of that
+        evaluation, which nothing else writes; so does each part of the
+        stage of a galaxy (see GalaxyStage) whose parameters, and the parts
+        it takes, are those of its last evaluation (with extra outputs too,
+        but the states of the components). A recording of orbits keeps the
+        orbits of its last recording while the parameters it reads (see
         OrbitRecording.reads) and the orbits of its spheroid do (with extra
         outputs too: it has none), and the model of an observation it
         models while those and the weights of the orbits do. NaN is never
@@ -516,14 +518,17 @@ class GroupPlan:
             ObservationGroup.observation_label), and those of the stage of
             each galaxy (e.g. its rotation tables, see GalaxyStage.evaluate)
             with its label as the id 'galaxy'.
+        observations : Sequence of int, optional
+            The observations to evaluate, by index (e.g. those that an
+            objective compares); all by default.
 
         Returns
         -------
         list of ModelData
-            The model data of each observation, on its driver; they are
-            overwritten by the next evaluation (of it, or of a plan that
-            shares its memory: hold its lock while reading them, see
-            lock).
+            The model data of each observation, on its driver (of those
+            not evaluated, as they were); they are overwritten by the next
+            evaluation (of it, or of a plan that shares its memory: hold
+            its lock while reading them, see lock).
         """
         with (self._lock, self._timers.measure('model_eval'),
               threadutils.single_threaded_blas()):
@@ -531,7 +536,8 @@ class GroupPlan:
                 states = self._galaxy_states(params, out_extra)
             series = self._orbit_series(params, states)
             self._evaluate_models(
-                range(len(self._plans)), params, states, series, out_extra)
+                range(len(self._plans)) if observations is None
+                else observations, params, states, series, out_extra)
         return self._d_model_data
 
     def amplitude_pieces(

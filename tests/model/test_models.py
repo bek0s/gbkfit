@@ -19,7 +19,7 @@ from gbkfit.grid import Coords, Grid, GridData
 from gbkfit.model import SceneTarget, galaxy_parser
 from gbkfit.model._opacity import opacity_cubes
 from gbkfit.model.scenes import IMAGE_SPECTRAL_AXIS
-from gbkfit.observation import Depth, LineOfSightGrid
+from gbkfit.observation import Depth
 from gbkfit.params import ParamModeOffsets
 
 
@@ -46,8 +46,7 @@ def mcdisk(seed=0, **options):
 CASES = dict(
     intensity_2d=(
         dict(
-            observable=dict(type='pixel_brightness', size=[20, 16], rota=10),
-            line_of_sight=dict(type='flat'),
+            observation=dict(type='pixel_brightness', size=[20, 16], rota=10),
             galaxy=dict(components=[
                 smdisk(
                     loose=True, tilted=True,
@@ -62,10 +61,9 @@ CASES = dict(
             spt_p=45, spt_s=270)),
     kinematics_2d=(
         dict(
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[20, 16], step=[1, 1],
                 spectral=dict(size=11, step=30, convention='relativistic')),
-            line_of_sight=dict(type='flat'),
             galaxy=dict(components=[
                 smdisk(
                     name='disk1', loose=True, tilted=False,
@@ -95,8 +93,7 @@ CASES = dict(
             disk2_spt_p=[0, 10, 20, 30, 40], disk2_spt_s=[300] * 5)),
     intensity_3d=(
         dict(
-            observable=dict(type='pixel_brightness', size=[20, 16]),
-            line_of_sight=dict(type='grid'),
+            observation=dict(type='pixel_brightness', size=[20, 16]),
             galaxy=dict(components=[
                 smdisk(
                     name='smooth', loose=False, tilted=True,
@@ -132,11 +129,10 @@ CASES = dict(
             dust_clouds_rht_s=0.5)),
     kinematics_3d=(
         dict(
-            observable=dict(
+            observation=dict(
                 type='pixel_spectra', size=[20, 16], step=[1, 1],
                 spectral=dict(size=11, step=30, convention='relativistic')),
-            line_of_sight=dict(
-                type='grid', depth=dict(extent=14 * 1.5, step=1.5)),
+            depth=dict(extent=14 * 1.5, step=1.5),
             galaxy=dict(components=[
                 smdisk(
                     name='smooth', loose=True, tilted=True,
@@ -247,7 +243,7 @@ def image_plan(driver, galaxy, size):
             driver, grid, IMAGE_SPECTRAL_AXIS, np.float32, None, None, None,
             None), (0,),
         opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
-        LineOfSightGrid(Depth(extent='legacy')).depth_axis(grid, 0))
+        Depth(extent='legacy').axis(grid, 0))
 
 
 def evaluate_image(driver, plan, size, params):

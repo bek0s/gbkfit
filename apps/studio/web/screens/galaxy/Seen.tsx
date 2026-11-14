@@ -1,13 +1,13 @@
 // The galaxy as an observation of the project sees it ("Seen by", in the
 // viewer of the galaxy; see the server's /views/observed): its model on the
-// grid of the observation, through its instrument and its line of sight,
-// at the values of its parameters as they are set (as the edits settle,
+// grid of the observation, through its instrument, at the values of its parameters as they are set (as the edits settle,
 // not as saved); in the viewer of its kind of data: a cube (its channels,
 // its spectra, and the moments measured from it, as from data), or maps
 // (an image, or moment maps, measured as the observation measures them).
 // What the library notes as it sets them up shows over it, and why the
-// observation cannot see the galaxy, if it cannot (e.g. a thick disk
-// along a flat line of sight). Under it, the curves of the galaxy.
+// observation cannot see the galaxy, if it cannot (e.g. a band of an
+// image that none of its components emits in). Under it, the curves of the
+// galaxy.
 import { useDebouncedValue } from '@mantine/hooks';
 import { useMemo, useState } from 'react';
 import { useGalaxyRender, useObserved, usePiece } from '../../api/queries';
@@ -19,7 +19,7 @@ import { frameOf } from '../../components/sky';
 import { Curves, type CurvesFocus } from './Curves';
 import type { Options } from './options';
 
-// (the kinds of observables shown, on a grid of pixels: a cube, an image,
+// (the kinds of observations shown, on a grid of pixels: a cube, an image,
 // moment maps)
 const SHOWN = ['pixel_spectra', 'pixel_brightness', 'pixel_moments'];
 
@@ -84,10 +84,10 @@ function Shown({ observed }: { observed: Observed }) {
   const [selection, setSelection] = useState<Region | null>(null);
   const [band, setBand] = useState<[number, number] | null>(null);
   const models = observed.arrays.filter((array) => array.kind === 'model');
-  if (!SHOWN.includes(observed.observable) || models.length === 0) {
-    return <p className="note">The Studio does not show this kind of observation ({observed.observable.replaceAll('_', ' ')}) yet.</p>;
+  if (!SHOWN.includes(observed.type) || models.length === 0) {
+    return <p className="note">The Studio does not show this kind of observation ({observed.type.replaceAll('_', ' ')}) yet.</p>;
   }
-  if (observed.observable === 'pixel_spectra') {
+  if (observed.type === 'pixel_spectra') {
     const [model] = models;
     return (
       <CubeViewer

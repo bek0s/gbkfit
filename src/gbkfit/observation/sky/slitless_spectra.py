@@ -1,5 +1,5 @@
 """
-The observable of slitless spectra: the image of a grism (or prism)
+The observation of slitless spectra: the image of a grism (or prism)
 exposure, its exposures, and where the light of a pixel lands along the
 trace of the disperser (see pixel_footprints).
 """
@@ -23,17 +23,19 @@ from gbkfit.grid import (
     Grid, SpectralAxis, grid_options, make_convention, make_cube_grid,
     vacuum_wavelength)
 from gbkfit.instrument import (
-    SlitMask, Trace, slit_mask_parser, trace_parser)
-from gbkfit.model import DataUnit, LightUnit, LineEmission
+    Instrument, SlitMask, Trace, slit_mask_parser, trace_parser)
+from gbkfit.model import Band, DataUnit, LightUnit, LineEmission
 from gbkfit.utils import iterutils
+from ..depth import Depth
+from ..foreground import Foreground
+from ..plan import FluxScale, HostModelData, ModelData, ModelItem
+from ..weights import Weights
 from . import _model_cube, _moments
-from ._cube_plan import CubeObservablePlan
+from ._cube_plan import CubePlan
 from ._data_units import data_unit
 from ._options import Rota, Rpix, Rval, Size, Step
 from ._sparse_sums import SparseSumsPlan
-from .base import (
-    FluxScale, HostModelData, ModelData, ModelItem, Observable,
-    ObservationSetup)
+from .base import DType, ObservationSky, SkyOptions
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -42,7 +44,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     'Exposure',
-    'SlitlessSpectra',
+    'ObservationSlitlessSpectra',
     'exposure_parser',
     'pixel_footprint',
     'pixel_footprints'
@@ -259,12 +261,12 @@ def _unique_rows(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 class Exposure(Serializable):
     """
     An exposure combined into the image of slitless spectra (see
-    SlitlessSpectra): of the sky at an offset from the instrument (e.g.
-    after a nod of the telescope), with its image moved by an offset (e.g.
-    back by the nod, when the reduction aligns the exposures on the sky)
-    and weighted. Spectra whose background is subtracted with the
-    exposures of the other nods (e.g. A - (B + C) / 2) are the exposures
-    of the nods of weights 1, -1/2 and -1/2.
+    ObservationSlitlessSpectra): of the sky at an offset from the
+    instrument (e.g. after a nod of the telescope), with its image moved
+    by an offset (e.g. back by the nod, when the reduction aligns the
+    exposures on the sky) and weighted. Spectra whose background is
+    subtracted with the exposures of the other nods (e.g. A - (B + C) / 2)
+    are the exposures of the nods of weights 1, -1/2 and -1/2.
 
     Parameters
     ----------
@@ -320,7 +322,7 @@ class Exposure(Serializable):
 exposure_parser = BasicParser(Exposure)
 
 
-class SlitlessSpectra(Observable):
+class ObservationSlitlessSpectra(ObservationSky):
     """
     Slitless spectra: the image of a grism (or prism) exposure, where the
     light of each wavelength lands away from its place on the sky. The
@@ -374,13 +376,12 @@ class SlitlessSpectra(Observable):
     pixel_footprint), of the pixels of the detector taken of the size of
     its own.
 
-    Its configuration has the options below, but those of the grid when
-    it has data, which give them (see from_data).
+    Its options are those below, then those of every observation on the
+    sky (see ObservationSky). Its data give those of its grid (given too,
+    they serve only without data); without data, size is required.
 
     Parameters
     ----------
-    size : int or Sequence of int
-        The number of pixels of the image (nx, ny).
     spectral : SpectralAxis
         The spectral axis of the model (see SpectralAxis): its
         step, the width of its channels (km/s), is required (a channel
@@ -390,11 +391,13 @@ class SlitlessSpectra(Observable):
         default, its channels span 1000 km/s, centred on 0.
     trace : Trace
         The trace of the disperser.
+    size : int or Sequence of int, optional
+        The number of pixels of the image (nx, ny).
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the image (see Coords); rpix
-        is the centre by default.
+        The world coordinates of the image (see Coords); without data, a
+        step of 1, rval 0, and rpix the centre by default.
     rota : float, optional
-        The rotation of the image on the sky.
+        The rotation of the image on the sky; 0 by default without data.
     slit_mask : SlitMask, optional
         The slit mask in front of the disperser, if any.
     exposures : Exposure or Sequence of Exposure, optional
@@ -409,7 +412,9 @@ class SlitlessSpectra(Observable):
     ------
     ValueError
         If the spectral axis has no step or no rest wavelength, there are
-        no exposures, or sky_sampling is not an integer of at least 1.
+        no exposures, sky_sampling is not an integer of at least 1, or an
+        option of every observation on the sky is not valid (see
+        ObservationSky).
     """
 
     dataset_class = DatasetSlitlessSpectra
@@ -430,46 +435,11 @@ class SlitlessSpectra(Observable):
         return 'Slitless spectra (grism)'
 
     @classmethod
-    def from_data(
-            cls,
-            dataset: DatasetSlitlessSpectra,
-            spectral: SpectralAxis,
-            trace: Trace,
-            slit_mask: SlitMask | None = None,
-            exposures: Exposure | Sequence[Exposure] | None = None,
-            sky_sampling: Annotated[int, Ge(1)] = 1,
-            resampled: bool = False
-    ) -> 'SlitlessSpectra':
-        """
-        Make the observable of slitless spectra, on their grid.
-
-        Parameters
-        ----------
-        dataset : DatasetSlitlessSpectra
-            The image.
-        spectral, trace :
-            As those of SlitlessSpectra.
-        slit_mask, exposures, sky_sampling, resampled : optional
-            As those of SlitlessSpectra.
-
-        Returns
-        -------
-        SlitlessSpectra
-            The observable.
-
-        Raises
-        ------
-        TypeError
-            If the dataset is not of slitless spectra.
-        ValueError
-            If the options are not valid.
-        """
-        check_options(SlitlessSpectra.from_data, locals())
-        return cls(
-            **grid_options(dataset.grid()), spectral=spectral,
-            trace=trace, slit_mask=slit_mask,
-            exposures=exposures, sky_sampling=sky_sampling,
-            resampled=resampled)
+    def _options_from_data(
+            cls, dataset: DatasetSlitlessSpectra, options: dict[str, Any]
+    ) -> dict[str, Any]:
+        # (the grid of the image)
+        return grid_options(dataset.grid())
 
     def _dump_options(
             self, prefix: str, dump_path: bool, overwrite: bool
@@ -484,22 +454,45 @@ class SlitlessSpectra(Observable):
             sky_sampling=self._sky_sampling,
             resampled=self._resampled)
 
+    def _kind_options(self) -> dict[str, Any]:
+        return grid_options(self.grid()) | dict(
+            spectral=self._spectral, trace=self._trace,
+            slit_mask=self._slit_mask, exposures=self._exposures,
+            sky_sampling=self._sky_sampling, resampled=self._resampled)
+
     def __init__(
             self,
-            size: Size,
             spectral: SpectralAxis,
             trace: Trace,
-            step: Step = (1, 1),
+            size: Size | None = None,
+            step: Step | None = None,
             rpix: Rpix | None = None,
-            rval: Rval = (0, 0),
-            rota: Rota = 0,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             slit_mask: SlitMask | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: Annotated[int, Ge(1)] = 1,
-            resampled: bool = False
+            resampled: bool = False,
+            foreground: Foreground | None = None,
+            instrument: Instrument | None = None,
+            galaxies: Sequence[str] | None = None,
+            components: Sequence[str] | None = None,
+            lines: Sequence[str] | None = None,
+            band: str | Band | None = None,
+            pixel_weights: Weights | None = None,
+            flux_scale: str | None = None,
+            offsets: Mapping[str, bool] | None = None,
+            dataset: Dataset | None = None,
+            oversampling: Sequence[int] | None = None,
+            depth: Depth | None = None,
+            dtype: DType | None = None,
+            fft_dtype: DType = 'float64',
+            name: str | None = None,
+            unit: str | None = None
     ):
-        check_options(SlitlessSpectra.__init__, locals())
-        super().__init__(size, step, rpix, rval, rota)
+        check_options(ObservationSlitlessSpectra.__init__, locals())
+        grid = self._options(dataset, dict(
+            size=size, step=step, rpix=rpix, rval=rval, rota=rota))
         rest = spectral.rest()
         if spectral.step() is None or rest is None \
                 or rest.unit != astropy.units.m:
@@ -518,6 +511,10 @@ class SlitlessSpectra(Observable):
         self._exposures = exposures
         self._sky_sampling = sky_sampling
         self._resampled = resampled
+        super().__init__(
+            self._make_grid(**grid), foreground, instrument, galaxies,
+            components, lines, band, pixel_weights, flux_scale, offsets,
+            dataset, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def spectral(self) -> SpectralAxis:
         """Return the spectral axis of the model."""
@@ -568,10 +565,10 @@ class SlitlessSpectra(Observable):
         return DatasetSlitlessSpectra(
             items['spectra'], **grid_options(self.grid(), sizes=False))
 
-    def data_unit(
+    def _data_unit(
             self,
             dataset: Dataset | None,
-            light: LightUnit | None = None
+            light: LightUnit | None
     ) -> DataUnit | None:
         # (the light of a pixel is integrated over the lines, as moment 0)
         return data_unit(
@@ -585,22 +582,18 @@ class SlitlessSpectra(Observable):
     def model_can_have_missing_values(self) -> bool:
         return False
 
-    def check_observation(self, setup: ObservationSetup) -> None:
-        if setup.pixel_weights is not None:
+    def _check_options(self, options: SkyOptions) -> None:
+        if options.pixel_weights is not None:
             raise ValueError(
                 "slitless spectra do not support pixel_weights yet")
-        if setup.instrument.lsf() is not None and self._slit_mask is None:
+        if options.instrument.lsf() is not None and self._slit_mask is None:
             raise ValueError(
                 "slitless spectra without a slit mask have no LSF: the PSF "
                 "along the trace sets their resolution; remove the LSF of "
                 "the instrument, or give the slit mask")
 
-    def plan(
-            self,
-            driver: Driver,
-            scene: 'Scene',
-            setup: ObservationSetup
-    ) -> 'SlitlessSpectraPlan':
+    def _plan(self, driver: Driver, scene: 'Scene') -> 'SlitlessSpectraPlan':
+        options = self._sky_options
         edges = self._channel_edges()
         offset, size = self._sky(edges)
         rpix, step, k = self.rpix(), self.step(), self._sky_sampling
@@ -612,16 +605,16 @@ class SlitlessSpectra(Observable):
                 ((rpix[0] - offset[0] + 0.5) * k - 0.5,
                  (rpix[1] - offset[1] + 0.5) * k - 0.5),
                 self.rval(), self.rota(), self._spectral),
-            oversampling=setup.oversampling + (1,),
-            primary_beam=setup.instrument.primary_beam(),
-            psf=setup.instrument.psf(),
-            lsf=setup.instrument.lsf(),
+            oversampling=options.oversampling + (1,),
+            primary_beam=options.instrument.primary_beam(),
+            psf=options.instrument.psf(),
+            lsf=options.instrument.lsf(),
             smooth_weights=False,
-            dtype=setup.dtype,
-            fft_dtype=setup.fft_dtype)
+            dtype=options.dtype,
+            fft_dtype=options.fft_dtype)
         dispersion = self._dispersion(edges, size, offset)
         return SlitlessSpectraPlan(
-            model_cube, dispersion, self.grid(), driver, scene, setup)
+            model_cube, dispersion, self.grid(), driver, scene, options)
 
     def _channel_edges(self) -> np.ndarray:
         """
@@ -818,10 +811,10 @@ class SlitlessSpectra(Observable):
             shape=(width * height, len(edges) * npixels))
 
 
-class SlitlessSpectraPlan(CubeObservablePlan):
+class SlitlessSpectraPlan(CubePlan):
     """
-    The evaluation of SlitlessSpectra: the cube of the sky (see
-    CubeObservablePlan), then its dispersion into the image of the grid of the
+    The evaluation of ObservationSlitlessSpectra: the cube of the sky (see
+    CubePlan), then its dispersion into the image of the grid of the
     detector, the sums of its voxels with the weights of a sparse matrix
     (see SparseSumsPlan). The detector records the image, so the noise of
     its mock data goes in there.
@@ -834,12 +827,12 @@ class SlitlessSpectraPlan(CubeObservablePlan):
             grid: Grid,
             driver: Driver,
             scene: 'Scene',
-            setup: ObservationSetup
+            options: SkyOptions
     ):
-        # (without pixel weights, which SlitlessSpectra.check_observation
-        # refuses)
-        super().__init__(model_cube, driver, scene, setup)
-        dtype = setup.dtype
+        # (without pixel weights, which
+        # ObservationSlitlessSpectra._check_options refuses)
+        super().__init__(model_cube, driver, scene, options)
+        dtype = options.dtype
         self._dispersion = SparseSumsPlan(dispersion, driver, dtype)
         size = grid.size
         self._image = driver.mem_alloc_d((1, size[0] * size[1]), dtype)

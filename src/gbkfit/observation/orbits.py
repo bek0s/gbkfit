@@ -19,12 +19,12 @@ from gbkfit.model.components.spheroids import (
     OrbitIntegrator, OrbitLibraryState, SkyGrid, Spheroid)
 from gbkfit.moments import gauss_hermite_norm, moment_item
 from gbkfit.params import ModelEvaluationError, ParamValues
-from .observables import ModelData, ModelItem
-from .observables._orbit_sky import bins_sky_grid
+from .plan import ModelData, ModelItem
+from .sky._orbit_sky import bins_sky_grid
 
 if TYPE_CHECKING:
     from .group import ObservationGroup
-    from .sky import ObservationSky
+    from .sky import ObservationRegionMoments
 
 
 __all__ = [
@@ -180,7 +180,7 @@ class OrbitRecording:
         self._order = max(data.order for data in self._data)
         self._grids = tuple(
             bins_sky_grid(
-                observation.observable().regions(), observation.instrument(),
+                observation.regions(), observation.instrument(),
                 observation.oversampling())
             for observation in observed)
         # (and those of the offsets of the frames of its observations)
@@ -389,9 +389,9 @@ class _BinsData:
     normalisation N_b of the series of each (see gauss_hermite_norm).
     """
 
-    def __init__(self, observation: 'ObservationSky', index: int):
-        dataset = observation.data()
-        orders = observation.observable().orders()
+    def __init__(self, observation: 'ObservationRegionMoments', index: int):
+        dataset = observation.dataset()
+        orders = observation.orders()
         self.order = len(orders)
         # (the Gauss-Hermite series of the stars: V, sigma, h3 ... hM)
         self.keys = {m: moment_item(m, 'gauss_hermite') for m in orders}
@@ -541,7 +541,7 @@ def orbit_recordings(
     """
     seen: dict[tuple[int, int], list[int]] = {}
     for i, observation in enumerate(group.observations()):
-        if observation.data() is not None:
+        if observation.dataset() is not None:
             for key in group.orbit_components(i):
                 seen.setdefault(key, []).append(i)
     return tuple(

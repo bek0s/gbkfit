@@ -13,9 +13,8 @@ import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.model import Extra, Extras
-from gbkfit.objective import Objective
-from gbkfit.observation import (
-    GroupPlan, HostModelData, Likelihood, ModelItem, Observation)
+from gbkfit.objective import Likelihood, Objective
+from gbkfit.observation import GroupPlan, HostModelData, ModelItem, Observation
 from gbkfit.outputs import Output, product_extension
 from gbkfit.params import ParamValues
 
@@ -48,7 +47,7 @@ def data_outputs(group_plan: GroupPlan) -> dict[str, Output]:
     outputs = []
     for i, (observation, driver) in enumerate(zip(
             group.observations(), group_plan.observation_drivers())):
-        if (dataset := observation.data()) is None:
+        if (dataset := observation.dataset()) is None:
             continue
         name = group.observation_label(i)
         for key in observation.keys():
@@ -220,7 +219,7 @@ def _residual_outputs(
     for k, i in enumerate(objective.observations()):
         observation, model = group.observations()[i], models[i]
         name = group.observation_label(i)
-        dataset = observation.data()
+        dataset = observation.dataset()
         likelihood = objective.likelihoods().of(i)
         for key, item in model.items():
             data = dataset[key]
@@ -257,7 +256,7 @@ def _fit_residual_differs(
     _residual_outputs): those of noise correlated in the data, whitened,
     or of a model with pixel weights, times them.
     """
-    item = observation.data()[key]
+    item = observation.dataset()[key]
     correlated = item.spatial_correlation() is not None \
         or item.spectral_correlation() is not None
     return likelihood.gives_residuals() \
@@ -295,7 +294,7 @@ def _images(
     outputs) makes of its model ('model_image') and of its data minus the
     model ('residual_image'; see Observation.images), on its driver.
     """
-    dataset = observation.data()
+    dataset = observation.dataset()
     weights = _weights(dataset)
     units = _units(dataset)
     images = [

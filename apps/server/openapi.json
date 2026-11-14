@@ -3007,9 +3007,9 @@
       },
       "ObservedInfo": {
         "properties": {
-          "observable": {
+          "type": {
             "type": "string",
-            "title": "Observable"
+            "title": "Type"
           },
           "arrays": {
             "items": {
@@ -3028,12 +3028,12 @@
         },
         "type": "object",
         "required": [
-          "observable",
+          "type",
           "arrays",
           "notes"
         ],
         "title": "ObservedInfo",
-        "description": "A galaxy as an observation of its project sees it: the type of its\nobservable (e.g. 'pixel_spectra'), its arrays (the model of each item,\nand the data and errors of the data, if it has them), and the warnings\nof the library as it set them up."
+        "description": "A galaxy as an observation of its project sees it: the type of the\nobservation (e.g. 'pixel_spectra'), its arrays (the model of each item,\nand the data and errors of the data, if it has them), and the warnings\nof the library as it set them up."
       },
       "ObservedRequest": {
         "properties": {

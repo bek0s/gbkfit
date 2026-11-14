@@ -33,7 +33,7 @@ from gbkfit.params import (
     joint_prior_residuals)
 
 if TYPE_CHECKING:
-    from gbkfit.observation import Likelihoods
+    from gbkfit.objective import Likelihoods
     from gbkfit.parallel import WorkerPool
 
 

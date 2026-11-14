@@ -22,7 +22,7 @@ from gbkfit.grid import GridData, SpectraData
 from gbkfit.io import Beam
 from gbkfit.model import DataUnit, DepthUnit, Galaxy
 from gbkfit.params import ParamDesc
-from .observables import FluxScale, ObservablePlan
+from .plan import FluxScale, ObservationPlan
 
 
 __all__ = [
@@ -63,7 +63,7 @@ class SkyFrame(NamedTuple):
     origin : tuple of float
         The RA and Dec (degrees) of its origin, from which the centres of
         what the observation sees are measured (e.g. the reference pixel
-        of the grid of its data, see Observable.sky_rval).
+        of the grid of its data, see ObservationSky.sky_rval).
     offsets : tuple of (str or None)
         The names of the parameters of the offsets of the frame, of x, y
         and the velocity (see ObservationSky): None for those it does not
@@ -111,7 +111,7 @@ class Observation(TypedSerializable, abc.ABC):
     galaxies : Sequence of str, optional
         The names of the galaxies it sees; required only when there are
         several (see ObservationGroup).
-    data : Dataset, optional
+    dataset : Dataset, optional
         The data, of its kind.
     name : str, optional
         Its name, which is the id of its extra outputs instead of its
@@ -136,7 +136,7 @@ class Observation(TypedSerializable, abc.ABC):
             self,
             keys: Sequence[str],
             galaxies: Sequence[str] | None = None,
-            data: Dataset | None = None,
+            dataset: Dataset | None = None,
             name: str | None = None,
             model_can_have_missing_values: bool = False
     ):
@@ -150,14 +150,14 @@ class Observation(TypedSerializable, abc.ABC):
                 raise ValueError(f"the galaxies repeat: {list(galaxies)}")
             for galaxy in galaxies:
                 check_name(galaxy)
-        if data is not None:
+        if dataset is not None:
             for key in keys:
                 # (the correlation of its noise must be one its kind of data
                 # can have)
-                data.noise_correlation(key)
+                dataset.noise_correlation(key)
         self._keys = keys
         self._galaxies = galaxies
-        self._data = data
+        self._dataset = dataset
         self._name = name
         self._model_can_have_missing_values = model_can_have_missing_values
 
@@ -169,9 +169,9 @@ class Observation(TypedSerializable, abc.ABC):
         """Return the names of the galaxies it sees, if given."""
         return self._galaxies
 
-    def data(self) -> Dataset | None:
-        """Return the data, if any."""
-        return self._data
+    def dataset(self) -> Dataset | None:
+        """Return its data, if any."""
+        return self._dataset
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
@@ -261,9 +261,9 @@ class Observation(TypedSerializable, abc.ABC):
         tuple
             The unit, or None, and the beam, or None.
         """
-        if self._data is None:
+        if self._dataset is None:
             return None, None
-        item = self._data[key]
+        item = self._dataset[key]
         return item.unit(), item.beam()
 
     @abc.abstractmethod
@@ -271,14 +271,14 @@ class Observation(TypedSerializable, abc.ABC):
         """Return the floating type of its model."""
 
     @abc.abstractmethod
-    def with_data(self, data: Dataset) -> Self:
+    def with_dataset(self, dataset: Dataset) -> Self:
         """
         Return a copy of it with other data (e.g. mock data; see
         draw_mocks).
 
         Parameters
         ----------
-        data : Dataset
+        dataset : Dataset
             The data, of the observation.
 
         Returns
@@ -295,9 +295,9 @@ class Observation(TypedSerializable, abc.ABC):
     def same_plan(self, other: 'Observation') -> bool:
         """
         Check whether its plan is also that of another observation, the
-        same one with other data (see with_data), which can then share it
-        (see GroupPlan.with_data): whether all that its plan takes from
-        its data is the same in the other.
+        same one with other data (see with_dataset), which can then share
+        it (see GroupPlan.with_datasets): whether all that its plan takes
+        from its data is the same in the other.
 
         Here, the unit of their light (see data_unit) and the floating
         type of their models, which the data can choose (see dtype);
@@ -324,7 +324,7 @@ class Observation(TypedSerializable, abc.ABC):
         group: those of the components whose light it sees, of the
         galaxies it sees, each with None if its model is linear in it, or
         why not (also when it is not linear in the light: see
-        Observable.linear_in_light); none here, where it sees no light.
+        ObservationSky.linear_in_light); none here, where it sees no light.
         """
         return {}
 
@@ -361,7 +361,7 @@ class Observation(TypedSerializable, abc.ABC):
         """
 
     @abc.abstractmethod
-    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
+    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservationPlan:
         """
         Plan the evaluation of its model (see ObservationGroup.plan).
 
@@ -374,7 +374,7 @@ class Observation(TypedSerializable, abc.ABC):
 
         Returns
         -------
-        ObservablePlan
+        ObservationPlan
             The plan.
         """
 
@@ -411,8 +411,8 @@ class Observation(TypedSerializable, abc.ABC):
     ) -> dict[str, GridData]:
         """
         Return images of values of its data items, as outputs (e.g. the
-        dirty images of visibilities; see Observable.images), made on a
-        driver; here, none.
+        dirty images of visibilities; see ObservationVisibilities.images),
+        made on a driver; here, none.
 
         Parameters
         ----------
@@ -442,8 +442,8 @@ class Observation(TypedSerializable, abc.ABC):
     ) -> dict[str, GridData]:
         """
         Return images of the PSF of its data (e.g. the dirty beam of
-        visibilities; see Observable.psf_images), which its images are
-        seen through, made on a driver; here, none.
+        visibilities; see ObservationVisibilities.psf_images), which its
+        images are seen through, made on a driver; here, none.
 
         Parameters
         ----------
@@ -462,9 +462,14 @@ class Observation(TypedSerializable, abc.ABC):
 
 def _same_unit(a: DataUnit | None, b: DataUnit | None) -> bool:
     """
-    Return whether two units of the light of data are the same (see
-    DataUnit, whose beams can be arrays, one for each spectral point).
+    Return whether two units of the light of data are the same for a plan
+    (see DataUnit, whose beams can be arrays, one for each spectral
+    point). Data without a unit of their light are as no data: the light
+    of the components is taken as it is (and their components have no
+    unit, which the check of an observation makes sure of; see
+    check_data_unit), e.g. mock data of an observation without data.
     """
+    a, b = (None if x is None or x.unit is None else x for x in (a, b))
     if a is None or b is None:
         return a is b
     return all(np.array_equal(x, y) if isinstance(x, np.ndarray)

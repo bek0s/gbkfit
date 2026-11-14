@@ -403,7 +403,7 @@ async def view_observed(
             shape=[nx, ny, nchannels], unit=array.unit,
             step=list(observed.step), rpix=list(observed.rpix)))
     return ObservedInfo(
-        observable=observed.observable, arrays=arrays, notes=observed.notes)
+        type=observed.type, arrays=arrays, notes=observed.notes)
 
 
 @router.get('/renders')

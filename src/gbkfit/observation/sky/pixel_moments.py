@@ -1,5 +1,5 @@
 """
-The observable of moments of the spectra on a grid of pixels: moment
+The observation of moments of the spectra on a grid of pixels: moment
 maps.
 """
 
@@ -10,27 +10,32 @@ from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis, grid_options
-from gbkfit.model import DataUnit, LightUnit, LineEmission
+from gbkfit.instrument import Instrument
+from gbkfit.model import Band, DataUnit, LightUnit, LineEmission
 from gbkfit.moments import (
     FluxFloor, Method, MomentsPlan, check_moment_items, check_moment_orders,
     moment_item, split_moments)
+from ..depth import Depth
+from ..foreground import Foreground
+from ..plan import ModelData
+from ..weights import Weights
 from . import _model_cube, _moments
-from ._cube_plan import CubeObservablePlan
+from ._cube_plan import CubePlan
 from ._data_units import data_unit
 from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size)
-from .base import ModelData, Observable, ObservationSetup
+from .base import DType, ObservationSky, SkyOptions
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
 
 
 __all__ = [
-    'PixelMoments'
+    'ObservationPixelMoments'
 ]
 
 
-class PixelMoments(Observable):
+class ObservationPixelMoments(ObservationSky):
     """
     Moments of the spectra on a grid of pixels: moment maps of a spectral
     cube of the model, seen through the instrument. The maps are of some
@@ -41,13 +46,13 @@ class PixelMoments(Observable):
     of the maps, and a spectral axis (spectral; see _moments.spectral_axis
     for its defaults).
 
-    Its configuration has the options below, but those of the grid and
-    the orders when it has data, which give them (see from_data).
+    Its options are those below, then those of every observation on the
+    sky (see ObservationSky). Its data give those of its grid and its
+    orders (given too, they serve only without data); without data, size
+    is required.
 
     Parameters
     ----------
-    size : int or Sequence of int
-        The number of pixels of the maps (nx, ny).
     spectral : SpectralAxis
         The spectral axis of the cube the maps are measured from (see
         SpectralAxis), and the convention of the velocities of
@@ -55,12 +60,17 @@ class PixelMoments(Observable):
         rest; see check_convention): none is right for all data
         (e.g. radio for HI, optical for lines of ionised gas, log for the
         stars of pPXF). By default, its channels are of 1 km/s and span
-        1000 km/s, centred on 0.
+        1000 km/s, centred on 0; with data, its size and rval cover the
+        velocities of the data: the range of moment 1, and three times
+        the largest dispersion (moment 2, but at least 100 km/s) on each
+        side.
+    size : int or Sequence of int, optional
+        The number of pixels of the maps (nx, ny).
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the maps (see Coords); rpix is
-        the centre by default.
+        The world coordinates of the maps (see Coords); without data, a
+        step of 1, rval 0, and rpix the centre by default.
     rota : float, optional
-        The rotation of the maps on the sky.
+        The rotation of the maps on the sky; 0 by default without data.
     flux_floor : float, optional
         The spectra of the model whose moment 0 is not above this fraction
         of the largest of the maps (in absolute value) have no moments
@@ -69,7 +79,7 @@ class PixelMoments(Observable):
         the rounding of convolutions); what the data lack is for their
         mask and their likelihood (e.g. upper limits).
     orders : Sequence of int, optional
-        The orders of the moments.
+        The orders of the moments; 0, 1 and 2 by default without data.
     method : str, optional
         How the maps are measured from the spectra, as the maps of the
         data were: 'moments'; 'gauss_fit' (the flux, centre and
@@ -91,8 +101,9 @@ class PixelMoments(Observable):
     ------
     ValueError
         If the orders are not valid for the method, flux_floor is not from
-        0 to below 1, the convention of the velocities is not known, or
-        median_size is not an odd number of at least 3.
+        0 to below 1, the convention of the velocities is not known,
+        median_size is not an odd number of at least 3, or an option of
+        every observation on the sky is not valid (see ObservationSky).
     """
 
     dataset_class = DatasetPixelMoments
@@ -111,54 +122,27 @@ class PixelMoments(Observable):
     def type_title() -> str:
         return 'Pixel moments (maps)'
 
+    defaults_without_data = ObservationSky.defaults_without_data | dict(
+        orders=(0, 1, 2))
+
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
         # The grid and the orders
         return super().options_from_data(dataset) + ('orders',)
 
     @classmethod
-    def from_data(
-            cls,
-            dataset: DatasetPixelMoments,
-            spectral: SpectralAxis,
-            flux_floor: FluxFloor = 1e-6,
-            method: Method = 'moments',
-            median_size: MedianSize | None = None
-    ) -> 'PixelMoments':
-        """
-        Make the observable of moment maps, on their grid and of their
-        orders.
-
-        Parameters
-        ----------
-        dataset : DatasetPixelMoments
-            The moment maps.
-        spectral : SpectralAxis
-            As that of PixelMoments. Its size and rval by default, with
-            moment 1, cover the velocities of the data: the range of moment
-            1, and three times the largest dispersion (moment 2, but at
-            least 100 km/s) on each side.
-        flux_floor, method, median_size : optional
-            As those of PixelMoments.
-
-        Returns
-        -------
-        PixelMoments
-            The observable.
-
-        Raises
-        ------
-        TypeError
-            If the dataset is not of moment maps.
-        ValueError
-            If the options are not valid.
-        """
-        check_options(PixelMoments.from_data, locals())
-        return cls(
-            **grid_options(dataset.grid()),
-            spectral=_moments.spectral_axis(spectral, dataset),
-            flux_floor=flux_floor, orders=dataset.orders(), method=method,
-            median_size=median_size)
+    def _options_from_data(
+            cls, dataset: DatasetPixelMoments, options: dict[str, Any]
+    ) -> dict[str, Any]:
+        # (the grid and the orders of the maps, and the spectral axis of
+        # the cube, which covers the velocities of the data unless its
+        # size and rval are given, see _moments.spectral_axis)
+        spectral = options['spectral']
+        covered = {} if spectral.size() is not None \
+            and spectral.rval() is not None else dict(
+                spectral=_moments.spectral_axis(spectral, dataset))
+        return grid_options(dataset.grid()) \
+            | dict(orders=dataset.orders()) | covered
 
     def _dump_options(
             self, prefix: str, dump_path: bool, overwrite: bool
@@ -170,27 +154,55 @@ class PixelMoments(Observable):
             method=self._method,
             median_size=self._median_size)
 
+    def _kind_options(self) -> dict[str, Any]:
+        return grid_options(self.grid()) | dict(
+            spectral=self._spectral, flux_floor=self._flux_floor,
+            orders=self._orders, method=self._method,
+            median_size=self._median_size)
+
     def __init__(
             self,
-            size: Size,
             spectral: SpectralAxis,
-            step: Step = (1, 1),
+            size: Size | None = None,
+            step: Step | None = None,
             rpix: Rpix | None = None,
-            rval: Rval = (0, 0),
-            rota: Rota = 0,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             flux_floor: FluxFloor = 1e-6,
-            orders: Sequence[int] = (0, 1, 2),
+            orders: Sequence[int] | None = None,
             method: Method = 'moments',
-            median_size: MedianSize | None = None
+            median_size: MedianSize | None = None,
+            foreground: Foreground | None = None,
+            instrument: Instrument | None = None,
+            galaxies: Sequence[str] | None = None,
+            components: Sequence[str] | None = None,
+            lines: Sequence[str] | None = None,
+            band: str | Band | None = None,
+            pixel_weights: Weights | None = None,
+            flux_scale: str | None = None,
+            offsets: Mapping[str, bool] | None = None,
+            dataset: Dataset | None = None,
+            oversampling: Sequence[int] | None = None,
+            depth: Depth | None = None,
+            dtype: DType | None = None,
+            fft_dtype: DType = 'float64',
+            name: str | None = None,
+            unit: str | None = None
     ):
-        check_options(PixelMoments.__init__, locals())
-        super().__init__(size, step, rpix, rval, rota)
+        check_options(ObservationPixelMoments.__init__, locals())
+        options = self._options(dataset, dict(
+            size=size, step=step, rpix=rpix, rval=rval, rota=rota,
+            spectral=spectral, orders=orders))
         check_median_size(median_size)
         self._median_size = median_size
-        self._orders = check_moment_orders(orders, method)
-        self._spectral = _moments.spectral_axis(spectral)
+        self._orders = check_moment_orders(options.pop('orders'), method)
+        self._spectral = _moments.spectral_axis(options.pop('spectral'))
         self._flux_floor = flux_floor
         self._method = method
+        super().__init__(
+            self._make_grid(**options), foreground, instrument, galaxies,
+            components, lines, band, pixel_weights, flux_scale, offsets,
+            dataset, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def keys(self) -> tuple[str, ...]:
         return tuple(moment_item(i, self._method) for i in self._orders)
@@ -199,10 +211,10 @@ class PixelMoments(Observable):
         return DatasetPixelMoments(
             *split_moments(items), **grid_options(self.grid(), sizes=False))
 
-    def data_unit(
+    def _data_unit(
             self,
             dataset: Dataset | None,
-            light: LightUnit | None = None
+            light: LightUnit | None
     ) -> DataUnit | None:
         return data_unit(
             dataset, 'moment0' if 0 in self._orders else None,
@@ -239,46 +251,42 @@ class PixelMoments(Observable):
         """
         return self._spectral
 
-    def check_observation(self, setup: ObservationSetup) -> None:
-        if setup.pixel_weights is not None and self._method != 'moments':
+    def _check_options(self, options: SkyOptions) -> None:
+        if options.pixel_weights is not None and self._method != 'moments':
             raise ValueError(
                 f"the method {self._method} does not support pixel_weights "
                 f"yet")
-        _moments.warn_unmasked_noise(self._flux_floor, setup.instrument)
+        _moments.warn_unmasked_noise(self._flux_floor, options.instrument)
 
-    def check_scene(self, scene: 'Scene', setup: ObservationSetup) -> None:
+    def _check_scene(self, scene: 'Scene') -> None:
         _moments.check_one_line(scene)
-        super().check_scene(scene, setup)
+        super()._check_scene(scene)
 
     def check_dataset(self, dataset: Dataset) -> None:
         check_moment_items(dataset, self._method)
         super().check_dataset(dataset)
 
-    def plan(
-            self,
-            driver: Driver,
-            scene: 'Scene',
-            setup: ObservationSetup
-    ) -> 'PixelMomentsPlan':
+    def _plan(self, driver: Driver, scene: 'Scene') -> 'PixelMomentsPlan':
+        options = self._sky_options
         model_cube = _moments.spectra_model_cube(
-            self, setup, self._median_size)
-        return PixelMomentsPlan(self, model_cube, driver, scene, setup)
+            self, options, self._median_size)
+        return PixelMomentsPlan(self, model_cube, driver, scene, options)
 
 
-class PixelMomentsPlan(CubeObservablePlan):
+class PixelMomentsPlan(CubePlan):
 
     def __init__(
             self,
-            moments: PixelMoments,
+            moments: ObservationPixelMoments,
             model_cube: _model_cube.ModelCube,
             driver: Driver,
             scene: 'Scene',
-            setup: ObservationSetup
+            options: SkyOptions
     ):
-        super().__init__(model_cube, driver, scene, setup)
+        super().__init__(model_cube, driver, scene, options)
         self._moments = MomentsPlan(
             driver, moments.size(), moments.orders(), moments.flux_floor(),
-            moments.method(), setup.dtype)
+            moments.method(), options.dtype)
 
     def _measure(self, draw: bool = False) -> ModelData:
         # The moment maps, with the mask and the weight map they share: of

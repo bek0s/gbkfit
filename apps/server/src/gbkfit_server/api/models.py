@@ -212,12 +212,12 @@ class ObservedArrayInfo(BaseModel):
 
 class ObservedInfo(BaseModel):
     """
-    A galaxy as an observation of its project sees it: the type of its
-    observable (e.g. 'pixel_spectra'), its arrays (the model of each item,
+    A galaxy as an observation of its project sees it: the type of the
+    observation (e.g. 'pixel_spectra'), its arrays (the model of each item,
     and the data and errors of the data, if it has them), and the warnings
     of the library as it set them up.
     """
-    observable: str
+    type: str
     arrays: list[ObservedArrayInfo]
     notes: list[str]
 

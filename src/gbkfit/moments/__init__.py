@@ -25,7 +25,7 @@ are not its mean and dispersion. gauss_hermite_moments gives those
 line of sight, fitted to the series of pPXF), and gauss_hermite_norm
 its normalisation.
 
-Datasets name their items by it, the observables measure their models
+Datasets name their items by it, the observations measure their models
 with it, and the prep task, the Studio and users measure or convert
 data with it. It needs no model and no data.
 """

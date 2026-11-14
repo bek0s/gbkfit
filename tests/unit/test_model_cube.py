@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from gbkfit.grid import make_grid
-from gbkfit.observation.observables._model_cube import ModelCube, cube_extra
+from gbkfit.observation.sky._model_cube import ModelCube, cube_extra
 from gbkfit.instrument import Channel, LSFGauss
 from gbkfit.instrument import PSFGauss
 

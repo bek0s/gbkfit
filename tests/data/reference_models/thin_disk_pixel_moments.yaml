@@ -1,4 +1,4 @@
-version: 10
+version: 12
 driver: {type: host}
 galaxies:
 - components:
@@ -11,14 +11,11 @@ galaxies:
     dptraits: {type: uniform}
     emission: {type: lines}
 observations:
-- type: sky
-  line_of_sight: {type: flat}
-  observable:
-    type: pixel_moments
-    size: [48, 48]
-    step: [1, 1]
-    orders: [0, 1, 2]
-    spectral: {convention: relativistic}
+- type: pixel_moments
+  size: [48, 48]
+  step: [1, 1]
+  orders: [0, 1, 2]
+  spectral: {convention: relativistic}
   instrument:
     psf: {type: gauss, sigma: 1.5}
     lsf: {type: gauss, sigma: 15.0 km/s}

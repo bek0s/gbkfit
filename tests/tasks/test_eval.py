@@ -33,17 +33,17 @@ def run_task(workdir, task, options, *flags):
         cwd=workdir, capture_output=True, text=True)
 
 
-def data_grid(observable):
+def data_grid(observation):
     """
-    Remove the grid of an observable, and return it as the options of data
-    without world coordinates, which then give it (with the type of the
-    data, that of the observable).
+    Remove the grid of an observation (its configuration), and return it
+    as the options of data without world coordinates, which then give it
+    (with the type of the data, that of the observation).
     """
-    observable.pop('size')
-    spectral = observable.pop('spectral')
+    observation.pop('size')
+    spectral = observation.pop('spectral')
     spectral.pop('size')
     return dict(
-        type=observable['type'], step=observable.pop('step'),
+        type=observation['type'], step=observation.pop('step'),
         spectral=spectral)
 
 
@@ -83,7 +83,7 @@ def mock_data(run, k):
     filename = pathlib.Path(run.filename(run.product('mock_config', mock=k)))
     config = yaml.load(filename)
     root = filename.parent / config['root']
-    data = config['observations'][0]['data']
+    data = config['observations'][0]['dataset']
     return filename, *(
         np.array(fits.getdata(root / data[part])) for part in ('data', 'error'))
 
@@ -99,9 +99,9 @@ def test_objective_residuals(tmp_path):
     model = array(run_eval('model', config, tmp_path / 'model'), 'model')
     fits.writeto(tmp_path / 'data.fits', model + 1)
     observation = config['observations'][0]
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         data=str(tmp_path / 'data.fits'), error=2.0) \
-        | data_grid(observation['observable'])
+        | data_grid(observation)
     config['likelihoods'] = dict(type='gauss', weights=0.5)
     # (a configuration of a fit evaluates too: its fitter is left)
     config['fitter'] = dict(type='scipy.least_squares')
@@ -132,9 +132,9 @@ def test_profiling_writes_the_timings(tmp_path, mode):
         model = array(run_eval('model', config, tmp_path / 'model'), 'model')
         fits.writeto(tmp_path / 'data.fits', model)
         observation = config['observations'][0]
-        observation['data'] = dict(
+        observation['dataset'] = dict(
             data=str(tmp_path / 'data.fits'), error=1.0) \
-            | data_grid(observation['observable'])
+            | data_grid(observation)
     run = run_eval(mode, config, tmp_path / mode, profile_iters=3)
     timings = run.read(run.product('timings'))
     assert timings['model_eval']['count'] == 3
@@ -201,9 +201,9 @@ def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     # data and the residuals, 1, as those the task writes
     fits.writeto(tmp_path / 'data.fits', expected + 1)
     observation = config['observations'][0]
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         data=str(tmp_path / 'data.fits'), error=2.0) \
-        | data_grid(observation['observable'])
+        | data_grid(observation)
     yaml.dump(config, tmp_path / 'data.yaml')
     setup = gbkfit.load(str(tmp_path / 'data.yaml'))
     outputs = setup.outputs(setup.evaluate(), data=True)
@@ -224,9 +224,9 @@ def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
     project.create(str(study))
     fits.writeto(study / 'data/cube.fits', model + 1)
     observation = config['observations'][0]
-    observation['data'] = dict(
+    observation['dataset'] = dict(
         data='data/cube.fits', error=2.0) \
-        | data_grid(observation['observable'])
+        | data_grid(observation)
     for path, piece in (
             ('galaxies/disk.yaml', config['galaxies'][0]),
             ('observations/cube.yaml', observation),
@@ -269,13 +269,13 @@ def test_unknown_options(tmp_path):
 
 
 def test_outputs_have_the_world_coordinates_of_the_model(tmp_path):
-    # The model is written with the coordinates of its observable, so it can
-    # be read back with them
+    # The model is written with the coordinates of its observation, so it
+    # can be read back with them
     from gbkfit.io import read_data
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    observable = config['observations'][0]['observable']
-    observable.update(rval=[150, 2], rota=30)
-    observable['spectral'].update(rval=1500)
+    observation = config['observations'][0]
+    observation.update(rval=[150, 2], rota=30)
+    observation['spectral'].update(rval=1500)
     run = run_eval('model', config, tmp_path / 'model')
     _, coords = read_data(run.filename(run.product('model')))
     np.testing.assert_allclose(coords.step, [1, 1, 10], rtol=1e-12)
@@ -290,12 +290,9 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
     # is 1 (0.5 in errors).
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     observation = config['observations'][0]
-    scube = observation['observable']
     regions = dict(type='apertures', apertures=[
         dict(type='field'), dict(type='circle', x=0, y=0, radius=3)])
-    observation['observable'] = dict(
-        type='region_spectra', regions=regions, size=scube['size'],
-        step=scube['step'], spectral=scube['spectral'])
+    observation.update(type='region_spectra', regions=regions)
     run = run_eval('model', config, tmp_path / 'model')
     model = array(run, 'model')
     assert model.shape == (50, 2)
@@ -304,10 +301,9 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
     assert header['CTYPE2'] == 'VELO'
     assert header['CDELT2'] == 10
     fits.writeto(tmp_path / 'data.fits', model + 1, header)
-    observable = observation['observable']
     for key in ('regions', 'spectral'):
-        observable.pop(key)
-    observation['data'] = dict(
+        observation.pop(key)
+    observation['dataset'] = dict(
         type='region_spectra', regions=regions,
         data=str(tmp_path / 'data.fits'), error=2.0)
     run = run_eval('objective', config, tmp_path / 'objective')
@@ -321,11 +317,10 @@ def test_one_galaxy_seen_by_two_observations(tmp_path):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     scube = config['observations'][0]
     mmaps = dict(
-        type='sky',
-        name='maps', line_of_sight=dict(type='flat'),
-        observable=dict(
-            type='pixel_moments', size=[48, 48],
-            spectral=dict(convention='relativistic')))
+        type='pixel_moments',
+        name='maps',
+        size=[48, 48],
+        spectral=dict(convention='relativistic'))
     config['observations'] = [scube | dict(name='cube'), mmaps]
     run = run_eval('model', config, tmp_path / 'model')
     assert array(run, 'model', observation='cube').shape == (50, 48, 48)

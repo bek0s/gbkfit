@@ -16,7 +16,7 @@ import ruamel.yaml
 
 from gbkfit import migration, project, setup
 from gbkfit.config import FORMAT_VERSION, ConfigError
-from gbkfit.observation import observable_parser
+from gbkfit.observation import observation_parser
 
 
 yaml = ruamel.yaml.YAML(typ='safe')
@@ -25,10 +25,25 @@ yaml = ruamel.yaml.YAML(typ='safe')
 VERSION = FORMAT_VERSION
 
 OBSERVATION = dict(
-    type='sky', name='kmos', line_of_sight=dict(type='flat'),
+    type='sky', name='kmos',
     observable=dict(
         type='pixel_spectra', size=[4, 4],
         spectral=dict(size=5, convention='relativistic')))
+
+
+def merged(observation):
+    """
+    An observation of a configuration of an older version, as the
+    version of 12 has it: its observable merged into it (see
+    migration.v12).
+    """
+    result = {}
+    for key, value in observation.items():
+        if key == 'observable':
+            result |= {k: v for k, v in value.items() if k != 'type'}
+        else:
+            result[key] = value
+    return result | dict(type=observation['observable']['type'])
 
 
 @pytest.mark.parametrize('version, message', [
@@ -113,7 +128,9 @@ def test_a_project_is_migrated_across_its_pieces(tmp_path):
     changes = migration.migrate_project(study.path)
     assert changes == {
         'observations/kmos.yaml': [
-            migration.Change([], "calibration -> flux_scale: one")],
+            migration.Change([], "calibration -> flux_scale: one"),
+            migration.Change(
+                ['observable'], "merged: type sky -> pixel_spectra")],
         'params/flux.yaml': [
             migration.Change(
                 ['properties'], "kmos_calibration -> kmos_flux_scale")]}
@@ -170,18 +187,18 @@ def test_components_of_version_2_keep_the_geometry_of_their_galaxy():
 
 
 def test_observations_without_a_type_are_migrated_to_the_sky():
+    # (and then of the type of their observable, see version 12)
     observation = dict(observable=dict(type='pixel_brightness'))
     migration.migrate(dict(observations=[observation, 'named']), 1)
-    assert list(observation) == ['type', 'observable']
-    assert observation['type'] == 'sky'
+    assert observation == dict(type='pixel_brightness')
 
 
 def test_the_old_observation_options_are_migrated():
     observation = OBSERVATION | dict(
         scale=[2, 2, 1], weights=dict(component='disk'))
     migration.migrate(dict(observations=[observation]), 1)
-    assert observation == OBSERVATION | dict(
-        oversampling=[2, 2, 1], pixel_weights=dict(component='disk'))
+    assert observation == merged(OBSERVATION | dict(
+        oversampling=[2, 2, 1], pixel_weights=dict(component='disk')))
 
 
 def test_kinematics_are_migrated_to_typed_ones():
@@ -218,7 +235,7 @@ def test_spectral_axes_are_migrated_to_one_option():
     assert cube == dict(
         type='pixel_spectra', size=[8, 8], step=[1, 1],
         spectral=dict(size=20, step=10, convention='relativistic'))
-    assert observations[2]['data'] == dict(
+    assert observations[2]['dataset'] == dict(
         type='pixel_spectra', data='cube.fits', step=[1, 1],
         spectral=dict(step=10, rest='1420 MHz'))
 
@@ -381,10 +398,11 @@ def test_rings_from_the_centre_lose_rnmin():
     assert any(c.message.startswith('by hand') for c in changes)
 
 
-def test_datasets_have_the_types_of_their_observables():
+def test_datasets_have_the_types_of_their_observations():
     # (on which the migration of the data of observations relies)
-    for type_, cls in observable_parser.registered_classes().items():
-        assert cls.dataset_class.type() == type_
+    for type_, cls in observation_parser.registered_classes().items():
+        if type_ != 'profile':
+            assert cls.dataset_class.type() == type_
 
 
 def test_gauss_hermite_moments_are_migrated_to_h3_and_h4():
@@ -398,7 +416,7 @@ def test_gauss_hermite_moments_are_migrated_to_h3_and_h4():
     migration.migrate(dict(observations=[hermite, central]), 2)
     assert data == dict(type='pixel_moments', moment1='v.fits',
                         h3='h3.fits', h4='h4.fits')
-    assert central['data'] == dict(moment3='m3.fits')
+    assert central['dataset'] == dict(moment3='m3.fits')
 
 
 # Two disks and a point of version 3 that share the geometry of their
@@ -1227,12 +1245,12 @@ def test_the_distances_of_tables_and_profiles_are_assumed_distances():
     migration.migrate(config, 7)
     assert 'distance' not in table and table['assumed_distance'] == 10
     assert profile['assumed_distance'] == 10
-    assert profile['data']['assumed_distance'] == 10
-    pieces = migration.rules.PiecesView(data=[
+    assert profile['dataset']['assumed_distance'] == 10
+    pieces = migration.rules.PiecesView(dataset=[
         dict(type='profile', file='rc.ecsv', distance=10),
         dict(type='pixel_spectra', data='cube.fits')])
     migration.v8.AssumedDistances().rewrite(pieces)
-    assert pieces['data'] == [
+    assert pieces['dataset'] == [
         dict(type='profile', file='rc.ecsv', assumed_distance=10),
         dict(type='pixel_spectra', data='cube.fits')]
 
@@ -1287,7 +1305,7 @@ def test_moments_of_fitted_gaussians_are_of_the_method_gauss_fit():
         dict(type='sky', observable=dict(
             type='pixel_moments', size=[8, 8], method='gauss_hermite'))])
     changes = migration.migrate(config, 8)
-    assert [o['observable']['method'] for o in config['observations']] == [
+    assert [o['method'] for o in config['observations']] == [
         'gauss_fit', 'gauss_fit', 'gauss_hermite']
     assert migration.Change(
         ['observations', 1, 'observable'],
@@ -1326,7 +1344,7 @@ def test_the_mask_of_slitless_spectra_is_a_slit_mask():
         type='slitless_spectra', size=[32, 24], aperture=mask,
         sky_sampling=2))])
     migration.migrate(config, 8)
-    assert config['observations'][0]['observable'] == dict(
+    assert config['observations'][0] == dict(
         type='slitless_spectra', size=[32, 24], slit_mask=mask,
         sky_sampling=2)
 
@@ -1348,43 +1366,41 @@ def test_slits_are_oriented_by_their_position_angle():
             type='pixel_spectra', size=[4, 4], rota=30))])
     changes = migration.migrate(config, 8)
     observations = config['observations']
-    assert observations[0]['observable'] == dict(
+    assert observations[0] == dict(
         type='slit_spectra', size=[40], slit_pa=-60, slit_width=1.5)
-    assert observations[1]['data']['slit_pa'] == 30.5
-    assert observations[2]['data'] == dict(
+    assert observations[1]['dataset']['slit_pa'] == 30.5
+    assert observations[2]['dataset'] == dict(
         type='slit_spectra', data='slit.fits', slit_pa=None)
-    assert observations[3]['observable'] == dict(
-        type='slit_spectra', size=[40])
-    assert observations[4]['observable']['rota'] == 30
+    assert observations[3] == dict(type='slit_spectra', size=[40])
+    assert observations[4]['rota'] == 30
     assert not any(c.message.startswith('by hand') for c in changes)
-    pieces = migration.rules.PiecesView(data=[
+    pieces = migration.rules.PiecesView(dataset=[
         dict(type='slit_spectra', data='slit.fits', rota=0),
         dict(type='pixel_spectra', data='cube.fits', rota=0)])
     migration.v9.SlitPositionAngles().rewrite(pieces)
-    assert pieces['data'] == [
+    assert pieces['dataset'] == [
         dict(type='slit_spectra', data='slit.fits', slit_pa=-90),
         dict(type='pixel_spectra', data='cube.fits', rota=0)]
     # (an angle that is not a number is changed by hand)
     config = dict(observations=[dict(type='sky', observable=dict(
         type='slit_spectra', size=[40], rota='30'))])
     changes = migration.migrate(config, 8)
-    assert config['observations'][0]['observable']['rota'] == '30'
+    assert config['observations'][0]['rota'] == '30'
     assert any(c.message.startswith('by hand') for c in changes)
 
 
 def test_the_slit_pa_of_a_migrated_slit_is_the_slit_of_its_rota():
-    # The migrated observable is the slit it was: its grid has the rota of
-    # the configuration of version 8
+    # The migrated observation is the slit it was: its grid has the rota
+    # of the configuration of version 8
     config = dict(observations=[dict(
-        type='sky', line_of_sight=dict(type='flat'), observable=dict(
+        type='sky', observable=dict(
             type='slit_spectra', size=[40],
             spectral=dict(size=5, step=10, convention='relativistic'),
             rota=30))])
     migration.migrate(config, 8)
-    observable = observable_parser.load(
-        config['observations'][0]['observable'])
-    assert observable.grid().coords.rota == 30
-    assert observable.slit_pa() == -60
+    observation = observation_parser.load(config['observations'][0])
+    assert observation.grid().coords.rota == 30
+    assert observation.slit_pa() == -60
 
 
 def test_the_parameters_of_lens_masses_are_named_as_those_of_disks():
@@ -1478,6 +1494,16 @@ def with_data(name=None, **options):
                                              data='image.fits')) | options
 
 
+def migrated(observation):
+    """
+    The configuration of an observation of version 9 or 10 (see with_data)
+    as it is in the current version: its dataset is its option dataset.
+    """
+    observation = dict(observation)
+    observation['dataset'] = observation.pop('data')
+    return observation
+
+
 def without_data(name=None, **options):
     """The configuration of an observation without data."""
     named = {} if name is None else dict(name=name)
@@ -1543,14 +1569,13 @@ def _group_of(observations):
     """
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        LineOfSightFlat, ObservationGroup, ObservationSky, PixelBrightness)
+        ObservationGroup, ObservationPixelBrightness)
     galaxy = galaxy_parser.load(dict(components=[dict(
         type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
         emission=dict(type='band'))]))
     return ObservationGroup(galaxy, [
-        ObservationSky(
-            PixelBrightness(size=(8, 8)), LineOfSightFlat(),
-            name=observation.get('name'))
+        ObservationPixelBrightness(
+            size=(8, 8), name=observation.get('name'))
         for observation in observations])
 
 
@@ -1649,12 +1674,12 @@ def test_a_migrated_file_has_its_likelihoods_after_its_observations(
         "params: {properties: {a: 1}}  # the parameters\n")
     migration.migrate_file(str(path))
     assert path.read_text() == (
-        "version: 10\n"
+        f"version: {VERSION}\n"
         "# the observations\n"
         "observations:\n"
         "- type: sky\n"
         "  name: hi\n"
-        "  data: {type: pixel_brightness, data: hi.fits}\n"
+        "  dataset: {type: pixel_brightness, data: hi.fits}\n"
         "likelihoods: {type: gauss, missing_residual: 3}\n"
         "params: {properties: {a: 1}}  # the parameters\n")
 
@@ -1679,13 +1704,15 @@ def test_the_likelihoods_of_observation_pieces_move_into_their_setups(
         'unnamed', with_data(likelihood=dict(type='gauss'))]),
         setups / 'by_hand.yaml')
     changes = migration.migrate_project(study.path)
-    assert study.piece('observations', 'hi') == with_data('hi')
-    assert changes['observations/hi.yaml'] == [migration.Change(
-        ['likelihood'],
-        "-> the section likelihoods of the setups that name the piece")]
+    assert study.piece('observations', 'hi') == migrated(with_data('hi'))
+    assert changes['observations/hi.yaml'] == [
+        migration.Change(['likelihood'], (
+            "-> the section likelihoods of the setups that name the "
+            "piece")),
+        migration.Change(['data'], "-> dataset")]
     joint = yaml.load(setups / 'joint.yaml')
     assert joint == dict(
-        observations=['hi', with_data('ha')],
+        observations=['hi', migrated(with_data('ha'))],
         likelihoods=dict(hi=MOMENTS),
         mock=dict(noise=dict(
             hi=dict(type='gauss', rms=1), ha=dict(type='gauss', rms=2))))
@@ -1698,3 +1725,116 @@ def test_the_likelihoods_of_observation_pieces_move_into_their_setups(
         "by hand: name the observation piece 'unnamed' (e.g. "
         "'observation0'), and give its likelihood by that name")) \
         in changes['setups/by_hand.yaml']
+
+
+@pytest.mark.parametrize('line_of_sight, depth', [
+    (dict(type='flat'), None),
+    (dict(type='grid'), None),
+    (dict(type='grid', depth=dict(step=0.5)), dict(step=0.5)),
+    (dict(type='transfer', depth=dict(extent=120), slab=4, subchannels=2),
+     dict(extent=120, slab=4, subchannels=2)),
+    (dict(type='transfer', slab=None, subchannels=4), dict(subchannels=4))])
+def test_the_line_of_sight_leaves_for_the_depth_of_the_observation(
+        line_of_sight, depth):
+    # Version 11: the components decide how an observation is evaluated
+    # along the line of sight; its depth axis and the options of
+    # radiative transfer are its option depth, in the place of the line of
+    # sight
+    config = dict(observations=[dict(
+        type='sky', name='hi', line_of_sight=line_of_sight,
+        observable=dict(type='pixel_brightness', size=[8, 8]))])
+    changes = migration.migrate(config, 10)
+    observation = config['observations'][0]
+    assert 'line_of_sight' not in observation
+    if depth is None:
+        assert list(observation) == ['type', 'name', 'size']
+    else:
+        assert observation['depth'] == depth
+        assert list(observation) == ['type', 'name', 'depth', 'size']
+    assert any(
+        change.path == ['observations', 0, 'line_of_sight']
+        for change in changes)
+    # (the migrated configuration loads)
+    group_of_config = setup._config._load_observation_group
+    group_of_config(config | dict(galaxies=[dict(components=[dict(
+        type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+        emission=dict(type='band'))])]))
+
+
+def test_a_migrated_line_of_sight_keeps_the_comments(tmp_path):
+    path = tmp_path / 'fit.yaml'
+    path.write_text(
+        "version: 10\n"
+        "observations:\n"
+        "- type: sky\n"
+        "  # the depth axis\n"
+        "  line_of_sight: {type: grid, depth: {step: 0.5}}  # fine\n"
+        "  observable: {type: pixel_brightness, size: [8, 8]}\n")
+    migration.migrate_file(str(path))
+    # (the comment after it stays in its column)
+    lines = path.read_text().splitlines()
+    assert lines[:4] == [
+        f"version: {VERSION}", "observations:", "- type: pixel_brightness",
+        "  # the depth axis"]
+    assert lines[4].split() == ['depth:', '{step:', '0.5}', '#', 'fine']
+    assert lines[5] == "  size: [8, 8]"
+
+
+def test_the_data_of_an_observation_are_its_dataset():
+    # Version 11: the dataset of an observation, in place or the name of a
+    # piece, is its option dataset, in its place; the values of its items
+    # keep their option data
+    config = dict(observations=[
+        dict(type='sky', name='hi', data=dict(
+            type='pixel_brightness', data='image.fits'),
+            observable=dict(type='pixel_brightness')),
+        dict(type='profile', name='rc', data='rotation_curve'),
+        dict(type='sky', name='mock', observable=dict(
+            type='pixel_brightness', size=[8, 8]))])
+    changes = migration.migrate(config, 10)
+    hi, rc, mock = config['observations']
+    assert list(hi) == ['type', 'name', 'dataset']
+    assert hi['dataset'] == dict(type='pixel_brightness', data='image.fits')
+    assert rc == dict(type='profile', name='rc', dataset='rotation_curve')
+    assert 'dataset' not in mock and 'data' not in mock
+    assert migration.Change(['observations', 0, 'data'], "-> dataset") \
+        in changes
+
+
+def test_the_observable_of_an_observation_is_merged_into_it(tmp_path):
+    # Version 12: an observation on the sky takes the type of its
+    # observable, and the options of its observable at their place; the
+    # observations of profiles stay
+    config = dict(observations=[
+        dict(type='sky', name='hi', observable=dict(
+            type='pixel_spectra', size=[8, 8], spectral=dict(size=5)),
+            dataset='cube', instrument=dict(psf='kmos')),
+        dict(type='profile', name='rc', dataset='rotation_curve'),
+        'named'])
+    changes = migration.migrate(config, 11)
+    hi, rc, named = config['observations']
+    assert list(hi) == [
+        'type', 'name', 'size', 'spectral', 'dataset', 'instrument']
+    assert hi == dict(
+        type='pixel_spectra', name='hi', size=[8, 8],
+        spectral=dict(size=5), dataset='cube', instrument=dict(psf='kmos'))
+    assert rc == dict(type='profile', name='rc', dataset='rotation_curve')
+    assert named == 'named'
+    assert migration.Change(
+        ['observations', 0, 'observable'],
+        "merged: type sky -> pixel_spectra") in changes
+    # (with the comments of YAML)
+    path = tmp_path / 'fit.yaml'
+    path.write_text(
+        "version: 11\n"
+        "observations:\n"
+        "- type: sky  # a cube\n"
+        "  observable:\n"
+        "    type: pixel_spectra\n"
+        "    size: [8, 8]  # of KMOS\n"
+        "  name: kmos\n")
+    migration.migrate_file(str(path))
+    lines = path.read_text().splitlines()
+    assert [line.split() for line in lines[1:]] == [
+        ['observations:'], ['-', 'type:', 'pixel_spectra', '#', 'a', 'cube'],
+        ['size:', '[8,', '8]', '#', 'of', 'KMOS'], ['name:', 'kmos']]

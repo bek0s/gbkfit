@@ -13,7 +13,7 @@ import pytest
 from gbkfit.dataset import DatasetVisibilities
 from gbkfit.grid import make_grid
 from gbkfit.grid.coords import _to_sky
-from gbkfit.observation.observables._uv_transforms import uv_transforms
+from gbkfit.observation.sky._uv_transforms import uv_transforms
 
 
 pytest.importorskip('casacore')
@@ -59,17 +59,17 @@ def test_the_dirty_image_of_casa_is_the_point(driver):
     # Of natural weights, it peaks at the pixel of the point (x = -20, y =
     # 15 of a grid of 1 arcsec at the phase centre) with its flux, 1 Jy;
     # the dirty beam peaks at the phase centre with 1
-    from gbkfit.observation import Visibilities
+    from gbkfit.observation import ObservationVisibilities
     dataset = DatasetVisibilities.from_ms(str(MS), rest=REST)
-    observable = Visibilities.from_data(
-        dataset, fov=(61, 41), step=1, transform='sin')
+    observation = ObservationVisibilities(
+        fov=(61, 41), step=1, transform='sin', dataset=dataset)
     weights = {key: 1 / dataset[key].error() ** 2 for key in ('re', 'im')}
-    dirty = observable.images(
+    dirty = observation.images(
         driver, {key: dataset[key].data() for key in ('re', 'im')},
         weights, {key: dataset[key].unit() for key in ('re', 'im')})['dirty']
     assert dirty.unit == 'Jy beam-1'
     dirty = dirty.data
-    beam = observable.psf_images(driver, weights)['dirty_beam'].data
+    beam = observation.psf_images(driver, weights)['dirty_beam'].data
     for image, peak in ((dirty, (20 + 15, 30 - 20)), (beam, (20, 30))):
         assert np.unravel_index(np.argmax(image[0]), image[0].shape) == peak
         np.testing.assert_allclose(image[:, peak[0], peak[1]], 1, atol=1e-5)

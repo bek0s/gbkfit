@@ -121,14 +121,14 @@ class ObservedArray:
 class Observed:
     """
     A galaxy as an observation sees it (see Renders.observed): the type of
-    the observable of the observation, its arrays (the model of each item,
+    the observation (e.g. 'pixel_spectra'), its arrays (the model of each item,
     and the data and errors of the data, if it has them), the velocities of
     its channels (km/s; None without a spectral axis), and the warnings of
     the library as it set them up (e.g. a PSF narrower than the pixels),
     and its pixels on the sky: their size (x, y; arcsec) and the pixel (x,
     y; 0-based) that the model measures positions from.
     """
-    observable: str
+    type: str
     arrays: list[ObservedArray]
     velocities: np.ndarray | None
     notes: list[str]
@@ -296,8 +296,8 @@ class Renders:
                     | gbkfit.setup.data_outputs(plan)
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
-        observable = seen[0].observable()
-        light = seen[0].data_unit()
+        observation = seen[0]
+        light = observation.data_unit()
         arrays = []
         for output in outputs.values():
             data = getattr(output.value, 'data', output.value)
@@ -307,7 +307,7 @@ class Renders:
                 arrays.append(ObservedArray(
                     output.kind, item, np.asarray(data, dtype=np.float32),
                     _item_unit(item, light)))
-        spectral = observable.spectral()
+        spectral = observation.spectral()
         velocities = None if spectral is None or spectral.size() is None \
             else spectral.rval() + spectral.step() * (
                 np.arange(spectral.size()) - spectral.rpix())
@@ -323,9 +323,9 @@ class Renders:
                 f"the model has no light in the observation: the galaxy "
                 f"may be out of its field, or too small for its pixels"
                 f"{where}")
-        step, rpix = observable.step(), observable.rpix()
+        step, rpix = observation.step(), observation.rpix()
         return Observed(
-            observable.type(), arrays, velocities, notes,
+            observation.type(), arrays, velocities, notes,
             (float(step[0]), float(step[1])), (float(rpix[0]), float(rpix[1])))
 
     def _load(
@@ -418,12 +418,12 @@ def _observations(
     options of a spectral axis given, or else of two, whose velocities its
     maps hold whatever its channels; at the rest of the first line named,
     if any), and an image of those that emit in
-    bands; each with a depth axis if a component it sees is thick or has
-    an opacity, and with radiative transfer if one absorbs its own lines.
+    bands; each evaluated along the line of sight as what it sees needs
+    (see Scene.evaluation of gbkfit.model).
     """
     components = galaxy.components()
     infos = []
-    for kind, observable in (
+    for kind, info in (
             (LineEmission, dict(
                 type='pixel_spectra',
                 spectral=(spectral or dict(size=2, step=100))
@@ -434,20 +434,10 @@ def _observations(
             continue
         # (the convention then that of the rest)
         if kind is LineEmission and (rest := _rest(seen)) is not None:
-            observable = observable | dict(spectral={
-                key: value for key, value in observable['spectral'].items()
+            info = info | dict(spectral={
+                key: value for key, value in info['spectral'].items()
                 if key != 'convention'} | dict(rest=rest))
-        opacities = [c.opacity() for c in seen if c.opacity() is not None]
-        if any(o.type() == 'line' for o in opacities):
-            line_of_sight = 'transfer'
-        elif opacities or any(c.thick(kind) for c in seen):
-            line_of_sight = 'grid'
-        else:
-            line_of_sight = 'flat'
-        infos.append(dict(
-            type='sky',
-            observable=observable | dict(size=[size, size], step=[step, step]),
-            line_of_sight=dict(type=line_of_sight)))
+        infos.append(info | dict(size=[size, size], step=[step, step]))
     return observation_parser.load(infos)
 
 

@@ -16,9 +16,6 @@ from modelutils import group_plan, split_case
 
 C = astropy.constants.c.to_value('km/s')
 
-FLAT = dict(type='flat')
-GRID = dict(type='grid')
-
 COMPONENT = dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
@@ -48,10 +45,10 @@ def scube(rest, **options):
         spectral=spectral, **INSTRUMENT) | options
 
 
-def evaluate(driver, galaxy, observable, properties, line_of_sight=FLAT):
+def evaluate(driver, galaxy, observable, properties):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
-        line_of_sight=line_of_sight, observable=copy.deepcopy(observable))])
+        observation=copy.deepcopy(observable))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties)
     return plan.model_h(params.evaluate())[0]['spectra'].data.copy()
@@ -128,10 +125,10 @@ def test_lines_of_a_monte_carlo_disk_share_the_clouds(driver):
              dict(name='nii6583', rest='6583.45 Angstrom')]
     rest = '6562.8 Angstrom'
     single = evaluate(
-        driver, galaxy_of(component), scube(rest), properties, GRID)
+        driver, galaxy_of(component), scube(rest), properties)
     double = evaluate(
         driver, galaxy_of(with_lines(component, lines)), scube(rest),
-        properties | dict(nii6583_ratio=0.25), GRID)
+        properties | dict(nii6583_ratio=0.25))
     np.testing.assert_allclose(double.sum(), 1.25 * single.sum(), rtol=1e-5)
 
 
@@ -208,8 +205,7 @@ def evaluate_observation(driver, galaxy, observable, properties, **options):
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     _, observation, _ = split_case(dict(
-        driver=None, galaxy=galaxy, observable=observable,
-        line_of_sight=FLAT))
+        driver=None, galaxy=galaxy, observation=observable))
     observation = observation_parser.load(
         copy.deepcopy(observation | options))
     group = ObservationGroup(
@@ -315,11 +311,9 @@ def test_a_component_must_have_a_selected_line(driver):
 
 def test_line_selection_round_trip():
     from gbkfit.observation import observation_parser
-    info = dict(
-        type='sky',
-        observable={key: value for key, value in scube(
-            '6562.8 Angstrom').items() if key not in INSTRUMENT},
-        line_of_sight=FLAT, lines=['ha'])
+    info = {key: value for key, value in scube(
+        '6562.8 Angstrom').items() if key not in INSTRUMENT} | dict(
+            lines=['ha'])
     dumped = observation_parser.dump(
         observation_parser.load(dict(info)))
     assert dumped['lines'] == ['ha']

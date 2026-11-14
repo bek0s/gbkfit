@@ -8,18 +8,17 @@ import { membersOf, propertiesOf, typeOf, type Defs, type Options, type Schema }
 // as the dock has them (by the id of their section)
 export const STAGES = [
   { key: 'light', title: 'Galaxies', section: 'ob-light' },
-  { key: 'line_of_sight', title: 'Line of sight', section: 'ob-sight' },
   { key: 'instrument', title: 'Instrument', section: 'ob-instrument' },
-  { key: 'observable', title: 'Observable', section: 'ob-observable' },
-  { key: 'data', title: 'Data', section: 'ob-data' },
+  { key: 'kind', title: 'Kind', section: 'ob-kind' },
+  { key: 'dataset', title: 'Data', section: 'ob-data' },
 ] as const;
 
 // The options of a sky observation that its sections set by hand; the
 // others are in its forms of more options
 export const LIGHT_KEYS = ['galaxies', 'components', 'lines', 'band'];
-export const HANDLED_KEYS = ['type', 'data', 'observable', 'instrument', 'line_of_sight', ...LIGHT_KEYS];
+export const HANDLED_KEYS = ['type', 'dataset', 'instrument', ...LIGHT_KEYS];
 
-// The observables (and datasets) whose data have a spectral axis
+// The kinds of observations (and datasets) whose data have a spectral axis
 const SPECTRAL = ['pixel_spectra', 'pixel_moments', 'slit_spectra', 'slitless_spectra', 'region_spectra', 'region_moments', 'visibilities'];
 
 export function isSpectral(type: unknown): boolean {
@@ -54,7 +53,6 @@ export function glanceOf(key: (typeof STAGES)[number]['key'], options: Options, 
     const galaxies = options.galaxies;
     return Array.isArray(galaxies) && galaxies.length ? galaxies.join(', ') : 'All of the setup';
   }
-  if (key === 'line_of_sight') return options.line_of_sight == null ? 'Not chosen' : titleOf('line_of_sight', objectAt(options, 'line_of_sight').type).replace(/ \(.*\)$/, '');
   if (key === 'instrument') {
     const instrument = objectAt(options, 'instrument');
     const parts = (['psf', 'lsf'] as const).flatMap((part) => {
@@ -64,8 +62,8 @@ export function glanceOf(key: (typeof STAGES)[number]['key'], options: Options, 
     });
     return parts.join(' · ') || 'A perfect one';
   }
-  if (key === 'observable') return titleOf('observable', objectAt(options, 'observable').type);
-  return typeof options.data === 'string' ? options.data : options.data ? 'Given in place' : 'None: a model';
+  if (key === 'kind') return titleOf('observation', options.type);
+  return typeof options.dataset === 'string' ? options.dataset : options.dataset ? 'Given in place' : 'None: a model';
 }
 
 // The ellipse of a PSF or a beam at half its maximum: the FWHM of its
@@ -115,16 +113,15 @@ export function checksOf({
   titleOf: (family: string, type: unknown) => string;
 }): Check[] {
   const checks: Check[] = [];
-  const observable = objectAt(options, 'observable');
   const instrument = objectAt(options, 'instrument');
-  const named = typeof options.data === 'string' ? options.data : null;
-  if (options.data == null) checks.push({ ok: null, text: 'No data: the observation makes a model (or mock data).' });
+  const named = typeof options.dataset === 'string' ? options.dataset : null;
+  if (options.dataset == null) checks.push({ ok: null, text: 'No data: the observation makes a model (or mock data).' });
   else if (named !== null && !datasets.includes(named)) checks.push({ ok: false, text: `The project has no dataset ${named}.` });
   else if (datasetType !== undefined) {
     checks.push(
-      datasetType === observable.type
-        ? { ok: true, text: `The observable and the data are both ${titleOf('observable', observable.type)}.` }
-        : { ok: false, text: `The observable is ${titleOf('observable', observable.type)}, but the data are ${titleOf('observable', datasetType)}.` },
+      datasetType === options.type
+        ? { ok: true, text: `The observation and the data are both ${titleOf('observation', options.type)}.` }
+        : { ok: false, text: `The observation is ${titleOf('observation', options.type)}, but the data are ${titleOf('observation', datasetType)}.` },
     );
   }
   const beam = headerBeam(data);
@@ -147,7 +144,7 @@ export function checksOf({
     );
   }
   const width = data?.step && data.step.length === 3 ? Math.abs(data.step[2]) : null;
-  if (isSpectral(observable.type)) {
+  if (isSpectral(options.type)) {
     if (instrument.lsf == null) checks.push({ ok: null, text: 'No LSF: a perfect spectrograph.' });
     else if (lsfWidth !== null && width !== null) {
       checks.push({ ok: null, text: `The LSF is ${fixed(lsfWidth)} km/s across (FWHM): ${fixed(lsfWidth / width)} channels of the data.` });
@@ -163,22 +160,44 @@ function fixed(value: number): string {
   return Number(value.toPrecision(3)).toString();
 }
 
-// The member of the observable of a type (see the schema): that of an
-// observation with data (the data give its grid) or without (it gives its
-// own: its size, or its regions, its coverage...)
-export function observableMember(defs: Defs, type: unknown, withData: boolean): Schema | undefined {
-  const members = membersOf(defs.observable ?? {}, defs).filter((m) => typeOf(m) === type);
-  const gives = (m: Schema) => Array.isArray(m.required) && (m.required as string[]).some((key) => key === 'size' || key === 'coverage' || key === 'regions');
-  return members.find((m) => gives(m) !== withData) ?? members[0];
+// The member of the observation of a type (see the schema)
+export function observationMember(defs: Defs, type: unknown): Schema | undefined {
+  return membersOf(defs.observation ?? {}, defs).find((m) => typeOf(m) === type);
 }
 
-// The options of the observable that its member for data does not take
-// (its own grid, which the data give)
-export function gridOptions(defs: Defs, observable: Options): string[] {
-  const member = observableMember(defs, observable.type, true);
-  if (!member) return [];
-  const allowed = Object.keys(propertiesOf(member));
-  return Object.keys(observable).filter((key) => !allowed.includes(key));
+// The options of the grid of a kind on the sky
+const GRID = ['size', 'step', 'rpix', 'rval', 'rota', 'slit_pa'];
+
+// The options of every observation on the sky: those that all the kinds of
+// data share, but their grids (the others are of each kind: its grid, its
+// channels...)
+export function skyKeys(defs: Defs): string[] {
+  const kinds = membersOf(defs.observation ?? {}, defs).filter((m) => typeOf(m) !== 'profile');
+  const keys = kinds.map((m) => Object.keys(propertiesOf(m)));
+  return keys.length ? keys[0].filter((key) => !GRID.includes(key) && keys.every((own) => own.includes(key))) : [];
+}
+
+// The options of a kind required without data, which the data give (see
+// the schema: those required unless the dataset is given)
+export function requiredWithoutData(member: Schema | undefined): string[] {
+  for (const condition of (member?.allOf as Schema[] | undefined) ?? []) {
+    const [ifData, without] = (condition.anyOf as Schema[] | undefined) ?? [];
+    if ((ifData?.required as string[] | undefined)?.[0] === 'dataset') return (without?.required as string[] | undefined) ?? [];
+  }
+  return [];
+}
+
+// The options of a kind that its data give: those required without them,
+// and with its size, the rest of its grid (see GRID)
+export function dataOptions(member: Schema | undefined): string[] {
+  const needed = requiredWithoutData(member);
+  return needed.includes('size') ? [...new Set([...GRID, ...needed])] : needed;
+}
+
+// The options of an observation that its data give, but given too (they
+// serve only without data)
+export function gridOptions(defs: Defs, options: Options): string[] {
+  return dataOptions(observationMember(defs, options.type)).filter((key) => options[key] != null);
 }
 
 // Whether the data of a type have channels (those of the model with them)
@@ -204,24 +223,18 @@ export function needsOf({
   titleOf: (family: string, type: unknown) => string;
 }): { text: string; section: string }[] {
   const needs: { text: string; section: string }[] = [];
-  const observable = objectAt(options, 'observable');
-  const withData = options.data != null;
-  if (typeof options.data === 'string' && !datasets.includes(options.data)) needs.push({ section: 'ob-data', text: `The project has no dataset ${options.data}` });
-  if (observable.type == null) needs.push({ section: 'ob-observable', text: 'Choose what the data measure (the observable)' });
-  else {
-    if (withData && datasetType !== undefined && datasetType !== observable.type) {
-      needs.push({ section: 'ob-observable', text: `The observable is not of the type of the data (${titleOf('observable', datasetType)})` });
-    }
-    const extra = withData ? gridOptions(defs, observable) : [];
-    if (extra.length) needs.push({ section: 'ob-observable', text: `The data give the grid: the observable cannot have its ${extra.join(', ')}` });
-    const member = observableMember(defs, observable.type, withData);
-    const missing = ((member?.required as string[] | undefined) ?? []).filter((key) => key !== 'type' && observable[key] == null);
-    if (missing.length) needs.push({ section: 'ob-observable', text: `Give the observable its ${missing.map((key) => NAMES[key] ?? key).join(', ')}` });
-    else if (member && 'spectral' in propertiesOf(member) && isSpectral(observable.type) && !(withData && dataHaveChannels(datasetType))) {
-      const spectral = objectAt(observable, 'spectral');
-      if (spectral.size == null || spectral.step == null) needs.push({ section: 'ob-observable', text: 'Give the channels of the model (their number and width)' });
-    }
+  const withData = options.dataset != null;
+  const member = observationMember(defs, options.type);
+  if (typeof options.dataset === 'string' && !datasets.includes(options.dataset)) needs.push({ section: 'ob-data', text: `The project has no dataset ${options.dataset}` });
+  if (withData && datasetType !== undefined && datasetType !== options.type) {
+    needs.push({ section: 'ob-kind', text: `The observation is not of the type of the data (${titleOf('observation', datasetType)})` });
   }
-  if (options.line_of_sight == null) needs.push({ section: 'ob-sight', text: 'Choose the line of sight' });
+  const required = [...((member?.required as string[] | undefined) ?? []), ...(withData ? [] : requiredWithoutData(member))];
+  const missing = required.filter((key) => key !== 'type' && options[key] == null);
+  if (missing.length) needs.push({ section: 'ob-kind', text: `Give the observation its ${missing.map((key) => NAMES[key] ?? key).join(', ')}` });
+  else if (member && 'spectral' in propertiesOf(member) && isSpectral(options.type) && !(withData && dataHaveChannels(datasetType))) {
+    const spectral = objectAt(options, 'spectral');
+    if (spectral.size == null || spectral.step == null) needs.push({ section: 'ob-kind', text: 'Give the channels of the model (their number and width)' });
+  }
   return needs;
 }

@@ -1327,14 +1327,14 @@ export interface components {
         };
         /**
          * ObservedInfo
-         * @description A galaxy as an observation of its project sees it: the type of its
-         *     observable (e.g. 'pixel_spectra'), its arrays (the model of each item,
+         * @description A galaxy as an observation of its project sees it: the type of the
+         *     observation (e.g. 'pixel_spectra'), its arrays (the model of each item,
          *     and the data and errors of the data, if it has them), and the warnings
          *     of the library as it set them up.
          */
         ObservedInfo: {
-            /** Observable */
-            observable: string;
+            /** Type */
+            type: string;
             /** Arrays */
             arrays: components["schemas"]["ObservedArrayInfo"][];
             /** Notes */

@@ -1,6 +1,6 @@
 # msa_shutters: Slitless spectra behind a slitlet of three MSA shutters: two nods subtracted (A - B, B - A) and aligned on the sky (sky and image offsets, weights), blurred by the LSF behind the slit mask.
 # (written by make_golden.py; do not edit)
-version: 10
+version: 12
 driver: {type: host}
 galaxies:
 - components:
@@ -13,8 +13,8 @@ galaxies:
     dptraits: {type: uniform}
     emission: {type: lines}
 observations:
-- type: sky
-  data:
+- type: slitless_spectra
+  dataset:
     type: slitless_spectra
     step: [1, 1]
     rpix: [15.5, 11.5]
@@ -23,41 +23,39 @@ observations:
     data: observation0_spectra_d.fits
     error: 0.005
   dtype: float64
-  line_of_sight: {type: flat}
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 40.0 km s-1}
-  observable:
-    type: slitless_spectra
-    spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical, rest: 4e-06 m}
-    trace:
-      type: polynomial
-      wave: 4e-06 m
-      dx: [0.0, 2498.2704833333332]
-      dy: [0.0]
-    slit_mask:
-      type: shutters
-      size: [1.0, 2.0]
-      count: 3
-      centre: [0.5, 0.0]
-      pitch: 2.5
-    exposures:
-    - sky_offset: [0.0, 2.5]
-      image_offset: [0.0, 0.0]
-      weight: 1.0
-    - sky_offset: [0.0, -2.5]
-      image_offset: [0.0, 0.0]
-      weight: -1.0
-    - sky_offset: [0.0, -2.5]
-      image_offset: [0.0, 5.0]
-      weight: 1.0
-    - sky_offset: [0.0, 2.5]
-      image_offset: [0.0, 5.0]
-      weight: -1.0
-    sky_sampling: 2
-    resampled: false
+  spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical, rest: 4e-06 m}
+  trace:
+    type: polynomial
+    wave: 4e-06 m
+    dx: [0.0, 2498.2704833333332]
+    dy: [0.0]
+  slit_mask:
+    type: shutters
+    size: [1.0, 2.0]
+    count: 3
+    centre: [0.5, 0.0]
+    pitch: 2.5
+  exposures:
+  - sky_offset: [0.0, 2.5]
+    image_offset: [0.0, 0.0]
+    weight: 1.0
+  - sky_offset: [0.0, -2.5]
+    image_offset: [0.0, 0.0]
+    weight: -1.0
+  - sky_offset: [0.0, -2.5]
+    image_offset: [0.0, 5.0]
+    weight: 1.0
+  - sky_offset: [0.0, 2.5]
+    image_offset: [0.0, 5.0]
+    weight: -1.0
+  sky_sampling: 2
+  resampled: false
   oversampling: [1, 1]
   fft_dtype: float64
 likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}

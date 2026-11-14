@@ -10,7 +10,7 @@ from gbkfit.config import ConfigError, strict_mode
 from gbkfit.grid import Coords, Grid
 from gbkfit.model import BandEmission, LineEmission, SceneTarget, galaxy_parser
 from gbkfit.model._opacity import opacity_cubes
-from gbkfit.observation import Depth, LineOfSightGrid
+from gbkfit.observation import Depth
 from modelutils import located_message
 
 
@@ -177,9 +177,9 @@ def test_a_shared_height_trait_is_one_for_each_polar_trait(
             'band_smdisk_thick', rptraits=rptraits, rhtraits=rhtraits)
         case = dict(
             driver=dict(type=driver.type()), galaxy=dict(components=[disk]),
-            observable=dict(
+            observation=dict(
                 type='pixel_brightness', size=[24, 24], step=[1, 1]),
-            line_of_sight=dict(type='grid', depth=dict(step=0.5)))
+            depth=dict(step=0.5))
         data, _ = evaluate_cases([case], dict(
             xpos=0.5, ypos=-0.5, posa=30, incl=70, rpt_a=1, rpt_s=3,
             rpt2_a=0.5, rpt2_s=2) | values)
@@ -281,7 +281,7 @@ def test_thick_disk_with_several_velocity_traits(name):
             DriverHost(), spatial, grid.spectral(), np.float32, None, None,
             None, None), (0,),
         opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
-        LineOfSightGrid(Depth(extent='legacy')).depth_axis(spatial, 0))
+        Depth(extent='legacy').axis(spatial, 0))
     plan.evaluate(params, {}, dict(scube=scube), None)
     assert scube.sum() > 0
 

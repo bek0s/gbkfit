@@ -51,8 +51,7 @@ CASES = dict(
 def flat_case(observable, galaxy):
     """A case of a galaxy seen through a flat line of sight."""
     return dict(
-        driver=dict(type='host'), observable=observable,
-        line_of_sight=dict(type='flat'), galaxy=galaxy)
+        driver=dict(type='host'), observation=observable, galaxy=galaxy)
 
 
 @pytest.mark.parametrize('name', CASES)
@@ -142,8 +141,8 @@ def test_grid_extras_have_a_line_of_sight_axis(evaluate_cases):
                                   rptraits=dict(type='exponential'),
                                   rhtraits=dict(type='sech2', zmax=8))
     case = dict(
-        driver=dict(type='host'), observable=observable,
-        line_of_sight=dict(type='grid', depth=dict(extent=5.0, step=0.5)),
+        driver=dict(type='host'), observation=observable,
+        depth=dict(extent=5.0, step=0.5),
         galaxy=dict(components=[thick_disk]))
     _, extra = evaluate_cases([case], PROPERTIES | dict(rht_s=1))
     bdata = extra.get('bdata', component='component0')

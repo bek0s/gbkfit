@@ -1,6 +1,6 @@
 """
-Tests for radiative transfer along the line of sight (LineOfSightTransfer): the
-fields of the light of the emitters, which the march reads.
+Tests for radiative transfer along the line of sight (see SceneEvaluation):
+the fields of the light of the emitters, which the march reads.
 """
 
 import numpy as np
@@ -174,21 +174,22 @@ LAWS = [
     dict(type='table', wavelengths=[0.65, 0.66], ratios=[0.5, 2.0])]
 
 
-def cubes_of(evaluate_cases, driver, components, properties, **observation):
+def cubes_of(
+        evaluate_cases, force_evaluation, driver, components, properties,
+        **observation):
     """
-    The model data of a galaxy of the given components seen through a
-    grid and through radiative transfer (a spectral cube by default).
+    The model data of a galaxy of the given components seen on a depth
+    axis and through radiative transfer (a spectral cube by default).
     """
-    observation = dict(
-        observable=dict(
-            type='pixel_spectra', size=[24, 24], step=[1, 1],
-            spectral=dict(size=31, step=10, convention='relativistic'))
+    observation = dict(observation=dict(
+        type='pixel_spectra', size=[24, 24], step=[1, 1],
+        spectral=dict(size=31, step=10, convention='relativistic'))
     ) | observation
     models = []
-    for kind in ('grid', 'transfer'):
+    for evaluation in ('depth', 'transfer'):
+        force_evaluation(evaluation)
         case = dict(
             observation, driver=dict(type=driver.type()),
-            line_of_sight=dict(type=kind),
             galaxy=dict(components=components))
         data, _ = evaluate_cases([case], of_model([case], properties))
         models.append(next(iter(data[0].values())).data)
@@ -219,16 +220,19 @@ def assert_same_model(actual, desired):
     [NUCLEUS, DUST],
     [GAS, NUCLEUS, DUST, THIN_GAS | dict(name='gas2')]],
     ids=['thick', 'dust', 'thin', 'point', 'all'])
-def test_transfer_gives_what_a_grid_gives(driver, evaluate_cases, components):
+def test_transfer_gives_what_a_depth_axis_gives(
+        driver, evaluate_cases, force_evaluation, components):
     properties = PROPERTIES | {
         key.replace('gas_', 'gas2_'): value
         for key, value in PROPERTIES.items() if key.startswith('gas_')}
-    grid, transfer = cubes_of(evaluate_cases, driver, components, properties)
+    grid, transfer = cubes_of(
+        evaluate_cases, force_evaluation, driver, components, properties)
     assert grid.max() > 0
     assert_same_model(transfer, grid)
 
 
-def test_transfer_dims_each_line_by_its_law(driver, evaluate_cases):
+def test_transfer_dims_each_line_by_its_law(
+        driver, evaluate_cases, force_evaluation):
     # Two laws and two lines: a cube of opacity for each law, and the
     # light of each line dimmed by its ratios
     gas = GAS | dict(emission=dict(type='lines', lines=['halpha', 'nii6583']))
@@ -240,35 +244,35 @@ def test_transfer_dims_each_line_by_its_law(driver, evaluate_cases):
         for i in range(2) for key, value in PROPERTIES.items()
         if key.startswith('dust_')}
     grid, transfer = cubes_of(
-        evaluate_cases, driver, [gas] + dusts, properties,
-        observable=dict(
+        evaluate_cases, force_evaluation, driver, [gas] + dusts, properties,
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1], rval=[0, 0],
             spectral=dict(
                 size=81, step=25, rval=500, rest='6564.61 Angstrom')))
     assert_same_model(transfer, grid)
 
 
-def test_transfer_gives_what_a_grid_gives_for_an_image(
-        driver, evaluate_cases):
+def test_transfer_gives_what_a_depth_axis_gives_for_an_image(
+        driver, evaluate_cases, force_evaluation):
     stars = GAS | dict(name='stars', emission=dict(type='band'))
     del stars['vptraits'], stars['dptraits']
     properties = PROPERTIES | dict(
         stars_xpos=0.5, stars_ypos=-1, stars_posa=30, stars_incl=60,
         stars_rpt_a=1, stars_rpt_s=3, stars_rht_s=1)
     grid, transfer = cubes_of(
-        evaluate_cases, driver, [stars, DUST], properties,
-        observable=dict(type='pixel_brightness', size=[24, 24]))
+        evaluate_cases, force_evaluation, driver, [stars, DUST], properties,
+        observation=dict(type='pixel_brightness', size=[24, 24]))
     assert_same_model(transfer, grid)
 
 
 def test_transfer_keeps_the_moments_of_monte_carlo_clouds(
-        driver, evaluate_cases):
+        driver, evaluate_cases, force_evaluation):
     # The clouds of a voxel become one line of their flux, mean velocity
     # and width: the moments of each spaxel are kept
     gas = GAS | dict(type='thick_disk', clouds=dict(cflux=1e-3))
     grid, transfer = cubes_of(
-        evaluate_cases, driver, [gas, DUST], PROPERTIES,
-        observable=dict(
+        evaluate_cases, force_evaluation, driver, [gas, DUST], PROPERTIES,
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=61, step=10, convention='relativistic')))
     velocity = (np.arange(61) - 30) * 10.0
@@ -295,8 +299,8 @@ def line_opacity(gas, coefficients):
 def transfer_cube(evaluate_cases, driver, components, properties):
     """The spectral cube of components seen through radiative transfer."""
     case = dict(
-        driver=dict(type=driver.type()), line_of_sight=dict(type='transfer'),
-        observable=dict(
+        driver=dict(type=driver.type()),
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=61, step=10, convention='relativistic')),
         galaxy=dict(components=components))
@@ -309,10 +313,13 @@ def transfer_cube(evaluate_cases, driver, components, properties):
 
 @pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])
 def test_line_opacity_saturates_at_the_source_function(
-        driver, evaluate_cases, disk_type):
+        driver, evaluate_cases, force_evaluation, disk_type):
     # Each voxel's optical depth at each channel is its light there over S
     # (a uniform coefficient 1/S), so the light of each channel is S (1 -
-    # exp(-I / S)), I that without line opacity, whatever the geometry
+    # exp(-I / S)), I that without line opacity, whatever the geometry.
+    # (I by radiative transfer too, where the clouds of a voxel are one
+    # line, as they are with line opacity; a depth axis keeps their lines)
+    force_evaluation('transfer')
     gas = GAS | (
         dict(clouds=dict(cflux=1e-3)) if disk_type == 'clouds' else {})
     thin = transfer_cube(evaluate_cases, driver, [gas], PROPERTIES)
@@ -376,27 +383,24 @@ def test_a_uniform_coefficient_is_not_discouraged(caplog):
     assert 'discouraged' not in caplog.text
 
 
-@pytest.mark.parametrize('component, line_of_sight, message', [
-    (line_opacity(GAS, dict(type='uniform')), 'grid',
-     "needs a line of sight of radiative transfer"),
-    (line_opacity(GAS, dict(halpha=dict(type='uniform'))), 'transfer',
+@pytest.mark.parametrize('component, message', [
+    (line_opacity(GAS, dict(halpha=dict(type='uniform'))),
      "one line without a name"),
     (line_opacity(
         GAS | dict(emission=dict(type='lines', lines=['halpha', 'nii6583'])),
-        dict(halpha=dict(type='uniform'))), 'transfer',
+        dict(halpha=dict(type='uniform'))),
      "needs the coefficients of every line"),
-    (line_opacity(THIN_GAS, dict(type='uniform')), 'transfer',
+    (line_opacity(THIN_GAS, dict(type='uniform')),
      r"options of a thick disk \(type: thick_disk\), which a thin disk "
      r"does not take: 'opacity'"),
     (line_opacity(
         GAS | dict(emission=dict(type='band')), dict(type='uniform')),
-     'transfer', "needs emission lines")])
-def test_line_opacity_errors(driver, component, line_of_sight, message):
+     "needs emission lines")])
+def test_line_opacity_errors(driver, component, message):
     from modelutils import group_plan
     case = dict(
         driver=dict(type=driver.type()),
-        line_of_sight=dict(type=line_of_sight),
-        observable=dict(
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=31, step=10, convention='relativistic')),
         galaxy=dict(components=[component]))
@@ -425,9 +429,8 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
     for slab in (None, 1, 7):
         case = dict(
             driver=dict(type=driver.type()),
-            line_of_sight=dict(type='transfer') | (
-                dict(slab=slab) if slab is not None else {}),
-            observable=dict(
+            **({} if slab is None else dict(depth=dict(slab=slab))),
+            observation=dict(
                 type='pixel_spectra', size=[24, 24], step=[1, 1],
                 spectral=dict(size=31, step=10, convention='relativistic')),
             galaxy=dict(components=components))
@@ -454,12 +457,13 @@ def names(extra):
 
 def galaxies_model(
         driver, galaxies, properties, depth_order=None, with_extras=True,
-        **observation):
+        kind=None, **observation):
     """
     The model data of an observation of several galaxies through
-    radiative transfer (a spectral cube by default), front to back in the
-    given order (that of the galaxies if None), and its extras (none
-    without with_extras: the evaluation of fits). The galaxies take those
+    radiative transfer, of a kind (its type and options; a spectral cube
+    by default) and the given options, front to back in the given order
+    (that of the galaxies if None), and its extras (none without
+    with_extras: the evaluation of fits). The galaxies take those
     of the properties that they have (see of_model). Its depth axis holds
     the tails of the disks (beyond their last ring) on every line of
     sight: on the default one, the diagonal of the grid, a group of
@@ -468,12 +472,11 @@ def galaxies_model(
     """
     import gbkfit.params
     from gbkfit.observation import ObservationGroup, observation_parser
-    observation = dict(
-        type='sky',
-        observable=dict(
-            type='pixel_spectra', size=[24, 24], step=[1, 1],
-            spectral=dict(size=31, step=10, convention='relativistic')),
-        line_of_sight=dict(type='transfer', depth=dict(extent=120)),
+    kind = kind or dict(
+        type='pixel_spectra', size=[24, 24], step=[1, 1],
+        spectral=dict(size=31, step=10, convention='relativistic'))
+    observation = kind | dict(
+        depth=dict(extent=120),
         galaxies=[galaxy['name'] for galaxy in galaxies]) | observation
     if depth_order is None:
         depth_order = [galaxy['name'] for galaxy in galaxies]
@@ -518,8 +521,7 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
         dust_rpt_s=4, dust_rht_s=1))
     order = ['front', 'back'] if dust_in_front else ['back', 'front']
     image = dict(
-        observable=dict(type='pixel_brightness', size=[24, 24]),
-        band='sdss_r')
+        kind=dict(type='pixel_brightness', size=[24, 24]), band='sdss_r')
     clear, _ = galaxies_model(driver, galaxies[:1], properties, **image)
     model, extra = galaxies_model(
         driver, galaxies, properties, order, **image)
@@ -624,30 +626,30 @@ def test_a_group_far_apart_is_its_galaxies_in_order(driver, separation):
     assert_same_model(model(group, b_separation=3 * separation), ordered)
 
 
-@pytest.mark.parametrize('line_of_sight, depth_order, message', [
-    ('grid', ['a', 'b'], "needs a line of sight of radiative transfer"),
-    ('transfer', ['a'], r"must give the place of the galaxies \['b'\]"),
-    ('transfer', ['a', 'c'], r"names unknown galaxies \['c'\]"),
-    ('transfer', ['a', 'b', 'a'], "repeats galaxies"),
-    ('transfer', [DepthGroup('pair', ('a',)), 'b'], "at least two galaxies"),
-    ('transfer', [DepthGroup('a', ('a', 'b'))], "the name of a galaxy")])
-def test_several_galaxies_errors(
-        driver, line_of_sight, depth_order, message):
+@pytest.mark.parametrize('depth_order, message', [
+    (['a'], r"must place the galaxies \['b'\]"),
+    (['a', 'c'], r"names unknown galaxies \['c'\]"),
+    (['a', 'b', 'a'], "repeats galaxies"),
+    ([DepthGroup('pair', ('a',)), 'b'], "at least two galaxies"),
+    ([DepthGroup('a', ('a', 'b'))], "the name of a galaxy")])
+def test_several_galaxies_errors(driver, depth_order, message):
     galaxies = [
         dict(name='a', components=[GAS, DUST]),
         dict(name='b', components=[DUST])]
     with pytest.raises(ValueError, match=message):
-        galaxies_model(
-            driver, galaxies, {}, depth_order,
-            line_of_sight=dict(type=line_of_sight))
+        galaxies_model(driver, galaxies, {}, depth_order)
 
 
-def transfer_case(driver, components, nchannels=31, step=10, **transfer):
-    """A case of a spectral cube of components seen through transfer."""
+def transfer_case(driver, components, nchannels=31, step=10, **depth):
+    """
+    A case of a spectral cube of components, of the given options of its
+    depth axis, if any (e.g. of radiative transfer, which line opacity
+    needs).
+    """
     return dict(
         driver=dict(type=driver.type()),
-        line_of_sight=dict(type='transfer') | transfer,
-        observable=dict(
+        **({} if not depth else dict(depth=depth)),
+        observation=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(
                 size=nchannels, step=step, convention='relativistic')),
@@ -706,19 +708,20 @@ def test_transfer_extras(driver, evaluate_cases):
 
 
 def test_subchannels_option():
-    from gbkfit.observation import LineOfSightTransfer
-    assert LineOfSightTransfer(subchannels=4).dump()['subchannels'] == 4
+    from gbkfit.observation import Depth
+    assert Depth(subchannels=4).dump()['subchannels'] == 4
     for subchannels, error, message in (
             (0, ValueError, "at least 1 and at most 64"),
             (65, ValueError, "at least 1 and at most 64"),
             (2.5, TypeError, "of type int")):
         with pytest.raises(error, match=message):
-            LineOfSightTransfer(subchannels=subchannels)
+            Depth(subchannels=subchannels)
 
 
 @pytest.mark.parametrize('incl, dispersion, subchannels, warnings', [
     (0, 20, 1, []),
-    (0, 4, 1, ["raise the option subchannels of the line of sight to 4"]),
+    (0, 4, 1, ["raise the option subchannels of the observation (depth: "
+               "{subchannels: ...}) to 4"]),
     (0, 4, 4, []),
     (90, 5, 4, ["does not resolve line opacity along the line of sight"])])
 def test_a_coarse_march_of_line_opacity_warns(
@@ -758,12 +761,12 @@ def test_a_coarse_depth_axis_warns_about_the_light(
     # from the centre), unless a finer depth axis resolves it or the
     # instrument smooths it; face-on, each line of sight has one velocity
     import logging
+    # (on a depth axis: gas without opacity)
     case = transfer_case(driver, [GAS])
-    case['line_of_sight'] = dict(type='grid')
     if depth_step is not None:
-        case['line_of_sight']['depth'] = dict(step=depth_step)
+        case['depth'] = dict(step=depth_step)
     if lsf_sigma is not None:
-        case['observable'] |= dict(lsf=dict(
+        case['observation'] |= dict(lsf=dict(
             type='gauss', sigma=f'{lsf_sigma} km/s'))
     caplog.set_level(logging.WARNING)
     evaluate_transfer(evaluate_cases, case, PROPERTIES | dict(

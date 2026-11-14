@@ -46,8 +46,7 @@ def test_a_tied_geometry_is_the_geometry_it_is_tied_to(
         disk('hi', loose=False, tilted=True, rnodes=RNODES),
         disk('ha', loose=False, tilted=True, rnodes=RNODES)])
     case = dict(
-        driver=dict(type=driver.type()), observable=OBSERVABLE,
-        line_of_sight=dict(type='flat'), galaxy=galaxy)
+        driver=dict(type=driver.type()), observation=OBSERVABLE, galaxy=galaxy)
     data_given, _ = evaluate_cases([case], TRAIT_PROPERTIES | {
         f'{cmp}_{name}': value for name, value in GEOMETRY.items()
         for cmp in ('hi', 'ha')})

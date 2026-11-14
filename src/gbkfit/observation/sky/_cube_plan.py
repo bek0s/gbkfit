@@ -1,6 +1,6 @@
 """
-The base plan of the observables made from a ModelCube (see
-CubeObservablePlan).
+The base plan of the observations on the sky made from a ModelCube
+(see CubePlan).
 """
 
 import abc
@@ -13,19 +13,20 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData
 from gbkfit.model import Extras, GalaxyState
 from gbkfit.params import ParamValues
+from ..depth import plan_scene
 from ..weights import plan_weights
 from ._model_cube import ModelCube, cube_extra
-from .base import (
-    HostModelData, ModelData, ModelItem, ObservablePlan, ObservationSetup)
+from ..plan import HostModelData, ModelData, ModelItem, ObservationPlan
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
     from ..noise import Noise
+    from .base import SkyOptions
 
 
-class CubeObservablePlan(ObservablePlan):
+class CubePlan(ObservationPlan):
     """
-    The evaluation of an observable made from a ModelCube: the plan of the
+    The evaluation of an observation made from a ModelCube: the plan of the
     cube, the plan of the scene (what an observation sees) along its line
     of sight on its high-resolution grid (see _model_grid), that of the
     pixel weights of the data, if any, which fill the weight cube of the
@@ -35,7 +36,7 @@ class CubeObservablePlan(ObservablePlan):
 
     It evaluates the model on the cube, records and masks it (see
     ModelCubePlan.evaluate), and measures the data items from its
-    low-resolution cube (_measure, of each observable). Its mock data are
+    low-resolution cube (_measure, of each kind). Its mock data are
     measured from the recorded low-resolution cube plus noise, masked as
     the model (see _measure_draw), after the model without noise is
     measured once, which raises if it failed (e.g. its moments).
@@ -48,8 +49,8 @@ class CubeObservablePlan(ObservablePlan):
         The driver it is evaluated on.
     scene : Scene
         What is seen.
-    setup : ObservationSetup
-        The setup of the observation (see Observable.plan).
+    options : SkyOptions
+        The options of the observation (see ObservationSky._plan).
 
     Raises
     ------
@@ -62,32 +63,32 @@ class CubeObservablePlan(ObservablePlan):
             model_cube: ModelCube,
             driver: Driver,
             scene: 'Scene',
-            setup: ObservationSetup
+            options: 'SkyOptions'
     ):
-        dtype = setup.dtype
+        dtype = options.dtype
         self._driver = driver
         self._dtype = dtype
         self._model_cube = model_cube
-        self._flux_scale_param = setup.flux_scale_param
+        self._flux_scale_param = options.flux_scale_param
         # (the unit of the light of the model, if known)
         data_unit = scene.data_unit()
         self._light_unit = None if data_unit is None \
             else data_unit.cube_unit()
         self._model_cube_plan = model_cube.plan(
-            driver, has_weights=setup.pixel_weights is not None)
+            driver, has_weights=options.pixel_weights is not None)
         grid = self._model_grid()
         self._weights_plan = None
-        if setup.pixel_weights is not None:
+        if options.pixel_weights is not None:
             self._weights_plan = plan_weights(
-                setup.pixel_weights, scene,
+                options.pixel_weights, scene,
                 self._model_cube_plan.high_res_grid().spatial(), driver,
                 dtype)
         # With a lens, the model is evaluated on the source plane, into a
         # cube of its own, which is lensed into the high-resolution cube
         self._lens_plan = None
         self._source_cube = None
-        if setup.foreground.lens() is not None:
-            self._lens_plan = setup.foreground.plan_lens(
+        if options.foreground.lens() is not None:
+            self._lens_plan = options.foreground.plan_lens(
                 driver, self._model_cube_plan.high_res_grid(), dtype)
             grid = self._lens_plan.source_grid(grid)
             nz = self._model_cube_plan.high_res_cube().shape[0]
@@ -97,8 +98,8 @@ class CubeObservablePlan(ObservablePlan):
         # an image has none)
         smoothing = None if grid.spectral_axis is None \
             else model_cube.spectral_smoothing()
-        self._model_plan = setup.line_of_sight.plan_scene(
-            scene, driver, grid, dtype, smoothing)
+        self._model_plan = plan_scene(
+            scene, options.depth, driver, grid, dtype, smoothing)
 
     def _model_grid(self) -> Grid:
         """
@@ -110,7 +111,7 @@ class CubeObservablePlan(ObservablePlan):
     def _model_extra(
             self, value: GridData
     ) -> GridData | np.ndarray:
-        """Return an extra output of the model as this observable gives it."""
+        """Return an extra output of the model as this observation gives it."""
         return value
 
     def evaluate(
@@ -174,7 +175,7 @@ class CubeObservablePlan(ObservablePlan):
     def _measure_draw(self) -> ModelData:
         """
         Return the model data measured from the low-resolution cube of a
-        mock draw (see _mock_once): here as _measure. Observables whose
+        mock draw (see _mock_once): here as _measure. Kinds whose
         measurement of a model checks that it did not fail (e.g. moments,
         see MomentsPlan.evaluate) measure a draw as data, whose noise may
         blank values on purpose (see Noise).
@@ -190,7 +191,7 @@ class CubeObservablePlan(ObservablePlan):
         """
         Return the model data measured from the recorded low-resolution
         cube (on the host) plus a draw of the noise, masked as the model,
-        on the host (see mock). Observables whose noise goes in elsewhere (e.g.
+        on the host (see mock). Kinds whose noise goes in elsewhere (e.g.
         slitless spectra, in the image) override this.
         """
         model_cube = self._model_cube

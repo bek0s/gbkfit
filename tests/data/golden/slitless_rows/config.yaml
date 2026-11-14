@@ -1,6 +1,6 @@
 # slitless_rows: Slitless spectra of a polynomial trace along x, with a solved flux scale per row (along the dispersion).
 # (written by make_golden.py; do not edit)
-version: 10
+version: 12
 driver: {type: host}
 galaxies:
 - components:
@@ -13,10 +13,10 @@ galaxies:
     dptraits: {type: uniform}
     emission: {type: lines}
 observations:
-- type: sky
+- type: slitless_spectra
   name: grism
   flux_scale: per_row
-  data:
+  dataset:
     type: slitless_spectra
     step: [1, 1]
     rpix: [15.5, 11.5]
@@ -25,27 +25,25 @@ observations:
     data: grism_spectra_d.fits
     error: 0.02
   dtype: float64
-  line_of_sight: {type: flat}
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: null
-  observable:
-    type: slitless_spectra
-    spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical, rest: 4e-06 m}
-    trace:
-      type: polynomial
-      wave: 4e-06 m
-      dx: [0.0, 2498.2704833333332]
-      dy: [0.0]
-    slit_mask: null
-    exposures:
-    - sky_offset: [0.0, 0.0]
-      image_offset: [0.0, 0.0]
-      weight: 1.0
-    sky_sampling: 1
-    resampled: false
+  spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical, rest: 4e-06 m}
+  trace:
+    type: polynomial
+    wave: 4e-06 m
+    dx: [0.0, 2498.2704833333332]
+    dy: [0.0]
+  slit_mask: null
+  exposures:
+  - sky_offset: [0.0, 0.0]
+    image_offset: [0.0, 0.0]
+    weight: 1.0
+  sky_sampling: 1
+  resampled: false
   oversampling: [1, 1]
   fft_dtype: float64
 likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}

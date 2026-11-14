@@ -939,7 +939,7 @@ def test_a_galaxy_is_observed_by_an_observation_of_its_project(client):
     info = client.post('/api/v1/views/observed', json=dict(
         project='study', galaxy=galaxy, properties=dict(rpt_s=2),
         observation='image')).json()
-    assert info['observable'] == 'pixel_brightness'
+    assert info['type'] == 'pixel_brightness'
     [array] = info['arrays']
     assert (array['kind'], array['item'], array['shape']) \
         == ('model', 'brightness', [16, 12, 1])

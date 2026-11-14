@@ -32,15 +32,13 @@ def spectra(driver, psf=None, lsf=None, oversampling=(1, 1, 1)):
     """The spectra of the galaxy seen with the PSF and the LSF."""
     group = ObservationGroup([galaxy_parser.load(GALAXY)], [
         observation_parser.load(dict(
-            type='sky',
+            type='pixel_spectra',
             oversampling=list(oversampling),
-            line_of_sight=dict(type='flat'),
             instrument=dict(psf=psf, lsf=lsf),
-            observable=dict(
-                type='pixel_spectra', size=list(SIZE[:2]),
-                step=list(STEP[:2]), spectral=dict(
-                    size=SIZE[2], step=STEP[2],
-                    convention='relativistic'))))])
+            size=list(SIZE[:2]),
+            step=list(STEP[:2]), spectral=dict(
+                size=SIZE[2], step=STEP[2],
+                convention='relativistic')))])
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES).evaluate()
     return group.plan(driver).model_h(params)[0]['spectra'].data.copy()

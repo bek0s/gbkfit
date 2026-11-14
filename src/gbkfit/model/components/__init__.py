@@ -1,4 +1,4 @@
-from ._units import DataUnit, LightUnit
+from ._units import DataUnit, LightUnit, check_data_unit
 from .base import *
 from .extinction import *
 from .geometries import *

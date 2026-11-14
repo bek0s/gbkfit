@@ -1,8 +1,8 @@
 """
-The observable of spectra on a grid of pixels: a spectral cube.
+The observation of spectra on a grid of pixels: a spectral cube.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -11,15 +11,19 @@ from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis, grid_options
-from gbkfit.model import DataUnit, LightUnit, LineEmission
+from gbkfit.instrument import Instrument
+from gbkfit.model import Band, DataUnit, LightUnit, LineEmission
+from ..depth import Depth
+from ..foreground import Foreground
+from ..plan import FluxScale, ModelData, ModelItem
+from ..weights import Weights
 from . import _model_cube
-from ._cube_plan import CubeObservablePlan
+from ._cube_plan import CubePlan
 from ._data_units import data_unit
 from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size,
     warn_unsmoothed_weights)
-from .base import (
-    FluxScale, ModelData, ModelItem, Observable, ObservationSetup)
+from .base import DType, ObservationSky, SkyOptions
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -27,30 +31,32 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    'PixelSpectra'
+    'ObservationPixelSpectra'
 ]
 
 
-class PixelSpectra(Observable):
+class ObservationPixelSpectra(ObservationSky):
     """
     Spectra on a grid of pixels: a spectral cube of the model, seen
     through the instrument.
 
-    Its configuration has the options below, but those of the grid when
-    it has data, which give them (see from_data).
+    Its options are those below, then those of every observation on the
+    sky (see ObservationSky). Its data give those of its grid (given too,
+    they serve only without data); without data, size and spectral are
+    required.
 
     Parameters
     ----------
-    size : int or Sequence of int
+    size : int or Sequence of int, optional
         The number of pixels of the cube on the sky (nx, ny).
-    spectral : SpectralAxis
+    spectral : SpectralAxis, optional
         The spectral axis of the cube: its size, its world coordinates and
         the convention of its velocities (see make_cube_grid).
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the cube on the sky (see
-        Coords); rpix is the centre by default.
+        The world coordinates of the cube on the sky (see Coords); without
+        data, a step of 1, rval 0, and rpix the centre by default.
     rota : float, optional
-        The rotation of the cube on the sky.
+        The rotation of the cube on the sky; 0 by default without data.
     smooth_weights : bool, optional
         Whether the weights of the model are smoothed by the PSF and the
         LSF, as the model is.
@@ -65,7 +71,8 @@ class PixelSpectra(Observable):
     ------
     ValueError
         If the spectral axis is not valid (see make_cube_grid),
-        or median_size is not an odd number of at least 3.
+        median_size is not an odd number of at least 3, or an option of
+        every observation on the sky is not valid (see ObservationSky).
     """
 
     dataset_class = DatasetPixelSpectra
@@ -76,6 +83,8 @@ class PixelSpectra(Observable):
     # The axes of a spectral cube: x, y and the spectral axis
     spectral_axis = 2
 
+    config_required_without = dict(dataset=('size', 'spectral'))
+
     @staticmethod
     def type() -> str:
         return 'pixel_spectra'
@@ -85,38 +94,11 @@ class PixelSpectra(Observable):
         return 'Pixel spectra (cube)'
 
     @classmethod
-    def from_data(
-            cls,
-            dataset: DatasetPixelSpectra,
-            smooth_weights: bool = False,
-            median_size: MedianSize | None = None
-    ) -> 'PixelSpectra':
-        """
-        Make the observable of a spectral cube, on its grid.
-
-        Parameters
-        ----------
-        dataset : DatasetPixelSpectra
-            The spectral cube.
-        smooth_weights, median_size : optional
-            As those of PixelSpectra.
-
-        Returns
-        -------
-        PixelSpectra
-            The observable.
-
-        Raises
-        ------
-        TypeError
-            If the dataset is not of spectra on pixels.
-        ValueError
-            If the options are not valid.
-        """
-        check_options(PixelSpectra.from_data, locals())
-        return cls(
-            **grid_options(dataset.grid()),
-            smooth_weights=smooth_weights, median_size=median_size)
+    def _options_from_data(
+            cls, dataset: DatasetPixelSpectra, options: dict[str, Any]
+    ) -> dict[str, Any]:
+        # (the grid of the cube)
+        return grid_options(dataset.grid())
 
     def _dump_options(
             self, prefix: str, dump_path: bool, overwrite: bool
@@ -125,22 +107,49 @@ class PixelSpectra(Observable):
             smooth_weights=self._smooth_weights,
             median_size=self._median_size)
 
+    def _kind_options(self) -> dict[str, Any]:
+        return grid_options(self.grid()) | dict(
+            smooth_weights=self._smooth_weights,
+            median_size=self._median_size)
+
     def __init__(
             self,
-            size: Size,
-            spectral: SpectralAxis,
-            step: Step = (1, 1),
+            size: Size | None = None,
+            spectral: SpectralAxis | None = None,
+            step: Step | None = None,
             rpix: Rpix | None = None,
-            rval: Rval = (0, 0),
-            rota: Rota = 0,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             smooth_weights: bool = False,
-            median_size: MedianSize | None = None
+            median_size: MedianSize | None = None,
+            foreground: Foreground | None = None,
+            instrument: Instrument | None = None,
+            galaxies: Sequence[str] | None = None,
+            components: Sequence[str] | None = None,
+            lines: Sequence[str] | None = None,
+            band: str | Band | None = None,
+            pixel_weights: Weights | None = None,
+            flux_scale: str | None = None,
+            offsets: Mapping[str, bool] | None = None,
+            dataset: Dataset | None = None,
+            oversampling: Sequence[int] | None = None,
+            depth: Depth | None = None,
+            dtype: DType | None = None,
+            fft_dtype: DType = 'float64',
+            name: str | None = None,
+            unit: str | None = None
     ):
-        check_options(PixelSpectra.__init__, locals())
-        super().__init__(size, step, rpix, rval, rota, spectral)
+        check_options(ObservationPixelSpectra.__init__, locals())
+        grid = self._options(dataset, dict(
+            size=size, spectral=spectral, step=step, rpix=rpix, rval=rval,
+            rota=rota))
         check_median_size(median_size)
         self._smooth_weights = smooth_weights
         self._median_size = median_size
+        super().__init__(
+            self._make_grid(**grid), foreground, instrument, galaxies,
+            components, lines, band, pixel_weights, flux_scale, offsets,
+            dataset, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
@@ -149,10 +158,10 @@ class PixelSpectra(Observable):
         return DatasetPixelSpectra(
             items['spectra'], **grid_options(self.grid(), sizes=False))
 
-    def data_unit(
+    def _data_unit(
             self,
             dataset: Dataset | None,
-            light: LightUnit | None = None
+            light: LightUnit | None
     ) -> DataUnit | None:
         return data_unit(
             dataset, 'spectra', abs(self.step()[0] * self.step()[1]), False,
@@ -175,29 +184,25 @@ class PixelSpectra(Observable):
     def model_can_have_missing_values(self) -> bool:
         return False
 
-    def check_observation(self, setup: ObservationSetup) -> None:
-        warn_unsmoothed_weights(self._smooth_weights, setup.instrument)
+    def _check_options(self, options: SkyOptions) -> None:
+        warn_unsmoothed_weights(self._smooth_weights, options.instrument)
 
-    def plan(
-            self,
-            driver: Driver,
-            scene: 'Scene',
-            setup: ObservationSetup
-    ) -> 'PixelSpectraPlan':
+    def _plan(self, driver: Driver, scene: 'Scene') -> 'PixelSpectraPlan':
+        options = self._sky_options
         model_cube = _model_cube.ModelCube(
             self.grid(),
-            oversampling=setup.oversampling,
-            primary_beam=setup.instrument.primary_beam(),
-            psf=setup.instrument.psf(),
-            lsf=setup.instrument.lsf(),
+            oversampling=options.oversampling,
+            primary_beam=options.instrument.primary_beam(),
+            psf=options.instrument.psf(),
+            lsf=options.instrument.lsf(),
             smooth_weights=self._smooth_weights,
-            dtype=setup.dtype,
-            fft_dtype=setup.fft_dtype,
+            dtype=options.dtype,
+            fft_dtype=options.fft_dtype,
             median_size=self._median_size)
-        return PixelSpectraPlan(model_cube, driver, scene, setup)
+        return PixelSpectraPlan(model_cube, driver, scene, options)
 
 
-class PixelSpectraPlan(CubeObservablePlan):
+class PixelSpectraPlan(CubePlan):
 
     def has_exact_errors(self) -> bool:
         # (but through a median filter, whose noise no formula gives: then

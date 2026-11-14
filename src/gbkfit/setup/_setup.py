@@ -13,10 +13,9 @@ from gbkfit.driver import Driver
 from gbkfit.fitting import (
     Bootstrap, BootstrapOptions, EvaluationLog, Fitter, FitResult,
     ProgressObserver, SubFitLog, run_bootstrap)
-from gbkfit.objective import Objective, ObjectiveEvaluation
+from gbkfit.objective import Likelihoods, Objective, ObjectiveEvaluation
 from gbkfit.observation import (
-    GroupPlan, Likelihoods, MockOptions, Observation, ObservationGroup,
-    draw_mocks)
+    GroupPlan, MockOptions, Observation, ObservationGroup, draw_mocks)
 from gbkfit.outputs import Output
 from gbkfit.parallel import WorkerPool, Workers
 from gbkfit.params import ParamSpace, ParamValues
@@ -65,8 +64,8 @@ class Setup:
     configuration of a fit evaluated to draw mocks).
 
     The objective compares the observations with data (see Objective),
-    and a fit fits them; the models of the others are evaluated alongside
-    (e.g. a prediction of a band without data, see outputs).
+    and a fit fits them; the models of the others are evaluated with the
+    outputs (e.g. a prediction of a band without data, see outputs).
 
     It holds the memory of its objective and its workers until it is
     closed (see close; e.g. at the end of a with block).
@@ -96,7 +95,9 @@ class Setup:
         The workers of copies of the objective, which evaluate the batches
         of points of fits at once (see Workers.start).
     mock_options : MockOptions, optional
-        The options of mock data of the observations (see mock).
+        The options of mock data of the observations (see mock): its
+        likelihoods are then those of the fits of the mock data, of every
+        observation (see Likelihoods: mocked).
     bootstrap_options : BootstrapOptions, optional
         The options of a bootstrap of a fit (see bootstrap).
 
@@ -104,7 +105,8 @@ class Setup:
     ------
     ValueError
         If the parameters are not of the group and the likelihoods, the
-        likelihoods are of another group, the fitter cannot fit the
+        likelihoods are of another group, or not of mock data with options
+        of mock data, the fitter cannot fit the
         parameters (see Fitter.check), the options of mock data are not
         of the observations (see MockOptions.check), the options of a
         bootstrap do not suit the data (see BootstrapOptions.check), or
@@ -137,11 +139,17 @@ class Setup:
             bootstrap_options: BootstrapOptions | None = None
     ):
         if likelihoods is None:
-            likelihoods = Likelihoods(group)
+            likelihoods = Likelihoods(
+                group, mocked=mock_options is not None)
         elif likelihoods.group() is not group:
             raise ValueError(
                 "the likelihoods are of another group (see "
                 "Likelihoods.with_group)")
+        elif mock_options is not None and not likelihoods.mocked():
+            raise ValueError(
+                "the likelihoods of a setup of mock data are those of the "
+                "fits of its mock data, of every observation: "
+                "Likelihoods(group, ..., mocked=True)")
         pdescs = group.pdescs() | likelihoods.pdescs()
         if missing := [n for n in pdescs if n not in params.pdescs()]:
             raise ValueError(
@@ -414,7 +422,7 @@ class Setup:
             raise ValueError("mock data need their options (section 'mock')")
         observations = self.group().observations()
         return [
-            [observation.with_data(dataset)
+            [observation.with_dataset(dataset)
              for observation, dataset in zip(observations, datasets)]
             for datasets in draw_mocks(self._group_plan, values, options)]
 

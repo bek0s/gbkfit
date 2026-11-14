@@ -1,6 +1,6 @@
 # blobs_maps_selection: The moment maps of a disk whose density is an exponential, three blobs (a mixture) and a map of 4 x 4 cells, within a range of radii and of azimuths (selection traits).
 # (written by make_golden.py; do not edit)
-version: 10
+version: 12
 driver: {type: host}
 galaxies:
 - components:
@@ -21,8 +21,8 @@ galaxies:
     - {type: rrange}
     - {type: azrange}
 observations:
-- type: sky
-  data:
+- type: pixel_moments
+  dataset:
     type: pixel_moments
     step: [0.6, 0.6]
     rpix: [11.5, 11.5]
@@ -32,18 +32,16 @@ observations:
     moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
     moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
   dtype: float64
-  line_of_sight: {type: flat}
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20.0 km s-1}
-  observable:
-    type: pixel_moments
-    spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
-    flux_floor: 0.03
-    method: moments
-    median_size: null
+  spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
+  flux_floor: 0.03
+  method: moments
+  median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
 likelihoods: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}

@@ -266,9 +266,8 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     data of the model at its true values (see Case.mock_galaxies), and
     its parameters at its trial values.
     """
-    from gbkfit.observation import (
-        LikelihoodGauss, MockOptions, draw_mocks, likelihood_parser,
-        noise_parser)
+    from gbkfit.objective import LikelihoodGauss, likelihood_parser
+    from gbkfit.observation import MockOptions, draw_mocks, noise_parser
     from gbkfit.observation import observation_parser
     from gbkfit.config import FORMAT_VERSION
     from gbkfit.config import paths_relative_to
@@ -310,12 +309,13 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     prefix = str(folder) + os.sep
     observations = []
     for i, observation in enumerate(group.observations()):
-        mocked = observation.with_data(datasets[i])
+        mocked = observation.with_dataset(datasets[i])
         info = _rebased(observation_parser.dump(
             mocked, f'{prefix}{labels[i]}_', overwrite=True), prefix)
         if 'name' not in case.observations[i]:
             info.pop('name', None)
-        info['data'] = _compacted(info['data'], folder) | data_options[i]
+        info['dataset'] = _compacted(info['dataset'], folder) \
+            | data_options[i]
         observations.append(info)
     config = dict(version=FORMAT_VERSION, driver=dict(type='host')) \
         | sections | dict(
@@ -343,7 +343,7 @@ def make_config(case: Case, folder: pathlib.Path) -> None:
     migration.migrate(current)
     for observation, data in zip(
             config['observations'], current['observations'], strict=True):
-        observation['data'] = data['data']
+        observation['dataset'] = data['dataset']
     _write_config(case, folder, config)
 
 

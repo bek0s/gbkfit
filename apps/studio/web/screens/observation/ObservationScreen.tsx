@@ -13,8 +13,8 @@ import { useStudio } from '../../studio';
 import { BlockLinks } from '../../shell/BlockLinks';
 import { arraysOf, draftOfDataset, EMPTY_ITEM, kept, KINDS, kindOfType } from '../dataset/model';
 import { SaveActions, useEditedBlock } from '../editing';
-import { checksOf, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, objectAt, psfEllipse, textAt } from './model';
-import { DataFields, InstrumentFields, LightFields, LineOfSightFields, ObservableFields, OptionFields } from './Sections';
+import { checksOf, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, objectAt, psfEllipse, skyKeys, textAt } from './model';
+import { DataFields, InstrumentFields, KindFields, LightFields, OptionFields } from './Sections';
 import { Checks, Resolution, Sky, Stages, type SkyData } from './View';
 import { SheetLayout } from '../../components/ui/sheet';
 
@@ -31,11 +31,11 @@ export function ObservationScreen({ name }: { name: string }) {
   // read as the dataset reads it: of its rest or that of the observation,
   // the convention of velocities its header leaves ambiguous and the type
   // of a spectral axis FITS does not define)
-  const dataset = usePiece(named('datasets', options?.data)).data as Options | undefined;
+  const dataset = usePiece(named('datasets', options?.dataset)).data as Options | undefined;
   const kind = kindOfType(dataset?.type);
   const first = kind && dataset ? Object.values(draftOfDataset(kind, dataset, root).items)[0]?.files.data : undefined;
   const axis = dataset ? objectAt(dataset, 'spectral') : {};
-  const given = textAt(objectAt(objectAt(options ?? {}, 'observable'), 'spectral'), 'rest') ?? textAt(axis, 'rest');
+  const given = textAt(objectAt(options ?? {}, 'spectral'), 'rest') ?? textAt(axis, 'rest');
   const velocity = axis.convention === 'radio' || axis.convention === 'optical' ? axis.convention : null;
   const describe = useDescriptions(first ? [first.file] : [], velocity, given, textAt(axis, 'type') as SpectralTypeOption | null);
   const array = kind && first ? arraysOf({ ...EMPTY_ITEM, files: { data: first } }, describe, KINDS[kind].ndim).found.data : undefined;
@@ -53,22 +53,24 @@ export function ObservationScreen({ name }: { name: string }) {
 
   if (project === null) return null;
   const title = (family: string, type: unknown) => (type === undefined ? '—' : titleOf(defs, family, String(type)));
-  const sky = defs && options ? membersOf(defs.observation ?? {}, defs).find((m) => typeOf(m) === options.type) : undefined;
+  // (of a kind of data on the sky; a profile has the form of the schema)
+  const sky = defs && options && options.type !== 'profile' ? membersOf(defs.observation ?? {}, defs).find((m) => typeOf(m) === options.type) : undefined;
   const psf = instrument.psf == null ? null : psfEllipse(psfView.data?.axes as [number, number, number | null] | undefined);
   const beam = headerBeam(array);
-  const observable = options ? objectAt(options, 'observable') : {};
-  const withData = options?.data != null;
+  const withData = options?.dataset != null;
   const lsfWidth = instrument.lsf == null ? null : (lsfView.data?.fwhm ?? null);
-  const channel = array?.step?.length === 3 ? Math.abs(array.step[2]) : typeof objectAt(observable, 'spectral').step === 'number' ? (objectAt(observable, 'spectral').step as number) : null;
+  const spectral = options ? objectAt(options, 'spectral') : {};
+  const channel = array?.step?.length === 3 ? Math.abs(array.step[2]) : typeof spectral.step === 'number' ? spectral.step : null;
   const skyData: SkyData | null = first && array ? { path: first.file, array, cube: kept(array).length === 3, reading: { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null } } : null;
-  const grid = !withData && Array.isArray(observable.size) ? { size: pairOf(observable.size), step: pairOf(observable.step ?? [1, 1]) } : !withData && typeof observable.size === 'number' ? { size: pairOf(observable.size), step: pairOf(observable.step ?? 1) } : null;
+  const grid = !withData && options && (Array.isArray(options.size) || typeof options.size === 'number') ? { size: pairOf(options.size), step: pairOf(options.step ?? 1) } : null;
   const checks = options
     ? checksOf({ options, datasets: edited.blocks.datasets ?? [], datasetType: dataset?.type as string | undefined, data: array, psf, lsfWidth, titleOf: title })
     : [];
   const needs = defs && options ? needsOf({ options, defs, datasets: edited.blocks.datasets ?? [], datasetType: dataset?.type as string | undefined, titleOf: title }) : [];
   const needed = (section: string) => needs.some((need) => need.section === section);
   const common = defs && options ? { defs, project, options, onChange: edited.set, blocks: edited.blocks, openBlock: (folder: string, block: string) => go({ kind: 'block', folder, name: block }) } : null;
-  const others = sky ? Object.keys((sky.properties as Record<string, unknown>) ?? {}).filter((key) => !HANDLED_KEYS.includes(key)) : [];
+  // (the options of every observation on the sky that no section sets)
+  const others = sky && defs ? skyKeys(defs).filter((key) => !HANDLED_KEYS.includes(key)) : [];
 
   return (
     <section className="screen ob-screen">
@@ -87,7 +89,7 @@ export function ObservationScreen({ name }: { name: string }) {
       {edited.error && <p className="error screen-error">{edited.error.message}</p>}
       {!options || !common ? (
         <p className="note screen-error">Reading the observation…</p>
-      ) : options.type !== 'sky' || !sky ? (
+      ) : !sky ? (
         <SheetLayout
           className="ob-body"
           width={400}
@@ -116,7 +118,7 @@ export function ObservationScreen({ name }: { name: string }) {
               <div className="ob-figures">
                 <Sky data={skyData} grid={grid} psf={psf} beam={beam} />
                 <div className="ob-side">
-                  {isSpectral(observable.type) && <Resolution fwhm={lsfWidth} channel={channel} named={instrument.lsf != null} />}
+                  {isSpectral(options.type) && <Resolution fwhm={lsfWidth} channel={channel} named={instrument.lsf != null} />}
                   <Checks checks={checks} />
                 </div>
               </div>
@@ -125,16 +127,13 @@ export function ObservationScreen({ name }: { name: string }) {
           sheet={
             <Dock label="The observation">
               <DockSection id="ob-data" title="Data" needed={needed('ob-data')}>
-                <DataFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observable', type)} />
+                <DataFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observation', type)} />
               </DockSection>
-              <DockSection id="ob-observable" title="Observable" needed={needed('ob-observable')}>
-                <ObservableFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observable', type)} />
+              <DockSection id="ob-kind" title="Kind" needed={needed('ob-kind')}>
+                <KindFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observation', type)} />
               </DockSection>
               <DockSection id="ob-instrument" title="Instrument">
                 <InstrumentFields {...common} beam={beam} psf={psf} titleOf={title} />
-              </DockSection>
-              <DockSection id="ob-sight" title="Line of sight" needed={needed('ob-sight')}>
-                <LineOfSightFields {...common} titleOf={title} />
               </DockSection>
               <DockSection id="ob-light" title="Galaxies and light" note={setCount(options, LIGHT_KEYS)}>
                 <LightFields {...common} />

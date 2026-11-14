@@ -1,6 +1,6 @@
 """
-The units of the light of the data of the observables (see
-Observable.data_unit): of the pixels of grids, and of fluxes, sums of
+The units of the light of the data of the observations on the sky (see
+ObservationSky.data_unit): of the pixels of grids, and of fluxes, sums of
 the light of pixels (e.g. of regions, or visibilities).
 """
 
@@ -19,11 +19,12 @@ def data_unit(
         light: LightUnit | None = None
 ) -> DataUnit | None:
     """
-    Return the unit of the light of a dataset (see Observable.data_unit):
-    that of its item of the given key (None: it has none), with its beam,
-    whose pixels have the given solid angle (arcsec^2), and whose light
-    is integrated over the lines or not; without data, that of the given
-    light, if any; None without either, or without an item of light.
+    Return the unit of the light of a dataset (see
+    ObservationSky.data_unit): that of its item of the given key (None:
+    it has none), with its beam, whose pixels have the given solid angle
+    (arcsec^2), and whose light is integrated over the lines or not;
+    without data, that of the given light, if any; None without either,
+    or without an item of light.
     """
     if key is None:
         return None
