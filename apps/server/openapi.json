@@ -1109,6 +1109,76 @@
         }
       }
     },
+    "/api/v1/views/galaxy-volume": {
+      "post": {
+        "summary": "View Galaxy Volume",
+        "description": "Render the light of a galaxy in 3d, face-on (see Renders.volume): a\nframe of one array, 'light' (nz, ny, nx), whose header has the size\nof its voxels across (step) and along z (depth_step; arcsec) and the\nvoxel of its plane (zero). The render is cancelled if the client goes\naway (see RenderPool).",
+        "operationId": "view_galaxy_volume_api_v1_views_galaxy_volume_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalaxyVolumeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/views/galaxy-extra": {
+      "post": {
+        "summary": "View Galaxy Extra",
+        "description": "Render an extra output of the evaluation of a galaxy (see\nRenders.extra): a frame of one array, its values, whose header has its\nname, ids, title, description and unit, and the size of its pixels\nacross (step) and along its depth (depth_step; null without one). The\nrender is cancelled if the client goes away (see RenderPool).",
+        "operationId": "view_galaxy_extra_api_v1_views_galaxy_extra_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalaxyExtraRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/views/galaxy-cube": {
       "post": {
         "summary": "View Galaxy Cube",
@@ -2569,6 +2639,71 @@
         "title": "FolderInfo",
         "description": "A folder: its path, and its folders and files (but the hidden ones),\nby name."
       },
+      "GalaxyExtraRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "galaxy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Galaxy"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Properties",
+            "default": {}
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "ids": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Ids",
+            "default": {}
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "sky",
+              "face-on",
+              "edge-on"
+            ],
+            "title": "View",
+            "default": "sky"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "default": 160
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "galaxy",
+          "name"
+        ],
+        "title": "GalaxyExtraRequest",
+        "description": "An extra output of a galaxy to render (see Renders.extra): as\nGalaxyRenderRequest, with the name and the ids of the output (see the\nlist of a render of the galaxy)."
+      },
       "GalaxyInfo": {
         "properties": {
           "parameters": {
@@ -2667,6 +2802,48 @@
         ],
         "title": "GalaxyRequest",
         "description": "A galaxy to describe: the project of its piece, and its options (its\nfiles relative to the project)."
+      },
+      "GalaxyVolumeRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "galaxy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Galaxy"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Properties",
+            "default": {}
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "default": 96
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "galaxy"
+        ],
+        "title": "GalaxyVolumeRequest",
+        "description": "A galaxy to render in 3d (see Renders.volume): as GalaxyRenderRequest,\nbut always face-on."
       },
       "HTTPValidationError": {
         "properties": {

@@ -1,8 +1,9 @@
 """
 The functions of a galaxy (GalaxyFunctions) that the derived values of
 its parameters can use (see ParamSpace): the circular velocity, the
-enclosed mass and the density slope of its mass, and the rotation and
-dispersion of its disks, at any radius.
+enclosed mass and the density slope of its mass, and the rotation, the
+speeds, the dispersion and the surface density of its disks, at any
+radius.
 """
 
 import functools
@@ -22,7 +23,8 @@ from gbkfit.params import ParamValues
 from ._galaxy_stage import GalaxyStage, GalaxyState
 from .components.base import GalaxyMass
 from .components.base import ComponentState
-from .components.disks._profiles import dispersion, rotation
+from .components.disks._profiles import (
+    dispersion, rotation, speed, surface_density)
 from .components.disks.disk import Disk
 
 if TYPE_CHECKING:
@@ -49,7 +51,9 @@ _RADIAL_FAMILIES = dict(
     mass=(u.Msun, u.kpc, True),
     slope=(u.dimensionless_unscaled, u.kpc, True),
     rotation=(u.km / u.s, u.arcsec, True),
-    dispersion=(u.km / u.s, u.arcsec, True))
+    speed=(u.km / u.s, u.arcsec, True),
+    dispersion=(u.km / u.s, u.arcsec, True),
+    density=(u.dimensionless_unscaled, u.arcsec, True))
 
 # The families of functions of the mass of the galaxy
 _MASS_FAMILIES = ('vcirc', 'vnewton', 'mass', 'slope')
@@ -96,12 +100,20 @@ class GalaxyFunctions:
       its gravity moves it: the azimuthal mean of its tangential velocity
       traits (with the circular velocity of the mass, and its pressure
       support, that its gravity gives them; see rotation)
+    - speed_{component}(R, direction): its speed along a direction at
+      its midplane (km/s): the azimuthal mean of its velocity traits
+      along it ('rad', 'ver', 'away', 'out' or 'los', see traits); along
+      'tan', its rotation (see speed)
     - dispersion_{component}(R): its velocity dispersion at its midplane
       (km/s): the azimuthal mean of its dispersion traits, with the
       dispersion of its vertical equilibrium in quadrature (see
       dispersion); dispersion_{component}(R, direction), along a
       direction, 'rad', 'tan' or 'ver' (see traits), as a disk whose
       dispersion is not isotropic needs
+    - density_{component}(R): its surface density seen face-on, in the
+      unit of its density (e.g. its light): the azimuthal mean of its
+      density traits where its selection traits keep it (see
+      surface_density)
 
     The functions take numbers or arrays of radii, and return arrays of
     their shape. They are of the mass of the galaxy and of what it gives
@@ -254,8 +266,12 @@ class GalaxyFunctions:
         for i, suffix in self._suffixes.items():
             functions[f'rotation{suffix}'] = functools.partial(
                 self._rotation, i, params, state_of)
+            functions[f'speed{suffix}'] = functools.partial(
+                self._speed, i, params, state_of)
             functions[f'dispersion{suffix}'] = functools.partial(
                 self._dispersion, i, params, state_of)
+            functions[f'density{suffix}'] = functools.partial(
+                self._density, i, params)
         return functions
 
     def _rotation(
@@ -276,6 +292,41 @@ class GalaxyFunctions:
         return rotation(
             disk, self._disk_plans[index], self._disk_params(index, params),
             radii.ravel(), typing.cast('DiskState | None', state_of(index))
+        ).reshape(radii.shape)
+
+    def _speed(
+            self,
+            index: int,
+            params: ParamValues,
+            state_of: Callable[[int], ComponentState | None],
+            R: npt.ArrayLike,
+            direction: str
+    ) -> np.ndarray:
+        """
+        Return the speed (km/s) along a direction of the disk of the
+        component of the given index at the radii R (arcsec), at the
+        values of the parameters of the galaxy and with what its galaxy
+        gives it (its state, by the index of its component).
+        """
+        radii = self._radii(index, R, 'speed')
+        return speed(
+            self._disks[index], self._disk_plans[index],
+            self._disk_params(index, params), radii.ravel(), direction,
+            typing.cast('DiskState | None', state_of(index))
+        ).reshape(radii.shape)
+
+    def _density(
+            self, index: int, params: ParamValues, R: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Return the surface density of the disk of the component of the
+        given index at the radii R (arcsec), at the values of the
+        parameters of the galaxy.
+        """
+        radii = self._radii(index, R, 'density')
+        return surface_density(
+            self._disks[index], self._disk_plans[index],
+            self._disk_params(index, params), radii.ravel()
         ).reshape(radii.shape)
 
     def _dispersion(
@@ -351,7 +402,9 @@ def function_names(galaxy: 'Galaxy') -> tuple[str, ...]:
         names += ['kpc_per_arcsec']
     names += ['redshift_at']
     for suffix in _disk_suffixes(galaxy).values():
-        names += [f'rotation{suffix}', f'dispersion{suffix}']
+        names += [
+            f'rotation{suffix}', f'speed{suffix}', f'dispersion{suffix}',
+            f'density{suffix}']
     return tuple(names)
 
 
@@ -365,7 +418,8 @@ def function_radius_range(
     functions, of any radius.
     """
     for suffix in _disk_suffixes(galaxy).values():
-        if name in (f'rotation{suffix}', f'dispersion{suffix}'):
+        if name in (f'rotation{suffix}', f'speed{suffix}',
+                    f'dispersion{suffix}', f'density{suffix}'):
             return 0.0, math.inf
     return None
 

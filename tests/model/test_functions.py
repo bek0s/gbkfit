@@ -67,7 +67,8 @@ def test_circular_velocity_of_the_mass():
     assert functions.names() == (
         'vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo', 'mass', 'mass_bh',
         'mass_halo', 'slope', 'slope_bh', 'slope_halo', 'kpc_per_arcsec',
-        'redshift_at', 'rotation_gas', 'dispersion_gas')
+        'redshift_at', 'rotation_gas', 'speed_gas', 'dispersion_gas',
+        'density_gas')
     bound = functions.bind(PARAMS)
     R = np.array([0.5, 2.0, 8.0])
     np.testing.assert_allclose(
@@ -198,13 +199,36 @@ def test_functions_of_a_disk_without_mass():
     # its traits at any radius
     galaxy = galaxy_parser.load(dict(components=[copy.deepcopy(DISK)]))
     functions = galaxy.plan_functions()
-    assert functions.names() == ('redshift_at', 'rotation', 'dispersion')
+    assert functions.names() == (
+        'redshift_at', 'rotation', 'speed', 'dispersion', 'density')
     bound = functions.bind(DISK_PARAMS)
     R = np.array([[0.0, 1.3], [7.1, 20.0]])
     np.testing.assert_allclose(
         bound['rotation'](R), 200 * 2 / np.pi * np.arctan(R / 3),
         rtol=1e-12)
     np.testing.assert_allclose(bound['dispersion'](R), 20, rtol=1e-12)
+    # (its speed along a direction: its rotation along the tangent, none
+    # along others it has no traits along; its density, its exponential)
+    np.testing.assert_allclose(
+        bound['speed'](R, 'tan'), bound['rotation'](R), rtol=1e-12)
+    np.testing.assert_array_equal(bound['speed'](R, 'rad'), 0)
+    np.testing.assert_allclose(
+        bound['density'](R), np.exp(-R / 4), rtol=1e-12)
+
+
+def test_the_speeds_of_a_disk_are_along_each_direction():
+    # (an inflow along the radius beside its rotation, which the speed
+    # along the radius gives alone)
+    disk = copy.deepcopy(DISK) | dict(vptraits=[
+        dict(type='arctan', direction='tan'),
+        dict(type='uniform', direction='rad')])
+    galaxy = galaxy_parser.load(dict(components=[disk]))
+    bound = galaxy.plan_functions().bind(DISK_PARAMS | dict(vpt2_vr=-8))
+    R = np.array([1.0, 5.0, 12.0])
+    np.testing.assert_allclose(bound['speed'](R, 'rad'), -8, rtol=1e-12)
+    np.testing.assert_allclose(
+        bound['speed'](R, 'tan'), 200 * 2 / np.pi * np.arctan(R / 3),
+        rtol=1e-12)
 
 
 def test_functions_of_a_galaxy_of_mass_alone():

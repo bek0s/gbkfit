@@ -40,7 +40,9 @@ from .workspace import Workspace
 
 
 __all__ = [
+    'GalaxyExtra',
     'GalaxyRender',
+    'GalaxyVolume',
     'Observed',
     'ObservedArray',
     'Renders',
@@ -54,6 +56,11 @@ __all__ = [
 View = Literal['sky', 'face-on', 'edge-on']
 _ORIENTATIONS = {
     'face-on': dict(posa=0, incl=0), 'edge-on': dict(posa=90, incl=90)}
+
+# The directions of the speeds of the disks (see GalaxyFunctions; the
+# planar traits, along none, are left out) and of their dispersions
+_SPEED_DIRECTIONS = ('tan', 'rad', 'ver', 'away', 'out', 'los')
+_DISPERSION_DIRECTIONS = ('rad', 'tan', 'ver')
 
 # The pixels across a render, and the most
 _SIZE = 160
@@ -93,14 +100,54 @@ class GalaxyRender:
     that has the map, by its name, or its position if it has none, e.g.
     'component0/light'; NaN where there is no light), and its curves by name
     ('radius', arcsec, and the functions of radii of the galaxy at them,
-    e.g. 'rotation_gas' and 'vcirc_halo'; see GalaxyFunctions), with the
-    problems of the curves that could not be drawn.
+    e.g. 'rotation_gas' and 'vcirc_halo'; see GalaxyFunctions; and of each
+    disk its speeds along each direction it has traits along,
+    'speed_gas:rad', and its dispersion along each direction if it is not
+    isotropic, 'dispersion_gas:tan'), with the problems of the curves that
+    could not be drawn; and the extra outputs of the evaluation (see
+    gbkfit.model.Extras: of each, its name, ids, title, description, unit
+    and number of dimensions; see Renders.extra).
     """
     step: float
     size: int
     maps: dict[str, np.ndarray]
     curves: dict[str, list[float]]
     problems: list[str]
+    extras: list[dict[str, Any]]
+
+
+@dataclasses.dataclass
+class GalaxyVolume:
+    """
+    The light of a galaxy in 3d, face-on (see Renders.volume): its values
+    (nz, ny, nx; the axis z along its axis of rotation, from below its
+    plane to above it), the size of its voxels across (step) and along z
+    (depth_step; arcsec), and the voxel of its plane along z (zero, 0-based;
+    fractional).
+    """
+    step: float
+    depth_step: float
+    zero: float
+    values: np.ndarray
+
+
+@dataclasses.dataclass
+class GalaxyExtra:
+    """
+    An extra output of the evaluation of a galaxy (see Renders.extra): its
+    name, ids, title, description and unit (as the library gives them; ''
+    if none), its values (an array: e.g. a map, ny by nx, or a cube with a
+    depth axis, nz by ny by nx), and the size of its pixels across (step;
+    arcsec) and along its depth (depth_step; None without a depth axis).
+    """
+    name: str
+    ids: dict[str, str]
+    title: str
+    description: str
+    unit: str
+    values: np.ndarray
+    step: float
+    depth_step: float | None
 
 
 @dataclasses.dataclass
@@ -171,6 +218,122 @@ class Renders:
             rendered.
         """
         tell = progress or _quiet
+        galaxy, values, extras, radius, step = self._evaluate(
+            project, options, properties, view, size, tell)
+        maps = _maps(galaxy, extras)
+        tell('drawing the curves')
+        curves, problems = _curves(galaxy, values, radius)
+        listed = [
+            dict(name=x.name, ids=x.ids, title=x.title,
+                 description=x.description, unit=_extra_unit(x.value),
+                 ndim=int(np.ndim(_extra_values(x.value))))
+            for x in extras if _extra_values(x.value) is not None]
+        return GalaxyRender(step, size, maps, curves, problems, listed)
+
+    def volume(
+            self,
+            project: str,
+            options: Mapping[str, Any],
+            properties: Mapping[str, Any],
+            size: int = _SIZE,
+            progress: Callable[[str], None] | None = None
+    ) -> GalaxyVolume:
+        """
+        Render the light of a galaxy in 3d (as galaxy renders its maps),
+        face-on, so that z is along its axis of rotation: the brightness of
+        each of its components in each voxel of an ideal observation with
+        a depth axis (those in a plane, e.g. thin disks, in the voxels of
+        its plane); telling progress the stage it reaches, if given.
+
+        Raises
+        ------
+        Invalid
+            If the galaxy or the values are not valid, or it cannot be
+            rendered.
+        """
+        tell = progress or _quiet
+        galaxy, _, extras, _, step = self._evaluate(
+            project, options, properties, 'face-on', size, tell)
+        tell('gathering the volume')
+        cubes, planes = [], []
+        for extra in extras:
+            if extra.name != 'bdata' or 'component' not in extra.ids:
+                continue
+            data = np.asarray(extra.value.data, dtype=np.float32)
+            (cubes if data.ndim == 3 else planes).append((extra.value, data))
+        if cubes:
+            coords = cubes[0][0].coords
+            depth_step, zero = float(coords.step[2]), float(coords.rpix[2])
+            values = sum(data for _, data in cubes)
+        else:
+            depth_step, zero = step, 0.0
+            values = np.zeros((1, size, size), dtype=np.float32)
+        for _, data in planes:
+            values[int(round(min(max(zero, 0), len(values) - 1)))] += data
+        return GalaxyVolume(step, depth_step, zero, values.astype(np.float32))
+
+    def extra(
+            self,
+            project: str,
+            options: Mapping[str, Any],
+            properties: Mapping[str, Any],
+            name: str,
+            ids: Mapping[str, str],
+            view: View = 'sky',
+            size: int = _SIZE,
+            progress: Callable[[str], None] | None = None
+    ) -> GalaxyExtra:
+        """
+        Render an extra output of the evaluation of a galaxy (as galaxy
+        renders its maps; see gbkfit.model.Extras): that of the name and
+        the ids given (e.g. 'vdata' of the component 'gas'), telling
+        progress the stage it reaches, if given.
+
+        Raises
+        ------
+        Invalid
+            If the galaxy or the values are not valid, it cannot be
+            rendered, or its evaluation has no such output.
+        """
+        tell = progress or _quiet
+        _, _, extras, _, step = self._evaluate(
+            project, options, properties, view, size, tell)
+        found = [
+            x for x in extras if x.name == name and x.ids == dict(ids)
+            and _extra_values(x.value) is not None]
+        if not found:
+            raise Invalid(f"the galaxy has no extra output {name} of {ids}")
+        extra = found[0]
+        coords = getattr(extra.value, 'coords', None)
+        depth = None if coords is None or len(coords.step) < 3 \
+            else float(coords.step[2])
+        return GalaxyExtra(
+            extra.name, extra.ids, extra.title, extra.description,
+            _extra_unit(extra.value),
+            np.asarray(_extra_values(extra.value), dtype=np.float32),
+            step, depth)
+
+    def _evaluate(
+            self,
+            project: str,
+            options: Mapping[str, Any],
+            properties: Mapping[str, Any],
+            view: View,
+            size: int,
+            tell: Callable[[str], None]
+    ) -> tuple[Galaxy, dict[str, Any], Extras, float, float]:
+        """
+        Evaluate a galaxy of the options of a piece of a project through
+        its ideal observations (see _observations), seen as given: return
+        the galaxy, the values of its parameters, the extra outputs of the
+        evaluation, its largest radius and the size of its pixels (arcsec).
+
+        Raises
+        ------
+        Invalid
+            If the galaxy or the values are not valid, or it cannot be
+            evaluated (e.g. it has no component that emits light).
+        """
         tell('setting up')
         galaxy, radius, step = self._load(project, options, view, size)
         try:
@@ -186,10 +349,7 @@ class Renders:
         # A mistake of the options or the values, or of the model at them
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
-        maps = _maps(galaxy, extras)
-        tell('drawing the curves')
-        curves, problems = _curves(galaxy, values, radius)
-        return GalaxyRender(step, size, maps, curves, problems)
+        return galaxy, values, extras, radius, step
 
     def cube(
             self,
@@ -441,17 +601,17 @@ def _observations(
     return observation_parser.load(infos)
 
 
-def _rest(components: list[Any]) -> dict[str, Any] | None:
+def _rest(components: list[Any]) -> str | None:
     """
     Return the rest of the first line named by components that emit lines,
-    as an option of a spectral axis; None if they name none.
+    as an option of a spectral axis (its text, in full); None if they name
+    none.
     """
     for component in components:
         if lines := component.emission().lines().lines():
             rest = lines[0].rest()
-            return dict(
-                value=float(rest.value),
-                unit=gbkfit.units.format_unit(rest.unit))
+            unit = gbkfit.units.format_unit(rest.unit)
+            return f"{float(rest.value)!r} {unit}"
     return None
 
 
@@ -626,7 +786,10 @@ def _curves(
     Return the curves of a galaxy from just off its centre to its largest
     radius (arcsec): 'radius', and each of its functions of radii at them
     (e.g. the rotation of a disk; those of its mass, of radii in kpc, at
-    the same radii on the sky), with the problems of those that failed.
+    the same radii on the sky), with the problems of those that failed: of
+    a disk, its speeds along each direction it has traits along (e.g.
+    'speed_gas:rad'), and its dispersion along each direction if it is not
+    isotropic (e.g. 'dispersion_gas:tan').
     """
     radii = np.linspace(radius / _NCURVE, radius, _NCURVE)
     curves = dict(radius=radii.tolist())
@@ -644,11 +807,51 @@ def _curves(
         if in_kpc and kpc is None:
             continue
         at = radii * kpc if in_kpc else radii
+        family = GalaxyFunctions.family(name)
+        if family == 'speed':
+            for direction in _SPEED_DIRECTIONS:
+                try:
+                    result = np.asarray(function(at, direction), dtype=float)
+                except (ValueError, TypeError, RuntimeError) as e:
+                    problems.append(f"{name}: {error_message(e)}")
+                    break
+                if np.any(result != 0):
+                    curves[f'{name}:{direction}'] = _listed(result)
+            continue
         try:
             result = np.asarray(function(at), dtype=float)
-        except (ValueError, TypeError, RuntimeError) as e:
+        except ValueError as e:
+            # (the dispersion of a disk that is not isotropic, along each
+            # direction)
+            if family != 'dispersion':
+                problems.append(f"{name}: {error_message(e)}")
+                continue
+            for direction in _DISPERSION_DIRECTIONS:
+                curves[f'{name}:{direction}'] = _listed(
+                    np.asarray(function(at, direction), dtype=float))
+            continue
+        except (TypeError, RuntimeError) as e:
             problems.append(f"{name}: {error_message(e)}")
             continue
-        curves[name] = [
-            float(v) if math.isfinite(v) else None for v in result]
+        curves[name] = _listed(result)
     return curves, problems
+
+
+def _listed(values: np.ndarray) -> list[float | None]:
+    """Return values as a list, None where they are not finite."""
+    return [float(v) if math.isfinite(v) else None for v in values]
+
+
+def _extra_values(value: Any) -> np.ndarray | None:
+    """
+    Return the array of an extra output (of data on a grid, or an array),
+    or None if it is not one (e.g. a table).
+    """
+    data = getattr(value, 'data', value)
+    return data if isinstance(data, np.ndarray) and data.ndim >= 1 else None
+
+
+def _extra_unit(value: Any) -> str:
+    """Return the unit of an extra output as text, '' if none is known."""
+    unit = getattr(value, 'unit', None)
+    return '' if unit is None else gbkfit.units.format_unit(unit)

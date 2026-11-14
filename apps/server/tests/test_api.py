@@ -951,6 +951,71 @@ def test_a_galaxy_is_rendered_as_it_is_built(client):
     assert header['problems'] == []
 
 
+def test_a_galaxy_of_a_named_line_is_rendered(client):
+    # (its cube at the rest of the line, given as text)
+    gas = dict(RENDERED['components'][0], emission=dict(
+        type='lines', lines='hi21'))
+    _, maps = render(
+        client, dict(components=[gas]), properties=dict(gas_vpt_vt=200),
+        size=32)
+    assert np.nanmax(maps['gas/velocity']) > 0
+
+
+def test_the_curves_of_a_disk_are_along_each_direction(client):
+    # (its speeds along each direction it has traits along, and its
+    # density)
+    gas = dict(RENDERED['components'][0], vptraits=[
+        dict(type='arctan', direction='tan'),
+        dict(type='uniform', direction='rad')])
+    header, _ = render(
+        client, dict(components=[gas]),
+        properties=dict(gas_vpt_vt=200, gas_vpt2_vr=-8), size=32)
+    curves = header['curves']
+    assert {'speed_gas:tan', 'speed_gas:rad', 'density_gas',
+            'rotation_gas'} <= set(curves)
+    assert 'speed_gas:ver' not in curves
+    assert curves['speed_gas:rad'] \
+        == pytest.approx([-8] * len(curves['radius']))
+    assert curves['speed_gas:tan'] == pytest.approx(curves['rotation_gas'])
+
+
+def test_a_galaxy_is_rendered_in_3d(client):
+    # (face-on: its light is thickest at its plane, along z)
+    thick = dict(
+        RENDERED['components'][0], type='thick_disk',
+        rhtraits=dict(type='sech2', zmax=4))
+    response = client.post('/api/v1/views/galaxy-volume', json=dict(
+        project='study', galaxy=dict(components=[thick]),
+        properties=dict(gas_vpt_vt=200), size=24))
+    assert response.status_code == 200, response.text
+    header, data = frames.decode(response.content)
+    light, = frames.arrays(header, data)
+    assert light.ndim == 3 and light.shape[1:] == (24, 24)
+    profile = light.sum(axis=(1, 2))
+    assert abs(int(profile.argmax()) - header['zero']) <= 1
+    assert header['depth_step'] > 0 and header['step'] > 0
+
+
+def test_the_extra_outputs_of_a_galaxy_are_listed_and_rendered(client):
+    header, _ = render(
+        client, RENDERED, properties=dict(gas_vpt_vt=200), size=32)
+    velocity = next(
+        x for x in header['extras']
+        if x['name'] == 'vdata' and x['ids'].get('component') == 'gas')
+    assert velocity['title'] and velocity['ndim'] == 2
+    response = client.post('/api/v1/views/galaxy-extra', json=dict(
+        project='study', galaxy=RENDERED, properties=dict(gas_vpt_vt=200),
+        size=32, name='vdata', ids=velocity['ids']))
+    assert response.status_code == 200, response.text
+    extra_header, data = frames.decode(response.content)
+    values, = frames.arrays(extra_header, data)
+    assert values.shape == (32, 32)
+    assert extra_header['title'] == velocity['title']
+    response = client.post('/api/v1/views/galaxy-extra', json=dict(
+        project='study', galaxy=RENDERED, size=32, name='none'))
+    assert response.status_code == 400
+
+
 def test_a_galaxy_is_rendered_face_on_and_edge_on(client):
     _, face_on = render(
         client, RENDERED, properties=dict(gas_vpt_vt=200), view='face-on',

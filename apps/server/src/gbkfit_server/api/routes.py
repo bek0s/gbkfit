@@ -31,11 +31,9 @@ from gbkfit_server.services.units import rest_text
 from gbkfit_server.services.views import Cube
 from .models import (
     ArrayInfo, CatalogueLine, CheckRequest, CheckResult, ComponentPartInfo,
-    ComponentType,
-    CubeRenderInfo,
-    FolderInfo,
-    GalaxyInfo, HeaderInfo,
-    GalaxyRenderRequest, GalaxyRequest, ImportRequest,
+    ComponentType, CubeRenderInfo, FolderInfo, GalaxyExtraRequest,
+    GalaxyInfo, GalaxyRenderRequest, GalaxyRequest, GalaxyVolumeRequest,
+    HeaderInfo, ImportRequest,
     JobInfo, JobRequest, LSFRequest, LSFViewInfo, ObservedArrayInfo,
     ObservedInfo, ObservedRequest, PSFRequest, PSFViewInfo,
     PieceReference, PieceRename, PieceRequest, PreferencesInfo,
@@ -348,10 +346,59 @@ async def view_galaxy(
         size=request.size), _what(request.label), connection.is_disconnected)
     header = dict(
         step=render.step, size=render.size, curves=render.curves,
-        problems=render.problems)
+        problems=render.problems, extras=render.extras)
     arrays = [(dict(name=name), data) for name, data in render.maps.items()]
     return Response(
         frames.array_frame(header, arrays),
+        media_type='application/octet-stream')
+
+
+@router.post(
+    '/views/galaxy-volume', response_class=Response, responses=_FRAME)
+async def view_galaxy_volume(
+        server: ServerDep, request: GalaxyVolumeRequest,
+        connection: Request) -> Response:
+    """
+    Render the light of a galaxy in 3d, face-on (see Renders.volume): a
+    frame of one array, 'light' (nz, ny, nx), whose header has the size
+    of its voxels across (step) and along z (depth_step; arcsec) and the
+    voxel of its plane (zero). The render is cancelled if the client goes
+    away (see RenderPool).
+    """
+    volume = await server.renders.render('volume', dict(
+        project=request.project, options=request.galaxy,
+        properties=request.properties, size=request.size),
+        f"{_what(request.label)} in 3d", connection.is_disconnected)
+    header = dict(
+        step=volume.step, depth_step=volume.depth_step, zero=volume.zero)
+    return Response(
+        frames.array_frame(header, [(dict(name='light'), volume.values)]),
+        media_type='application/octet-stream')
+
+
+@router.post(
+    '/views/galaxy-extra', response_class=Response, responses=_FRAME)
+async def view_galaxy_extra(
+        server: ServerDep, request: GalaxyExtraRequest,
+        connection: Request) -> Response:
+    """
+    Render an extra output of the evaluation of a galaxy (see
+    Renders.extra): a frame of one array, its values, whose header has its
+    name, ids, title, description and unit, and the size of its pixels
+    across (step) and along its depth (depth_step; null without one). The
+    render is cancelled if the client goes away (see RenderPool).
+    """
+    extra = await server.renders.render('extra', dict(
+        project=request.project, options=request.galaxy,
+        properties=request.properties, name=request.name, ids=request.ids,
+        view=request.view, size=request.size),
+        f"{_what(request.label)}: {request.name}", connection.is_disconnected)
+    header = dict(
+        name=extra.name, ids=extra.ids, title=extra.title,
+        description=extra.description, unit=extra.unit, step=extra.step,
+        depth_step=extra.depth_step)
+    return Response(
+        frames.array_frame(header, [(dict(name=extra.name), extra.values)]),
         media_type='application/octet-stream')
 
 

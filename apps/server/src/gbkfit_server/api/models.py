@@ -19,9 +19,11 @@ __all__ = [
     'Diagnostic',
     'FileEntry',
     'FolderInfo',
+    'GalaxyExtraRequest',
     'GalaxyInfo',
     'GalaxyRenderRequest',
     'GalaxyRequest',
+    'GalaxyVolumeRequest',
     'HeaderInfo',
     'ImportRequest',
     'JobInfo',
@@ -156,6 +158,34 @@ class GalaxyInfo(BaseModel):
     """
     parameters: list[dict[str, Any]]
     problems: list[dict[str, Any]]
+
+
+class GalaxyVolumeRequest(BaseModel):
+    """
+    A galaxy to render in 3d (see Renders.volume): as GalaxyRenderRequest,
+    but always face-on.
+    """
+    project: str
+    galaxy: dict[str, Any]
+    properties: dict[str, Any] = {}
+    size: int = 96
+    label: str | None = None
+
+
+class GalaxyExtraRequest(BaseModel):
+    """
+    An extra output of a galaxy to render (see Renders.extra): as
+    GalaxyRenderRequest, with the name and the ids of the output (see the
+    list of a render of the galaxy).
+    """
+    project: str
+    galaxy: dict[str, Any]
+    properties: dict[str, Any] = {}
+    name: str
+    ids: dict[str, str] = {}
+    view: Literal['sky', 'face-on', 'edge-on'] = 'sky'
+    size: int = 160
+    label: str | None = None
 
 
 class GalaxyRenderRequest(BaseModel):

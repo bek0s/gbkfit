@@ -369,6 +369,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/views/galaxy-volume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Galaxy Volume
+         * @description Render the light of a galaxy in 3d, face-on (see Renders.volume): a
+         *     frame of one array, 'light' (nz, ny, nx), whose header has the size
+         *     of its voxels across (step) and along z (depth_step; arcsec) and the
+         *     voxel of its plane (zero). The render is cancelled if the client goes
+         *     away (see RenderPool).
+         */
+        post: operations["view_galaxy_volume_api_v1_views_galaxy_volume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/galaxy-extra": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Galaxy Extra
+         * @description Render an extra output of the evaluation of a galaxy (see
+         *     Renders.extra): a frame of one array, its values, whose header has its
+         *     name, ids, title, description and unit, and the size of its pixels
+         *     across (step) and along its depth (depth_step; null without one). The
+         *     render is cancelled if the client goes away (see RenderPool).
+         */
+        post: operations["view_galaxy_extra_api_v1_views_galaxy_extra_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/views/galaxy-cube": {
         parameters: {
             query?: never;
@@ -1105,6 +1153,49 @@ export interface components {
             files: components["schemas"]["FileEntry"][];
         };
         /**
+         * GalaxyExtraRequest
+         * @description An extra output of a galaxy to render (see Renders.extra): as
+         *     GalaxyRenderRequest, with the name and the ids of the output (see the
+         *     list of a render of the galaxy).
+         */
+        GalaxyExtraRequest: {
+            /** Project */
+            project: string;
+            /** Galaxy */
+            galaxy: {
+                [key: string]: unknown;
+            };
+            /**
+             * Properties
+             * @default {}
+             */
+            properties: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /**
+             * Ids
+             * @default {}
+             */
+            ids: {
+                [key: string]: string;
+            };
+            /**
+             * View
+             * @default sky
+             * @enum {string}
+             */
+            view: "sky" | "face-on" | "edge-on";
+            /**
+             * Size
+             * @default 160
+             */
+            size: number;
+            /** Label */
+            label?: string | null;
+        };
+        /**
          * GalaxyInfo
          * @description A galaxy as the library describes it (see Galaxies.describe): its
          *     parameters ({name, title, desc, size, default, unit, range, period,
@@ -1170,6 +1261,33 @@ export interface components {
             galaxy: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * GalaxyVolumeRequest
+         * @description A galaxy to render in 3d (see Renders.volume): as GalaxyRenderRequest,
+         *     but always face-on.
+         */
+        GalaxyVolumeRequest: {
+            /** Project */
+            project: string;
+            /** Galaxy */
+            galaxy: {
+                [key: string]: unknown;
+            };
+            /**
+             * Properties
+             * @default {}
+             */
+            properties: {
+                [key: string]: unknown;
+            };
+            /**
+             * Size
+             * @default 96
+             */
+            size: number;
+            /** Label */
+            label?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2338,6 +2456,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GalaxyRenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_galaxy_volume_api_v1_views_galaxy_volume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalaxyVolumeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_galaxy_extra_api_v1_views_galaxy_extra_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalaxyExtraRequest"];
             };
         };
         responses: {

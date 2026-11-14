@@ -7,8 +7,9 @@ input ends:
 
 It writes frames to stdout (see frames): {type: ready} once the library
 is imported; then, for each frame it reads from stdin, {type: render, id,
-kind, args} (kind: 'galaxy', 'cube' or 'observed', the method of Renders,
-and args its keyword arguments), {type: progress, id, stage} for each
+kind, args} (kind: 'galaxy', 'volume', 'extra', 'cube' or 'observed',
+the method of Renders, and args its keyword arguments), {type: progress,
+id, stage} for each
 stage that the render reaches (e.g. 'evaluating'), and its result, {type:
 result, id} with the pickled result as data, or {type: error, id, error,
 message}, error the name of its class of errors (see errors: 'Invalid',

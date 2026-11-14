@@ -5,8 +5,9 @@ azimuthal means of its traits, for the mass components that follow it
 traits.VPTraitMass), and its rms height, rotation and dispersions, for
 its vertical equilibrium (see traits.DPTraitEquilibrium and
 traits.RHTraitEquilibrium); its rotation, for its density waves (see
-traits.VPTraitSpiral); and its rotation and dispersion, for the
-functions of its galaxy (see GalaxyFunctions).
+traits.VPTraitSpiral); and its rotation, speeds along each direction,
+dispersion and surface density, for the functions of its galaxy (see
+GalaxyFunctions).
 """
 
 import dataclasses
@@ -31,6 +32,7 @@ __all__ = [
     'pressure_support',
     'rms_heights',
     'rotation',
+    'speed',
     'surface_density'
 ]
 
@@ -526,29 +528,72 @@ def rotation(
         'mass', or the pressure support of its tangential traits), if
         anything.
     """
-    params = _with_inputs(disk, params, state)
+    v = _speed(disk, plan, _with_inputs(disk, params, state), radii, 'tan')
+    if state is None or state.pressure is None:
+        return v
+    pressure = np.interp(
+        np.asarray(radii, dtype=float), disk.subrnodes(), state.pressure)
+    return np.copysign(np.sqrt(np.maximum(v ** 2 + pressure, 0)), v)
+
+
+def speed(
+        disk: NodalDisk,
+        plan: DiskPlan,
+        params: ParamValues,
+        radii: np.ndarray,
+        direction: str,
+        state: 'DiskState | None' = None
+) -> np.ndarray:
+    """
+    Return the speed of a disk along a direction at its midplane, at radii
+    (arcsec, on the disk), in km/s: the azimuthal mean of the sum of its
+    velocity traits along it (see traits.VPT_DIRECTIONS), each times its
+    velocity height trait at z = 0; 0 without them. Along 'tan', its
+    rotation (see rotation: with the pressure support of its state).
+
+    Parameters
+    ----------
+    disk, plan, params, radii, state
+        As those of rotation.
+    direction : str
+        The direction (see traits.VPT_DIRECTIONS; not 'plane', of the
+        planar traits, whose speeds are not along one direction).
+    """
+    if direction == 'tan':
+        return rotation(disk, plan, params, radii, state)
+    return _speed(
+        disk, plan, _with_inputs(disk, params, state), radii, direction)
+
+
+def _speed(
+        disk: NodalDisk,
+        plan: DiskPlan,
+        params: ParamValues,
+        radii: np.ndarray,
+        direction: str
+) -> np.ndarray:
+    """
+    Return the azimuthal mean of the sum of the velocity traits of a disk
+    along a direction, each times its velocity height trait at z = 0, at
+    the radii (arcsec), of the values of its parameters with those its
+    galaxy gives its traits; 0 without them.
+    """
     r = np.asarray(radii, dtype=float)[:, None]
-    tangential = [
-        trait.direction() == 'tan' for trait in disk.traits('vpt')]
-    if not any(tangential):
+    along = [trait.direction() == direction for trait in disk.traits('vpt')]
+    if not any(along):
         return np.zeros(len(r))
     heights = _at_midplane(disk, plan, params, 'vht', r)
 
     def values(theta: np.ndarray) -> np.ndarray:
         speeds = plan.evaluate_polar_traits(params, 'vpt', r, theta) \
             * heights
-        return np.sum(
-            speeds[tangential], axis=0, keepdims=True, dtype=float)
+        return np.sum(speeds[along], axis=0, keepdims=True, dtype=float)
     # (the other traits, e.g. a spiral wave, do not make its sum vary)
     axisymmetric = all(
         trait.axisymmetric()
-        for trait, along in zip(disk.traits('vpt'), tangential) if along)
-    v = _azimuthal_mean(
+        for trait, kept in zip(disk.traits('vpt'), along) if kept)
+    return _azimuthal_mean(
         values, axisymmetric, _edges(disk, params, ('vpt',), r[:, 0]))[0]
-    if state is None or state.pressure is None:
-        return v
-    pressure = np.interp(r[:, 0], disk.subrnodes(), state.pressure)
-    return np.copysign(np.sqrt(np.maximum(v ** 2 + pressure, 0)), v)
 
 
 def density_waves(
