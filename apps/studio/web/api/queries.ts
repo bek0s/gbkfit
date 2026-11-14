@@ -2,7 +2,7 @@
 // its cache (which the events of the server refresh, see events.ts).
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
-import { api, data } from './client';
+import { api, data, errorMessage } from './client';
 import { decodeFrame } from './frames';
 import type { components, operations } from './schema';
 
@@ -281,7 +281,7 @@ export function useDeleteData() {
   return useMutation({
     mutationFn: async (path: string) => {
       const { error, response } = await api.DELETE('/api/v1/data/{path}', { params: { path: { path } } });
-      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+      if (!response.ok) throw new Error(errorMessage(error, response.status, response.statusText));
     },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ['folder'] });
@@ -335,7 +335,7 @@ export function useDeleteProject() {
   return useMutation({
     mutationFn: async (path: string) => {
       const { error, response } = await api.DELETE('/api/v1/projects/{path}', { params: { path: { path } } });
-      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+      if (!response.ok) throw new Error(errorMessage(error, response.status, response.statusText));
     },
     onSuccess: () => client.invalidateQueries({ queryKey: keys.projects }),
   });
@@ -372,7 +372,7 @@ export function useDeleteBlock(project: string) {
   return useMutation({
     mutationFn: async (path: string) => {
       const { error, response } = await api.DELETE('/api/v1/pieces/{path}', { params: { path: { path } } });
-      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+      if (!response.ok) throw new Error(errorMessage(error, response.status, response.statusText));
     },
     onSuccess: (_, path) => {
       client.invalidateQueries({ queryKey: keys.project(project) });
@@ -413,8 +413,9 @@ export function useNotes(project: string | null) {
         parseAs: 'text',
       });
       if (response.status === 404) return '';
-      if (!response.ok || text === undefined) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
-      return text;
+      if (!response.ok) throw new Error(errorMessage(error, response.status, response.statusText));
+      // (an empty file has no body)
+      return text ?? '';
     },
   });
 }
@@ -427,10 +428,10 @@ export function useSaveNotes(project: string) {
       const { error, response } = await api.PUT('/api/v1/files/{path}', {
         params: { path: { path: `${project}/README.md` } },
         body: text,
-        bodySerializer: (body: string) => body,
+        bodySerializer: (body?: string) => body ?? '',
         headers: { 'Content-Type': 'text/plain' },
       });
-      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+      if (!response.ok) throw new Error(errorMessage(error, response.status, response.statusText));
     },
     onSuccess: () => client.invalidateQueries({ queryKey: ['notes', project] }),
   });
@@ -442,7 +443,7 @@ export function useUpdateBlock() {
   return useMutation({
     mutationFn: async ({ path, content }: { path: string; content: Record<string, unknown> }) => {
       const { error, response } = await api.PUT('/api/v1/pieces/{path}', { params: { path: { path } }, body: content });
-      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+      if (!response.ok) throw new Error(errorMessage(error, response.status, response.statusText));
     },
     onSuccess: (_, { path }) => client.invalidateQueries({ queryKey: keys.piece(path) }),
   });

@@ -207,6 +207,19 @@ def test_pieces_are_updated_and_their_comments_stay(client):
         .status_code == 404
 
 
+def test_files_are_written_and_can_be_emptied(client):
+    # (e.g. notes cleared: no text writes an empty file)
+    path = 'study/README.md'
+    headers = {'content-type': 'text/plain'}
+    assert client.put(
+        f'/api/v1/files/{path}', content='# notes\n',
+        headers=headers).status_code == 204
+    assert client.get(f'/api/v1/files/{path}').text == '# notes\n'
+    assert client.put(
+        f'/api/v1/files/{path}', content='', headers=headers).status_code \
+        == 204
+    assert client.get(f'/api/v1/files/{path}').text == ''
+
 def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
     psf = client.post('/api/v1/views/psf', json=dict(
         project='study', options=dict(type='gauss', sigma=1.0))).json()

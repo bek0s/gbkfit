@@ -519,9 +519,12 @@ def read_file(server: ServerDep, path: str) -> str:
 def write_file(
         server: ServerDep,
         path: str,
-        text: Annotated[str, Body(media_type='text/plain')]
+        text: Annotated[str, Body(media_type='text/plain')] = ''
 ) -> None:
-    """Write the text of a file, and its folders."""
+    """
+    Write the text of a file, and its folders; no text (an empty body)
+    writes an empty file (e.g. notes cleared).
+    """
     server.workspace.write_text(path, text)
 
 

@@ -1447,7 +1447,7 @@
       },
       "put": {
         "summary": "Write File",
-        "description": "Write the text of a file, and its folders.",
+        "description": "Write the text of a file, and its folders; no text (an empty body)\nwrites an empty file (e.g. notes cleared).",
         "operationId": "write_file_api_v1_files__path__put",
         "parameters": [
           {
@@ -1461,11 +1461,11 @@
           }
         ],
         "requestBody": {
-          "required": true,
           "content": {
             "text/plain": {
               "schema": {
                 "type": "string",
+                "default": "",
                 "title": "Text"
               }
             }

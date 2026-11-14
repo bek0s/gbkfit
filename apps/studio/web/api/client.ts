@@ -45,13 +45,23 @@ api.use({
   },
 });
 
+// The message of an error response: the detail the server gave (a
+// message, or the messages of a request it refused, one per field), or
+// its status
+export function errorMessage(error: unknown, status: number, statusText: string): string {
+  const detail = (error as { detail?: unknown } | null | undefined)?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item) => (item as { msg?: unknown } | null)?.msg).filter((msg): msg is string => typeof msg === 'string');
+    if (messages.length) return messages.join('; ');
+  }
+  return `${status} ${statusText}`;
+}
+
 // The data of a response, or its error, with the detail the server gave
 export async function data<T>(request: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
   const { data: value, error, response } = await request;
-  if (error !== undefined || value === undefined) {
-    const detail = (error as { detail?: unknown } | undefined)?.detail;
-    throw new Error(typeof detail === 'string' ? detail : `${response.status} ${response.statusText}`);
-  }
+  if (error !== undefined || value === undefined) throw new Error(errorMessage(error, response.status, response.statusText));
   return value;
 }
 
@@ -72,7 +82,7 @@ export function upload(project: string, file: File, onProgress: (fraction: numbe
     request.onload = () => {
       const body = JSON.parse(request.responseText || 'null') as unknown;
       if (request.status === 201 && typeof body === 'string') resolve(body);
-      else reject(new Error(String((body as { detail?: unknown } | null)?.detail ?? `${request.status} ${request.statusText}`)));
+      else reject(new Error(errorMessage(body, request.status, request.statusText)));
     };
     request.onerror = () => reject(new Error('the file could not be sent'));
     request.send(file);

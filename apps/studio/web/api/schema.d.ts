@@ -582,7 +582,8 @@ export interface paths {
         get: operations["read_file_api_v1_files__path__get"];
         /**
          * Write File
-         * @description Write the text of a file, and its folders.
+         * @description Write the text of a file, and its folders; no text (an empty body)
+         *     writes an empty file (e.g. notes cleared).
          */
         put: operations["write_file_api_v1_files__path__put"];
         post?: never;
@@ -2633,7 +2634,7 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
                 "text/plain": string;
             };
