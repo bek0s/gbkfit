@@ -10,7 +10,7 @@ export const STAGES = [
   { key: 'light', title: 'Galaxies', section: 'ob-light' },
   { key: 'instrument', title: 'Instrument', section: 'ob-instrument' },
   { key: 'kind', title: 'Kind', section: 'ob-kind' },
-  { key: 'dataset', title: 'Data', section: 'ob-data' },
+  { key: 'dataset', title: 'Dataset', section: 'ob-data' },
 ] as const;
 
 // The options of a sky observation that its sections set by hand; the

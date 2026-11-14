@@ -126,7 +126,7 @@ export function ObservationScreen({ name }: { name: string }) {
           }
           sheet={
             <Dock label="The observation">
-              <DockSection id="ob-data" title="Data" needed={needed('ob-data')}>
+              <DockSection id="ob-data" title="Dataset" needed={needed('ob-data')}>
                 <DataFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observation', type)} />
               </DockSection>
               <DockSection id="ob-kind" title="Kind" needed={needed('ob-kind')}>

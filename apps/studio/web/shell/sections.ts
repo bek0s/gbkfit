@@ -24,7 +24,7 @@ export interface Section {
 
 export const SECTIONS: Section[] = [
   { key: 'home', title: 'Home', tool: false, groups: [] },
-  { key: 'data', title: 'Data', tool: false, groups: [{ folder: 'datasets', title: 'Datasets', kind: 'Dataset' }] },
+  { key: 'data', title: 'Datasets', tool: false, groups: [{ folder: 'datasets', title: 'Datasets', kind: 'Dataset' }] },
   { key: 'galaxies', title: 'Galaxies', tool: false, groups: [{ folder: 'galaxies', title: 'Galaxies', kind: 'Galaxy' }] },
   {
     key: 'observations',

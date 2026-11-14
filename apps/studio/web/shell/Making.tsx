@@ -24,7 +24,7 @@ const ADDERS: Record<string, ComponentType<AdderProps>> = { datasets: DataKindDi
 // The new blocks the menu makes, by the section they are in (the tools
 // make none yet: comparisons and fits come with their screens)
 const MADE: { section: string; folders: string[] }[] = [
-  { section: 'Data', folders: ['datasets'] },
+  { section: 'Datasets', folders: ['datasets'] },
   { section: 'Galaxies', folders: ['galaxies'] },
   { section: 'Observations', folders: ['observations', 'psfs', 'lsfs', 'noise'] },
 ];
