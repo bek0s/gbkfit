@@ -128,9 +128,15 @@ export function useGalaxyDraft(project: string, name: string) {
   const fresh = description.isSuccess && !description.isPlaceholderData;
   const params = (description.data?.parameters ?? []) as unknown as Param[];
   const problems = (description.data?.problems ?? []) as unknown as Problem[];
-  // (valid: the library made the galaxy; it has parameters, or no
-  // components to have them)
-  const valid = fresh && (params.length > 0 || problems.length === 0);
+  // (valid: the library made the galaxy as a whole; it has parameters, or
+  // no components to have them)
+  const whole = description.data?.whole ?? true;
+  const valid = fresh && whole && (params.length > 0 || problems.length === 0);
+  // (of a galaxy not made as a whole, the parameters of its parts made on
+  // their own, shown while it is as it is; the properties are not carried
+  // over to them, so that those of a part with a problem stay as they
+  // are, for when it has none)
+  const partial = fresh && !whole && settled !== undefined && state !== undefined && JSON.stringify(settled) === JSON.stringify(state.options) ? params : null;
 
   // The last valid description that has been taken in: the options it is
   // of (their text, and them), and their parameters. As each new one comes,
@@ -216,9 +222,10 @@ export function useGalaxyDraft(project: string, name: string) {
     saveError,
     defs: schema.data?.$defs as Defs | undefined,
     consistent,
-    // The description: the parameters (of the last valid one), the problems
-    // (of the options shown), and whether it is of them
-    params: described?.params ?? [],
+    // The description: the parameters (of the last valid one, or of the
+    // parts made on their own of the options shown), the problems (of the
+    // options shown), and whether it is of them
+    params: partial ?? described?.params ?? [],
     problems: fresh ? problems : [],
     // (a description that failed: e.g. the server could not be reached)
     describeError: description.error as Error | null,

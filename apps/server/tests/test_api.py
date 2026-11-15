@@ -396,6 +396,44 @@ def test_the_parameters_of_a_galaxy_are_described(client):
     assert info['problems'][0]['path'] == ['components', 0]
 
 
+def test_a_problem_in_a_part_of_a_galaxy_keeps_the_parameters_of_the_others(
+        client):
+    disk = dict(
+        type='thin_disk', rnodes=[0, 2, 4],
+        rptraits=dict(type='exponential'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'),
+        emission=dict(type='lines'))
+    galaxy = dict(
+        components=[dict(disk, name='gas'), dict(disk, name='stars')],
+        distance=dict(type='parameter'),
+        mass=[dict(type='halo', name='halo', profile=dict(type='nfw')),
+              dict(type='traced_disk', name='gas', component='gas')])
+    whole = client.post('/api/v1/parameters', json=dict(
+        project='study', galaxy=galaxy)).json()
+    assert whole['problems'] == []
+    # A part of the mass that follows no component: the galaxy is not
+    # made, but its other parts are, each on its own, with the same names
+    # and the paths of their options in the whole galaxy
+    broken = dict(galaxy, mass=[galaxy['mass'][0], dict(
+        galaxy['mass'][1], component='nowhere')])
+    info = client.post('/api/v1/parameters', json=dict(
+        project='study', galaxy=broken)).json()
+    assert [p['path'][:2] for p in info['problems']] == [['mass', 1]]
+    assert info['parameters'] == [
+        p for p in whole['parameters'] if p['owner'] != ['mass', 1]]
+    # A component with a problem: the other one, the distance and the halo
+    bad = dict(disk, name='stars', rnodes=[1, 2, 4])
+    info = client.post('/api/v1/parameters', json=dict(
+        project='study', galaxy=dict(galaxy, components=[
+            galaxy['components'][0], bad]))).json()
+    owners = {p['name']: p['owner'] for p in info['parameters']}
+    assert owners['gas_vpt_vt'] == ['components', 0, 'vptraits', 0]
+    assert owners['mass_halo_c'] == ['mass', 0]
+    assert 'distance' in owners
+    assert not any(name.startswith('stars_') for name in owners)
+
+
 def test_the_schema_of_the_configurations_is_served(client):
     schema = client.get('/api/v1/schema').json()
     assert {'psf', 'lsf'} <= set(schema['$defs'])

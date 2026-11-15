@@ -1,11 +1,13 @@
 // The model of a galaxy, as its sheet shows it: the galaxy as a whole (its
-// distance, redshift and gravity, in a strip), its components, each one
-// line (its name, its type, its extent and its parts in a few words) and
-// one open at a time, with its parts in the order the library gives them
-// (see types.ts), each its items with their numbers in its line; and the
-// parts of its mass. Options at their defaults stay out of sight, behind
-// "N more options"; the parts a component can have but has not are a row
-// of "+ ..." to add them. A problem shows where it is.
+// distance, redshift and gravity, in a strip, and the parts of its mass,
+// a line each, under them, in reach however long the components are),
+// and its components, each one line (its name, its type, its extent and
+// its parts in a few words) and one open at a time, with its parts in the
+// order the library gives them (see types.ts), each its items with their
+// numbers in its line. Options at their defaults stay out of sight,
+// behind "N more options"; the parts a component can have but has not
+// are a row of "+ ..." to add them. A problem shows where it is, and the
+// count of them at the foot goes to each in turn.
 import { Popover } from '@mantine/core';
 import { useState, type ReactNode } from 'react';
 import { useComponentTypes, useLines } from '../../api/queries';
@@ -14,7 +16,7 @@ import { significant } from '../../components/format';
 import { Close } from '../../components/ui/basics';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
-import { NumberChips, ParamEditor, paramText, type NumbersContext } from './Numbers';
+import { NumberChip, NumberChips, paramText, type NumbersContext } from './Numbers';
 import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
 import { ownedBy, settingOf } from './params';
 import { memberOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
@@ -108,38 +110,27 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
   const componentTypes = Object.keys(types ?? {}).map((type) => ({ value: type, ...titled(draft.defs, 'component', type) }));
   const massTypes = typesOf(draft.defs, 'mass_component');
   const general = draft.problems.filter((p) => !startsWith(p.path, ['components']) && !startsWith(p.path, ['mass']));
+  // (the problems of a component or a part of the mass: the count goes to
+  // each in turn, opening it and bringing its first problem in sight)
+  const placed = draft.problems.filter((p) => !general.includes(p) && typeof p.path[1] === 'number');
+  const [turn, setTurn] = useState(0);
+  const goToProblem = () => {
+    const problem = placed[turn % placed.length];
+    setTurn(turn + 1);
+    const [section, index] = problem.path as [string, number];
+    onOpen({ kind: section === 'mass' ? 'mass' : 'component', index });
+    // (once it is open)
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const row = document.querySelector(`[data-at="${section}/${index}"]`);
+        (row?.querySelector('.gm-why') ?? row)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }),
+    );
+  };
 
   return (
     <div className="gm">
       <Strip ctx={ctx} hasMass={mass.length > 0} />
-
-      <div className="gm-sec">
-        <span className="gm-over">
-          Components<b>{components.length}</b>
-        </span>
-        <DropMenu
-          label="Add a component"
-          width={320}
-          at="end"
-          entries={componentTypes.map((t) => ({ label: t.label, description: t.description, onClick: () => addComponent(t.value) }))}
-          target={<button className="gm-add">+ Add</button>}
-        />
-      </div>
-      {components.length === 0 && <p className="gm-empty">No components yet: add one to see the galaxy.</p>}
-      {components.map((component, i) => (
-        <ComponentCard
-          key={i}
-          ctx={ctx}
-          index={i}
-          component={component}
-          colour={colours[i]}
-          open={open?.kind === 'component' && open.index === i}
-          onToggle={() => onOpen(open?.kind === 'component' && open.index === i ? null : { kind: 'component', index: i })}
-          isolated={isolated === componentName(component, i)}
-          onIsolate={(on) => onIsolate(on ? componentName(component, i) : null)}
-          onOpen={onOpen}
-        />
-      ))}
 
       <div className="gm-sec">
         <span className="gm-over">
@@ -173,13 +164,47 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
         </div>
       )}
 
+      <div className="gm-sec">
+        <span className="gm-over">
+          Components<b>{components.length}</b>
+        </span>
+        <DropMenu
+          label="Add a component"
+          width={320}
+          at="end"
+          entries={componentTypes.map((t) => ({ label: t.label, description: t.description, onClick: () => addComponent(t.value) }))}
+          target={<button className="gm-add">+ Add</button>}
+        />
+      </div>
+      {components.length === 0 && <p className="gm-empty">No components yet: add one to see the galaxy.</p>}
+      {components.map((component, i) => (
+        <ComponentCard
+          key={i}
+          ctx={ctx}
+          index={i}
+          component={component}
+          colour={colours[i]}
+          open={open?.kind === 'component' && open.index === i}
+          onToggle={() => onOpen(open?.kind === 'component' && open.index === i ? null : { kind: 'component', index: i })}
+          isolated={isolated === componentName(component, i)}
+          onIsolate={(on) => onIsolate(on ? componentName(component, i) : null)}
+          onOpen={onOpen}
+        />
+      ))}
+
       <div className="gm-problems" data-bad={draft.problems.length > 0 || undefined}>
         {draft.problems.length === 0 ? (
           <span>No problems: the library builds the galaxy.</span>
         ) : (
           <span>
-            {draft.problems.length} {draft.problems.length === 1 ? 'problem' : 'problems'}
-            {draft.problems.length > general.length && ', shown where they are'}
+            {placed.length > 0 ? (
+              <button className="gm-link" onClick={goToProblem} title="Open where the next one is">
+                {draft.problems.length} {draft.problems.length === 1 ? 'problem' : 'problems'}
+              </button>
+            ) : (
+              `${draft.problems.length} ${draft.problems.length === 1 ? 'problem' : 'problems'}`
+            )}
+            {placed.length > 0 && ', shown where they are'}
           </span>
         )}
         {general.map((p, i) => (
@@ -212,8 +237,10 @@ function titled(defs: Defs | undefined, family: string, type: string): { label: 
 // ---------------------------------------------------------------------
 // The galaxy as a whole
 
-// The galaxy as a whole: its distance, redshift and gravity, each a tile
-// of its value in words, which a click opens to set
+// The galaxy as a whole: its distance, redshift and gravity, each a tile.
+// A click on the tile of the distance or the gravity opens the menu of
+// their types; their numbers are chips in the tile, each opening to set;
+// the redshift is typed in its tile.
 function Strip({ ctx, hasMass }: { ctx: Ctx; hasMass: boolean }) {
   const { defs, options, params, draft, set, project } = ctx;
   const distance = isObject(options.distance) ? options.distance : null;
@@ -221,61 +248,100 @@ function Strip({ ctx, hasMass }: { ctx: Ctx; hasMass: boolean }) {
   const distanceParam = params.find((p) => p.owner.length === 1 && p.owner[0] === 'distance');
   const setting = distanceParam ? settingOf(draft.state?.properties ?? {}, distanceParam) : null;
   const scale = ctx.kpcPerArcsec === null ? null : `1″ = ${significant(ctx.kpcPerArcsec * 1000, 3)} pc`;
-  let distanceText = '—';
-  let distanceNote = 'none: angles only';
-  if (distance && distanceParam && setting) {
-    distanceText = paramText(ctx, distanceParam).replace(/^\S+ /, '');
-    distanceNote = [setting.kind === 'free' ? 'free' : setting.kind === 'tied' ? 'tied' : 'given', scale].filter(Boolean).join(' · ');
-  } else if (distance) {
-    distanceText = titled(defs, 'distance', String(distance.type)).label;
-    distanceNote = scale ?? 'of its redshift';
-  }
+  const distanceType = String(distance?.type ?? '');
+  const gravityType = String(gravity?.type ?? 'newton');
   const z = typeof options.redshift === 'number' ? options.redshift : 0;
   const gravityParams = ownedBy(params, ['gravity']);
   const gravityRest = restOf(defs, memberOf(defs, 'gravity', gravity?.type), new Set(['type']));
-  const distanceRest = restOf(defs, memberOf(defs, 'distance', distance?.type), new Set(['type']));
+  const typeEntries = (family: string, current: string, onChange: (type: string) => void, none?: string): MenuEntry[] => [
+    ...(none ? [{ label: none, current: current === '', onClick: () => onChange('') }] : []),
+    ...typesOf(defs, family).map((t) => ({ label: t.label, description: t.description, current: t.value === current, onClick: () => t.value !== current && onChange(t.value) })),
+  ];
+  let distanceValue: ReactNode = <span className="gm-tv">None</span>;
+  let distanceNote = 'angles only';
+  if (distance && distanceParam && setting) {
+    distanceValue = <NumberChip ctx={ctx} param={distanceParam} rings={null} bare />;
+    distanceNote = scale ?? '';
+  } else if (distance) {
+    distanceValue = <span className="gm-tv">{titled(defs, 'distance', distanceType).label}</span>;
+    distanceNote = scale ?? 'of its redshift';
+  }
   return (
     <div className="gm-strip">
-      <Tile label="Distance" value={distanceText} note={distanceNote}>
-        <div className="gm-popline">
-          <span className="gm-word">Distance</span>
-          <TypePick
-            items={typesOf(defs, 'distance')}
-            value={String(distance?.type ?? '')}
-            none="None"
-            label="The distance of the galaxy"
-            onChange={(type) => set(['distance'], type === '' ? undefined : retyped(defs, 'distance', distance, type))}
-          />
-        </div>
-        {distanceParam && <ParamEditor ctx={ctx} param={distanceParam} rings={null} />}
-        {distanceRest && defs && distance && (
-          <SchemaForm defs={defs} node={distanceRest} project={project} value={omit(distance, 'type')} onChange={(next) => set(['distance'], { type: distance.type, ...next })} />
-        )}
-      </Tile>
-      <Tile label="Redshift" value={String(Number(z.toPrecision(6)))} note="its lines and dimming">
-        <div className="gm-popline">
-          <span className="gm-word">Redshift</span>
-          <NumberText value={z} label="The redshift of the galaxy" onCommit={(value) => set(['redshift'], value > 0 ? value : undefined)} />
-        </div>
-      </Tile>
-      <Tile label="Gravity" value={titled(defs, 'gravity', String(gravity?.type ?? 'newton')).label} note={hasMass ? 'of the mass below' : 'with mass only'}>
-        <div className="gm-popline">
-          <span className="gm-word">Gravity</span>
-          <TypePick
-            items={typesOf(defs, 'gravity')}
-            value={String(gravity?.type ?? 'newton')}
-            label="The gravity of the galaxy"
-            onChange={(type) => set(['gravity'], type === 'newton' ? undefined : retyped(defs, 'gravity', gravity, type))}
-          />
-        </div>
+      <TypeTile
+        label="Distance"
+        menu="The distance of the galaxy"
+        entries={typeEntries('distance', distanceType, (type) => set(['distance'], type === '' ? undefined : retyped(defs, 'distance', distance, type)), 'None')}
+        note={distanceNote}
+      >
+        {distanceValue}
+      </TypeTile>
+      <div className="gm-tile gm-tile-z">
+        <span className="gm-tl">Redshift</span>
+        <NumberText value={z} label="The redshift of the galaxy" onCommit={(value) => set(['redshift'], value > 0 ? value : undefined)} bare />
+        <span className="gm-tc">its lines and dimming</span>
+      </div>
+      <TypeTile
+        label="Gravity"
+        menu="The gravity of the galaxy"
+        entries={typeEntries('gravity', gravityType, (type) => set(['gravity'], type === 'newton' ? undefined : retyped(defs, 'gravity', gravity, type)))}
+        note={hasMass ? 'of the mass below' : 'with mass only'}
+      >
+        <span className="gm-tv">{titled(defs, 'gravity', gravityType).label}</span>
         {gravityParams.map((p) => (
-          <ParamEditor key={p.name} ctx={ctx} param={p} rings={null} />
+          <NumberChip key={p.name} ctx={ctx} param={p} rings={null} />
         ))}
         {gravityRest && defs && gravity && (
-          <SchemaForm defs={defs} node={gravityRest} project={project} value={omit(gravity, 'type')} onChange={(next) => set(['gravity'], { type: gravity.type, ...next })} />
+          <Popover position="bottom-start" offset={4} width={340} shadow="md" withinPortal trapFocus={false} classNames={{ dropdown: 'gm-pop' }}>
+            <Popover.Target>
+              <button className="gm-opt" title="Its other options">
+                options
+              </button>
+            </Popover.Target>
+            <Popover.Dropdown>
+              <div className="gm-popbody">
+                <SchemaForm defs={defs} node={gravityRest} project={project} value={omit(gravity, 'type')} onChange={(next) => set(['gravity'], { type: gravity.type, ...next })} />
+              </div>
+            </Popover.Dropdown>
+          </Popover>
         )}
-      </Tile>
+      </TypeTile>
     </div>
+  );
+}
+
+// A tile of the strip of a choice of types (the distance, the gravity): a
+// click opens the menu of its types; its value, and the chips of its
+// numbers, which open on their own
+function TypeTile({ label, menu, entries, note, children }: { label: string; menu: string; entries: MenuEntry[]; note: string; children: ReactNode }) {
+  return (
+    <DropMenu
+      label={menu}
+      width={300}
+      entries={entries}
+      target={
+        <div
+          className="gm-tile"
+          role="button"
+          tabIndex={0}
+          title={`The ${label.toLowerCase()}: click to change its kind`}
+          onKeyDown={(event) => event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ') && (event.preventDefault(), event.currentTarget.click())}
+        >
+          <span className="gm-tl">
+            {label}
+            <span className="gm-caret" aria-hidden>
+              ▾
+            </span>
+          </span>
+          {/* (the chips and what they open are their own, not the menu's;
+          the value in words is the tile's) */}
+          <span className="gm-tvs" onClick={(event) => event.target !== event.currentTarget && !(event.target as HTMLElement).classList.contains('gm-tv') && event.stopPropagation()}>
+            {children}
+          </span>
+          <span className="gm-tc">{note || ' '}</span>
+        </div>
+      }
+    />
   );
 }
 
@@ -353,7 +419,7 @@ function ComponentCard({
     onClick: () => type !== component.type && set(base, retypedComponent(defs, types, component, type)),
   }));
   return (
-    <div className="gm-comp" data-open={open || undefined} data-bad={own.length > 0 || undefined}>
+    <div className="gm-comp" data-open={open || undefined} data-bad={own.length > 0 || undefined} data-at={`components/${index}`}>
       <div
         className="gm-crow"
         role="button"
@@ -868,7 +934,7 @@ function MassRow({
     onClick: () => set(path, retyped(defs, 'mass_component', item, t.value)),
   }));
   return (
-    <div className="gm-mrow" data-open={open || undefined} data-bad={own.length > 0 || undefined}>
+    <div className="gm-mrow" data-open={open || undefined} data-bad={own.length > 0 || undefined} data-at={`mass/${index}`}>
       <div className="gm-mhead" role="button" tabIndex={0} aria-expanded={open} onClick={() => !renaming && onToggle()} onKeyDown={(event) => event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ') && (event.preventDefault(), onToggle())}>
         <span className="gm-dot" style={{ background: followed ? colourOf(followed) : 'var(--faint)' }} />
         {renaming ? (
@@ -1020,10 +1086,10 @@ function NameText({ value, onCommit, required, onCancel, autoFocus }: { value: s
 
 // A number of an option (not a parameter), as typed: set once it reads as
 // one, at least 0
-function NumberText({ value, onCommit, label, unit }: { value: number; onCommit: (value: number) => void; label: string; unit?: string }) {
+function NumberText({ value, onCommit, label, unit, bare }: { value: number; onCommit: (value: number) => void; label: string; unit?: string; bare?: boolean }) {
   const [text, setText] = useState<string | null>(null);
   return (
-    <label className="gm-numtext">
+    <label className={bare ? 'gm-numtext gm-numtext-bare' : 'gm-numtext'}>
       <input
         value={text ?? (Number.isFinite(value) ? String(value) : '')}
         onChange={(event) => {
@@ -1183,25 +1249,6 @@ function omit(options: Options, key: string): Options {
 
 function omitKeys(options: Options, keys: Set<string>): Options {
   return Object.fromEntries(Object.entries(options).filter(([key]) => !keys.has(key)));
-}
-
-// A tile of the strip: its label, its value and a note; a click opens what
-// sets it
-function Tile({ label, value, note, children }: { label: string; value: string; note: string; children: ReactNode }) {
-  return (
-    <Popover position="bottom-start" offset={4} width={340} shadow="md" withinPortal trapFocus={false} classNames={{ dropdown: 'gm-pop' }}>
-      <Popover.Target>
-        <button className="gm-tile">
-          <span className="gm-tl">{label}</span>
-          <span className="gm-tv">{value}</span>
-          <span className="gm-tc">{note}</span>
-        </button>
-      </Popover.Target>
-      <Popover.Dropdown>
-        <div className="gm-popbody">{children}</div>
-      </Popover.Dropdown>
-    </Popover>
-  );
 }
 
 // The rings (or shells) of a component in a few words: how many, to what

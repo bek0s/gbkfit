@@ -27,10 +27,25 @@ export interface ParamFieldProps {
   onUntie: () => void;
 }
 
-// The units as they are written here
+// The units as they are written here: a scale as a power of ten (e.g.
+// '1e-10 m / s2' as '×10⁻¹⁰ m/s²'), powers raised, products by a dot
 export function unitText(unit: string | null): string {
   if (unit === null) return '';
-  return { 'km / s': 'km/s', deg: '°', arcsec: '″', 'km / (Mpc s)': 'km/s/Mpc', solMass: 'M☉', 'dex(solMass)': 'dex M☉', 'solMass / solLum': 'M☉/L☉' }[unit] ?? unit.replaceAll(' ', '');
+  const known = { 'km / s': 'km/s', deg: '°', arcsec: '″', 'km / (Mpc s)': 'km/s/Mpc', solMass: 'M☉', 'dex(solMass)': 'dex M☉', 'solMass / solLum': 'M☉/L☉' }[unit];
+  if (known) return known;
+  const scaled = /^1e([+-]?\d+)\s+(.*)$/.exec(unit);
+  const rest = (scaled ? scaled[2] : unit)
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s+/g, '·')
+    .replace(/solMass/g, 'M☉')
+    .replace(/solLum/g, 'L☉')
+    .replace(/([a-zA-Z])(-?\d+)/g, (_, base: string, power: string) => base + raised(power));
+  return scaled ? `×10${raised(String(Number(scaled[1])))} ${rest}` : rest;
+}
+
+// A number as superscript digits
+function raised(digits: string): string {
+  return [...digits].map((c) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(c)] ?? (c === '-' ? '⁻' : c)).join('');
 }
 
 // (profiles of more values than this have only the slider of all)

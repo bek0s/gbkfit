@@ -9,7 +9,6 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-import scipy.integrate
 
 from gbkfit.config import TypedParser, TypedSerializable
 from gbkfit.params import ParamDesc, ParamValues
@@ -45,46 +44,41 @@ def _flattened_nodes() -> tuple[np.ndarray, np.ndarray]:
 _FLATTENED_PHI, _FLATTENED_WEIGHTS = _flattened_nodes()
 
 
+def _cosine_nodes() -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the nodes mu of the integral of _flattened_enclosed_mass over
+    [0, 1] and their weights: Gauss-Legendre points on panels of
+    geometric widths towards both ends (where the shells of a flat or a
+    long spheroid change on the scale q^2 or 1 / q).
+    """
+    x, w = np.polynomial.legendre.leggauss(10)
+    widths = np.concatenate(([0], np.geomspace(1e-10, 0.5, 20)))
+    edges = np.concatenate((widths, 1 - widths[::-1][1:]))
+    lo, hi = edges[:-1, None], edges[1:, None]
+    return (((hi - lo) * x + hi + lo) / 2).ravel(), ((hi - lo) * w / 2).ravel()
+
+
+_COSINE_MU, _COSINE_WEIGHTS = _cosine_nodes()
+
+
 def _flattened_enclosed_mass(
-        r: float,
+        r: np.ndarray,
         profile: SphericalProfile,
         params: ParamValues,
         context: MassContext
-) -> float:
+) -> np.ndarray:
     """
     Return the mass of a flattened spheroid (see ShapeFlattened) within
-    the sphere of the radius r: that of the shells of m wholly inside it
-    (each keeps the mass of its sphere, M(<m) of the profile), and the
-    share that it cuts of the others, whose mass is uniform in the cosine
-    mu of the angle of their points (R = m sqrt(1 - mu^2), z = q m mu): of
-    an oblate one (q < 1), within m < r and the share 1 - sqrt((1 - r^2 /
-    m^2) / (1 - q^2)) for r < m < r / q; of a prolate one (q > 1), within
-    m < r / q and the share sqrt((r^2 / m^2 - 1) / (q^2 - 1)) for r / q <
-    m < r. The share is integrated by adaptive quadrature (to 1e-10).
+    the spheres of the radii r. The mass of each shell of m is uniform in
+    the cosine mu of the angle of its points (R = m sqrt(1 - mu^2), z = q m
+    mu), which lie at the radius m sqrt(1 + (q^2 - 1) mu^2); so the mass
+    within r is the mean over mu of the mass of the profile within the
+    shell that reaches r at mu: the integral over [0, 1] of M(r / sqrt(1 +
+    (q^2 - 1) mu^2)), smooth in mu (to about 1e-10 here).
     """
     q = params['q']
-    if r <= 0:
-        return 0.0
-    if q == 1:
-        return float(profile.enclosed_mass(np.array([r]), params, context)[0])
-    if q < 1:
-        whole, edge = r, np.inf if q == 0 else r / q
-
-        def share(m: float) -> float:
-            return 1 - np.sqrt((1 - r ** 2 / m ** 2) / (1 - q ** 2))
-    else:
-        whole, edge = r / q, r
-
-        def share(m: float) -> float:
-            return np.sqrt((r ** 2 / m ** 2 - 1) / (q ** 2 - 1))
-
-    def shells(m: float) -> float:
-        density = profile.density(np.array([m]), params, context)[0]
-        return 4 * np.pi * m ** 2 * density * share(m)
-    inside = profile.enclosed_mass(np.array([whole]), params, context)[0]
-    cut, _ = scipy.integrate.quad(
-        shells, whole, edge, epsabs=0, epsrel=1e-10, limit=200)
-    return float(inside) + cut
+    shells = r[..., None] / np.sqrt(1 + (q ** 2 - 1) * _COSINE_MU ** 2)
+    return profile.enclosed_mass(shells, params, context) @ _COSINE_WEIGHTS
 
 
 class SpheroidShape(TypedSerializable, abc.ABC):
@@ -347,10 +341,9 @@ class ShapeFlattened(SpheroidShape):
             context: MassContext
     ) -> np.ndarray:
         r = np.asarray(r, dtype=float)
-        masses = [
-            _flattened_enclosed_mass(radius, profile, params, context)
-            for radius in r.ravel()]
-        return np.reshape(masses, r.shape)
+        if params['q'] == 1:
+            return profile.enclosed_mass(r, params, context)
+        return _flattened_enclosed_mass(r, profile, params, context)
 
     def forces(
             self,

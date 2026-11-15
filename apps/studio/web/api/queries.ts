@@ -459,7 +459,7 @@ export function usePsfView(project: string, options: Record<string, unknown>, st
     enabled,
     placeholderData: keepPreviousData,
     retry: false,
-    queryFn: () => data(api.POST('/api/v1/views/psf', { body: { project, options, step } })),
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/psf', { signal, body: { project, options, step } })),
   });
 }
 
@@ -479,7 +479,7 @@ export function useLsfView(project: string, options: Record<string, unknown>, at
     enabled,
     placeholderData: keepPreviousData,
     retry: false,
-    queryFn: () => data(api.POST('/api/v1/views/lsf', { body: { project, options, ...at } })),
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/lsf', { signal, body: { project, options, ...at } })),
   });
 }
 
@@ -492,7 +492,7 @@ export function useGalaxyParameters(project: string, galaxy: Record<string, unkn
     enabled: galaxy !== undefined,
     placeholderData: keepPreviousData,
     retry: false,
-    queryFn: () => data(api.POST('/api/v1/parameters', { body: { project, galaxy: galaxy ?? {} } })),
+    queryFn: ({ signal }) => data(api.POST('/api/v1/parameters', { signal, body: { project, galaxy: galaxy ?? {} } })),
   });
 }
 
@@ -539,8 +539,8 @@ export function useGalaxyVolume(project: string, galaxy: Record<string, unknown>
     enabled: enabled && galaxy !== undefined,
     placeholderData: keepPreviousData,
     retry: false,
-    queryFn: async (): Promise<GalaxyVolume> => {
-      const frame = decodeFrame(await data(api.POST('/api/v1/views/galaxy-volume', { body: { project, galaxy: galaxy ?? {}, properties, size }, parseAs: 'arrayBuffer' })));
+    queryFn: async ({ signal }): Promise<GalaxyVolume> => {
+      const frame = decodeFrame(await data(api.POST('/api/v1/views/galaxy-volume', { signal, body: { project, galaxy: galaxy ?? {}, properties, size }, parseAs: 'arrayBuffer' })));
       const header = frame.header as { step: number; depth_step: number; zero: number };
       const [array] = frame.arrays;
       return { values: array.values, shape: array.shape as [number, number, number], step: header.step, depthStep: header.depth_step, zero: header.zero };
@@ -572,9 +572,9 @@ export function useGalaxyExtra(
     enabled: galaxy !== undefined && extra !== null,
     placeholderData: keepPreviousData,
     retry: false,
-    queryFn: async (): Promise<GalaxyExtra> => {
+    queryFn: async ({ signal }): Promise<GalaxyExtra> => {
       const frame = decodeFrame(
-        await data(api.POST('/api/v1/views/galaxy-extra', { body: { project, galaxy: galaxy ?? {}, properties, name: extra?.name ?? '', ids: extra?.ids ?? {}, view, size }, parseAs: 'arrayBuffer' })),
+        await data(api.POST('/api/v1/views/galaxy-extra', { signal, body: { project, galaxy: galaxy ?? {}, properties, name: extra?.name ?? '', ids: extra?.ids ?? {}, view, size }, parseAs: 'arrayBuffer' })),
       );
       const header = frame.header as { title: string; description: string; unit: string; step: number; depth_step: number | null };
       const [array] = frame.arrays;
@@ -600,7 +600,7 @@ export function useGalaxyCube(
     retry: false,
     // (a cube is kept by the server for a while only)
     gcTime: 0,
-    queryFn: () => data(api.POST('/api/v1/views/galaxy-cube', { body: { project, galaxy: galaxy ?? {}, properties, view, size } })),
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/galaxy-cube', { signal, body: { project, galaxy: galaxy ?? {}, properties, view, size } })),
   });
 }
 
@@ -616,10 +616,11 @@ export function useGalaxyRender(
     enabled: galaxy !== undefined,
     placeholderData: keepPreviousData,
     retry: false,
-    queryFn: async (): Promise<GalaxyRender> => {
+    queryFn: async ({ signal }): Promise<GalaxyRender> => {
       const frame = decodeFrame(
         await data(
           api.POST('/api/v1/views/galaxy', {
+            signal,
             body: { project, galaxy: galaxy ?? {}, properties, view, size },
             parseAs: 'arrayBuffer',
           }),
@@ -653,6 +654,6 @@ export function useObserved(
     retry: false,
     // (its arrays are kept by the server for a while only)
     gcTime: 0,
-    queryFn: () => data(api.POST('/api/v1/views/observed', { body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '' } })),
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/observed', { signal, body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '' } })),
   });
 }

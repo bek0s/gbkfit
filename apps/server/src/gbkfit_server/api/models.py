@@ -153,11 +153,13 @@ class GalaxyInfo(BaseModel):
     """
     A galaxy as the library describes it (see Galaxies.describe): its
     parameters ({name, title, desc, size, default, unit, range, period,
-    owner}, in its order) and its problems ({severity, path, message};
-    paths in the galaxy).
+    owner}, in its order), its problems ({severity, path, message};
+    paths in the galaxy), and whether it was made as a whole (else its
+    parameters are those of its parts made on their own).
     """
     parameters: list[dict[str, Any]]
     problems: list[dict[str, Any]]
+    whole: bool
 
 
 class GalaxyVolumeRequest(BaseModel):

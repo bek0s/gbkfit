@@ -31,7 +31,8 @@ export function valueText(setting: Setting): string {
   return low === high ? significant(low, 4) : `${significant(low, 3)}…${significant(high, 3)}`;
 }
 
-export function NumberChip({ ctx, param, rings, limit }: { ctx: NumbersContext; param: Param; rings: number[] | null; limit?: number }) {
+// (bare: without its name, where what it is is said, e.g. in its tile)
+export function NumberChip({ ctx, param, rings, limit, bare }: { ctx: NumbersContext; param: Param; rings: number[] | null; limit?: number; bare?: boolean }) {
   const { draft, options, params } = ctx;
   const setting = settingOf(draft.state?.properties ?? {}, param);
   const label = shortName(param, options, params);
@@ -45,7 +46,7 @@ export function NumberChip({ ctx, param, rings, limit }: { ctx: NumbersContext; 
           data-ring={param.size > 1 || undefined}
           title={[param.title, param.name, param.desc].filter(Boolean).join(' · ')}
         >
-          <i>{label}</i>
+          {!bare && <i>{label}</i>}
           {valueText(setting)}
           {unit && <span className="gm-unit">{unit}</span>}
         </button>

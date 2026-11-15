@@ -901,9 +901,21 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm { display: grid; gap: 0; padding: 14px 14px 32px; min-width: 0; }
 .gm-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
 .gm-tile { display: grid; align-content: start; gap: 2px; min-width: 0; padding: 7px 10px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--raise); color: var(--fg); text-align: left; }
-.gm-tile:hover, .gm-tile[aria-expanded="true"] { border-color: var(--line2); }
-.gm-tl { font: var(--text-caption); color: var(--muted); }
+.gm-tile[role="button"] { cursor: pointer; }
+.gm-tile[role="button"]:hover, .gm-tile[aria-expanded="true"] { border-color: var(--line2); }
+.gm-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gm-tl { display: flex; align-items: center; gap: 4px; font: var(--text-caption); color: var(--muted); }
+.gm-caret { font-size: 9px; color: var(--faint); }
+.gm-tile:hover .gm-caret, .gm-tile[aria-expanded="true"] .gm-caret { color: var(--fg2); }
+.gm-tvs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; min-width: 0; min-height: 22px; }
+.gm-tvs .gm-num { margin-left: -6px; }
+.gm-tvs .gm-tv + .gm-num { margin-left: 0; }
 .gm-tv { font: var(--text-data); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gm-tvs .gm-num:not([data-kind="free"]) { font-weight: 600; }
+.gm-numtext.gm-numtext-bare { justify-self: start; margin-left: -6px; border-color: transparent; background: none; font: var(--text-data); font-weight: 600; }
+.gm-numtext-bare:hover { border-color: var(--line2); }
+.gm-numtext-bare:focus-within { border-color: var(--accent); background: var(--field); }
+.gm-numtext.gm-numtext-bare input { width: 11ch; text-align: left; font-weight: 600; }
 .gm-tc { font: var(--text-caption); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gm-popbody { display: grid; gap: 10px; }
 .gm-popline { display: flex; align-items: center; gap: 8px; }
@@ -1023,6 +1035,8 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-problems > span::before { content: "\2713"; margin-right: 7px; font-weight: 600; }
 .gm-problems[data-bad] { color: var(--err); }
 .gm-problems[data-bad] > span::before { content: "!"; }
+.gm-problems .gm-link { padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.gm-problems .gm-link:hover { background: none; text-decoration-thickness: 2px; }
 
 /* (the popover of a number: its parameter, to set) */
 .gm-pop { padding: 12px 12px 10px; border: 1px solid var(--line2); border-radius: 9px; background: var(--raise); }
