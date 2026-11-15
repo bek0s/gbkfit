@@ -122,14 +122,3 @@ export function NumberRows({ ctx, owned, rings, limit, depth = 1 }: { ctx: Numbe
     </>
   );
 }
-
-// The numbers of the parameters an option owns
-export function NumberChips({ ctx, owned, rings, limit }: { ctx: NumbersContext; owned: Param[]; rings: number[] | null; limit?: number }) {
-  return (
-    <>
-      {owned.map((param) => (
-        <NumberChip key={param.name} ctx={ctx} param={param} rings={rings} limit={limit} />
-      ))}
-    </>
-  );
-}

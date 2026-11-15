@@ -21,7 +21,7 @@ import { Expand } from '../../components/ui/motion';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { DirectionMark, RingMark } from './Marks';
-import { freeCount, NumberChip, NumberChips, NumberRows, paramText, type NumbersContext } from './Numbers';
+import { freeCount, NumberChip, NumberRows, paramText, type NumbersContext } from './Numbers';
 import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
 import { ownedBy, settingOf, type Param } from './params';
 import { memberOf, propertiesOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
@@ -802,7 +802,7 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
   if (nodesPart) groups.geometry.push(<RingsGroup key="rings" ctx={ctx} component={component} base={base} option={nodesPart.option} title={nodesPart.title} keys={ringLines} fold={foldOf(nodesPart.option)} />);
   for (const key of extent) {
     groups.geometry.push(
-      <OptionLine key={key} ctx={ctx} component={component} base={base} option={key}>
+      <OptionLine key={key} ctx={ctx} owner={component} base={base} option={key}>
         {typeof component[key] === 'number' && ctx.kpcPerArcsec !== null && <span className="gm-note">{significant(component[key] * ctx.kpcPerArcsec, 3)} kpc</span>}
       </OptionLine>,
     );
@@ -838,7 +838,7 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
       >
         <NumberRows ctx={ctx} owned={motion} rings={rings} depth={0} />
         {motionOptions.map((key) => (
-          <OptionLine key={key} ctx={ctx} component={component} base={base} option={key} />
+          <OptionLine key={key} ctx={ctx} owner={component} base={base} option={key} />
         ))}
       </Group>,
     );
@@ -966,7 +966,7 @@ function RingsGroup({ ctx, component, base, option, title, keys, fold }: { ctx: 
         </span>
       </div>
       {keys.map((key) => (
-        <OptionLine key={key} ctx={ctx} component={component} base={base} option={key} />
+        <OptionLine key={key} ctx={ctx} owner={component} base={base} option={key} />
       ))}
     </Group>
   );
@@ -1027,10 +1027,10 @@ function OtherOptions({ ctx, component, base, keys }: { ctx: Ctx; component: Opt
   return (
     <>
       {simple.map((key) => (
-        <OptionLine key={key} ctx={ctx} component={component} base={base} option={key} />
+        <OptionLine key={key} ctx={ctx} owner={component} base={base} option={key} />
       ))}
       {node && defs && (
-        <div className="gm-object">
+        <div className="gm-oform">
           <SchemaForm
             defs={defs}
             node={node}
@@ -1110,25 +1110,26 @@ function withDirection(item: Options, part: PartInfo): Options {
   return { ...item, direction: part.directions[0] };
 }
 
-// The options of a type of a family, by key
-function propertiesOfType(defs: Defs | undefined, type: unknown): Record<string, Schema> {
-  const member = memberOf(defs, 'component', type);
+// The options of a type of a family (by default, of components), by key
+function propertiesOfType(defs: Defs | undefined, type: unknown, family = 'component'): Record<string, Schema> {
+  const member = memberOf(defs, family, type);
   return (member?.properties ?? {}) as Record<string, Schema>;
 }
 
 // ---------------------------------------------------------------------
 // A part of a component
 
-// An option of a component, a line of its own in the columns of the card:
-// its title (and its key), and its value as its schema has it: a switch of
-// a yes or no, a choice of a few, or a number (in its unit, its default or
+// An option of a component (or of what else of a family is given, e.g. a
+// part of the mass), a line of its own in the columns of the card: its
+// title (and its key), and its value as its schema has it: a switch of a
+// yes or no, a choice of a few, or a number (in its unit, its default or
 // "auto" if it can be none, when not given), and what is given after it
 // (e.g. a note). An option set to its default is left out of the
 // configuration.
-function OptionLine({ ctx, component, base, option, children }: { ctx: Ctx; component: Options; base: Path; option: string; children?: ReactNode }) {
-  const node = propertiesOfType(ctx.defs, component.type)[option] ?? {};
+function OptionLine({ ctx, owner, family = 'component', base, option, children }: { ctx: Ctx; owner: Options; family?: string; base: Path; option: string; children?: ReactNode }) {
+  const node = propertiesOfType(ctx.defs, owner.type, family)[option] ?? {};
   const title = typeof node.title === 'string' ? node.title : option;
-  const value = component[option];
+  const value = owner[option];
   const fallback = node.default;
   const setOption = (next: unknown) => ctx.set([...base, option], next === fallback ? undefined : next, { moved: inPlace });
   const choices = choicesOf(node);
@@ -1222,7 +1223,7 @@ function SingleLine({ ctx, part, path, rings, problems }: { ctx: Ctx; part: Part
         items={typesOf(defs, family, part.types)}
         value={String(item?.type ?? '')}
         text={item ? String(item.type) : 'none'}
-        none="None"
+        none={part.optional ? 'None' : undefined}
         label={part.title}
         onChange={(type) => set(path, type === '' ? undefined : retyped(defs, family, item, type))}
         quiet
@@ -1573,6 +1574,11 @@ function ObjectItem({ ctx, part, path, onRemove }: { ctx: Ctx; part: PartInfo; p
 // ---------------------------------------------------------------------
 // A part of the mass
 
+// A part of the mass: a row of its name and, in a few words, its type,
+// what it follows and its numbers, which opens it; open, a line each, as
+// in the card of a component: what it follows, its parts of a type (e.g.
+// the profile of a halo), its parameters, its options, and those that
+// need a form in the same columns
 function MassRow({
   ctx,
   index,
@@ -1593,7 +1599,6 @@ function MassRow({
   onRemoved: () => void;
 }) {
   const { defs, params, problems, set, project } = ctx;
-  const [more, setMore] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const path: Path = ['mass', index];
   const refs = referencesOf(defs, 'mass_component', item.type);
@@ -1601,9 +1606,35 @@ function MassRow({
   const followed = follows.map((key) => item[key]).find((name) => typeof name === 'string');
   const own = problems.filter((p) => startsWith(p.path, path));
   const owned = ownedBy(params, path);
-  const without = new Set([...HEAD_OPTIONS, ...follows]);
   const member = memberOf(defs, 'mass_component', item.type);
-  const rest = restOf(defs, member, without);
+  // (its options, each where it goes: the components it follows; its parts
+  // of a type, e.g. the profile of a halo, a line each as a single setting
+  // of a component; those that can be a line; the others as a form)
+  const { properties, required } = defs ? propertiesOf(member, defs) : { properties: {} as Record<string, Schema>, required: [] as string[] };
+  const keys = Object.keys(properties).filter((key) => !HEAD_OPTIONS.has(key) && !follows.includes(key));
+  const familyOf = (key: string) => familyOfOption(defs, 'mass_component', item.type, key);
+  const typed = keys.filter((key) => {
+    const family = familyOf(key);
+    return family !== null && typesOf(defs, family).length > 0;
+  });
+  const simple = keys.filter((key) => !typed.includes(key) && lineable(properties[key]));
+  const others = keys.filter((key) => !typed.includes(key) && !simple.includes(key));
+  const form = others.length > 0 ? restOf(defs, member, new Set(Object.keys(properties).filter((key) => !others.includes(key)))) : null;
+  const partOf = (key: string): PartInfo => ({
+    option: key,
+    title: typeof properties[key].title === 'string' ? properties[key].title : key,
+    description: typeof properties[key].description === 'string' ? properties[key].description : undefined,
+    family: familyOf(key),
+    def: null,
+    many: false,
+    optional: !required.includes(key),
+    nullable: false,
+    types: null,
+    directions: null,
+    heights: null,
+  });
+  const within = (key: string) => own.filter((p) => startsWith(p.path, [...path, key]));
+  const general = own.filter((p) => !typed.some((key) => startsWith(p.path, [...path, key])));
   const typeTitle = titled(defs, 'mass_component', String(item.type)).label;
   // (in a few words: its type, or the types of what it is made of, e.g. the
   // profile of a halo; what it follows; its numbers)
@@ -1663,48 +1694,36 @@ function MassRow({
       </div>
       <Expand open={open}>
         <div className="gm-mbody">
-          <div className="gm-trait">
-            {follows.map((key) => (
-              <span key={key} className="gm-follow">
-                follows
+          {follows.map((key) => (
+            <div key={key} className="gm-oline">
+              <span className="gm-cell-head">
+                <span className="gm-oline-label">Follows</span>
+                <code className="gm-key">{key}</code>
+              </span>
+              <span className="gm-cell-nums">
                 <TypePick items={names.map((name) => ({ value: name, label: name }))} value={String(item[key] ?? '')} text={String(item[key] ?? '')} label="The component it follows" onChange={(name) => set([...path, key], name)} />
               </span>
-            ))}
-            {inner.length > 0 &&
-              Object.entries(item)
-                .filter(([key, value]) => key !== 'type' && isObject(value) && typeof value.type === 'string')
-                .map(([key, value]) => {
-                  const family = familyOfOption(defs, 'mass_component', item.type, key);
-                  return family ? (
-                    <TypePick
-                      key={key}
-                      items={typesOf(defs, family)}
-                      value={String((value as Options).type)}
-                      text={String((value as Options).type)}
-                      label={`Its ${key}`}
-                      onChange={(type) => set([...path, key], retyped(defs, family, value, type))}
-                    />
-                  ) : null;
-                })}
-            <NumberChips ctx={ctx} owned={owned} rings={null} />
-            {rest && <MoreButton on={more} count={Object.keys(item).filter((key) => !without.has(key)).length} onClick={() => setMore(!more)} />}
-          </div>
-          {more && rest && defs && (
-            <div className="gm-more-form">
+            </div>
+          ))}
+          {typed.map((key) => (
+            <SingleLine key={key} ctx={ctx} part={partOf(key)} path={[...path, key]} rings={null} problems={within(key)} />
+          ))}
+          <NumberRows ctx={ctx} owned={owned} rings={null} depth={0} />
+          {simple.map((key) => (
+            <OptionLine key={key} ctx={ctx} owner={item} family="mass_component" base={path} option={key} />
+          ))}
+          {form && defs && (
+            <div className="gm-oform">
               <SchemaForm
                 defs={defs}
-                node={rest}
+                node={form}
                 project={project}
-                value={omitKeys(item, without)}
-                onChange={(next) => set(path, { ...Object.fromEntries(Object.entries(item).filter(([key]) => without.has(key))), ...next }, { moved: inPlace })}
+                value={Object.fromEntries(others.filter((key) => item[key] !== undefined).map((key) => [key, item[key]]))}
+                onChange={(next) => set(path, { ...omitKeys(item, new Set(others)), ...next }, { moved: inPlace })}
               />
             </div>
           )}
-          {own.map((p, i) => (
-            <p key={i} className="gm-why">
-              {problemText(p.message)}
-            </p>
-          ))}
+          <Problems list={general} />
         </div>
       </Expand>
     </div>

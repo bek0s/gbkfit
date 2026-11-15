@@ -964,7 +964,6 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-trait .gm-opt:not([data-on]), .gm-trait .ui-close, .gm-oline .ui-close, .gm-span > .ui-close, .gm-hover, .gm-x { opacity: 0; transition: opacity .1s; }
 .gm-group:hover .gm-hover, .gm-item:hover .gm-opt, .gm-item:hover .ui-close, .gm-item:hover .gm-x, .gm-oline:hover .ui-close, .gm-oline:focus-within .ui-close,
 .gm-glines > .gm-trait:hover .gm-opt, .gm-glines > .gm-trait:hover .ui-close, .gm-glines > .gm-trait:hover .gm-x, .gm-span:hover > .ui-close,
-.gm-mbody .gm-trait:hover .gm-opt,
 .gm-trait:focus-within .gm-opt, .gm-trait:focus-within .ui-close, .gm-trait:focus-within .gm-x, .gm-group:focus-within .gm-hover { opacity: 1; }
 .gm-name { width: 120px; height: 24px; padding: 0 7px; border: 1px solid var(--line2); border-radius: 5px; background: var(--field); color: var(--fg); font: var(--text-data); outline: none; }
 .gm-name:focus { border-color: var(--accent); }
@@ -1085,6 +1084,12 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-more-form .schema-row { grid-template-columns: 110px minmax(0, 1fr); }
 .gm-object { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
 .gm-object > .schema-form { flex: 1; min-width: 0; }
+/* (options as a form that are lines of a card or of a part of the mass,
+   e.g. the file of particles: its rows in the columns of the card, their
+   labels as what a line is) */
+.gm-oform, .gm-oform > .schema-form, .gm-oform .schema-form > .schema-object, .gm-oform .schema-form > .schema-object > .schema-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; min-width: 0; }
+.gm-oform .schema-form > .schema-object > .schema-row > .schema-label { grid-column: 1 / 3; font: var(--text-label); font-weight: 500; color: var(--fg); }
+.gm-oform .schema-form > .schema-object > .schema-row > .schema-field { grid-column: 3; }
 .gm-numtext { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 6px; border: 1px solid var(--line2); border-radius: 5px; background: var(--field); cursor: text; }
 .gm-numtext:focus-within { border-color: var(--accent); }
 .gm-numtext input { width: 52px; min-width: 0; padding: 0; border: 0; background: none; color: var(--fg); font: var(--text-data); text-align: right; outline: none; }
@@ -1108,8 +1113,10 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-mhead:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
 .gm-mhead b { font-weight: 600; }
 .gm-msum { color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gm-mbody { display: grid; gap: 4px; padding: 0 11px 9px 32px; }
-.gm-follow { display: inline-flex; align-items: center; gap: 6px; font: var(--text-caption); color: var(--muted); }
+/* (open, its options and parameters a line each, in columns as those of
+   a card: what each is, and its value) */
+.gm-mbody { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); column-gap: 8px; row-gap: 2px; padding: 0 11px 9px 32px; }
+.gm-mbody > * { grid-column: 1 / -1; }
 
 /* (the problems: none, or how many, and those of the galaxy as a whole) */
 .gm-problems { display: grid; gap: 4px; margin-top: 14px; font: var(--text-label); color: var(--ok); }
