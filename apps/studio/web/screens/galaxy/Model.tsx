@@ -14,6 +14,7 @@ import { useComponentTypes, useLines } from '../../api/queries';
 import { choicesOf, SchemaForm, type Defs, type Schema } from '../../components/SchemaForm';
 import { significant } from '../../components/format';
 import { Close } from '../../components/ui/basics';
+import { Expand } from '../../components/ui/motion';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { NumberChip, NumberChips, paramText, type NumbersContext } from './Numbers';
@@ -467,7 +468,9 @@ function ComponentCard({
         </span>
         {!open && <span className="gm-csum">{glanceOf(ctx, component, parts)}</span>}
       </div>
-      {open && <ComponentBody ctx={ctx} index={index} component={component} parts={parts} rings={radii.length ? radii : null} />}
+      <Expand open={open}>
+        <ComponentBody ctx={ctx} index={index} component={component} parts={parts} rings={radii.length ? radii : null} />
+      </Expand>
     </div>
   );
 }
@@ -618,7 +621,7 @@ function Settings({ ctx, component, base }: { ctx: Ctx; component: Options; base
         {!open && <span> · {titles.join(', ')}</span>}
         {given > 0 && <small>{given} set</small>}
       </button>
-      {open && (
+      <Expand open={open}>
         <div className="gm-more-form">
           <SchemaForm
             defs={defs}
@@ -631,7 +634,7 @@ function Settings({ ctx, component, base }: { ctx: Ctx; component: Options; base
             }}
           />
         </div>
-      )}
+      </Expand>
     </div>
   );
 }
@@ -969,7 +972,7 @@ function MassRow({
           />
         </span>
       </div>
-      {open && (
+      <Expand open={open}>
         <div className="gm-mbody">
           <div className="gm-trait">
             {follows.map((key) => (
@@ -1014,7 +1017,7 @@ function MassRow({
             </p>
           ))}
         </div>
-      )}
+      </Expand>
     </div>
   );
 }

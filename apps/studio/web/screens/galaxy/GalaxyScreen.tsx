@@ -145,7 +145,6 @@ export function GalaxyScreen({ name }: { name: string }) {
                 <button role="tab" aria-selected={tab === 'params'} onClick={() => setTab('params')}>
                   Parameters <span>{draft.params.length}</span>
                 </button>
-                <span className="gm-tabs-hint">{tab === 'model' ? 'every component, closed until you open it' : 'every parameter, by what owns it'}</span>
               </div>
               <div className="gm-scroll">
                 {tab === 'model' ? (
