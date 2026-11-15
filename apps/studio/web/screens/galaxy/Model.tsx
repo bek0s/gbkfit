@@ -2,12 +2,12 @@
 // distance, redshift and gravity, in a strip, and the parts of its mass,
 // a line each, under them, in reach however long the components are),
 // and its components, each one line (its name, its type, its extent and
-// its parts in a few words) and one open at a time, with its parts in the
-// order the library gives them (see types.ts), each its items with their
-// numbers in its line. Options at their defaults stay out of sight,
-// behind "N more options"; the parts a component can have but has not
-// are a row of "+ ..." to add them. A problem shows where it is, and the
-// count of them at the foot goes to each in turn.
+// its parts in a few words) and one open at a time. An open component is
+// in sections in the order of its configuration (its geometry, its
+// traits, its light, its physics), each part a group under its title and
+// its keys in the configuration, with what adds to it, and each single
+// setting a line of its own. A problem shows where it is, and the count
+// of them at the foot goes to each in turn.
 import { Popover } from '@mantine/core';
 import { useState, type ReactNode } from 'react';
 import { useComponentTypes, useLines } from '../../api/queries';
@@ -20,8 +20,8 @@ import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { NumberChip, NumberChips, paramText, type NumbersContext } from './Numbers';
 import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
 import { ownedBy, settingOf, type Param } from './params';
-import { memberOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
-import { extentOf, familyOfOption, HEAD_OPTIONS, nameBase, partsOfType, referencesOf, retypedComponent, settingsOfType, withReferencesRenamed, type ComponentTypes, type PartInfo } from './types';
+import { memberOf, propertiesOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
+import { extentOf, familyOfOption, HEAD_OPTIONS, nameBase, optionTitle, partsOfType, referencesOf, retypedComponent, settingsOfType, withReferencesRenamed, type ComponentTypes, type PartInfo } from './types';
 
 // What is open in the sheet: a component or a part of the mass
 export type Open = { kind: 'component' | 'mass'; index: number } | null;
@@ -512,47 +512,101 @@ function glanceOf(ctx: Ctx, component: Options, parts: PartInfo[]): ReactNode {
   return words.flatMap((word, i) => (i ? [<span key={`s${i}`}> · </span>, word] : [word]));
 }
 
-// The options of the geometry of a component, shown at the top of its card
-// with its rings and its frame (not among its other options): of the
-// rings (or shells) of a disk or a cone, their width and interpolation, a
-// centre and an orientation per ring, the sides of a cone; the largest
-// radius of a spheroid
-const RING_OPTIONS = ['tilted', 'loose', 'sides', 'interp', 'rstep'];
+// ---------------------------------------------------------------------
+// The open card of a component: sections in the order of its
+// configuration (its geometry, its traits, its light, its physics), each
+// of groups under a subtitle (a part, with its keys in the configuration
+// and what adds to it, its lines under it) and lines of single settings
 
+type Section = 'geometry' | 'traits' | 'light' | 'physics';
+const SECTIONS: { key: Section; title: string }[] = [
+  { key: 'geometry', title: 'Geometry' },
+  { key: 'traits', title: 'Traits' },
+  { key: 'light', title: 'Light' },
+  { key: 'physics', title: 'Physics' },
+];
+
+// The options of the rings of a component (or its shells, or the nodes of
+// the traits of a spheroid), shown with them: their width and
+// interpolation, a centre and an orientation per ring, the sides of a cone
+const RING_OPTIONS = ['tilted', 'loose', 'sides', 'interp', 'rstep'];
+// The extent of a spheroid, at the top of its geometry
+const EXTENT_OPTIONS = ['rmax'];
+// The options of the motion of a spheroid (of its orbits), with the
+// parameters of its motion
+const MOTION_OPTIONS = ['norbits', 'turns', 'seed'];
+// The parts of the light of a component, and of its physics (single
+// settings of how it holds itself up and what it is made of)
+const LIGHT_PARTS = ['emission', 'opacity'];
+const PHYSICS_PARTS = ['pressure_support', 'clouds', 'rhtraits'];
 // The parameters of a component that place it (see its frame): its
 // centre, systemic velocity, orientation and the wall of a cone
 const FRAME_PARAMS = ['xpos', 'ypos', 'vsys', 'posa', 'incl', 'wall'];
-const EXTENT_OPTIONS = ['rmax'];
 
-// The options of the geometry a component shows at its top (see
-// RING_OPTIONS): those of its rings if it has rings as a part, and its
-// extent
-function geometryKeys(defs: Defs | undefined, types: ComponentTypes | undefined, component: Options, parts: PartInfo[]): { rings: string[]; extent: string[] } {
-  const keys = settingsOfType(defs, types, component.type);
-  const ringed = parts.some((p) => p.def === 'Nodes');
-  return { rings: ringed ? RING_OPTIONS.filter((key) => keys.includes(key)) : [], extent: EXTENT_OPTIONS.filter((key) => keys.includes(key)) };
+// The section of a part: its lists of traits in the traits, its light in
+// the light, its pressure support, clouds and vertical equilibrium (of a
+// thin disk) in the physics; the others (its rings, the profile and shape
+// of a spheroid) in the geometry
+function sectionOf(part: PartInfo): Section {
+  if (LIGHT_PARTS.includes(part.option)) return 'light';
+  if (PHYSICS_PARTS.includes(part.option)) return 'physics';
+  if (part.family !== null && part.many) return 'traits';
+  return 'geometry';
 }
 
-// The single settings of a component shown under the part they act on
-// (e.g. its pressure support under its velocity), by their option and
-// that of the part; the others, and the parts it can have of lists of
-// traits, are added from the foot of the card
-const ACTS_ON: Record<string, string> = { pressure_support: 'vptraits', opacity: 'emission', clouds: 'rptraits' };
+// The title of a part under its section: its own, unless it is that of
+// the section (e.g. the light of a component, 'Emission' in Light)
+function subtitleOf(part: PartInfo, section: Section): string {
+  const title = SECTIONS.find((s) => s.key === section)!.title;
+  return part.title.toLowerCase() === title.toLowerCase() ? part.option.charAt(0).toUpperCase() + part.option.slice(1) : part.title;
+}
 
-// The open card of a component, on one grid (label, type, direction,
-// numbers) so that the numbers of every trait start at one edge: its
-// frame, its parts in the order of the library, each with the settings
-// that act on it, and at its foot what adds the parts it has not (a
-// menu) and its other options
+// The keys of a part in the configuration, as its subtitle shows them;
+// none if they only say its title again (e.g. 'opacity')
+function keysOf(title: string, keys: string[]): string | null {
+  const plain = (text: string) => text.toLowerCase().replace(/_/g, ' ');
+  return keys.length === 1 && plain(keys[0]) === plain(title) ? null : keys.join(' · ');
+}
+
+// A group of the card: its subtitle, its keys and what adds to it, and
+// its lines under it
+function Group({ title, keys, description, add, bad, children }: { title: string; keys?: string | null; description?: string; add?: ReactNode; bad?: boolean; children: ReactNode }) {
+  return (
+    <div className="gm-group" data-bad={bad || undefined}>
+      <div className="gm-sub">
+        <span className="gm-sub-title" title={description}>
+          {title}
+        </span>
+        {keys && <code className="gm-key">{keys}</code>}
+        {add && <span className="gm-sub-add">{add}</span>}
+      </div>
+      <div className="gm-glines">{children}</div>
+    </div>
+  );
+}
+
+// The problems of a part or a group, under it
+function Problems({ list }: { list: Problem[] }) {
+  return (
+    <>
+      {list.map((p, i) => (
+        <p key={i} className="gm-why">
+          {problemText(p.message)}
+        </p>
+      ))}
+    </>
+  );
+}
+
 function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; index: number; component: Options; parts: PartInfo[]; rings: number[] | null }) {
-  const { params, problems } = ctx;
+  const { defs, types, params, problems } = ctx;
   const base: Path = ['components', index];
-  const has = (part: PartInfo) => component[part.option] !== undefined;
-  const hosts = new Set(parts.map((p) => p.option));
-  // (a single setting with its part shows under it, there or not)
-  const attached = (part: PartInfo) => !part.many && part.optional && ACTS_ON[part.option] !== undefined && hosts.has(ACTS_ON[part.option]);
-  const present = parts.filter((p) => !attached(p) && (has(p) || !p.optional));
-  const absent = parts.filter((p) => !attached(p) && !has(p) && p.optional);
+  const settings = settingsOfType(defs, types, component.type);
+  const has = (part: PartInfo) => {
+    const value = component[part.option];
+    return value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0);
+  };
+  const problemsOf = (options: string[]) => problems.filter((p) => options.some((option) => startsWith(p.path, [...base, option])));
   // (its own parameters: those that place it, its frame, and of a spheroid
   // that moves by the Jeans equations or orbits, those of its motion)
   const own = ownedBy(params, base, true);
@@ -560,101 +614,200 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
   const moves = String(component.type).endsWith('_spheroid');
   const frame = moves ? own.filter(placing) : own;
   const motion = moves ? own.filter((p) => !placing(p)) : [];
+  // (its settings, each where it acts; the others with its frame)
+  const pick = (keys: string[]) => keys.filter((key) => settings.includes(key));
+  const ringOptions = pick(RING_OPTIONS);
+  const extent = pick(EXTENT_OPTIONS);
+  const motionOptions = pick(MOTION_OPTIONS);
+  const placed = new Set([...ringOptions, ...extent, ...motionOptions, 'rnodes', 'fluid']);
+  const others = settings.filter((key) => !placed.has(key));
   // (the problems of the component itself, not of one of its parts)
   const partOptions = new Set(parts.flatMap((p) => [p.option, ...(p.heights ? [p.heights.option] : [])]));
   const general = problems.filter((p) => startsWith(p.path, base) && !(typeof p.path[2] === 'string' && partOptions.has(p.path[2])));
 
-  const rows: ReactNode[] = [];
-  const frameRow = frame.length > 0 && (
-    <div className="gm-fam" key="frame">
-      <span className="gm-fl" title="Its centre, orientation and systemic velocity, and its other parameters of its own">
-        Frame
-      </span>
-      <div className="gm-fc">
+  const groups: Record<Section, ReactNode[]> = { geometry: [], traits: [], light: [], physics: [] };
+  const feet: Record<Section, ReactNode[]> = { geometry: [], traits: [], light: [], physics: [] };
+  const nodesPart = parts.find((p) => p.def === 'Nodes');
+  if (nodesPart) groups.geometry.push(<RingsGroup key="rings" ctx={ctx} component={component} base={base} option={nodesPart.option} title={nodesPart.title} keys={ringOptions} />);
+  if (extent.length > 0) {
+    groups.geometry.push(
+      <Group key="extent" title="Extent" keys={extent.join(' · ')} description={optionTitle(defs, 'component', component.type, extent[0])}>
+        <OptionsLine ctx={ctx} component={component} base={base} keys={extent} bare>
+          {typeof component.rmax === 'number' && ctx.kpcPerArcsec !== null && <span className="gm-note">{significant(component.rmax * ctx.kpcPerArcsec, 3)} kpc</span>}
+        </OptionsLine>
+      </Group>,
+    );
+  }
+  if (frame.length > 0) {
+    groups.geometry.push(
+      <Group key="frame" title="Frame" description="Its centre, orientation and systemic velocity, and its other parameters of its own">
         <div className="gm-span gm-chips">
           <NumberChips ctx={ctx} owned={frame} rings={rings} />
         </div>
-      </div>
-    </div>
-  );
-  const geometry = geometryKeys(ctx.defs, ctx.types, component, parts);
-  if (geometry.extent.length > 0) {
-    rows.push(
-      <div className="gm-fam" key="extent">
-        <span className="gm-fl">Extent</span>
-        <div className="gm-fc">
-          <OptionsLine ctx={ctx} component={component} base={base} keys={geometry.extent} />
-        </div>
-      </div>,
+      </Group>,
     );
   }
-  if (!present.some((p) => p.def === 'Nodes')) rows.push(frameRow);
-  if (motion.length > 0) {
-    rows.push(
-      <div className="gm-fam" key="motion">
-        <span className="gm-fl" title="The parameters of its motion (e.g. of the Jeans equations)">
-          Motion
-        </span>
-        <div className="gm-fc">
+  // (the nodes of the traits of a spheroid: a setting, not a part, with
+  // its traits)
+  if (!nodesPart && settings.includes('rnodes') && parts.some((p) => sectionOf(p) === 'traits' && has(p))) {
+    groups.traits.push(<RingsGroup key="nodes" ctx={ctx} component={component} base={base} option="rnodes" title={optionTitle(defs, 'component', component.type, 'rnodes')} keys={ringOptions} />);
+  }
+  if (motion.length > 0 || motionOptions.length > 0) {
+    groups.physics.push(
+      <Group key="motion" title="Motion" description="The parameters of its motion (e.g. of the Jeans equations) and how it is made">
+        {motion.length > 0 && (
           <div className="gm-span gm-chips">
             <NumberChips ctx={ctx} owned={motion} rings={rings} />
           </div>
-        </div>
-      </div>,
+        )}
+        {motionOptions.length > 0 && <OptionsLine ctx={ctx} component={component} base={base} keys={motionOptions} />}
+      </Group>,
     );
   }
-  for (const part of present) {
-    const settings = parts.filter((p) => attached(p) && ACTS_ON[p.option] === part.option);
-    const extra = part.def === 'Nodes' && geometry.rings.length > 0 ? <OptionsLine ctx={ctx} component={component} base={base} keys={geometry.rings} /> : null;
-    rows.push(<PartRow key={part.option} ctx={ctx} part={part} base={base} rings={rings} component={component} settings={settings} extra={extra} />);
-    if (part.def === 'Nodes') rows.push(frameRow);
+  for (const part of parts) {
+    if (part === nodesPart) continue;
+    const section = sectionOf(part);
+    const title = subtitleOf(part, section);
+    const path = [...base, part.option];
+    const own = problemsOf([part.option, ...(part.heights ? [part.heights.option] : [])]);
+    if (section === 'traits') {
+      if (has(part) || !part.optional) groups.traits.push(<TraitGroup key={part.option} ctx={ctx} part={part} base={base} rings={rings} problems={own} />);
+      else {
+        feet.traits.push(
+          <AddPart key={part.option} ctx={ctx} part={part} base={base}>
+            + {title.toLowerCase()} <code className="gm-key">{part.option}</code>
+          </AddPart>,
+        );
+      }
+    } else if (part.family === 'emission' || section === 'geometry') {
+      // (the light, and the profile and shape of a spheroid)
+      const removable = part.optional && has(part);
+      groups[section].push(
+        <Group key={part.option} title={title} keys={keysOf(title, [part.option])} description={part.description} bad={own.length > 0} add={has(part) ? undefined : <AddPart ctx={ctx} part={part} base={base} />}>
+          {part.family !== null && has(part) && <OneItem ctx={ctx} part={part} path={path} rings={rings} onRemove={removable ? () => ctx.set(path, undefined) : undefined} />}
+          {part.family === null && has(part) && <ObjectItem ctx={ctx} part={part} path={path} onRemove={removable ? () => ctx.set(path, undefined) : undefined} />}
+          {!has(part) && <span className="gm-note">none</span>}
+          <Problems list={own} />
+        </Group>,
+      );
+    } else groups[section].push(<SingleLine key={part.option} ctx={ctx} part={part} path={path} rings={rings} problems={own} />);
+  }
+  if (settings.includes('fluid')) groups.physics.push(<FluidLine key="fluid" ctx={ctx} component={component} base={base} />);
+  if (others.length > 0) {
+    groups.geometry.push(
+      <Group key="others" title="Options" keys={others.join(' · ')}>
+        <OtherOptions ctx={ctx} component={component} base={base} keys={others} />
+      </Group>,
+    );
   }
 
   return (
     <div className="gm-cbody">
-      {general.map((p, i) => (
-        <p key={i} className="gm-why gm-why-top">
-          {problemText(p.message)}
-        </p>
+      {general.length > 0 && (
+        <div className="gm-why-top">
+          <Problems list={general} />
+        </div>
+      )}
+      {SECTIONS.filter((s) => groups[s.key].length > 0 || feet[s.key].length > 0).map((s) => (
+        <section key={s.key} className="gm-csec" aria-label={s.title}>
+          <div className="gm-rule">{s.title}</div>
+          {groups[s.key]}
+          {feet[s.key].length > 0 && <div className="gm-csec-foot">{feet[s.key]}</div>}
+        </section>
       ))}
-      {rows}
-      <div className="gm-cfoot">
-        {absent.length === 1 && <AddPart ctx={ctx} part={absent[0]} base={base} />}
-        {absent.length > 1 && <AddParts ctx={ctx} parts={absent} base={base} />}
-        <Settings ctx={ctx} component={component} base={base} shown={[...geometry.rings, ...geometry.extent]} />
-      </div>
     </div>
   );
 }
 
-// The parts a component can have but has not, to add: a menu of them,
-// each with what it is; one of several types opens their menu
-function AddParts({ ctx, parts, base }: { ctx: Ctx; parts: PartInfo[]; base: Path }) {
-  const { defs, set } = ctx;
-  const entries: MenuEntry[] = parts.map((part) => {
-    const path = [...base, part.option];
-    if (part.family === null) {
-      const start = part.def && defs?.[part.def] ? startOfDef(defs[part.def]) : {};
-      return { label: part.title, description: part.description, onClick: () => set(path, start) };
-    }
-    const types = typesOf(defs, part.family, part.types);
-    const add = (type: string) => set(path, withDirection(startOf(defs, part.family!, type), part));
-    if (types.length === 1) return { label: part.title, description: part.description, onClick: () => add(types[0].value) };
-    return { label: part.title, entries: types.map((t) => ({ label: t.label, description: t.description, onClick: () => add(t.value) })) };
-  });
-  return <DropMenu label="Add a part" width={300} entries={entries} target={<button className="gm-add gm-add-small">+ part</button>} />;
+// The rings of a component (or its shells, or the nodes of the traits of
+// a spheroid): how many, to what radius and how far that is, which opens
+// how they are given, and their options in a line under them. Nodes a
+// component can be without (a spheroid's: by default, 0 and its largest
+// radius) can be added and removed.
+function RingsGroup({ ctx, component, base, option, title, keys }: { ctx: Ctx; component: Options; base: Path; option: string; title: string; keys: string[] }) {
+  const { defs, set, problems } = ctx;
+  const path = [...base, option];
+  const value = component[option];
+  const given = value !== undefined && value !== null;
+  const required = !!defs && propertiesOf(memberOf(defs, 'component', component.type), defs).required.includes(option);
+  const own = problems.filter((p) => [option, ...keys].some((key) => startsWith(p.path, [...base, key])));
+  // (added: to the largest radius of the component, in a few)
+  const start = () => set(path, { max: typeof component.rmax === 'number' ? component.rmax : 10, len: 5 });
+  return (
+    <Group
+      title={title}
+      keys={option}
+      bad={own.length > 0}
+      add={
+        !given && !required ? (
+          <button className="gm-plus" onClick={start}>
+            + add
+          </button>
+        ) : undefined
+      }
+    >
+      {given ? (
+        <div className="gm-span">
+          <RingsRow ctx={ctx} component={component} value={value} onChange={(next) => set(path, next)} />
+          {!required && <Close label={`Remove the ${title.toLowerCase()}`} onClick={() => set(path, undefined)} />}
+        </div>
+      ) : (
+        <span className="gm-note">at 0 and its largest radius</span>
+      )}
+      {keys.length > 0 && <OptionsLine ctx={ctx} component={component} base={base} keys={keys} />}
+      <Problems list={own} />
+    </Group>
+  );
 }
 
-// A part a component does not have, to add: of one type, added at once;
-// else its types to choose from
-function AddPart({ ctx, part, base }: { ctx: Ctx; part: PartInfo; base: Path }) {
+// Options of a component that no section takes (e.g. the file of
+// particles): in a line those that can be, the others as a form
+function OtherOptions({ ctx, component, base, keys }: { ctx: Ctx; component: Options; base: Path; keys: string[] }) {
+  const { defs, set, project } = ctx;
+  const properties = propertiesOfType(defs, component.type);
+  const simple = keys.filter((key) => lineable(properties[key] ?? {}));
+  const rest = keys.filter((key) => !simple.includes(key));
+  const others = Object.keys(properties).filter((key) => !rest.includes(key));
+  const node = rest.length > 0 ? restOf(defs, memberOf(defs, 'component', component.type), new Set(others)) : null;
+  return (
+    <>
+      {simple.length > 0 && <OptionsLine ctx={ctx} component={component} base={base} keys={simple} />}
+      {node && defs && (
+        <div className="gm-object">
+          <SchemaForm
+            defs={defs}
+            node={node}
+            project={project}
+            value={Object.fromEntries(rest.filter((key) => component[key] !== undefined).map((key) => [key, component[key]]))}
+            onChange={(next) => {
+              const kept = Object.fromEntries(Object.entries(component).filter(([key]) => !rest.includes(key)));
+              set(base, { ...kept, ...next }, { moved: inPlace });
+            }}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+// Whether an option can be set in a line of options (see OptionsLine): a
+// yes or no, a choice of a few, or a number
+function lineable(node: Schema): boolean {
+  if (node.type === 'boolean' || choicesOf(node)) return true;
+  const branches = ((node.anyOf as Schema[] | undefined) ?? [node]).filter((b) => b.type !== 'null');
+  return branches.length === 1 && (branches[0].type === 'number' || branches[0].type === 'integer');
+}
+
+// A part a component does not have, to add (by its "+ ..." or what is
+// given): of one type, added at once; else its types to choose from
+function AddPart({ ctx, part, base, children }: { ctx: Ctx; part: PartInfo; base: Path; children?: ReactNode }) {
   const { defs, set } = ctx;
   const path = [...base, part.option];
-  const label = `+ ${part.title.toLowerCase()}`;
+  const label = children ?? '+ add';
   if (part.family === null) {
     const start = part.def && defs?.[part.def] ? startOfDef(defs[part.def]) : {};
     return (
-      <button className="gm-addchip" title={part.description} onClick={() => set(path, start)}>
+      <button className="gm-plus" title={part.description} onClick={() => set(path, start)}>
         {label}
       </button>
     );
@@ -663,7 +816,7 @@ function AddPart({ ctx, part, base }: { ctx: Ctx; part: PartInfo; base: Path }) 
   const add = (type: string) => set(path, withDirection(startOf(defs, part.family!, type), part));
   if (types.length === 1) {
     return (
-      <button className="gm-addchip" title={part.description} onClick={() => add(types[0].value)}>
+      <button className="gm-plus" title={part.description} onClick={() => add(types[0].value)}>
         {label}
       </button>
     );
@@ -674,7 +827,7 @@ function AddPart({ ctx, part, base }: { ctx: Ctx; part: PartInfo; base: Path }) 
       width={300}
       entries={types.map((t) => ({ label: t.label, description: t.description, onClick: () => add(t.value) }))}
       target={
-        <button className="gm-addchip" title={part.description}>
+        <button className="gm-plus" title={part.description}>
           {label}
         </button>
       }
@@ -696,44 +849,6 @@ function withDirection(item: Options, part: PartInfo): Options {
   return { ...item, direction: part.directions[0] };
 }
 
-// The settings of a component: its options that are not its parts, out of
-// sight behind "N more options" (their titles)
-function Settings({ ctx, component, base, shown }: { ctx: Ctx; component: Options; base: Path; shown: string[] }) {
-  const { defs, types, set, project } = ctx;
-  const [open, setOpen] = useState(false);
-  // (those not shown elsewhere, e.g. with its rings)
-  const keys = settingsOfType(defs, types, component.type).filter((key) => !shown.includes(key));
-  const others = Object.keys(propertiesOfType(defs, component.type)).filter((key) => !keys.includes(key));
-  const node = restOf(defs, memberOf(defs, 'component', component.type), new Set(others));
-  if (!defs || !node || keys.length === 0) return null;
-  const properties = (node.properties ?? {}) as Record<string, Schema>;
-  const titles = keys.map((key) => (typeof properties[key]?.title === 'string' ? (properties[key].title as string) : key).toLowerCase());
-  const given = keys.filter((key) => component[key] !== undefined).length;
-  return (
-    <>
-      <button className="gm-morel" onClick={() => setOpen(!open)} aria-expanded={open}>
-        {open ? 'Fewer options' : `${keys.length} more ${keys.length === 1 ? 'option' : 'options'}`}
-        {!open && <span> · {titles.join(', ')}</span>}
-        {given > 0 && <small>{given} set</small>}
-      </button>
-      <Expand open={open}>
-        <div className="gm-more-form">
-          <SchemaForm
-            defs={defs}
-            node={node}
-            project={project}
-            value={Object.fromEntries(keys.filter((key) => component[key] !== undefined).map((key) => [key, component[key]]))}
-            onChange={(next) => {
-              const kept = Object.fromEntries(Object.entries(component).filter(([key]) => !keys.includes(key)));
-              set(base, { ...kept, ...next }, { moved: inPlace });
-            }}
-          />
-        </div>
-      </Expand>
-    </>
-  );
-}
-
 // The options of a type of a family, by key
 function propertiesOfType(defs: Defs | undefined, type: unknown): Record<string, Schema> {
   const member = memberOf(defs, 'component', type);
@@ -743,55 +858,13 @@ function propertiesOfType(defs: Defs | undefined, type: unknown): Record<string,
 // ---------------------------------------------------------------------
 // A part of a component
 
-function PartRow({ ctx, part, base, rings, component, settings, extra }: { ctx: Ctx; part: PartInfo; base: Path; rings: number[] | null; component: Options; settings: PartInfo[]; extra?: ReactNode }) {
-  const { options, problems, set } = ctx;
-  const path = [...base, part.option];
-  const value = getAt(options, path);
-  const owners = [part.option, ...(part.heights ? [part.heights.option] : []), ...settings.map((p) => p.option)];
-  const own = problems.filter((p) => owners.some((owner) => startsWith(p.path, [...base, owner])));
-  let content: ReactNode;
-  if (part.def === 'Nodes')
-    content = (
-      <div className="gm-span">
-        <RingsRow ctx={ctx} component={component} value={value} onChange={(next) => set(path, next)} />
-      </div>
-    );
-  else if (part.family !== null && part.many) content = <TraitList ctx={ctx} part={part} base={base} rings={rings} />;
-  else if (part.family !== null)
-    content = <OneItem ctx={ctx} part={part} path={path} rings={rings} onRemove={part.optional ? () => set(path, undefined) : undefined} />;
-  else content = <ObjectItem ctx={ctx} part={part} path={path} onRemove={part.optional ? () => set(path, undefined) : undefined} />;
-  return (
-    <div className="gm-fam" data-bad={own.length > 0 || undefined}>
-      <span className="gm-fl" title={part.description}>
-        {part.title}
-      </span>
-      <div className="gm-fc">
-        {value === undefined && !part.optional ? (
-          <div className="gm-span">
-            <AddPart ctx={ctx} part={part} base={base} />
-          </div>
-        ) : (
-          content
-        )}
-        {extra}
-        {settings.map((setting) => (
-          <SettingLine key={setting.option} ctx={ctx} part={setting} path={[...base, setting.option]} rings={rings} />
-        ))}
-        {own.map((p, i) => (
-          <p key={i} className="gm-why">
-            {problemText(p.message)}
-          </p>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // Options of a component in a line, each as its schema has it: a switch
 // of a yes or no (its title), a choice of a few (its title and its value),
-// a number (its title, and its value or "auto" if it can be none); an
-// option set to its default is left out of the configuration
-function OptionsLine({ ctx, component, base, keys }: { ctx: Ctx; component: Options; base: Path; keys: string[] }) {
+// a number (its title, and its value or "auto" if it can be none), and
+// what is given after them (e.g. a note); bare, without their titles (but
+// those of the switches). An option set to its default is left out of the
+// configuration.
+function OptionsLine({ ctx, component, base, keys, bare, children }: { ctx: Ctx; component: Options; base: Path; keys: string[]; bare?: boolean; children?: ReactNode }) {
   const { defs, set } = ctx;
   const properties = propertiesOfType(defs, component.type);
   const setOption = (key: string, value: unknown) => set([...base, key], value, { moved: inPlace });
@@ -815,7 +888,7 @@ function OptionsLine({ ctx, component, base, keys }: { ctx: Ctx; component: Opti
           const current = String(value ?? fallback ?? '');
           return (
             <span key={key} className="gm-option">
-              <span className="gm-setting-label">{title}</span>
+              {!bare && <span className="gm-setting-label">{title}</span>}
               <DropMenu
                 label={title}
                 width={220}
@@ -825,106 +898,150 @@ function OptionsLine({ ctx, component, base, keys }: { ctx: Ctx; component: Opti
             </span>
           );
         }
-        const nullable = Array.isArray(node.anyOf) && (node.anyOf as Schema[]).some((b) => b.type === 'null');
+        // (a number: in its unit, within its bounds, a whole one if it must
+        // be; emptied, none or its default)
+        const branches = (node.anyOf as Schema[] | undefined) ?? [node];
+        const nullable = branches.some((b) => b.type === 'null');
+        const number = branches.find((b) => b.type !== 'null') ?? node;
+        const fits = (n: number) => (typeof number.exclusiveMinimum === 'number' ? n > number.exclusiveMinimum : typeof number.minimum === 'number' ? n >= number.minimum : true);
         return (
           <span key={key} className="gm-option">
-            <span className="gm-setting-label">{title}</span>
+            {!bare && <span className="gm-setting-label">{title}</span>}
             <NumberText
               value={typeof value === 'number' ? value : NaN}
               label={title}
-              unit="″"
-              placeholder={nullable ? 'auto' : undefined}
-              onCommit={(number) => number > 0 && setOption(key, number)}
-              onClear={nullable ? () => setOption(key, undefined) : undefined}
+              unit={(node.unit ?? number.unit) === 'arcsec' ? '″' : undefined}
+              placeholder={nullable ? 'auto' : typeof fallback === 'number' ? String(fallback) : undefined}
+              onCommit={(typed) => {
+                const next = number.type === 'integer' ? Math.round(typed) : typed;
+                if (fits(next)) setOption(key, next === fallback ? undefined : next);
+              }}
+              onClear={nullable || fallback !== undefined ? () => setOption(key, undefined) : undefined}
             />
           </span>
         );
       })}
+      {children}
     </div>
   );
 }
 
-// A single setting of a component under the part it acts on (e.g. its
-// pressure support under its velocity), quietly: its title and its type
-// (or none), its numbers, and its other options; of options of their own
-// (e.g. clouds), on or off and those options
-function SettingLine({ ctx, part, path, rings }: { ctx: Ctx; part: PartInfo; path: Path; rings: number[] | null }) {
+// A single setting of a component (e.g. its pressure support, its
+// opacity), a line of its own: its title (and its key), and beside it its
+// type (or none) and its numbers, its other options under it; of options
+// of their own (e.g. clouds), on or off and those options
+function SingleLine({ ctx, part, path, rings, problems }: { ctx: Ctx; part: PartInfo; path: Path; rings: number[] | null; problems: Problem[] }) {
   const { defs, options, params, set, project } = ctx;
   const [more, setMore] = useState(false);
   const value = getAt(options, path);
   const item = isObject(value) ? value : null;
-  const title = part.title.toLowerCase();
+  let pick: ReactNode;
+  let form: ReactNode = null;
+  let count = 0;
   if (part.family === null) {
     const start = part.def && defs?.[part.def] ? startOfDef(defs[part.def]) : {};
-    return (
-      <>
-        <div className="gm-span gm-setting">
-          <span className="gm-setting-head">
-            <span className="gm-setting-label" title={part.description}>
-              {title}
-            </span>
-            <DropMenu
-              label={part.title}
-              width={220}
-              entries={[
-                { label: 'Off', current: item === null, onClick: () => set(path, undefined) },
-                { label: 'On', description: part.description, current: item !== null, onClick: () => item === null && set(path, start) },
-              ]}
-              target={<button className="gm-ty gm-ty-quiet">{item ? 'on' : 'off'}</button>}
-            />
-          </span>
-          <span className="gm-setting-nums">{item && part.def && <MoreButton on={more} count={Object.keys(item).length} onClick={() => setMore(!more)} />}</span>
-        </div>
-        {item && part.def && defs?.[part.def] && (
-          <Expand open={more}>
-            <div className="gm-more-form">
-              <SchemaForm defs={defs} def={part.def} project={project} value={item} onChange={(next) => set(path, next)} />
-            </div>
-          </Expand>
-        )}
-      </>
+    pick = (
+      <DropMenu
+        label={part.title}
+        width={220}
+        entries={[
+          { label: 'Off', current: item === null, onClick: () => set(path, undefined) },
+          { label: 'On', description: part.description, current: item !== null, onClick: () => item === null && set(path, start) },
+        ]}
+        target={<button className="gm-ty gm-ty-quiet">{item ? 'on' : 'off'}</button>}
+      />
     );
+    if (item && part.def && defs?.[part.def]) {
+      count = Object.keys(item).length;
+      form = <SchemaForm defs={defs} def={part.def} project={project} value={item} onChange={(next) => set(path, next)} />;
+    }
+  } else {
+    const family = part.family;
+    pick = (
+      <TypePick
+        items={typesOf(defs, family, part.types)}
+        value={String(item?.type ?? '')}
+        text={item ? String(item.type) : 'none'}
+        none="None"
+        label={part.title}
+        onChange={(type) => set(path, type === '' ? undefined : retyped(defs, family, item, type))}
+        quiet
+      />
+    );
+    const rest = item ? restOf(defs, memberOf(defs, family, item.type), new Set(['type'])) : null;
+    if (rest && defs && item) {
+      count = Object.keys(item).filter((key) => key !== 'type').length;
+      form = <SchemaForm defs={defs} node={rest} project={project} value={omit(item, 'type')} onChange={(next) => set(path, { type: item.type, ...next })} />;
+    }
   }
-  const family = part.family;
-  const member = memberOf(defs, family, item?.type);
-  const rest = item ? restOf(defs, member, new Set(['type'])) : null;
+  const keys = keysOf(part.title, [String(path[path.length - 1])]);
   return (
     <>
-      <div className="gm-span gm-setting">
-        <span className="gm-setting-head">
-          <span className="gm-setting-label" title={part.description}>
-            {title}
-          </span>
-          <TypePick
-            items={typesOf(defs, family, part.types)}
-            value={String(item?.type ?? '')}
-            text={item ? String(item.type) : 'none'}
-            none="None"
-            label={part.title}
-            onChange={(type) => set(path, type === '' ? undefined : retyped(defs, family, item, type))}
-            quiet
-          />
+      <div className="gm-single" data-bad={problems.length > 0 || undefined}>
+        <span className="gm-single-label" title={part.description}>
+          {part.title}
+          {keys && <code className="gm-key">{keys}</code>}
         </span>
-        <span className="gm-setting-nums">
-          {item && <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} />}
-          {rest && <MoreButton on={more} count={Object.keys(item ?? {}).filter((key) => key !== 'type').length} onClick={() => setMore(!more)} />}
+        <span className="gm-single-value">
+          {pick}
+          {item && part.family !== null && <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} />}
+          {form && <MoreButton on={more} count={count} onClick={() => setMore(!more)} />}
         </span>
       </div>
-      {rest && defs && item && (
+      {form && (
         <Expand open={more}>
-          <div className="gm-more-form">
-            <SchemaForm defs={defs} node={rest} project={project} value={omit(item, 'type')} onChange={(next) => set(path, { type: item.type, ...next })} />
-          </div>
+          <div className="gm-more-form">{form}</div>
         </Expand>
       )}
+      <Problems list={problems} />
     </>
   );
 }
 
-// A list of traits (e.g. the velocity of a disk): a line for each, with
-// the height paired with it (or one that they share, after them), and what
-// adds one
-function TraitList({ ctx, part, base, rings }: { ctx: Ctx; part: PartInfo; base: Path; rings: number[] | null }) {
+// The gas disks of the mass whose densities the pressure support of a
+// disk takes (by default, the disks of the mass that follow it): a line of
+// its own, a menu of the parts of the mass, each in or out
+function FluidLine({ ctx, component, base }: { ctx: Ctx; component: Options; base: Path }) {
+  const { defs, options, problems, set } = ctx;
+  const path = [...base, 'fluid'];
+  const node = propertiesOfType(defs, component.type).fluid ?? {};
+  const title = typeof node.title === 'string' ? node.title : 'fluid';
+  const value = component.fluid;
+  const chosen = typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : [];
+  const names = asList(options.mass)
+    .map((m) => m.name)
+    .filter((name): name is string => typeof name === 'string' && name !== '');
+  const choose = (next: string[]) => set(path, next.length === 0 ? undefined : next.length === 1 ? next[0] : next, { moved: inPlace });
+  const own = problems.filter((p) => startsWith(p.path, path));
+  return (
+    <>
+      <div className="gm-single" data-bad={own.length > 0 || undefined}>
+        <span className="gm-single-label" title={typeof node.description === 'string' ? node.description : undefined}>
+          {title}
+          <code className="gm-key">fluid</code>
+        </span>
+        <span className="gm-single-value">
+          <DropMenu
+            label={title}
+            width={260}
+            entries={[
+              { label: 'The disks that follow it', current: chosen.length === 0, onClick: () => choose([]) },
+              ...names.map((name) => ({ label: name, current: chosen.includes(name), onClick: () => choose(chosen.includes(name) ? chosen.filter((n) => n !== name) : [...chosen, name]) })),
+            ]}
+            target={<button className="gm-ty gm-ty-quiet">{chosen.length > 0 ? chosen.join(', ') : 'the disks that follow it'}</button>}
+          />
+        </span>
+      </div>
+      <Problems list={own} />
+    </>
+  );
+}
+
+// A list of traits (e.g. the velocity of a disk), a group under its
+// title and its keys (of its traits and their heights), with what adds
+// one: a line for each, with the height paired with it (or one that they
+// share, after them)
+function TraitGroup({ ctx, part, base, rings, problems }: { ctx: Ctx; part: PartInfo; base: Path; rings: number[] | null; problems: Problem[] }) {
   const { defs, draft, options } = ctx;
   const family = part.family!;
   const listPath = [...base, part.option];
@@ -986,34 +1103,52 @@ function TraitList({ ctx, part, base, rings }: { ctx: Ctx; part: PartInfo; base:
   const hlist = Array.isArray(given) ? given : given === undefined || given === null ? [] : [given];
   const noHeights = !!heights && heights.nullable && !hlist.some(isObject);
   const shown = (i: number) => !!heights && !shared && (!heights.nullable || isObject(hlist[i]));
+  const heightActions = heights !== null && hpath !== null && (noHeights || (items.length > 1 && (shared || given !== undefined)));
   return (
-    <div className="gm-list">
-      {items.map((item, i) => (
-        <div key={i} className="gm-item">
-          <ItemLine ctx={ctx} part={part} path={[...listPath, i]} item={item} rings={rings} onRemove={removable ? () => remove(i) : undefined} />
-          {shown(i) && <HeightLine ctx={ctx} part={heights!} path={[...hpath!, i]} count={items.length} rings={rings} />}
-        </div>
-      ))}
-      {heights && shared && <HeightLine ctx={ctx} part={heights} path={[...hpath!, 0]} count={1} rings={rings} all />}
-      <div className="gm-list-foot">
-        <DropMenu
-          label={`Add to the ${part.title.toLowerCase()}`}
-          width={300}
-          entries={types.map((t) => ({ label: t.label, description: t.description, onClick: () => add(t.value) }))}
-          target={<button className="gm-add gm-add-small">+ {part.title.toLowerCase()}</button>}
-        />
-        {noHeights && hpath && (
-          <button className="gm-add gm-add-small gm-hover" title={heights!.description} onClick={() => ctx.set(hpath, newHeight())}>
-            + height
-          </button>
-        )}
-        {heights && !noHeights && items.length > 1 && (shared || given !== undefined) && (
-          <button className="gm-link gm-hover" onClick={() => share(!shared)}>
-            {shared ? 'a height for each' : 'one height for all'}
-          </button>
-        )}
+    <Group
+      title={part.title}
+      keys={keysOf(part.title, [part.option, ...(heights ? [heights.option] : [])])}
+      description={part.description}
+      bad={problems.length > 0}
+      add={
+        <>
+          {heightActions &&
+            (noHeights ? (
+              <button className="gm-plus gm-hover" title={heights.description} onClick={() => ctx.set(hpath, newHeight())}>
+                + height
+              </button>
+            ) : (
+              <button className="gm-plus gm-hover" onClick={() => share(!shared)}>
+                {shared ? 'a height for each' : 'one height for all'}
+              </button>
+            ))}
+          {types.length === 1 ? (
+            <button className="gm-plus" title={types[0].description} onClick={() => add(types[0].value)}>
+              + add
+            </button>
+          ) : (
+            <DropMenu
+              label={`Add to the ${part.title.toLowerCase()}`}
+              width={300}
+              entries={types.map((t) => ({ label: t.label, description: t.description, onClick: () => add(t.value) }))}
+              target={<button className="gm-plus">+ add</button>}
+            />
+          )}
+        </>
+      }
+    >
+      <div className="gm-list">
+        {items.map((item, i) => (
+          <div key={i} className="gm-item">
+            <ItemLine ctx={ctx} part={part} path={[...listPath, i]} item={item} rings={rings} onRemove={removable ? () => remove(i) : undefined} />
+            {shown(i) && <HeightLine ctx={ctx} part={heights!} path={[...hpath!, i]} count={items.length} rings={rings} />}
+          </div>
+        ))}
+        {heights && shared && <HeightLine ctx={ctx} part={heights} path={[...hpath!, 0]} count={1} rings={rings} all />}
+        {items.length === 0 && <span className="gm-note">none</span>}
       </div>
-    </div>
+      <Problems list={problems} />
+    </Group>
   );
 }
 
@@ -1111,7 +1246,9 @@ function HeightLine({ ctx, part, path, count, rings, all }: { ctx: Ctx; part: Pa
     <>
       <div className="gm-trait gm-height">
         <span className="gm-cell-head">
-          <span className="gm-times">{all ? '↳ height of all' : '↳ height'}</span>
+          <span className="gm-times" title={all ? 'The height of them all' : 'Its height'}>
+            {all ? '↳ all' : '↳'}
+          </span>
           <TypePick
             items={typesOf(defs, family, part.types)}
             value={String(item?.type ?? '')}
