@@ -10,7 +10,7 @@ import abc
 import functools
 import math
 from collections.abc import Callable, Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeAlias
 
 from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
@@ -20,7 +20,7 @@ import numpy.typing as npt
 import scipy.special
 
 from gbkfit.config import (
-    TypedParser, TypedSerializable, check_options)
+    TypedParser, TypedSerializable, Unit, check_options)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import (
     ModelEvaluationError, ParamDesc, ParamScalarDesc, ParamValues,
@@ -65,6 +65,10 @@ __all__ = [
     'TraitSpheroid',
     'light_profile_parser'
 ]
+
+
+# The largest radius of a spheroid
+RMax: TypeAlias = Annotated[float, Unit('arcsec')]
 
 
 class LightProfile(TypedSerializable, abc.ABC):
@@ -570,7 +574,7 @@ class Spheroid(Component, abc.ABC):
     def __init__(
             self,
             profile: LightProfile,
-            rmax: float,
+            rmax: RMax,
             emission: Emission,
             shape: SpheroidShape | None,
             kinematics: SpheroidKinematics | None,
@@ -843,7 +847,7 @@ class TraitSpheroid(Spheroid):
     def __init__(
             self,
             profile: LightProfile,
-            rmax: float,
+            rmax: RMax,
             emission: Emission,
             shape: SpheroidShape | None = None,
             vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None = None,
@@ -899,7 +903,7 @@ class JeansSpheroid(Spheroid):
     def __init__(
             self,
             profile: LightProfile,
-            rmax: float,
+            rmax: RMax,
             emission: Emission,
             shape: SpheroidShape | None = None,
             name: str | None = None
@@ -948,7 +952,7 @@ class OrbitSpheroid(Spheroid):
     def __init__(
             self,
             profile: LightProfile,
-            rmax: float,
+            rmax: RMax,
             emission: Emission,
             shape: SpheroidShape | None = None,
             norbits: Annotated[int, Gt(0)] = 3000,
