@@ -911,6 +911,15 @@ class NodalDiskDensity:
         """Check whether it has density height traits."""
         return bool(self._disk.traits('rht'))
 
+    def height_cuts(self) -> tuple[float, ...]:
+        """
+        Return the heights (kpc) where its density height traits end:
+        their zmax, beyond which they are 0.
+        """
+        return tuple(sorted({
+            trait.zmax() * self._kpc_per_arcsec
+            for trait in self._disk.traits('rht')}))
+
     def mass_per_unit(self) -> float | None:
         """
         Return the mass surface density (Msun/kpc^2) of one unit of the

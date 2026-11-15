@@ -60,6 +60,14 @@ class DiskVertical(TypedSerializable, abc.ABC):
         """
         return np.empty(0)
 
+    def height_cuts(self, context: MassContext) -> tuple[float, ...]:
+        """
+        Return the heights (kpc, above the plane) where its pdf of the
+        height ends (see mass.DiskDensity.height_cuts), in the context of
+        its galaxy (see MassContext); none here (a law, or thin).
+        """
+        return ()
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name; none here."""
         return {}
@@ -488,6 +496,12 @@ class VerticalComponent(DiskVertical):
         in the context of its galaxy (see MassContext).
         """
         return context.density(self._component).knots(self._rstep)
+
+    def height_cuts(self, context: MassContext) -> tuple[float, ...]:
+        # (those of the density height traits of the component)
+        if self.thin(context):
+            return ()
+        return context.density(self._component).height_cuts()
 
     def shapes(
             self, R: np.ndarray, z: np.ndarray, context: MassContext

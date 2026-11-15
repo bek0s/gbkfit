@@ -112,6 +112,15 @@ class DiskDensity(ComponentDensity, Protocol):
         """
         ...
 
+    def height_cuts(self) -> tuple[float, ...]:
+        """
+        Return the heights (kpc, above its plane) where the pdfs of the
+        height of its terms end (e.g. the zmax of its density height
+        traits, beyond which they are 0), at which the quadratures over
+        the heights of its gravity split their panels.
+        """
+        ...
+
 
 class SpheroidDensity:
     """

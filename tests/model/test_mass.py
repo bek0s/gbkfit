@@ -453,6 +453,29 @@ class Layers:
     def mass_per_unit(self):
         return None
 
+    def height_cuts(self):
+        # (its layers are not cut)
+        return ()
+
+
+def test_the_heights_of_a_thick_disk_are_split_where_its_pdfs_end():
+    # A sech2 pdf cut at 3.75 scale heights (as a density height trait is
+    # at its zmax), the cut within a panel of the heights: on the heights
+    # split at the cut it integrates to 1, as its gravity checks; on those
+    # that are not, only to about its jump times the width of the panel
+    outer, h, cut = 10.0, 0.16, 0.6
+
+    def pdf(z):
+        inside = np.abs(z) <= cut
+        return np.where(inside, VerticalSech2.pdf(z, h) / np.tanh(cut / h), 0)
+    split = _disk_gravity.height_grid([cut], outer)
+    assert np.any(np.isclose(split.edges, cut / outer, rtol=0, atol=1e-12))
+    assert 2 * outer * (pdf(split.nodes * outer) @ split.weights) \
+        == pytest.approx(1, abs=1e-9)
+    plain = _disk_gravity.height_grid([], outer)
+    assert abs(2 * outer * (pdf(plain.nodes * outer) @ plain.weights) - 1) \
+        > 1e-6
+
 
 def test_mass_disks_follow_one_component_or_two():
     # (e.g. H2 of a CO surface density in the layer of the HI)

@@ -15,8 +15,9 @@ The radii are cut into panels at knots, where the profile may have kinks
 (e.g. the nodes of a linear profile). On each panel, the density is the
 polynomial of a given degree through its values at the Gauss-Lobatto
 points of the panel (degree 1: linear between the knots), and v^2 is a
-linear map of the density at those points (and at fixed heights): weights
-that depend on the geometry only, cached. The weights integrate the
+linear map of the density at those points (and at fixed heights, see
+HeightGrid): weights that depend on the geometry only, cached. The
+weights integrate the
 kernel against each polynomial of the panels: by Gauss-Legendre
 quadrature on panels far from R, and on panels near R on sub-panels of
 geometric widths toward R, where the kernel of a thin disk has a
@@ -36,8 +37,11 @@ from .units import G
 
 
 __all__ = [
+    'HeightGrid',
     'ThickDiskGravity',
     'ThinDiskGravity',
+    'check_pdfs',
+    'height_grid',
     'thick_disk_gravity',
     'thin_disk_gravity',
     'thin_kernel'
@@ -82,10 +86,10 @@ _FAR_X, _FAR_W = np.polynomial.legendre.leggauss(16)
 _NEAR_T, _NEAR_W = _geometric_panels(
     np.concatenate(([0], np.geomspace(1e-12, 1, 30))), 10)
 
-# The heights of thick disks, in units of the outer radius of the disk:
-# Gauss-Legendre points on panels of geometric widths from 1e-9 to 10
+# The edges of the panels of the heights of thick disks (see HeightGrid),
+# in units of the outer radius of the disk: of geometric widths from 1e-9
+# to 10
 _HEIGHT_EDGES = np.concatenate(([0], np.geomspace(1e-9, 10, 22)))
-_HEIGHTS, _HEIGHT_WEIGHTS = _geometric_panels(_HEIGHT_EDGES, 8)
 
 # The singular values of the weights of thick disks that are kept, relative
 # to the largest (see _thick_weights)
@@ -97,6 +101,70 @@ _PDF_TOLERANCE = 1e-6
 # The resolution of the cache: the radii relative to the outer radius of
 # the disk are rounded to multiples of 2^-40
 _KEY_RESOLUTION = 2.0 ** 40
+
+
+@dataclasses.dataclass(frozen=True)
+class HeightGrid:
+    """
+    The heights of a thick disk, in units of its outer radius, and the
+    weights of a quadrature over them (of one side of its plane):
+    Gauss-Legendre points of 8 on panels of geometric widths from 1e-9 to
+    10, split at the heights where its pdfs of the height end (its cuts:
+    e.g. the zmax of the density height traits of the component it
+    follows, beyond which they are 0), so that each panel holds a smooth
+    piece of them. (A pdf cut within a panel would integrate there only to
+    about its jump times the width of the panel: e.g. to 1.0002 for a
+    sech2 cut at 3.75 scale heights.) The key of the cuts names the grid
+    in the caches of the weights.
+    """
+    edges: np.ndarray
+    nodes: np.ndarray
+    weights: np.ndarray
+    key: bytes
+
+
+@functools.lru_cache(maxsize=32)
+def _height_grid(key: bytes) -> HeightGrid:
+    """Return the height grid of the cuts of a key (see height_grid)."""
+    cuts = np.frombuffer(key) / _KEY_RESOLUTION
+    edges = np.unique(np.concatenate((_HEIGHT_EDGES, cuts)))
+    nodes, weights = _geometric_panels(edges, 8)
+    return HeightGrid(edges, nodes, weights, key)
+
+
+def height_grid(cuts: npt.ArrayLike = (), scale: float = 1.0) -> HeightGrid:
+    """
+    Return the heights of a thick disk of the outer radius scale (kpc),
+    whose pdfs of the height end at the cuts (kpc, above its plane; see
+    HeightGrid): those within the panels of its heights, rounded as the
+    radii of the caches are.
+    """
+    relative = np.asarray(cuts, dtype=float).ravel() / scale
+    inside = relative[
+        (relative > _HEIGHT_EDGES[1]) & (relative < _HEIGHT_EDGES[-1])]
+    return _height_grid(
+        np.unique(np.round(inside * _KEY_RESOLUTION)).tobytes())
+
+
+def check_pdfs(
+        sigmas: np.ndarray, pdfs: np.ndarray, scale: float, grid: HeightGrid
+) -> None:
+    """
+    Raise ValueError if a pdf of the height (at the heights of the grid
+    times scale, the outer radius of the disk) does not integrate to 1
+    (within _PDF_TOLERANCE) over them where its surface density is not 0:
+    the heights do not resolve it (e.g. heavy tails, or a scale height
+    below about 1e-8 of the outer radius of the disk).
+    """
+    mass = 2 * scale * (pdfs @ grid.weights)
+    unresolved = (np.abs(mass - 1) > _PDF_TOLERANCE) & (sigmas != 0)
+    if np.any(unresolved):
+        worst = mass[unresolved][np.argmax(np.abs(mass[unresolved] - 1))]
+        raise ValueError(
+            f"a height pdf of a thick disk integrates to {worst} over the "
+            f"heights of its gravity, not 1: its heights are not resolved "
+            f"(e.g. heavy tails, or a scale height below 1e-8 of the outer "
+            f"radius of the disk)")
 
 
 def thin_kernel(
@@ -276,28 +344,33 @@ def _thin_weights(
 
 @functools.lru_cache(maxsize=8)
 def _thick_weights(
-        knots_key: bytes, radii_key: bytes, degree: int) -> _ThickWeights:
+        knots_key: bytes, radii_key: bytes, degree: int, heights_key: bytes
+) -> _ThickWeights:
     knots = np.frombuffer(knots_key) / _KEY_RESOLUTION
     radii = np.frombuffer(radii_key) / _KEY_RESOLUTION
+    heights = _height_grid(heights_key)
     panels = _Panels.from_knots(knots, degree)
-    weights = np.zeros((len(radii), len(panels.points()), len(_HEIGHTS)))
+    weights = np.zeros(
+        (len(radii), len(panels.points()), len(heights.nodes)))
     for j, R in enumerate(radii):
         near = panels.near(R)
         a, w, basis = panels.far_quadrature(~near)
-        kernel = _thick_kernel(R, a[..., None], a[..., None] - R, _HEIGHTS)
+        kernel = _thick_kernel(
+            R, a[..., None], a[..., None] - R, heights.nodes)
         np.add.at(
             weights[j], panels.indices[~near],
             np.einsum('pn,pnh,nq->pqh', w, kernel, basis))
         for panel in np.flatnonzero(near):
             for a, d, w, basis in panels.near_quadrature(panel, R):
-                kernel = _thick_kernel(R, a[:, None], d[:, None], _HEIGHTS)
+                kernel = _thick_kernel(
+                    R, a[:, None], d[:, None], heights.nodes)
                 weights[j, panels.indices[panel]] += np.einsum(
                     'n,nh,nq->qh', w, kernel, basis)
-    weights *= _HEIGHT_WEIGHTS
+    weights *= heights.weights
     # Most of the weights repeat over the heights: keep the singular
     # values above a tolerance (which keeps the precision of the weights)
     u, s, vt = np.linalg.svd(
-        weights.reshape(-1, len(_HEIGHTS)), full_matrices=False)
+        weights.reshape(-1, len(heights.nodes)), full_matrices=False)
     rank = int(np.sum(s > _THICK_RANK_TOLERANCE * s[0]))
     return _ThickWeights(
         (u[:, :rank] * s[:rank]).reshape(len(radii), -1), vt[:rank])
@@ -365,17 +438,21 @@ class ThinDiskGravity:
 class ThickDiskGravity:
     """
     The circular velocity of a thick disk at given radii, from its density
-    at the radii of its density points (radii) and at fixed heights
-    (heights), given as surface densities and height pdfs (see the module
-    docstring; build it with thick_disk_gravity).
+    at the radii of its density points (radii) and at the heights of its
+    grid (heights, see HeightGrid), given as surface densities and height
+    pdfs (see the module docstring; build it with thick_disk_gravity).
     """
 
-    def __init__(self, weights: _ThickWeights, geometry: _Geometry):
+    def __init__(
+            self, weights: _ThickWeights, geometry: _Geometry,
+            grid: HeightGrid
+    ):
         self._weights = weights
         self._scale = geometry.scale
         self._inverse = geometry.inverse
+        self._grid = grid
         self.radii = geometry.points
-        self.heights = _HEIGHTS * geometry.scale
+        self.heights = grid.nodes * geometry.scale
 
     def vcirc2(self, sigmas: np.ndarray, pdfs: np.ndarray) -> np.ndarray:
         """
@@ -395,24 +472,13 @@ class ThickDiskGravity:
         Raises
         ------
         ValueError
-            If a pdf does not integrate to 1 over the heights (within
-            1e-6) where its surface density is not 0: its heights are not
-            resolved (e.g. a sharp cut, heavy tails, or a scale height
-            below about 1e-8 of the outer radius of the disk).
+            If a pdf does not integrate to 1 over the heights where its
+            surface density is not 0 (see check_pdfs).
         """
         weights = self._weights
         pdfs = np.broadcast_to(
-            pdfs, sigmas.shape + (len(_HEIGHTS),))
-        mass = 2 * self._scale * (pdfs @ _HEIGHT_WEIGHTS)
-        unresolved = (np.abs(mass - 1) > _PDF_TOLERANCE) & (sigmas != 0)
-        if np.any(unresolved):
-            worst = mass[unresolved][np.argmax(np.abs(
-                mass[unresolved] - 1))]
-            raise ValueError(
-                f"a height pdf of a thick disk integrates to {worst} over "
-                f"the heights of its gravity, not 1: its heights are not "
-                f"resolved (e.g. a sharp cut, heavy tails, or a scale "
-                f"height below 1e-8 of the outer radius of the disk)")
+            pdfs, sigmas.shape + (len(self._grid.nodes),))
+        check_pdfs(sigmas, pdfs, self._scale, self._grid)
         rho = np.sum(sigmas[..., None] * pdfs, axis=0)
         v2 = G * self._scale ** 2 * (
             weights.left @ (weights.right @ rho.T).T.ravel())
@@ -425,7 +491,7 @@ class ThickDiskGravity:
         an array of the shape of k, to the precision of the heights (see
         vcirc2).
         """
-        weights = 2 * self._scale * _HEIGHT_WEIGHTS * pdf
+        weights = 2 * self._scale * self._grid.weights * pdf
         k = np.asarray(k, dtype=float)
         return np.exp(-k[..., None] * self.heights) @ weights
 
@@ -446,15 +512,19 @@ def thin_disk_gravity(
 
 
 def thick_disk_gravity(
-        knots: np.ndarray, radii: np.ndarray, degree: int = 1
+        knots: np.ndarray, radii: np.ndarray, degree: int = 1,
+        cuts: npt.ArrayLike = ()
 ) -> ThickDiskGravity:
     """
     Return the gravity of a thick disk at the radii (kpc): its density is
     a polynomial in radius of the degree on each panel between the knots
     (kpc, increasing, from the inner to the outer edge of the disk) and 0
-    outside them.
+    outside them; its pdfs of the height end at the cuts (kpc, above its
+    plane; see HeightGrid), if any.
     """
     geometry = _Geometry.from_knots(knots, radii, degree)
+    grid = height_grid(cuts, geometry.scale)
     return ThickDiskGravity(
-        _thick_weights(geometry.knots_key, geometry.radii_key, degree),
-        geometry)
+        _thick_weights(
+            geometry.knots_key, geometry.radii_key, degree, grid.key),
+        geometry, grid)

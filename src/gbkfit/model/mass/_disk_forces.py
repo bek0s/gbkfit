@@ -67,12 +67,13 @@ from collections.abc import Callable
 from typing import Literal
 
 import numpy as np
+import numpy.typing as npt
 import scipy.sparse
 import scipy.special
 
 from ._disk_gravity import (
-    _HEIGHT_EDGES, _HEIGHT_WEIGHTS, _HEIGHTS, _KEY_RESOLUTION, _PDF_TOLERANCE,
-    _Geometry, _Panels, _thick_kernel)
+    _KEY_RESOLUTION, HeightGrid, _Geometry, _Panels, _height_grid,
+    _thick_kernel, check_pdfs, height_grid)
 from .units import G
 
 
@@ -90,7 +91,7 @@ Axis = Literal['R', 'z']
 
 # The heights zeta of the tables of C (see the module docstring), relative
 # to the outer radius of the disk: 32 per decade from 1e-9 to 16 (beyond
-# the heights of a thick disk, _HEIGHTS, and of the points asked for);
+# the heights of a thick disk, see HeightGrid, and of the points asked for);
 # below, C falls linearly to 0 (odd, the vertical force) or stays (even,
 # the radial force)
 _ZETAS = np.geomspace(1e-9, 16, 327)
@@ -113,10 +114,16 @@ _SOLID = np.array([[
        * scipy.special.factorial(order - 2 * j)) if 2 * j <= order else 0.0
     for j in range(len(_FAR_ORDERS))] for order in _FAR_ORDERS])
 
-# The vertical moments of the heights of thick disks (of outer radius 1):
-# int pdf(h) h^2p dh over both sides = _VERTICAL[p] @ pdf at _HEIGHTS
-_VERTICAL = 2 * _HEIGHT_WEIGHTS * _HEIGHTS ** (2 * np.arange(
-    len(_FAR_ORDERS))[:, None])
+
+
+def _vertical_moments(grid: HeightGrid) -> np.ndarray:
+    """
+    Return the vertical moments of the heights of a thick disk of outer
+    radius 1: int pdf(h) h^2p dh over both sides = moments[p] @ pdf at
+    the heights of the grid.
+    """
+    return 2 * grid.weights * grid.nodes ** (
+        2 * np.arange(len(_FAR_ORDERS))[:, None])
 
 
 def _vertical_kernel(
@@ -273,9 +280,9 @@ class _ThickPlan:
     of one radius (see _Stack.thick), from its geometry: the sum of C of
     its sheets at +h and -h, times the weights of the heights, as a
     sparse map of the table of C at the radius (sheets: of shape
-    (points, len(_ZETAS) * len(_HEIGHTS))); and the quadrature of the
-    slab between the sorted |z| of the points and the edges of the panels
-    of _HEIGHTS, which resolve the density (nodes and weights on each
+    (points, len(_ZETAS) * heights)); and the quadrature of the slab
+    between the sorted |z| of the points and the edges of the panels of
+    its heights, which resolve the density (nodes and weights on each
     interval from the last, relative to the outer radius of the disk, and
     the index of the |z| of each point among the edges of the intervals).
     """
@@ -286,14 +293,17 @@ class _ThickPlan:
 
 
 @functools.lru_cache(maxsize=64)
-def _thick_plan(heights_key: bytes, odd: bool) -> _ThickPlan:
-    z = np.frombuffer(heights_key) / _KEY_RESOLUTION
-    npoints, nheights = len(z), len(_HEIGHTS)
+def _thick_plan(
+        points_key: bytes, odd: bool, heights_key: bytes) -> _ThickPlan:
+    z = np.frombuffer(points_key) / _KEY_RESOLUTION
+    heights = _height_grid(heights_key)
+    npoints, nheights = len(z), len(heights.nodes)
     sheets = []
     for side in (-1, 1):
-        rows, coefficients = _catmull_rom(z[:, None] + side * _HEIGHTS, odd)
+        rows, coefficients = _catmull_rom(
+            z[:, None] + side * heights.nodes, odd)
         sheets.append(scipy.sparse.csr_array(
-            ((coefficients * _HEIGHT_WEIGHTS[:, None]).ravel(), (
+            ((coefficients * heights.weights[:, None]).ravel(), (
                 np.repeat(np.arange(npoints), nheights * 4),
                 (rows * nheights + np.arange(nheights)[:, None]).ravel())),
             shape=(npoints, len(_ZETAS) * nheights)))
@@ -301,12 +311,12 @@ def _thick_plan(heights_key: bytes, odd: bool) -> _ThickPlan:
     # missed its density: e.g. 4778 for -2.97 (km/s)^2/kpc at one outer
     # radius above the centre of a disk of hz / R_out = 1 / 400)
     edges, at = np.unique(
-        np.concatenate((_HEIGHT_EDGES, np.abs(z))), return_inverse=True)
+        np.concatenate((heights.edges, np.abs(z))), return_inverse=True)
     lo, hi = edges[:-1, None], edges[1:, None]
     x, w = np.polynomial.legendre.leggauss(8)
     return _ThickPlan(
         sheets[0] + sheets[1], ((hi - lo) * x + hi + lo) / 2,
-        (hi - lo) * w / 2, at[len(_HEIGHT_EDGES):])
+        (hi - lo) * w / 2, at[len(heights.edges):])
 
 
 class _Stack:
@@ -315,8 +325,9 @@ class _Stack:
     evaluated from its tables (within _MAX_HEIGHT of its plane), the index
     of the radius of each among those of the tables of its sheets
     (inverse), the outer radius of the disk, the unit of the heights of the
-    tables (scale), and the force (axis): the sums of the sheets of the
-    disk there (see the module docstring).
+    tables (scale), the force (axis), and the heights of its sheets, of a
+    thick disk (grid): the sums of the sheets of the disk there (see the
+    module docstring).
     """
 
     def __init__(
@@ -325,13 +336,15 @@ class _Stack:
             z: np.ndarray,
             inverse: np.ndarray,
             scale: float,
-            axis: Axis
+            axis: Axis,
+            grid: HeightGrid
     ):
         self._R = R
         self._z = z
         self._inverse = inverse
         self._scale = scale
         self._axis = axis
+        self._grid = grid
 
     def thin(self, tables: np.ndarray, means: np.ndarray) -> np.ndarray:
         """
@@ -355,9 +368,9 @@ class _Stack:
     ) -> np.ndarray:
         """
         Return the force ((km/s)^2/kpc) of a thick disk of the tables C of
-        the sheets at the heights _HEIGHTS (per G, an array of shape
-        (len(_ZETAS), len(_HEIGHTS)) for the index of a radius of the
-        tables), the mean surface densities (Msun/kpc^2) of its terms at
+        the sheets at the heights of its grid (per G, an array of shape
+        (len(_ZETAS), heights) for the index of a radius of the tables),
+        the mean surface densities (Msun/kpc^2) of its terms at
         the radii of the tables (an array of shape (radii, terms)), and
         the pdfs of the height of its terms at the radius R and the
         heights z (kpc) of two arrays (see DiskForce.thick; the vertical
@@ -370,7 +383,8 @@ class _Stack:
             points = self._inverse == index
             z = self._z[points]
             plan = _thick_plan(
-                np.round(z / scale * _KEY_RESOLUTION).tobytes(), vertical)
+                np.round(z / scale * _KEY_RESOLUTION).tobytes(), vertical,
+                self._grid.key)
             # The sheets at +h and -h (without their jumps); for the
             # vertical force, the pull of the slab, int_0^|z| rho(R, h) dh
             # (with the mean densities), summed between the sorted heights
@@ -475,30 +489,14 @@ def _joined(
     return out
 
 
-def _check_pdfs(sigmas: np.ndarray, pdfs: np.ndarray, scale: float) -> None:
-    """
-    Raise ValueError if a pdf of the height (at the heights _HEIGHTS times
-    scale) does not integrate to 1 (within 1e-6) where its surface
-    density is not 0 (see _disk_gravity.ThickDiskGravity.vcirc2).
-    """
-    mass = 2 * scale * (pdfs @ _HEIGHT_WEIGHTS)
-    unresolved = (np.abs(mass - 1) > _PDF_TOLERANCE) & (sigmas != 0)
-    if np.any(unresolved):
-        worst = mass[unresolved][np.argmax(np.abs(mass[unresolved] - 1))]
-        raise ValueError(
-            f"a height pdf of a thick disk integrates to {worst} over the "
-            f"heights of its gravity, not 1: its heights are not resolved "
-            f"(e.g. a sharp cut, heavy tails, or a scale height below 1e-8 "
-            f"of the outer radius of the disk)")
-
-
 class DiskForce:
     """
     A force of a disk at given points, from the pull of its rings (see the
     module docstring; build it with disk_force): from its surface
     densities at the radii of its density points (radii), and for a thick
-    disk, at the heights of its density (heights, those of _disk_gravity).
-    The points near it (near) take its tables, the others its far field.
+    disk, at the heights of its density (heights, of its grid: see
+    _disk_gravity.HeightGrid). The points near it (near) take its tables,
+    the others its far field.
     """
 
     def __init__(
@@ -509,19 +507,23 @@ class DiskForce:
             R: np.ndarray,
             z: np.ndarray,
             near: np.ndarray,
-            axis: Axis
+            axis: Axis,
+            grid: HeightGrid
     ):
         scale = geometry.scale
         powers = 2 * np.arange(len(_FAR_ORDERS))
         self._weights = weights
         self._scale = scale
+        self._grid = grid
         self._near = near
-        self._stack = _Stack(R[near], z[near], geometry.inverse, scale, axis)
+        self._stack = _Stack(
+            R[near], z[near], geometry.inverse, scale, axis, grid)
         self._far = _FarField(R[~near], z[~near], axis)
         self._radial = radial * scale ** (powers + 2.0)[:, None]
-        self._vertical = _VERTICAL * scale ** (powers + 1.0)[:, None]
+        self._vertical = _vertical_moments(grid) \
+            * scale ** (powers + 1.0)[:, None]
         self.radii = geometry.points
-        self.heights = _HEIGHTS * scale
+        self.heights = grid.nodes * scale
 
     def thin(self, sigma: np.ndarray) -> np.ndarray:
         """
@@ -564,13 +566,12 @@ class DiskForce:
         Raises
         ------
         ValueError
-            If a pdf does not integrate to 1 over the heights (within
-            1e-6) where its surface density is not 0 (see
-            _disk_gravity.ThickDiskGravity.vcirc2).
+            If a pdf does not integrate to 1 over the heights where its
+            surface density is not 0 (see _disk_gravity.check_pdfs).
         """
         weights = self._weights
-        pdfs = np.broadcast_to(pdfs, sigmas.shape + (len(_HEIGHTS),))
-        _check_pdfs(sigmas, pdfs, self._scale)
+        pdfs = np.broadcast_to(pdfs, sigmas.shape + (len(self._grid.nodes),))
+        check_pdfs(sigmas, pdfs, self._scale, self._grid)
         rho = np.sum(sigmas[..., None] * pdfs, axis=0)
         return _joined(
             self._near,
@@ -585,14 +586,17 @@ def disk_force(
         knots: np.ndarray,
         R: np.ndarray,
         z: np.ndarray,
-        degree: int = 1
+        degree: int = 1,
+        cuts: npt.ArrayLike = ()
 ) -> DiskForce:
     """
     Return the radial ('R') or the vertical ('z') force of a disk at the
     points (R, z) (kpc, of two arrays of one shape), from the pull of its
     rings: its density is a polynomial in radius of the degree on each
     panel between the knots (kpc, increasing, from the inner to the outer
-    edge of the disk) and 0 outside them.
+    edge of the disk) and 0 outside them; the pdfs of the height of a
+    thick one end at the cuts (kpc, above its plane; see
+    _disk_gravity.HeightGrid), if any.
     """
     R = np.asarray(R, dtype=float).ravel()
     z = np.asarray(z, dtype=float).ravel()
@@ -601,7 +605,7 @@ def disk_force(
     return DiskForce(
         _sheet_weights(geometry.knots_key, geometry.radii_key, degree, axis),
         _radial_weights(geometry.knots_key, degree), geometry, R, z, near,
-        axis)
+        axis, height_grid(cuts, geometry.scale))
 
 
 # The tables C of the sheets of an exponential disk of M = rd = 1 (see
@@ -662,11 +666,16 @@ class ExponentialForce:
     disk of M = rd = 1, which scale (see _exponential_tables; the weights
     of its rings would change with rd), within 1000 rd of its axis and 5
     outer radii of its plane, and its far field beyond. Build it with
-    exponential_force; heights are those of the density of a thick disk.
+    exponential_force; heights are those of the density of a thick disk
+    (of its grid: see _disk_gravity.HeightGrid).
     """
 
-    def __init__(self, R: np.ndarray, z: np.ndarray, rd: float, axis: Axis):
+    def __init__(
+            self, R: np.ndarray, z: np.ndarray, rd: float, axis: Axis,
+            cuts: npt.ArrayLike = ()
+    ):
         scale = _EXP_EXTENT * rd
+        grid = height_grid(cuts, scale)
         near = (np.abs(z) <= _MAX_HEIGHT * scale) & (R <= _EXP_X[-1] * rd)
         radii, inverse = np.unique(R[near] / rd, return_inverse=True)
         self._tables = np.array(
@@ -676,12 +685,14 @@ class ExponentialForce:
         self._rd = rd
         self._scale = scale
         self._near = near
-        self._stack = _Stack(R[near], z[near], inverse, scale, axis)
+        self._grid = grid
+        self._stack = _Stack(R[near], z[near], inverse, scale, axis, grid)
         self._far = _FarField(R[~near], z[~near], axis)
         powers = 2 * np.arange(len(_FAR_ORDERS))
         self._radial = _EXP_MOMENTS * rd ** powers
-        self._vertical = _VERTICAL * scale ** (powers + 1.0)[:, None]
-        self.heights = _HEIGHTS * scale
+        self._vertical = _vertical_moments(grid) \
+            * scale ** (powers + 1.0)[:, None]
+        self.heights = grid.nodes * scale
 
     def thin(self, mass: float) -> np.ndarray:
         """
@@ -713,7 +724,7 @@ class ExponentialForce:
             DiskForce.thick).
         """
         unit = mass / self._rd ** 2
-        _check_pdfs(np.ones(1), pdf[None], self._scale)
+        check_pdfs(np.ones(1), pdf[None], self._scale, self._grid)
         return _joined(
             self._near,
             self._stack.thick(
@@ -724,13 +735,15 @@ class ExponentialForce:
 
 
 def exponential_force(
-        axis: Axis, R: np.ndarray, z: np.ndarray, rd: float
+        axis: Axis, R: np.ndarray, z: np.ndarray, rd: float,
+        cuts: npt.ArrayLike = ()
 ) -> ExponentialForce:
     """
     Return the radial ('R') or the vertical ('z') force of an exponential
     disk of the scale length rd (kpc) at the points (R, z) (kpc, of two
-    arrays of one shape).
+    arrays of one shape), whose pdf of the height, if thick, ends at the
+    cuts (kpc, above its plane; see _disk_gravity.HeightGrid), if any.
     """
     return ExponentialForce(
         np.asarray(R, dtype=float).ravel(),
-        np.asarray(z, dtype=float).ravel(), rd, axis)
+        np.asarray(z, dtype=float).ravel(), rd, axis, cuts)
