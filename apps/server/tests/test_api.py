@@ -929,6 +929,32 @@ def test_a_job_prepares_moment_maps_with_one_mask(client, root):
     assert np.isfinite(prepared).sum() == 18
 
 
+
+def test_a_galaxy_of_mass_alone_is_described_and_drawn(client):
+    # (its rotation curve is fitted; it emits no light)
+    galaxy = dict(distance=dict(type='parameter'), mass=[dict(
+        type='disk', name='disk', surface=dict(type='exponential'),
+        vertical=dict(type='thin'))])
+    info = client.post('/api/v1/parameters', json=dict(
+        project='study', galaxy=galaxy)).json()
+    assert {p['name'] for p in info['parameters']} == {
+        'distance', 'mass_disk_log_m', 'mass_disk_rd'}
+    assert info['problems'] == [] and info['whole']
+    # Its curves, those of its mass, to 30 kpc; no maps
+    header, maps = render(client, galaxy, properties=dict(
+        distance=10, mass_disk_log_m=10, mass_disk_rd=3), size=64)
+    assert maps == {}
+    curves = header['curves']
+    assert {'vcirc', 'vcirc_disk', 'mass'} <= set(curves)
+    kpc = 10e3 * np.pi / 648000
+    assert np.isclose(curves['radius'][-1] * kpc, 30)
+    assert max(curves['vcirc']) > 50
+    # (its light, in 3d, is nothing to see)
+    response = client.post('/api/v1/views/galaxy-volume', json=dict(
+        project='study', galaxy=galaxy, size=32))
+    assert response.status_code == 400
+    assert 'no component that emits light' in response.text
+
 def test_the_files_of_moment_maps_are_lists(client):
     job = client.post('/api/v1/jobs', json=dict(
         task='prep_pixel_moments', options=dict(
@@ -1162,9 +1188,6 @@ def test_the_cube_of_a_galaxy_is_rendered_and_viewed(client):
 
 @pytest.mark.parametrize('galaxy, request_, message', [
     (dict(components=[]), {}, "at least one component"),
-    # (a galaxy of mass alone has nothing to see)
-    (dict(mass=dict(type='point', name='bh'), distance=dict(type='parameter')),
-     {}, "no component that emits light"),
     (RENDERED, dict(properties=dict(nonsense=1)), "unknown parameters"),
     (RENDERED, dict(view='sideways'), None)])
 def test_invalid_renders_are_refused(client, galaxy, request_, message):

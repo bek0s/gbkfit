@@ -84,12 +84,21 @@ _NO_VELOCITIES = (-300.0, 300.0)
 # centre (where some are not defined, e.g. the slope of a density)
 _NCURVE = 96
 
+# The reach of the curves of a galaxy of mass alone, which has no
+# components to give it a largest radius (kpc): about that of the rotation
+# curve of a galaxy
+_MASS_REACH = 30.0
+
 # The maps of each component, by the names of the extra outputs of its
 # plan (see Extras): its light, its velocity on the line of sight and in
 # the plane of the sky (x, y), and its dispersion
 _MAPS = dict(
     light='bdata', velocity='vdata', vx='vxdata', vy='vydata',
     dispersion='ddata')
+
+
+class _NoLight(Invalid):
+    """A galaxy that emits no light (e.g. of mass alone): nothing to map."""
 
 
 @dataclasses.dataclass
@@ -99,7 +108,8 @@ class GalaxyRender:
     across, its maps by name (ny, nx; 'light', 'velocity', 'vx', 'vy' and
     'dispersion' of all its components, and '{component}/{map}' of each
     that has the map, by its name, or its position if it has none, e.g.
-    'component0/light'; NaN where there is no light), and its curves by name
+    'component0/light'; NaN where there is no light; none, of a galaxy
+    that emits no light), and its curves by name
     ('radius', arcsec, and the functions of radii of the galaxy at them,
     e.g. 'rotation_gas' and 'vcirc_halo'; see GalaxyFunctions; and of each
     disk its speeds along each direction it has traits along,
@@ -210,7 +220,9 @@ class Renders:
         Render a galaxy of the options of a piece of a project, at the
         values of its parameters of the given properties (numbers, or
         lists of them for vectors; the defaults for the others), telling
-        progress the stage it reaches, if given (e.g. 'evaluating').
+        progress the stage it reaches, if given (e.g. 'evaluating'). A
+        galaxy that emits no light (e.g. of mass alone) has its curves
+        but no maps (see _unlit).
 
         Raises
         ------
@@ -219,8 +231,11 @@ class Renders:
             rendered.
         """
         tell = progress or _quiet
-        galaxy, values, extras, radius, step = self._evaluate(
-            project, options, properties, view, size, tell)
+        try:
+            galaxy, values, extras, radius, step = self._evaluate(
+                project, options, properties, view, size, tell)
+        except _NoLight:
+            return self._unlit(project, options, properties, view, size, tell)
         maps = _maps(galaxy, extras)
         tell('drawing the curves')
         curves, problems = _curves(galaxy, values, radius)
@@ -230,6 +245,36 @@ class Renders:
                  ndim=int(np.ndim(_extra_values(x.value))))
             for x in extras if _extra_values(x.value) is not None]
         return GalaxyRender(step, size, maps, curves, problems, listed)
+
+    def _unlit(
+            self,
+            project: str,
+            options: Mapping[str, Any],
+            properties: Mapping[str, Any],
+            view: View,
+            size: int,
+            tell: Callable[[str], None]
+    ) -> GalaxyRender:
+        """
+        Render a galaxy that emits no light (e.g. of mass alone, as the
+        rotation curve of a galaxy is fitted by): its curves, to its
+        largest radius (of the components it has, which only dim; else
+        _MASS_REACH kpc), and no maps.
+
+        Raises
+        ------
+        Invalid
+            If the galaxy or the values are not valid.
+        """
+        galaxy, radius, step = self._load(project, options, view, size)
+        try:
+            values = _values(galaxy, properties)
+        except (ConfigError, ValueError, TypeError, RuntimeError) as e:
+            raise Invalid(error_message(e)) from e
+        tell('drawing the curves')
+        curves, problems = _curves(
+            galaxy, values, radius if galaxy.components() else None)
+        return GalaxyRender(step, size, {}, curves, problems, [])
 
     def volume(
             self,
@@ -340,7 +385,7 @@ class Renders:
         try:
             observations = _observations(galaxy, size, step)
             if not observations:
-                raise Invalid("the galaxy has no component that emits light")
+                raise _NoLight("the galaxy has no component that emits light")
             group = ObservationGroup([galaxy], observations)
             values = _values(group, properties)
             plan = group.plan(DriverHost())
@@ -714,11 +759,12 @@ def _round_width(width: float) -> float:
 
 
 def _values(
-        group: ObservationGroup, properties: Mapping[str, Any]
+        group: ObservationGroup | Galaxy, properties: Mapping[str, Any]
 ) -> dict[str, Any]:
     """
-    Return the values of the parameters of a group: those of the given
-    properties (numbers or lists of them), and the defaults of the others.
+    Return the values of the parameters of a group (or of a galaxy alone):
+    those of the given properties (numbers or lists of them), and the
+    defaults of the others.
 
     Raises
     ------
@@ -824,11 +870,13 @@ def _projected(value: np.ndarray, light: np.ndarray) -> np.ndarray:
 
 
 def _curves(
-        galaxy: Galaxy, values: Mapping[str, Any], radius: float
+        galaxy: Galaxy, values: Mapping[str, Any], radius: float | None
 ) -> tuple[dict[str, list[float]], list[str]]:
     """
     Return the curves of a galaxy from just off its centre to its largest
-    radius (arcsec): 'radius', and each of its functions of radii at them
+    radius (arcsec; None: _MASS_REACH kpc, of a galaxy of mass alone, or
+    _FIELD arcsec without a distance): 'radius', and each of its
+    functions of radii at them
     (e.g. the rotation of a disk; those of its mass, of radii in kpc, at
     the same radii on the sky), with the problems of those that failed: of
     a component, its speeds along each direction it has traits along (e.g.
@@ -836,14 +884,16 @@ def _curves(
     isotropic (e.g. 'dispersion_gas:tan'), and its position angle and
     inclination ('orientation_gas:posa', 'orientation_gas:incl').
     """
-    radii = np.linspace(radius / _NCURVE, radius, _NCURVE)
-    curves = dict(radius=radii.tolist())
     problems = []
     try:
         bound = galaxy.plan_functions().bind(values)
     except (ValueError, TypeError, RuntimeError) as e:
-        return curves, [error_message(e)]
+        bound, problems = {}, [error_message(e)]
     kpc = bound.get('kpc_per_arcsec')
+    if radius is None:
+        radius = _MASS_REACH / kpc if kpc else _FIELD
+    radii = np.linspace(radius / _NCURVE, radius, _NCURVE)
+    curves = dict(radius=radii.tolist())
     for name, function in bound.items():
         units = GalaxyFunctions.radial_units(name)
         if units is None:

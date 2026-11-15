@@ -28,13 +28,17 @@ __all__ = [
 
 
 # The observations a galaxy is described through, in turn: that of the
-# template (a cube), and an image (e.g. for a galaxy of a band); each sees
-# every component that emits what it sees (thick ones, and the opacity of
-# their own lines, too: see Scene.evaluation of gbkfit.model)
+# template (a cube), an image (e.g. for a galaxy of a band), each of which
+# sees every component that emits what it sees (thick ones, and the
+# opacity of their own lines, too: see Scene.evaluation of gbkfit.model);
+# and the circular speed of its mass, for a galaxy of mass alone, which
+# emits no light (as its rotation curve is fitted)
 _OBSERVATIONS = (
     ruamel.yaml.YAML(typ='safe').load(
         gbkfit.project.TEMPLATES['observations']),
-    dict(type='pixel_brightness', size=[48, 48]))
+    dict(type='pixel_brightness', size=[48, 48]),
+    dict(type='profile', functions=['vcirc'],
+         radii=dict(value=[1.0], unit='kpc')))
 
 
 @dataclasses.dataclass

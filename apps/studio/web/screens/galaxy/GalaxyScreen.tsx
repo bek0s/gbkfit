@@ -20,7 +20,7 @@ import { kpcPerArcsecOf, Model, type Open } from './Model';
 import { Params } from './Params';
 import { useComponentTypes } from '../../api/queries';
 import type { ComponentTypes } from './types';
-import { componentName, componentsOf, ringRadii } from './options';
+import { asList, componentName, componentsOf, ringRadii, type Options } from './options';
 import { forRender } from './params';
 import { Views } from './Views';
 
@@ -51,6 +51,9 @@ export function GalaxyScreen({ name }: { name: string }) {
   // (the render follows the state the library has described, as it settles)
   const [rendered] = useDebouncedValue(draft.consistent, 60);
   const renderedComponents = rendered ? componentsOf(rendered.options) : [];
+  // (a galaxy is something to show with components or mass: of mass alone,
+  // its curves, as a rotation curve is fitted)
+  const something = (galaxy: Options) => componentsOf(galaxy).length > 0 || asList(galaxy.mass).length > 0;
   const renderProperties = useMemo(() => (rendered ? forRender(rendered.properties, draft.params) : {}), [rendered, draft.params]);
 
   // (keys: undo, redo and save, but in a field of text, whose own undo it is)
@@ -161,8 +164,8 @@ export function GalaxyScreen({ name }: { name: string }) {
               seenBy={seenBy}
               onSeenBy={setSeenBy}
               observations={observations}
-              galaxy={components.length && renderedComponents.length ? rendered?.options : undefined}
-              why={components.length === 0 ? 'empty' : draft.problems.length > 0 ? 'problems' : 'waiting'}
+              galaxy={rendered && something(options) && something(rendered.options) ? rendered.options : undefined}
+              why={!something(options) ? 'empty' : draft.problems.length > 0 ? 'problems' : 'waiting'}
               properties={renderProperties}
               components={renderedComponents.map((c, i) => ({ name: componentName(c, i), colour: COLOURS[i % COLOURS.length] }))}
               isolated={isolated}

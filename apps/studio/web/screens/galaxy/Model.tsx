@@ -181,7 +181,9 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
           target={<button className="gm-add">+ Add</button>}
         />
       </div>
-      {components.length === 0 && <p className="gm-empty">No components yet: add one to see the galaxy.</p>}
+      {components.length === 0 && (
+        <p className="gm-empty">{mass.length > 0 ? 'No components: the galaxy is its mass alone, which emits no light (its curves are in the views).' : 'No components yet: add one to see the galaxy.'}</p>
+      )}
       {components.map((component, i) => (
         <ComponentCard
           key={i}

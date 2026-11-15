@@ -189,7 +189,7 @@ function EmptyNote({ why }: { why: 'empty' | 'problems' }) {
   return (
     <div className="gx-empty">
       <p>{why === 'empty' ? 'An empty galaxy.' : 'Nothing to show.'}</p>
-      <p className="note">{why === 'empty' ? 'Add its first component in the model to see it.' : 'The library cannot make the galaxy: its problems are in the model.'}</p>
+      <p className="note">{why === 'empty' ? 'Add a component or mass to it in the model to see it.' : 'The library cannot make the galaxy: its problems are in the model.'}</p>
     </div>
   );
 }
@@ -320,6 +320,17 @@ function ViewBody(props: IDockviewPanelProps<{ view: ViewKind }>) {
 
 function ViewContent({ kind, data, galaxy }: { kind: ViewKind; data: ViewsData; galaxy: Options }) {
   const colours = new Map(data.components.map((c) => [c.name, c.colour]));
+  // (a galaxy of mass alone emits no light: its curves only)
+  if (componentsOf(galaxy).length === 0 && kind.kind !== 'profiles' && kind.kind !== 'mass') {
+    return (
+      <div className="gv-empty">
+        <div className="gx-empty">
+          <p>No light.</p>
+          <p className="note">The galaxy is its mass alone, which emits none: its curves are in the views of its profiles and of its mass model.</p>
+        </div>
+      </div>
+    );
+  }
   switch (kind.kind) {
     case 'seen':
       return data.seenBy ? (

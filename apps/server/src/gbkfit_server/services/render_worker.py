@@ -54,9 +54,12 @@ def main() -> None:
         try:
             result = getattr(renders, header['kind'])(
                 **header['args'], progress=progress)
+        # (named by its class of errors, which the pool knows, not by its
+        # own, e.g. of the galaxy without light of renders)
         except (Invalid, NotFound) as e:
             _write(out, frames.encode(dict(
-                type='error', id=id_, error=type(e).__name__,
+                type='error', id=id_,
+                error='Invalid' if isinstance(e, Invalid) else 'NotFound',
                 message=str(e))))
             continue
         # (any other error is a failure of the render, perhaps a bug: logged
