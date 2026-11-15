@@ -21,7 +21,7 @@ import { NumberChip, NumberChips, paramText, type NumbersContext } from './Numbe
 import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
 import { ownedBy, settingOf } from './params';
 import { memberOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
-import { extentOf, HEAD_OPTIONS, nameBase, partsOfType, referencesOf, retypedComponent, settingsOfType, type ComponentTypes, type PartInfo } from './types';
+import { extentOf, familyOfOption, HEAD_OPTIONS, nameBase, partsOfType, referencesOf, retypedComponent, settingsOfType, withReferencesRenamed, type ComponentTypes, type PartInfo } from './types';
 
 // What is open in the sheet: a component or a part of the mass
 export type Open = { kind: 'component' | 'mass'; index: number } | null;
@@ -379,10 +379,18 @@ function ComponentCard({
   const own = problems.filter((p) => startsWith(p.path, base));
   const typeTitle = titled(defs, 'component', String(component.type)).label;
 
+  // (what refers to it by name, e.g. the mass that follows it, with it)
   const rename = (name: string) => {
     setRenaming(false);
     if (!name || components.some((c, i) => i !== index && c.name === name)) return;
-    set([...base, 'name'], name, { moved: inPlace });
+    const old = component.name;
+    draft.edit(
+      (s) => {
+        const named = setAt(s.options, [...base, 'name'], name);
+        return { ...s, options: typeof old === 'string' ? withReferencesRenamed(defs, named, 'components', old, name) : named };
+      },
+      { moved: inPlace },
+    );
   };
   const duplicate = () => {
     const oldName = typeof component.name === 'string' ? component.name : null;
@@ -452,6 +460,8 @@ function ComponentCard({
             label={`The component ${componentName(component, index)}`}
             width={240}
             at="end"
+            // (its rename gives the focus to the field of its name)
+            returnFocus={false}
             entries={[
               { label: 'Rename', onClick: () => setRenaming(true) },
               { label: 'Change its type', entries: typeEntries },
@@ -930,6 +940,19 @@ function MassRow({
     .filter(([key, value]) => key !== 'type' && isObject(value) && typeof value.type === 'string')
     .map(([key, value]) => titled(defs, familyOfOption(defs, 'mass_component', item.type, key) ?? '', String((value as Options).type)).label);
   const words = [inner.length ? inner.join(' · ') : typeTitle, followed ? `follows ${String(followed)}` : null, ...owned.slice(0, 3).map((p) => paramText(ctx, p))].filter(Boolean);
+  // (what refers to it by name, e.g. a halo that responds to it, with it)
+  const rename = (name: string) => {
+    setRenaming(false);
+    if (!name) return;
+    const old = item.name;
+    ctx.draft.edit(
+      (s) => {
+        const named = setAt(s.options, [...path, 'name'], name);
+        return { ...s, options: typeof old === 'string' ? withReferencesRenamed(defs, named, 'mass', old, name) : named };
+      },
+      { moved: inPlace },
+    );
+  };
   const typeEntries: MenuEntry[] = typesOf(defs, 'mass_component').map((t) => ({
     label: t.label,
     description: t.description,
@@ -942,7 +965,7 @@ function MassRow({
         <span className="gm-dot" style={{ background: followed ? colourOf(followed) : 'var(--faint)' }} />
         {renaming ? (
           <span onClick={(event) => event.stopPropagation()}>
-            <NameText value={String(item.name ?? '')} required onCommit={(name) => (setRenaming(false), name && set([...path, 'name'], name, { moved: inPlace }))} onCancel={() => setRenaming(false)} autoFocus />
+            <NameText value={String(item.name ?? '')} required onCommit={rename} onCancel={() => setRenaming(false)} autoFocus />
           </span>
         ) : (
           <b>{String(item.name ?? '')}</b>
@@ -953,6 +976,8 @@ function MassRow({
             label={`The mass ${String(item.name ?? '')}`}
             width={240}
             at="end"
+            // (its rename gives the focus to the field of its name)
+            returnFocus={false}
             entries={[
               { label: 'Rename', onClick: () => setRenaming(true) },
               { label: 'Change its type', entries: typeEntries },
@@ -1281,14 +1306,4 @@ function RingsRow({ ctx, component, value, onChange }: { ctx: Ctx; component: Op
       {notes.length > 0 && <span className="gm-note">{notes.join(' · ')}</span>}
     </div>
   );
-}
-
-// The family of an option of a type of a family (e.g. 'halo_profile', of
-// the profile of a halo), if its value is a member of one
-function familyOfOption(defs: Defs | undefined, family: string, type: unknown, option: string): string | null {
-  const property = (memberOf(defs, family, type)?.properties as Record<string, Schema> | undefined)?.[option];
-  if (!property) return null;
-  const branches = (property.anyOf as Schema[] | undefined) ?? [property];
-  const ref = branches.map((b) => b.$ref).find((r): r is string => typeof r === 'string');
-  return ref ? ref.replace('#/$defs/', '') : null;
 }

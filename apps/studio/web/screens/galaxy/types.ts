@@ -164,3 +164,39 @@ export function extentOf(component: Options, radii: number[]): string {
   if (typeof component.rmax === 'number') return `to ${component.rmax}″`;
   return '';
 }
+
+// The family of an option of a type of a family (e.g. 'halo_profile', of
+// the profile of a halo), if its value is a member of one
+export function familyOfOption(defs: Defs | undefined, family: string, type: unknown, option: string): string | null {
+  const property = (memberOf(defs, family, type)?.properties as Record<string, Schema> | undefined)?.[option];
+  if (!property) return null;
+  const branches = (property.anyOf as Schema[] | undefined) ?? [property];
+  const ref = branches.map((b) => b.$ref).find((r): r is string => typeof r === 'string');
+  return ref ? ref.replace('#/$defs/', '') : null;
+}
+
+// The options of a galaxy with what refers by name to one of its
+// components or parts of its mass (what: 'components' or 'mass') renamed
+// from one name to another: the options that reference them (see
+// referencesOf; e.g. the component a traced disk follows, at any depth of
+// the options of a type, or the parts of the mass a gravity screens)
+export function withReferencesRenamed(defs: Defs | undefined, options: Options, what: 'components' | 'mass', from: string, to: string): Options {
+  const renamed = (value: unknown) => (value === from ? to : value);
+  const walk = (family: string, value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map((item) => walk(family, item));
+    if (!isObject(value) || typeof value.type !== 'string') return value;
+    const refs = referencesOf(defs, family, value.type);
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => {
+        if (refs[key] === what) return [key, Array.isArray(item) ? item.map(renamed) : renamed(item)];
+        const inner = familyOfOption(defs, family, value.type, key);
+        return [key, inner ? walk(inner, item) : item];
+      }),
+    );
+  };
+  const next = { ...options };
+  for (const [key, family] of [['components', 'component'], ['mass', 'mass_component'], ['gravity', 'gravity']] as const) {
+    if (next[key] !== undefined) next[key] = walk(family, next[key]);
+  }
+  return next;
+}

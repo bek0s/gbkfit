@@ -158,11 +158,13 @@ function SearchMenu({
     },
     onDropdownOpen: () => combobox.focusSearchInput(),
   });
-  // (the first found ready to be chosen, by Enter, as it opens and as the
-  // field changes)
+  // (the first found ready to be chosen, by Enter, once something is
+  // typed; none as it opens, which would look like the one pointed at;
+  // the arrows choose from the first)
   const opened = combobox.dropdownOpened;
   useEffect(() => {
-    if (opened) combobox.selectFirstOption();
+    if (opened && query.trim()) combobox.selectFirstOption();
+    else if (opened) combobox.resetSelectedOption();
   }, [opened, query, combobox]);
   // (the items by their sections, those found)
   const actions: Action[] = [];
