@@ -453,6 +453,8 @@ h2 { margin: 0; font: var(--text-heading); }
 .ui-segments .mantine-SegmentedControl-label { padding: 0 10px; height: 24px; display: flex; align-items: center; justify-content: center; font: var(--text-label); color: var(--muted); }
 .ui-segments .mantine-SegmentedControl-label[data-active] { color: var(--accent-text); }
 .ui-segments .mantine-SegmentedControl-label[data-disabled] { opacity: .4; cursor: not-allowed; }
+.ui-segments-small { height: 22px; padding: 1px; }
+.ui-segments-small .mantine-SegmentedControl-label { height: 18px; padding: 0 8px; font: var(--text-caption); }
 .ui-choice-option { display: grid; gap: 1px; }
 /* (a long description, e.g. of a fitter, in three lines; all of it on hover) */
 .ui-choice-option small { font: var(--text-caption); color: var(--faint); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -718,9 +720,6 @@ h2 { margin: 0; font: var(--text-heading); }
 .gx-param-name code { font: var(--text-data-small); color: var(--faint); }
 .gx-param-name code.gx-param-symbol { font: var(--text-data); color: var(--fg); }
 .gx-param-name small { font: var(--text-caption); color: var(--faint); }
-.gx-free { height: 19px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--faint); font: var(--text-caption); }
-.gx-free:hover { color: var(--fg2); border-color: var(--muted); }
-.gx-free[data-on] { border-color: var(--accent); background: var(--sel); color: var(--accent-text); }
 .gx-single { display: grid; grid-template-columns: minmax(0, 1fr) auto 18px; align-items: center; gap: 10px; }
 .gx-slider { position: relative; }
 .gx-slider .ui-slider { position: relative; z-index: 1; }

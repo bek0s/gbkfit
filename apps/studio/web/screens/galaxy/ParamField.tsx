@@ -8,6 +8,7 @@ import { RangeSlider } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { useRef, useState } from 'react';
 import { significant } from '../../components/format';
+import { Segments } from '../../components/ui/inputs';
 import { StepSlider } from '../../components/ui/sliders';
 import { elementValues, sliderReach, validRange, type Param, type Setting } from './params';
 
@@ -68,14 +69,16 @@ export function ParamField(props: ParamFieldProps) {
         {param.size > 1 && <small>{props.rings?.length === param.size ? 'per ring' : `${param.size} values`}</small>}
       </span>
       {(setting.kind === 'fixed' || setting.kind === 'free') && (
-        <button
-          className="gx-free"
-          data-on={setting.kind === 'free' || undefined}
-          onClick={() => onFree(setting.kind !== 'free')}
-          title={setting.kind === 'free' ? 'Free in a fit, in its range: click to fix it' : 'Fixed in a fit: click to free it'}
-        >
-          {setting.kind === 'free' ? 'Free' : 'Fixed'}
-        </button>
+        <Segments
+          small
+          label="In a fit"
+          value={setting.kind}
+          onChange={(kind) => kind !== setting.kind && onFree(kind === 'free')}
+          items={[
+            { value: 'fixed', label: 'Fixed', title: 'Kept at its value in a fit' },
+            { value: 'free', label: 'Free', title: 'Fitted, within its range' },
+          ]}
+        />
       )}
     </div>
   );

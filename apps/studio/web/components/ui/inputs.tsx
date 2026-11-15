@@ -181,17 +181,20 @@ export function splitQuantity(text: string): [string, string] {
   return match ? [match[1], match[2].trim()] : ['', text.trim()];
 }
 
-// One of a few choices, as segments (one can be off, and say why on hover)
+// One of a few choices, as segments (one can be off, and say why on
+// hover); small, in a line of text (e.g. the head of a parameter)
 export function Segments<T extends string>({
   items,
   value,
   onChange,
   label,
+  small,
 }: {
   items: { value: T; label: string; disabled?: boolean; title?: string }[];
   value: T | null;
   onChange: (value: T) => void;
   label: string;
+  small?: boolean;
 }) {
   return (
     <SegmentedControl
@@ -200,7 +203,7 @@ export function Segments<T extends string>({
       onChange={(next) => onChange(next as T)}
       aria-label={label}
       size="xs"
-      className="ui-segments"
+      className={small ? 'ui-segments ui-segments-small' : 'ui-segments'}
     />
   );
 }

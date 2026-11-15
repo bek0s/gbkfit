@@ -182,7 +182,7 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
         />
       </div>
       {components.length === 0 && (
-        <p className="gm-empty">{mass.length > 0 ? 'No components: the galaxy is its mass alone, which emits no light (its curves are in the views).' : 'No components yet: add one to see the galaxy.'}</p>
+        <p className="gm-empty">No components: nothing emits light.</p>
       )}
       {components.map((component, i) => (
         <ComponentCard
@@ -1149,7 +1149,6 @@ function TraitGroup({ ctx, part, base, rings, problems }: { ctx: Ctx; part: Part
       const next = one ? first : items.map((_, i) => structuredClone(isObject(current[i]) ? current[i] : heights!.nullable ? null : first));
       return { ...s, options: setAt(s.options, hpath!, next) };
     });
-  const removable = items.length > 1 || part.optional;
   const types = typesOf(defs, family, part.types);
   // (heights that can be none show where they are given; none given, what
   // gives one to all)
@@ -1193,7 +1192,7 @@ function TraitGroup({ ctx, part, base, rings, problems }: { ctx: Ctx; part: Part
       <div className="gm-list">
         {items.map((item, i) => (
           <div key={i} className="gm-item">
-            <ItemLine ctx={ctx} part={part} path={[...listPath, i]} item={item} rings={rings} onRemove={removable ? () => remove(i) : undefined} />
+            <ItemLine ctx={ctx} part={part} path={[...listPath, i]} item={item} rings={rings} onRemove={() => remove(i)} />
             {shown(i) && <HeightLine ctx={ctx} part={heights!} path={[...hpath!, i]} count={items.length} rings={rings} />}
           </div>
         ))}

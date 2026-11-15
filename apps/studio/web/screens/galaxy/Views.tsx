@@ -189,7 +189,7 @@ function EmptyNote({ why }: { why: 'empty' | 'problems' }) {
   return (
     <div className="gx-empty">
       <p>{why === 'empty' ? 'An empty galaxy.' : 'Nothing to show.'}</p>
-      <p className="note">{why === 'empty' ? 'Add a component or mass to it in the model to see it.' : 'The library cannot make the galaxy: its problems are in the model.'}</p>
+      <p className="note">{why === 'empty' ? 'It has no components and no mass.' : 'The library cannot make the galaxy: its problems are in the model.'}</p>
     </div>
   );
 }
@@ -320,13 +320,14 @@ function ViewBody(props: IDockviewPanelProps<{ view: ViewKind }>) {
 
 function ViewContent({ kind, data, galaxy }: { kind: ViewKind; data: ViewsData; galaxy: Options }) {
   const colours = new Map(data.components.map((c) => [c.name, c.colour]));
-  // (a galaxy of mass alone emits no light: its curves only)
+  // (a galaxy without components, of mass alone, emits no light: its
+  // curves only)
   if (componentsOf(galaxy).length === 0 && kind.kind !== 'profiles' && kind.kind !== 'mass') {
     return (
       <div className="gv-empty">
         <div className="gx-empty">
           <p>No light.</p>
-          <p className="note">The galaxy is its mass alone, which emits none: its curves are in the views of its profiles and of its mass model.</p>
+          <p className="note">No component has a density that emits it.</p>
         </div>
       </div>
     );
@@ -336,7 +337,7 @@ function ViewContent({ kind, data, galaxy }: { kind: ViewKind; data: ViewsData; 
       return data.seenBy ? (
         <SeenView project={data.project} galaxy={galaxy} properties={data.properties} observation={data.seenBy} />
       ) : (
-        <p className="note gv-note">Choose what sees the galaxy, in the bar above.</p>
+        <p className="note gv-note">Nothing sees the galaxy: an observation can, chosen in the bar above.</p>
       );
     case 'map':
       return <RenderMap project={data.project} galaxy={galaxy} properties={data.properties} orientation={kind.orientation} quantity={kind.quantity} isolated={data.isolated} />;
@@ -344,7 +345,7 @@ function ViewContent({ kind, data, galaxy }: { kind: ViewKind; data: ViewsData; 
       return <Profiles render={data.render} quantity={kind.quantity} options={data.options} colours={colours} rings={data.rings} />;
     case 'mass':
       return data.render ? (
-        <CurvePlot curves={massCurves(data.render, colours)} radius={data.render.curves.radius ?? []} rings={data.rings} unit="km/s" empty="Add mass to the galaxy to see its circular speeds." />
+        <CurvePlot curves={massCurves(data.render, colours)} radius={data.render.curves.radius ?? []} rings={data.rings} unit="km/s" empty="No circular speeds: the galaxy has no mass." />
       ) : (
         <div className="gx-map-wait" />
       );
