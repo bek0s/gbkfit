@@ -9,7 +9,7 @@
 // setting a line of its own. A problem shows where it is, and the count
 // of them at the foot goes to each in turn.
 import { Popover } from '@mantine/core';
-import { useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { useComponentTypes, useLines } from '../../api/queries';
 import { choicesOf, SchemaForm, type Defs, type Schema } from '../../components/SchemaForm';
 import { significant } from '../../components/format';
@@ -21,7 +21,7 @@ import { NumberChip, NumberChips, paramText, type NumbersContext } from './Numbe
 import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
 import { ownedBy, settingOf, type Param } from './params';
 import { memberOf, propertiesOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
-import { extentOf, familyOfOption, HEAD_OPTIONS, nameBase, optionTitle, partsOfType, referencesOf, retypedComponent, settingsOfType, withReferencesRenamed, type ComponentTypes, type PartInfo } from './types';
+import { extentOf, familyOfOption, HEAD_OPTIONS, nameBase, optionTitle, partsOfType, referencesOf, settingsOfType, withReferencesRenamed, type ComponentTypes, type PartInfo } from './types';
 
 // What is open in the sheet: a component or a part of the mass
 export type Open = { kind: 'component' | 'mass'; index: number } | null;
@@ -115,6 +115,7 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
   // each in turn, opening it and bringing its first problem in sight)
   const placed = draft.problems.filter((p) => !general.includes(p) && typeof p.path[1] === 'number');
   const [turn, setTurn] = useState(0);
+  const { room, keep } = useKeptInPlace();
   const goToProblem = () => {
     const problem = placed[turn % placed.length];
     setTurn(turn + 1);
@@ -158,7 +159,10 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
               colourOf={colourOf}
               names={components.map(componentName)}
               open={open?.kind === 'mass' && open.index === i}
-              onToggle={() => onOpen(open?.kind === 'mass' && open.index === i ? null : { kind: 'mass', index: i })}
+              onToggle={(row) => {
+                keep(row);
+                onOpen(open?.kind === 'mass' && open.index === i ? null : { kind: 'mass', index: i });
+              }}
               onRemoved={() => onOpen(null)}
             />
           ))}
@@ -186,7 +190,10 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
           component={component}
           colour={colours[i]}
           open={open?.kind === 'component' && open.index === i}
-          onToggle={() => onOpen(open?.kind === 'component' && open.index === i ? null : { kind: 'component', index: i })}
+          onToggle={(row) => {
+            keep(row);
+            onOpen(open?.kind === 'component' && open.index === i ? null : { kind: 'component', index: i });
+          }}
           isolated={isolated === componentName(component, i)}
           onIsolate={(on) => onIsolate(on ? componentName(component, i) : null)}
           onOpen={onOpen}
@@ -215,8 +222,59 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
         ))}
         {draft.describeError && <p className="gm-why">{draft.describeError.message}</p>}
       </div>
+      <div ref={room} aria-hidden />
     </div>
   );
+}
+
+// The row of a card that is opened or closed kept where it is in its pane,
+// under the pointer (else a card above it that closes moves it up, and a
+// pane that gets shorter scrolls back): while the cards move, the pane
+// follows the row, with room under the cards if it needs it, which goes
+// as the pane is scrolled back up
+function useKeptInPlace() {
+  const room = useRef<HTMLDivElement>(null);
+  const shrinking = useRef<(() => void) | null>(null);
+  const keep = useCallback((row: HTMLElement) => {
+    const pane = scrollParent(row);
+    const spacer = room.current;
+    if (!pane || !spacer) return;
+    const top = row.getBoundingClientRect().top;
+    // (longer than the cards take to open and close; see ui/motion.tsx)
+    const end = performance.now() + 400;
+    // (the room the pane needs under the cards to be scrolled so far: what
+    // they lack of it; none at its top)
+    const roomFor = (scroll: number) => (scroll > 0 ? Math.max(0, scroll + pane.clientHeight - (pane.scrollHeight - spacer.offsetHeight)) : 0);
+    const follow = () => {
+      const scroll = pane.scrollTop + row.getBoundingClientRect().top - top;
+      spacer.style.height = `${roomFor(scroll)}px`;
+      pane.scrollTop = scroll;
+      if (performance.now() < end) requestAnimationFrame(follow);
+      else pane.style.overflowAnchor = '';
+    };
+    // (the browser's own anchoring of the scroll would fight it)
+    pane.style.overflowAnchor = 'none';
+    requestAnimationFrame(follow);
+    if (shrinking.current) pane.removeEventListener('scroll', shrinking.current);
+    const shrink = () => {
+      if (performance.now() < end) return;
+      const next = Math.min(spacer.offsetHeight, roomFor(pane.scrollTop));
+      spacer.style.height = `${next}px`;
+      if (next === 0) pane.removeEventListener('scroll', shrink);
+    };
+    shrinking.current = shrink;
+    pane.addEventListener('scroll', shrink);
+  }, []);
+  return { room, keep };
+}
+
+// The nearest ancestor of an element that scrolls
+function scrollParent(element: HTMLElement): HTMLElement | null {
+  for (let at = element.parentElement; at; at = at.parentElement) {
+    const { overflowY } = getComputedStyle(at);
+    if (overflowY === 'auto' || overflowY === 'scroll') return at;
+  }
+  return null;
 }
 
 // The length of an arcsec at the distance of a galaxy (kpc): of its
@@ -365,7 +423,7 @@ function ComponentCard({
   component: Options;
   colour: string;
   open: boolean;
-  onToggle: () => void;
+  onToggle: (row: HTMLElement) => void;
   isolated: boolean;
   onIsolate: (on: boolean) => void;
   onOpen: (open: Open) => void;
@@ -421,12 +479,6 @@ function ComponentCard({
     set(base, undefined, { moved: removedFrom(['components'], index) });
     onOpen(null);
   };
-  const typeEntries: MenuEntry[] = Object.keys(types ?? {}).map((type) => ({
-    label: titled(defs, 'component', type).label,
-    description: titled(defs, 'component', type).description,
-    current: type === component.type,
-    onClick: () => type !== component.type && set(base, retypedComponent(defs, types, component, type)),
-  }));
   return (
     <div className="gm-comp" data-open={open || undefined} data-bad={own.length > 0 || undefined} data-at={`components/${index}`}>
       <div
@@ -434,12 +486,12 @@ function ComponentCard({
         role="button"
         tabIndex={0}
         aria-expanded={open}
-        onClick={() => !renaming && onToggle()}
+        onClick={(event) => !renaming && onToggle(event.currentTarget)}
         onKeyDown={(event) => {
           if (renaming || event.target !== event.currentTarget) return;
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            onToggle();
+            onToggle(event.currentTarget);
           }
         }}
       >
@@ -464,13 +516,12 @@ function ComponentCard({
             returnFocus={false}
             entries={[
               { label: 'Rename', onClick: () => setRenaming(true) },
-              { label: 'Change its type', entries: typeEntries },
               { label: isolated ? 'Show all in the views' : 'Show it alone in the views', onClick: () => onIsolate(!isolated) },
               { label: 'Duplicate', onClick: duplicate },
               { label: 'Remove', onClick: remove },
             ]}
             target={
-              <button className="gm-more" aria-label="Its actions" title="Rename, change its type, duplicate, remove">
+              <button className="gm-more" aria-label="Its actions" title="Rename, duplicate, remove">
                 ⋯
               </button>
             }
@@ -1306,7 +1357,7 @@ function MassRow({
   colourOf: (name: unknown) => string;
   names: string[];
   open: boolean;
-  onToggle: () => void;
+  onToggle: (row: HTMLElement) => void;
   onRemoved: () => void;
 }) {
   const { defs, params, problems, set, project } = ctx;
@@ -1341,15 +1392,9 @@ function MassRow({
       { moved: inPlace },
     );
   };
-  const typeEntries: MenuEntry[] = typesOf(defs, 'mass_component').map((t) => ({
-    label: t.label,
-    description: t.description,
-    current: t.value === item.type,
-    onClick: () => set(path, retyped(defs, 'mass_component', item, t.value)),
-  }));
   return (
     <div className="gm-mrow" data-open={open || undefined} data-bad={own.length > 0 || undefined} data-at={`mass/${index}`}>
-      <div className="gm-mhead" role="button" tabIndex={0} aria-expanded={open} onClick={() => !renaming && onToggle()} onKeyDown={(event) => event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ') && (event.preventDefault(), onToggle())}>
+      <div className="gm-mhead" role="button" tabIndex={0} aria-expanded={open} onClick={(event) => !renaming && onToggle(event.currentTarget)} onKeyDown={(event) => event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ') && (event.preventDefault(), onToggle(event.currentTarget))}>
         <span className="gm-dot" style={{ background: followed ? colourOf(followed) : 'var(--faint)' }} />
         {renaming ? (
           <span onClick={(event) => event.stopPropagation()}>
@@ -1368,7 +1413,6 @@ function MassRow({
             returnFocus={false}
             entries={[
               { label: 'Rename', onClick: () => setRenaming(true) },
-              { label: 'Change its type', entries: typeEntries },
               {
                 label: 'Remove',
                 onClick: () => {

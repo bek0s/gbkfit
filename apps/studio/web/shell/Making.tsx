@@ -58,6 +58,12 @@ export function Adding() {
   return <Adder project={project} folder={adding} onDone={() => startAdding(null)} />;
 }
 
+// What a new block of a folder starts with, where it is not the template
+// of its folder (see the library's project templates, made to be edited
+// by hand): a galaxy starts empty, its components and its mass added in
+// its sheet
+const STARTS: Record<string, Record<string, unknown>> = { galaxies: {} };
+
 export function NamingDialog({ project, folder, onDone }: AdderProps) {
   const { go } = useStudio();
   const create = useCreateBlock(project);
@@ -66,7 +72,7 @@ export function NamingDialog({ project, folder, onDone }: AdderProps) {
   const submit = () =>
     name.trim() &&
     create.mutate(
-      { folder, name: name.trim() },
+      { folder, name: name.trim(), content: STARTS[folder] },
       {
         onSuccess: () => {
           onDone();
@@ -89,7 +95,7 @@ export function NamingDialog({ project, folder, onDone }: AdderProps) {
           }}
         />
         <p className="naming-note">
-          Made in {folder}/ from the template of its kind; a name can have folders, e.g. ngc1313/hi.
+          Made in {folder}/{folder in STARTS ? ', empty' : ' from the template of its kind'}; a name can have folders, e.g. ngc1313/hi.
         </p>
         {create.error && <p className="error">{create.error.message}</p>}
         <div className="naming-actions">

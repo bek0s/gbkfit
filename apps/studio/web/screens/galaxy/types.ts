@@ -6,8 +6,8 @@
 // be left out, the types of its family it takes and the directions of its
 // traits; its other options are its settings.
 import type { Defs, Schema } from '../../components/SchemaForm';
-import { asOneOrList, isObject, type Options } from './options';
-import { memberOf, propertiesOf, retyped } from './schema';
+import { isObject, type Options } from './options';
+import { memberOf, propertiesOf } from './schema';
 
 // A type of component, as the server gives it
 export interface ComponentType {
@@ -104,28 +104,6 @@ export function settingsOfType(defs: Defs | undefined, types: ComponentTypes | u
   if (!member) return [];
   const parts = new Set((types[type]?.parts ?? []).flatMap((p) => [p.option, ...(p.heights ? [p.heights] : [])]));
   return Object.keys(propertiesOf(member, defs).properties).filter((key) => !parts.has(key) && !HEAD_OPTIONS.has(key));
-}
-
-// A component given another type (e.g. a thin disk made thick): it keeps
-// the items of its parts that the new type takes too (see retyped), and
-// starts the parts it requires that are left without any
-export function retypedComponent(defs: Defs | undefined, types: ComponentTypes | undefined, component: Options, type: string): Options {
-  const parts = partsOfType(defs, types, type);
-  // (an item of a type it takes; of heights, none too, if they can be)
-  const takes = (part: PartInfo, item: unknown) =>
-    item === null ? part.nullable : part.types === null || (isObject(item) && part.types.includes(String(item.type)));
-  const kept: Options = { ...component };
-  for (const part of parts) {
-    for (const p of [part, part.heights]) {
-      const value = p ? kept[p.option] : undefined;
-      if (p === null || value === undefined || p.family === null) continue;
-      const items = (Array.isArray(value) ? value : [value]).filter((item) => takes(p, item));
-      const next = p.many ? asOneOrList(items) : items[0];
-      if (next === undefined || next === null) delete kept[p.option];
-      else kept[p.option] = next;
-    }
-  }
-  return retyped(defs, 'component', kept, type);
 }
 
 // The title of an option of a type of a family (e.g. 'Ring width'), or
