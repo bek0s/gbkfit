@@ -947,7 +947,8 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-cname span { font-weight: 400; color: var(--muted); font-size: 0.92em; }
 .gm-cext { font: var(--text-data-small); color: var(--faint); white-space: nowrap; }
 .gm-csum { grid-column: 2 / 5; font: var(--text-caption); color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gm-dir { margin-left: 3px; padding: 1px 4px; border: 1px solid var(--line2); border-radius: 3px; font: var(--text-data-small); font-size: 10px; color: var(--muted); vertical-align: 1px; }
+.gm-dir { margin-left: 5px; font: var(--text-data-small); color: var(--muted); white-space: nowrap; }
+.gm-dir .gm-dmark { margin-right: 3px; vertical-align: -1px; }
 /* (content that opens and closes by its height: see ui/motion.tsx) */
 .ui-expand { display: grid; grid-template-rows: 1fr; animation: ui-expand-in .2s cubic-bezier(.2, .7, .2, 1); }
 .ui-expand[data-closing] { animation: ui-expand-out .16s ease-in forwards; }
@@ -960,42 +961,86 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-more:hover, .gm-more[aria-expanded="true"] { background: var(--panel2); color: var(--fg); }
 /* (what changes a line, shown as it is pointed at: its other options, what
    removes it, what adds to it) */
-.gm-trait .gm-opt:not([data-on]), .gm-trait .ui-close, .gm-glines > .gm-span > .ui-close, .gm-hover, .gm-x { opacity: 0; transition: opacity .1s; }
-.gm-group:hover .gm-hover, .gm-item:hover .gm-opt, .gm-item:hover .ui-close, .gm-item:hover .gm-x,
-.gm-glines > .gm-trait:hover .gm-opt, .gm-glines > .gm-trait:hover .ui-close, .gm-glines > .gm-trait:hover .gm-x, .gm-glines > .gm-span:hover > .ui-close,
+.gm-trait .gm-opt:not([data-on]), .gm-trait .ui-close, .gm-oline .ui-close, .gm-span > .ui-close, .gm-hover, .gm-x { opacity: 0; transition: opacity .1s; }
+.gm-group:hover .gm-hover, .gm-item:hover .gm-opt, .gm-item:hover .ui-close, .gm-item:hover .gm-x, .gm-oline:hover .ui-close, .gm-oline:focus-within .ui-close,
+.gm-glines > .gm-trait:hover .gm-opt, .gm-glines > .gm-trait:hover .ui-close, .gm-glines > .gm-trait:hover .gm-x, .gm-span:hover > .ui-close,
 .gm-mbody .gm-trait:hover .gm-opt,
 .gm-trait:focus-within .gm-opt, .gm-trait:focus-within .ui-close, .gm-trait:focus-within .gm-x, .gm-group:focus-within .gm-hover { opacity: 1; }
 .gm-name { width: 120px; height: 24px; padding: 0 7px; border: 1px solid var(--line2); border-radius: 5px; background: var(--field); color: var(--fg); font: var(--text-data); outline: none; }
 .gm-name:focus { border-color: var(--accent); }
-/* (the open card on one grid: type, direction, numbers and tools, which
-   every section, group, list and line takes as its own, so that the
-   numbers of every trait start at one edge) */
-.gm-cbody { display: grid; grid-template-columns: [type] max-content [dir] max-content [nums] minmax(0, 1fr) [tools] max-content; column-gap: 8px; padding: 0 12px 10px; border-top: 1px solid var(--line); }
-.gm-csec, .gm-group, .gm-glines, .gm-list, .gm-item { display: grid; grid-template-columns: subgrid; min-width: 0; }
-.gm-cbody > *, .gm-csec > *, .gm-group > *, .gm-glines > *, .gm-list > *, .gm-item > * { grid-column: 1 / -1; }
+/* (the open card on one grid: type, direction and values, which every
+   section, group, list and line takes as its own, so that every value of
+   the card starts at one edge; what a line is in the first two, when it
+   is not a type and its direction; what changes a line at the end of its
+   values) */
+.gm-cbody { display: grid; grid-template-columns: [type] max-content [dir] max-content [nums] minmax(0, 1fr); column-gap: 8px; padding: 0 12px 10px; border-top: 1px solid var(--line); }
+.gm-csec, .gm-group, .gm-glines, .gm-list, .gm-item, .gm-group > .ui-expand, .gm-group > .ui-expand > .ui-expand-inner { display: grid; grid-template-columns: subgrid; min-width: 0; }
+.gm-cbody > *, .gm-csec > *, .gm-group > *, .gm-glines > *, .gm-list > *, .gm-item > *, .gm-group > .ui-expand > *, .gm-group > .ui-expand > .ui-expand-inner > * { grid-column: 1 / -1; }
 /* (a section: its title a small rule; what adds the parts it has not at
    its foot) */
 .gm-rule { display: flex; align-items: center; gap: 10px; margin: 14px 0 2px; font: var(--text-overline); font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); }
 .gm-rule::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.gm-csec-foot { display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 2px 0 4px; }
-/* (a group: its subtitle, with its keys and what adds to it, and its
-   lines under it) */
+.gm-csec-foot { display: flex; flex-wrap: wrap; gap: 2px 14px; padding: 2px 0 4px 16px; }
+/* (lines of a section itself, not of a group: under the titles of its
+   groups, past their marks that fold them) */
+.gm-csec > .gm-single > .gm-cell-head, .gm-csec > .gm-oline > .gm-cell-head, .gm-csec > .gm-why { padding-left: 16px; }
+.gm-csec > .gm-prow > .gm-cell-head { padding-left: 30px; }
+/* (a group: its subtitle, which folds it, with its keys and what adds to
+   it, and its lines under it, under its title; folded, what it has in a
+   few words in the column of the values, and how many of its numbers are
+   free) */
 .gm-group { row-gap: 4px; margin: 0 -6px; padding: 5px 6px 7px; border-radius: 6px; }
+.gm-group[data-folded] { padding-bottom: 5px; }
 .gm-group[data-bad], .gm-single[data-bad] { background: color-mix(in srgb, var(--err-fill) 8%, transparent); box-shadow: inset 2px 0 0 var(--err-fill); }
 .gm-sub { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.gm-sub-title, .gm-single-label { font: var(--text-label); font-weight: 500; color: var(--fg); }
+.gm-group[data-folded] > .gm-sub { display: grid; grid-template-columns: subgrid; align-items: center; }
+.gm-group[data-folded] > .gm-sub > .gm-fold { grid-column: 1 / 3; }
+.gm-fold { display: inline-flex; align-items: center; gap: 6px; min-width: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--fg); text-align: left; cursor: pointer; }
+.gm-fold svg { flex: none; width: 10px; height: 10px; fill: none; stroke: var(--faint); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s; }
+.gm-fold[aria-expanded="true"] svg { transform: rotate(90deg); }
+.gm-fold:hover svg { stroke: var(--fg); }
+.gm-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .gm-fold svg { transition: none; } }
+.gm-sum { grid-column: 3 / -1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.gm-sum-text { flex: 1; min-width: 0; overflow: hidden; color: var(--fg2); font: var(--text-data-small); text-overflow: ellipsis; white-space: nowrap; }
+.gm-free { flex: none; height: 18px; padding: 0 7px; border-radius: 999px; background: var(--sel); color: var(--accent-text); font: var(--text-data-small); line-height: 18px; white-space: nowrap; }
+.gm-group > .gm-why { padding-left: 16px; }
+.gm-sub-title, .gm-oline-label { font: var(--text-label); font-weight: 500; color: var(--fg); }
 .gm-key { min-width: 0; font: var(--text-data-small); font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gm-sub-add { margin-left: auto; display: flex; gap: 6px; }
 .gm-plus { padding: 0 3px; border: 0; border-radius: 4px; background: none; color: var(--faint); font: var(--text-caption); white-space: nowrap; cursor: pointer; }
 .gm-plus:hover, .gm-plus[aria-expanded="true"] { color: var(--accent-text); }
 .gm-plus .gm-key { font-size: 10.5px; }
-.gm-glines { row-gap: 4px; padding-left: 12px; }
-.gm-list { row-gap: 4px; }
-.gm-item { row-gap: 4px; }
-/* (a single setting: its title, and beside it its value) */
-.gm-single { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); align-items: center; column-gap: 8px; min-height: 28px; margin: 0 -6px; padding: 0 6px; border-radius: 6px; }
-.gm-single-label { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
-.gm-single-value { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.gm-glines { row-gap: 2px; padding-left: 16px; }
+.gm-list { row-gap: 6px; }
+.gm-item { row-gap: 2px; }
+/* (a line of an option, of a single setting or of a parameter: what it is,
+   and beside it its value) */
+.gm-oline, .gm-single, .gm-prow { display: grid; grid-template-columns: subgrid; align-items: center; min-height: 24px; min-width: 0; }
+.gm-single { min-height: 28px; margin: 0 -6px; padding: 0 6px; border-radius: 6px; }
+.gm-oline-label { white-space: nowrap; }
+.gm-oline .gm-numtext, .gm-single .gm-numtext { border-color: transparent; background: none; }
+.gm-oline .gm-numtext:hover { border-color: var(--line2); }
+.gm-oline .gm-numtext:focus-within { border-color: var(--accent); background: var(--field); }
+.gm-oline .gm-numtext input { width: auto; min-width: 1ch; field-sizing: content; text-align: left; }
+.gm-oline .gm-numtext input::placeholder { color: var(--faint); }
+/* (a parameter: its short name and its title, under what owns it, and its
+   number) */
+.gm-prow .gm-cell-head { gap: 8px; padding-left: 14px; }
+.gm-prow[data-depth="0"] .gm-cell-head { padding-left: 0; }
+.gm-prow[data-depth="2"] .gm-cell-head { padding-left: 28px; }
+.gm-pn { flex: none; min-width: 4ch; font: var(--text-data-small); color: var(--faint); }
+.gm-pt { min-width: 0; max-width: 24ch; overflow: hidden; color: var(--fg2); font: var(--text-label); text-overflow: ellipsis; white-space: nowrap; }
+/* (the switch of a value per ring of a line of the frame) */
+.gm-rs { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px 0 6px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--muted); font: var(--text-caption); white-space: nowrap; cursor: pointer; }
+.gm-rs:hover { border-color: var(--muted); color: var(--fg2); }
+.gm-rs[aria-pressed="true"] { border-color: var(--accent); background: var(--sel); color: var(--fg); }
+.gm-rs[aria-pressed="true"] .gm-rmark { color: var(--accent-text); }
+/* (the marks of a value per ring and of a direction, see Marks.tsx) */
+.gm-rmark { flex: none; width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.2; }
+.gm-num .gm-rmark { align-self: center; margin-left: 3px; opacity: .85; }
+.gm-dmark { flex: none; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.gm-dmark .gm-mark-dot { fill: currentColor; stroke: none; }
 /* (a line of a trait: its type, direction, numbers and tools in the
    columns of the card) */
 .gm-trait { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; min-height: 24px; min-width: 0; }
@@ -1005,26 +1050,19 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-cell-dir { grid-column: 2; }
 .gm-cell-head { grid-column: 1 / 3; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .gm-cell-nums { grid-column: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; min-height: 24px; }
-.gm-cell-tools { grid-column: 4; display: flex; align-items: center; gap: 2px; min-height: 24px; }
+.gm-cell-tools { display: flex; align-items: center; gap: 2px; min-height: 24px; margin-left: auto; }
 .gm-span { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; min-width: 0; min-height: 24px; }
 .gm-height .gm-cell-head { padding-left: 6px; }
-/* (options of the geometry in a line: switches, choices and numbers) */
-.gm-options { gap: 4px 12px; }
-.gm-option { display: inline-flex; align-items: center; gap: 4px; }
 .gm-toggle { height: 22px; padding: 0 9px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--muted); font: var(--text-caption); white-space: nowrap; cursor: pointer; }
 .gm-toggle::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border: 1px solid var(--faint); border-radius: 50%; vertical-align: 1px; }
 .gm-toggle:hover { border-color: var(--muted); color: var(--fg2); }
 .gm-toggle[aria-pressed="true"] { border-color: var(--muted); background: var(--panel2); color: var(--fg); }
 .gm-toggle[aria-pressed="true"]::before { border-color: var(--accent); background: var(--accent); }
-.gm-options .gm-numtext { border-color: transparent; background: none; }
-.gm-options .gm-numtext:hover { border-color: var(--line2); }
-.gm-options .gm-numtext:focus-within { border-color: var(--accent); background: var(--field); }
-.gm-options .gm-numtext input { width: auto; min-width: 1ch; field-sizing: content; text-align: left; }
-.gm-options .gm-numtext input::placeholder { color: var(--faint); }
-.gm-setting-label { font: var(--text-caption); color: var(--faint); white-space: nowrap; }
 .gm-ty.gm-ty-quiet { border-color: transparent; background: none; color: var(--fg2); font-weight: 400; }
 .gm-ty.gm-ty-quiet:hover, .gm-ty.gm-ty-quiet[aria-expanded="true"] { border-color: var(--line2); color: var(--fg); }
-.gm-dir-pick { height: 22px; padding: 0 4px; border: 0; border-radius: 4px; background: none; color: var(--muted); font: var(--text-data-small); cursor: pointer; }
+.gm-dir-pick { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 5px; border: 0; border-radius: 4px; background: none; color: var(--fg2); font: var(--text-data-small); white-space: nowrap; cursor: pointer; }
+.gm-dir-pick::after { content: "\25BE"; color: var(--faint); font-size: 10px; }
+.gm-dir-pick .gm-dmark { color: var(--muted); }
 .gm-dir-pick:hover, .gm-dir-pick[aria-expanded="true"] { background: var(--panel2); color: var(--fg); }
 .gm-times { font: var(--text-caption); color: var(--faint); }
 .gm-word { font: var(--text-label); color: var(--muted); }
@@ -1041,7 +1079,6 @@ h2 { margin: 0; font: var(--text-heading); }
 /* (tied to an expression: outlined, the expression after its name) */
 .gm-num[data-kind="tied"] { border: 1px dashed var(--line2); color: var(--fg2); }
 .gm-num[data-kind="other"] { color: var(--faint); }
-.gm-num[data-ring]::after { content: "per ring"; margin-left: 4px; font: var(--text-caption); font-size: 9.5px; opacity: .8; }
 .gm-opt { height: 20px; padding: 0 6px; border: 0; border-radius: 4px; background: none; color: var(--faint); font: var(--text-caption); }
 .gm-opt:hover, .gm-opt[data-on] { color: var(--fg2); background: var(--panel2); }
 .gm-more-form { margin: 2px 0 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel2); }

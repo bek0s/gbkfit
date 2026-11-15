@@ -6,10 +6,13 @@
 // in sections in the order of its configuration (its geometry, its
 // traits, its light, its physics), each part a group under its title and
 // its keys in the configuration, with what adds to it, and each single
-// setting a line of its own. A problem shows where it is, and the count
-// of them at the foot goes to each in turn.
+// setting a line of its own. Every line of the card is what it is, then
+// its value, in one column for the whole card; a parameter is a line of
+// its own, under what owns it. A group folds to one line: what it has, in
+// a few words. A problem shows where it is, and the count of them at the
+// foot goes to each in turn.
 import { Popover } from '@mantine/core';
-import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useRef, useState, type ReactNode } from 'react';
 import { useComponentTypes, useLines } from '../../api/queries';
 import { choicesOf, SchemaForm, type Defs, type Schema } from '../../components/SchemaForm';
 import { significant } from '../../components/format';
@@ -17,7 +20,8 @@ import { Close } from '../../components/ui/basics';
 import { Expand } from '../../components/ui/motion';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
-import { NumberChip, NumberChips, paramText, type NumbersContext } from './Numbers';
+import { DirectionMark, RingMark } from './Marks';
+import { freeCount, NumberChip, NumberChips, NumberRows, paramText, type NumbersContext } from './Numbers';
 import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
 import { ownedBy, settingOf, type Param } from './params';
 import { memberOf, propertiesOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
@@ -34,6 +38,41 @@ interface Ctx extends NumbersContext {
   set: (path: Path, value: unknown, how?: EditHow) => void;
   // The length of an arcsec at the distance of the galaxy (kpc), if known
   kpcPerArcsec: number | null;
+  folds: Folds;
+  // What keeps a row where it is in its pane as what is around it opens or
+  // closes (see useKeptInPlace)
+  keep: (row: HTMLElement) => void;
+}
+
+// The groups of the cards of the components that are open, by the name of
+// the component and the key of the group (e.g. 'vptraits'): all folded at
+// first, and kept as the cards close and open
+interface Folds {
+  isOpen: (component: string, group: string) => boolean;
+  set: (component: string, groups: string[], open: boolean) => void;
+  rename: (from: string, to: string) => void;
+}
+
+function useFolds(): Folds {
+  const [open, setOpen] = useState<Record<string, string[]>>({});
+  return {
+    isOpen: (component, group) => open[component]?.includes(group) ?? false,
+    set: (component, groups, on) =>
+      setOpen((all) => {
+        const others = (all[component] ?? []).filter((group) => !groups.includes(group));
+        return { ...all, [component]: on ? [...others, ...groups] : others };
+      }),
+    rename: (from, to) => setOpen(({ [from]: moved, ...rest }) => (moved ? { ...rest, [to]: moved } : rest)),
+  };
+}
+
+// A group of a card that folds (see Folds): whether it is open; what opens
+// or folds it, kept where it is (all: every group of its card, as it goes);
+// what opens it (e.g. as something is added to it)
+interface Fold {
+  open: boolean;
+  toggle: (row: HTMLElement, all: boolean) => void;
+  show: () => void;
 }
 
 // The map of the paths of options as an item of a list is removed: the
@@ -68,7 +107,9 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
   const components = componentsOf(options);
   const mass = asList(options.mass);
   const set = (path: Path, value: unknown, how?: EditHow) => draft.edit((s) => ({ ...s, options: setAt(s.options, path, value) }), how);
-  const ctx: Ctx = { draft, options, params: draft.params, field, defs: draft.defs, types, project, problems: draft.problems, set, kpcPerArcsec: kpcPerArcsecOf(draft) };
+  const folds = useFolds();
+  const { room, keep } = useKeptInPlace();
+  const ctx: Ctx = { draft, options, params: draft.params, field, defs: draft.defs, types, project, problems: draft.problems, set, kpcPerArcsec: kpcPerArcsecOf(draft), folds, keep };
   const colourOf = (name: unknown) => {
     const at = components.findIndex((c, i) => componentName(c, i) === name);
     return at < 0 ? 'var(--faint)' : `var(--${colours[at]})`;
@@ -115,7 +156,6 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
   // each in turn, opening it and bringing its first problem in sight)
   const placed = draft.problems.filter((p) => !general.includes(p) && typeof p.path[1] === 'number');
   const [turn, setTurn] = useState(0);
-  const { room, keep } = useKeptInPlace();
   const goToProblem = () => {
     const problem = placed[turn % placed.length];
     setTurn(turn + 1);
@@ -444,6 +484,8 @@ function ComponentCard({
     setRenaming(false);
     if (!name || components.some((c, i) => i !== index && c.name === name)) return;
     const old = component.name;
+    // (its open groups with it)
+    ctx.folds.rename(componentName(component, index), name);
     draft.edit(
       (s) => {
         const named = setAt(s.options, [...base, 'name'], name);
@@ -554,7 +596,12 @@ function glanceOf(ctx: Ctx, component: Options, parts: PartInfo[]): ReactNode {
         <span key={i}>
           {i > 0 && ' + '}
           {titled(defs, part.family!, String(item.type)).label.toLowerCase()}
-          {typeof item.direction === 'string' && <span className="gm-dir">{item.direction}</span>}
+          {typeof item.direction === 'string' && (
+            <span className="gm-dir">
+              <DirectionMark direction={item.direction} />
+              {item.direction}
+            </span>
+          )}
           {isObject(height) && ` × ${titled(defs, part.heights!.family!, String(height.type)).label.toLowerCase()}`}
           {part.family === 'emission' && item.type === 'lines' && lineList(item.lines).length > 0 && ` ${lineList(item.lines).map(lineName).join(', ')}`}
         </span>
@@ -581,7 +628,8 @@ const SECTIONS: { key: Section; title: string }[] = [
 
 // The options of the rings of a component (or its shells, or the nodes of
 // the traits of a spheroid), shown with them: their width and
-// interpolation, a centre and an orientation per ring, the sides of a cone
+// interpolation, the sides of a cone, and a centre and an orientation per
+// ring (the switches of the lines of its frame, if it has them)
 const RING_OPTIONS = ['tilted', 'loose', 'sides', 'interp', 'rstep'];
 // The extent of a spheroid, at the top of its geometry
 const EXTENT_OPTIONS = ['rmax'];
@@ -595,6 +643,18 @@ const PHYSICS_PARTS = ['pressure_support', 'clouds', 'rhtraits'];
 // The parameters of a component that place it (see its frame): its
 // centre, systemic velocity, orientation and the wall of a cone
 const FRAME_PARAMS = ['xpos', 'ypos', 'vsys', 'posa', 'incl', 'wall'];
+// The lines of the frame, each with the option that gives it a value per
+// ring: its centre (and systemic velocity), and its orientation
+const FRAME_LINES = [
+  { title: 'Centre', keys: ['xpos', 'ypos', 'vsys'], option: 'loose' },
+  { title: 'Orientation', keys: ['posa', 'incl'], option: 'tilted' },
+];
+
+// Whether a parameter is of a key of its component (e.g. 'disk_posa', of
+// 'posa')
+function isOfKey(param: Param, key: string): boolean {
+  return param.name === key || param.name.endsWith(`_${key}`);
+}
 
 // The section of a part: its lists of traits in the traits, its light in
 // the light, its pressure support, clouds and vertical equilibrium (of a
@@ -621,19 +681,58 @@ function keysOf(title: string, keys: string[]): string | null {
   return keys.length === 1 && plain(keys[0]) === plain(title) ? null : keys.join(' · ');
 }
 
-// A group of the card: its subtitle, its keys and what adds to it, and
-// its lines under it
-function Group({ title, keys, description, add, bad, children }: { title: string; keys?: string | null; description?: string; add?: ReactNode; bad?: boolean; children: ReactNode }) {
+// A group of the card: its subtitle (its keys and what adds to it), its
+// lines under it, and its problems. Folded, its subtitle and beside it what
+// it has in a few words (its summary) and how many of its numbers a fit
+// frees; its problems still under it.
+function Group({
+  title,
+  keys,
+  description,
+  add,
+  problems = [],
+  fold,
+  summary,
+  free = 0,
+  children,
+}: {
+  title: string;
+  keys?: string | null;
+  description?: string;
+  add?: ReactNode;
+  problems?: Problem[];
+  fold: Fold;
+  summary: ReactNode;
+  free?: number;
+  children: ReactNode;
+}) {
   return (
-    <div className="gm-group" data-bad={bad || undefined}>
+    <div className="gm-group" data-bad={problems.length > 0 || undefined} data-folded={!fold.open || undefined}>
       <div className="gm-sub">
-        <span className="gm-sub-title" title={description}>
-          {title}
-        </span>
-        {keys && <code className="gm-key">{keys}</code>}
-        {add && <span className="gm-sub-add">{add}</span>}
+        <button className="gm-fold" aria-expanded={fold.open} title={`${fold.open ? 'Fold' : 'Open'} it (Alt: every group)`} onClick={(event) => fold.toggle(event.currentTarget, event.altKey)}>
+          <svg viewBox="0 0 10 10" aria-hidden="true">
+            <path d="M3.5 1.8 6.8 5 3.5 8.2" />
+          </svg>
+          <span className="gm-sub-title" title={description}>
+            {title}
+          </span>
+        </button>
+        {fold.open ? (
+          <>
+            {keys && <code className="gm-key">{keys}</code>}
+            {add && <span className="gm-sub-add">{add}</span>}
+          </>
+        ) : (
+          <span className="gm-sum">
+            <span className="gm-sum-text">{summary}</span>
+            {free > 0 && <span className="gm-free">{free} free</span>}
+          </span>
+        )}
       </div>
-      <div className="gm-glines">{children}</div>
+      <Expand open={fold.open}>
+        <div className="gm-glines">{children}</div>
+      </Expand>
+      <Problems list={problems} />
     </div>
   );
 }
@@ -663,7 +762,7 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
   // (its own parameters: those that place it, its frame, and of a spheroid
   // that moves by the Jeans equations or orbits, those of its motion)
   const own = ownedBy(params, base, true);
-  const placing = (p: Param) => FRAME_PARAMS.some((key) => p.name === key || p.name.endsWith(`_${key}`));
+  const placing = (p: Param) => FRAME_PARAMS.some((key) => isOfKey(p, key));
   const moves = String(component.type).endsWith('_spheroid');
   const frame = moves ? own.filter(placing) : own;
   const motion = moves ? own.filter((p) => !placing(p)) : [];
@@ -674,46 +773,73 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
   const motionOptions = pick(MOTION_OPTIONS);
   const placed = new Set([...ringOptions, ...extent, ...motionOptions, 'rnodes', 'fluid']);
   const others = settings.filter((key) => !placed.has(key));
+  // (a value per ring of its centre or its orientation: a switch of the
+  // line of its frame that has them, not an option of its rings)
+  const switches = FRAME_LINES.filter((line) => ringOptions.includes(line.option) && frame.some((p) => line.keys.some((key) => isOfKey(p, key)))).map((line) => line.option);
+  const ringLines = ringOptions.filter((key) => !switches.includes(key));
   // (the problems of the component itself, not of one of its parts)
   const partOptions = new Set(parts.flatMap((p) => [p.option, ...(p.heights ? [p.heights.option] : [])]));
   const general = problems.filter((p) => startsWith(p.path, base) && !(typeof p.path[2] === 'string' && partOptions.has(p.path[2])));
+  // (its groups that fold, as they are made: what folds or opens them all)
+  const name = componentName(component, index);
+  const foldKeys: string[] = [];
+  const foldOf = (key: string): Fold => {
+    foldKeys.push(key);
+    const open = ctx.folds.isOpen(name, key);
+    return {
+      open,
+      toggle: (row, all) => {
+        ctx.keep(row);
+        ctx.folds.set(name, all ? foldKeys : [key], !open);
+      },
+      show: () => ctx.folds.set(name, [key], true),
+    };
+  };
 
   const groups: Record<Section, ReactNode[]> = { geometry: [], traits: [], light: [], physics: [] };
   const feet: Record<Section, ReactNode[]> = { geometry: [], traits: [], light: [], physics: [] };
   const nodesPart = parts.find((p) => p.def === 'Nodes');
-  if (nodesPart) groups.geometry.push(<RingsGroup key="rings" ctx={ctx} component={component} base={base} option={nodesPart.option} title={nodesPart.title} keys={ringOptions} />);
-  if (extent.length > 0) {
+  if (nodesPart) groups.geometry.push(<RingsGroup key="rings" ctx={ctx} component={component} base={base} option={nodesPart.option} title={nodesPart.title} keys={ringLines} fold={foldOf(nodesPart.option)} />);
+  for (const key of extent) {
     groups.geometry.push(
-      <Group key="extent" title="Extent" keys={extent.join(' · ')} description={optionTitle(defs, 'component', component.type, extent[0])}>
-        <OptionsLine ctx={ctx} component={component} base={base} keys={extent} bare>
-          {typeof component.rmax === 'number' && ctx.kpcPerArcsec !== null && <span className="gm-note">{significant(component.rmax * ctx.kpcPerArcsec, 3)} kpc</span>}
-        </OptionsLine>
-      </Group>,
+      <OptionLine key={key} ctx={ctx} component={component} base={base} option={key}>
+        {typeof component[key] === 'number' && ctx.kpcPerArcsec !== null && <span className="gm-note">{significant(component[key] * ctx.kpcPerArcsec, 3)} kpc</span>}
+      </OptionLine>,
     );
   }
   if (frame.length > 0) {
     groups.geometry.push(
-      <Group key="frame" title="Frame" description="Its centre, orientation and systemic velocity, and its other parameters of its own">
-        <div className="gm-span gm-chips">
-          <NumberChips ctx={ctx} owned={frame} rings={rings} />
-        </div>
+      <Group
+        key="frame"
+        title="Frame"
+        description="Its centre, orientation and systemic velocity, and its other parameters of its own"
+        fold={foldOf('frame')}
+        summary={frame.map((p) => paramText(ctx, p)).join(' · ')}
+        free={freeCount(ctx, frame)}
+      >
+        <FrameLines ctx={ctx} component={component} base={base} params={frame} rings={rings} switches={switches} />
       </Group>,
     );
   }
   // (the nodes of the traits of a spheroid: a setting, not a part, with
   // its traits)
   if (!nodesPart && settings.includes('rnodes') && parts.some((p) => sectionOf(p) === 'traits' && has(p))) {
-    groups.traits.push(<RingsGroup key="nodes" ctx={ctx} component={component} base={base} option="rnodes" title={optionTitle(defs, 'component', component.type, 'rnodes')} keys={ringOptions} />);
+    groups.traits.push(<RingsGroup key="nodes" ctx={ctx} component={component} base={base} option="rnodes" title={optionTitle(defs, 'component', component.type, 'rnodes')} keys={ringLines} fold={foldOf('rnodes')} />);
   }
   if (motion.length > 0 || motionOptions.length > 0) {
     groups.physics.push(
-      <Group key="motion" title="Motion" description="The parameters of its motion (e.g. of the Jeans equations) and how it is made">
-        {motion.length > 0 && (
-          <div className="gm-span gm-chips">
-            <NumberChips ctx={ctx} owned={motion} rings={rings} />
-          </div>
-        )}
-        {motionOptions.length > 0 && <OptionsLine ctx={ctx} component={component} base={base} keys={motionOptions} />}
+      <Group
+        key="motion"
+        title="Motion"
+        description="The parameters of its motion (e.g. of the Jeans equations) and how it is made"
+        fold={foldOf('motion')}
+        summary={[...motion.map((p) => paramText(ctx, p)), ...motionOptions.filter((key) => component[key] !== undefined).map((key) => optionText(component, key))].join(' · ')}
+        free={freeCount(ctx, motion)}
+      >
+        <NumberRows ctx={ctx} owned={motion} rings={rings} depth={0} />
+        {motionOptions.map((key) => (
+          <OptionLine key={key} ctx={ctx} component={component} base={base} option={key} />
+        ))}
       </Group>,
     );
   }
@@ -723,11 +849,13 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
     const title = subtitleOf(part, section);
     const path = [...base, part.option];
     const own = problemsOf([part.option, ...(part.heights ? [part.heights.option] : [])]);
+    // (added, it opens)
+    const shown = () => ctx.folds.set(name, [part.option], true);
     if (section === 'traits') {
-      if (has(part) || !part.optional) groups.traits.push(<TraitGroup key={part.option} ctx={ctx} part={part} base={base} rings={rings} problems={own} />);
+      if (has(part) || !part.optional) groups.traits.push(<TraitGroup key={part.option} ctx={ctx} part={part} base={base} rings={rings} problems={own} fold={foldOf(part.option)} />);
       else {
         feet.traits.push(
-          <AddPart key={part.option} ctx={ctx} part={part} base={base}>
+          <AddPart key={part.option} ctx={ctx} part={part} base={base} onAdded={shown}>
             + {title.toLowerCase()} <code className="gm-key">{part.option}</code>
           </AddPart>,
         );
@@ -736,11 +864,20 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
       // (the light, and the profile and shape of a spheroid)
       const removable = part.optional && has(part);
       groups[section].push(
-        <Group key={part.option} title={title} keys={keysOf(title, [part.option])} description={part.description} bad={own.length > 0} add={has(part) ? undefined : <AddPart ctx={ctx} part={part} base={base} />}>
+        <Group
+          key={part.option}
+          title={title}
+          keys={keysOf(title, [part.option])}
+          description={part.description}
+          problems={own}
+          add={has(part) ? undefined : <AddPart ctx={ctx} part={part} base={base} onAdded={shown} />}
+          fold={foldOf(part.option)}
+          summary={itemText(component[part.option])}
+          free={freeCount(ctx, ownedBy(params, path))}
+        >
           {part.family !== null && has(part) && <OneItem ctx={ctx} part={part} path={path} rings={rings} onRemove={removable ? () => ctx.set(path, undefined) : undefined} />}
           {part.family === null && has(part) && <ObjectItem ctx={ctx} part={part} path={path} onRemove={removable ? () => ctx.set(path, undefined) : undefined} />}
           {!has(part) && <span className="gm-note">none</span>}
-          <Problems list={own} />
         </Group>,
       );
     } else groups[section].push(<SingleLine key={part.option} ctx={ctx} part={part} path={path} rings={rings} problems={own} />);
@@ -748,7 +885,7 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
   if (settings.includes('fluid')) groups.physics.push(<FluidLine key="fluid" ctx={ctx} component={component} base={base} />);
   if (others.length > 0) {
     groups.geometry.push(
-      <Group key="others" title="Options" keys={others.join(' · ')}>
+      <Group key="others" title="Options" keys={others.join(' · ')} fold={foldOf('others')} summary={others.filter((key) => component[key] !== undefined).map((key) => optionText(component, key)).join(' · ') || 'as by default'}>
         <OtherOptions ctx={ctx} component={component} base={base} keys={others} />
       </Group>,
     );
@@ -772,25 +909,45 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
   );
 }
 
+// An option of a component in a few words: its key and its value
+function optionText(component: Options, key: string): string {
+  const value = component[key];
+  return `${key} ${isObject(value) || Array.isArray(value) ? JSON.stringify(value) : String(value)}`;
+}
+
+// An item of a part in a few words (e.g. the light of a component): its
+// type, and of an emission of lines, its lines; none if it has none
+function itemText(value: unknown): string {
+  if (!isObject(value)) return 'none';
+  const lines = value.type === 'lines' ? lineList(value.lines).map(lineName) : [];
+  return [typeof value.type === 'string' ? value.type : 'on', ...lines].join(' ');
+}
+
 // The rings of a component (or its shells, or the nodes of the traits of
-// a spheroid): how many, to what radius and how far that is, which opens
-// how they are given, and their options in a line under them. Nodes a
-// component can be without (a spheroid's: by default, 0 and its largest
-// radius) can be added and removed.
-function RingsGroup({ ctx, component, base, option, title, keys }: { ctx: Ctx; component: Options; base: Path; option: string; title: string; keys: string[] }) {
+// a spheroid): a line of how many, to what radius and how far that is,
+// which opens how they are given, and a line for each of their options.
+// Nodes a component can be without (a spheroid's: by default, 0 and its
+// largest radius) can be added and removed.
+function RingsGroup({ ctx, component, base, option, title, keys, fold }: { ctx: Ctx; component: Options; base: Path; option: string; title: string; keys: string[]; fold: Fold }) {
   const { defs, set, problems } = ctx;
   const path = [...base, option];
   const value = component[option];
   const given = value !== undefined && value !== null;
   const required = !!defs && propertiesOf(memberOf(defs, 'component', component.type), defs).required.includes(option);
   const own = problems.filter((p) => [option, ...keys].some((key) => startsWith(p.path, [...base, key])));
+  const unset = 'at 0 and its largest radius';
   // (added: to the largest radius of the component, in a few)
-  const start = () => set(path, { max: typeof component.rmax === 'number' ? component.rmax : 10, len: 5 });
+  const start = () => {
+    set(path, { max: typeof component.rmax === 'number' ? component.rmax : 10, len: 5 });
+    fold.show();
+  };
   return (
     <Group
       title={title}
       keys={option}
-      bad={own.length > 0}
+      problems={own}
+      fold={fold}
+      summary={given ? ringsText(component, value) : unset}
       add={
         !given && !required ? (
           <button className="gm-plus" onClick={start}>
@@ -799,22 +956,67 @@ function RingsGroup({ ctx, component, base, option, title, keys }: { ctx: Ctx; c
         ) : undefined
       }
     >
-      {given ? (
-        <div className="gm-span">
-          <RingsRow ctx={ctx} component={component} value={value} onChange={(next) => set(path, next)} />
-          {!required && <Close label={`Remove the ${title.toLowerCase()}`} onClick={() => set(path, undefined)} />}
-        </div>
-      ) : (
-        <span className="gm-note">at 0 and its largest radius</span>
-      )}
-      {keys.length > 0 && <OptionsLine ctx={ctx} component={component} base={base} keys={keys} />}
-      <Problems list={own} />
+      <div className="gm-oline">
+        <span className="gm-cell-head">
+          <span className="gm-oline-label">Radii</span>
+        </span>
+        <span className="gm-cell-nums">
+          {given ? <RingsRow ctx={ctx} component={component} value={value} onChange={(next) => set(path, next)} /> : <span className="gm-note">{unset}</span>}
+          <span className="gm-cell-tools">{given && !required && <Close label={`Remove the ${title.toLowerCase()}`} onClick={() => set(path, undefined)} />}</span>
+        </span>
+      </div>
+      {keys.map((key) => (
+        <OptionLine key={key} ctx={ctx} component={component} base={base} option={key} />
+      ))}
     </Group>
   );
 }
 
+// The frame of a component (its own parameters: those that place it, and
+// others of its own, e.g. the flux of a point): its centre and its
+// orientation, each a line with the switch of a value per ring if it has
+// one and its parameters under it, and its others after them
+function FrameLines({ ctx, component, base, params, rings, switches }: { ctx: Ctx; component: Options; base: Path; params: Param[]; rings: number[] | null; switches: string[] }) {
+  // (in the order of their keys, e.g. xpos, ypos, vsys)
+  const lines = FRAME_LINES.map((line) => ({ ...line, params: line.keys.flatMap((key) => params.filter((p) => isOfKey(p, key))) }));
+  const rest = params.filter((p) => !lines.some((line) => line.params.includes(p)));
+  return (
+    <>
+      {lines
+        .filter((line) => line.params.length > 0)
+        .map((line) => (
+          <Fragment key={line.title}>
+            <div className="gm-oline">
+              <span className="gm-cell-head">
+                <span className="gm-oline-label">{line.title}</span>
+                {switches.includes(line.option) && <RingSwitch ctx={ctx} component={component} base={base} option={line.option} />}
+              </span>
+            </div>
+            <NumberRows ctx={ctx} owned={line.params} rings={rings} />
+          </Fragment>
+        ))}
+      <NumberRows ctx={ctx} owned={rest} rings={rings} depth={0} />
+    </>
+  );
+}
+
+// The switch of a value per ring of what a line of the frame holds (of
+// its centre, loose; of its orientation, tilted)
+function RingSwitch({ ctx, component, base, option }: { ctx: Ctx; component: Options; base: Path; option: string }) {
+  const node = propertiesOfType(ctx.defs, component.type)[option] ?? {};
+  const fallback = node.default === true;
+  const on = (component[option] ?? fallback) === true;
+  const title = typeof node.title === 'string' ? node.title : option;
+  return (
+    <button className="gm-rs" aria-pressed={on} title={`${title} (${option})`} onClick={() => ctx.set([...base, option], !on === fallback ? undefined : !on, { moved: inPlace })}>
+      <RingMark />
+      per ring
+    </button>
+  );
+}
+
 // Options of a component that no section takes (e.g. the file of
-// particles): in a line those that can be, the others as a form
+// particles): a line each those that can be, the others as a form
 function OtherOptions({ ctx, component, base, keys }: { ctx: Ctx; component: Options; base: Path; keys: string[] }) {
   const { defs, set, project } = ctx;
   const properties = propertiesOfType(defs, component.type);
@@ -824,7 +1026,9 @@ function OtherOptions({ ctx, component, base, keys }: { ctx: Ctx; component: Opt
   const node = rest.length > 0 ? restOf(defs, memberOf(defs, 'component', component.type), new Set(others)) : null;
   return (
     <>
-      {simple.length > 0 && <OptionsLine ctx={ctx} component={component} base={base} keys={simple} />}
+      {simple.map((key) => (
+        <OptionLine key={key} ctx={ctx} component={component} base={base} option={key} />
+      ))}
       {node && defs && (
         <div className="gm-object">
           <SchemaForm
@@ -843,7 +1047,7 @@ function OtherOptions({ ctx, component, base, keys }: { ctx: Ctx; component: Opt
   );
 }
 
-// Whether an option can be set in a line of options (see OptionsLine): a
+// Whether an option can be set in a line of its own (see OptionLine): a
 // yes or no, a choice of a few, or a number
 function lineable(node: Schema): boolean {
   if (node.type === 'boolean' || choicesOf(node)) return true;
@@ -853,20 +1057,24 @@ function lineable(node: Schema): boolean {
 
 // A part a component does not have, to add (by its "+ ..." or what is
 // given): of one type, added at once; else its types to choose from
-function AddPart({ ctx, part, base, children }: { ctx: Ctx; part: PartInfo; base: Path; children?: ReactNode }) {
-  const { defs, set } = ctx;
+function AddPart({ ctx, part, base, onAdded, children }: { ctx: Ctx; part: PartInfo; base: Path; onAdded?: () => void; children?: ReactNode }) {
+  const { defs } = ctx;
   const path = [...base, part.option];
   const label = children ?? '+ add';
+  const set = (value: unknown) => {
+    ctx.set(path, value);
+    onAdded?.();
+  };
   if (part.family === null) {
     const start = part.def && defs?.[part.def] ? startOfDef(defs[part.def]) : {};
     return (
-      <button className="gm-plus" title={part.description} onClick={() => set(path, start)}>
+      <button className="gm-plus" title={part.description} onClick={() => set(start)}>
         {label}
       </button>
     );
   }
   const types = typesOf(defs, part.family, part.types);
-  const add = (type: string) => set(path, withDirection(startOf(defs, part.family!, type), part));
+  const add = (type: string) => set(withDirection(startOf(defs, part.family!, type), part));
   if (types.length === 1) {
     return (
       <button className="gm-plus" title={part.description} onClick={() => add(types[0].value)}>
@@ -911,78 +1119,77 @@ function propertiesOfType(defs: Defs | undefined, type: unknown): Record<string,
 // ---------------------------------------------------------------------
 // A part of a component
 
-// Options of a component in a line, each as its schema has it: a switch
-// of a yes or no (its title), a choice of a few (its title and its value),
-// a number (its title, and its value or "auto" if it can be none), and
-// what is given after them (e.g. a note); bare, without their titles (but
-// those of the switches). An option set to its default is left out of the
+// An option of a component, a line of its own in the columns of the card:
+// its title (and its key), and its value as its schema has it: a switch of
+// a yes or no, a choice of a few, or a number (in its unit, its default or
+// "auto" if it can be none, when not given), and what is given after it
+// (e.g. a note). An option set to its default is left out of the
 // configuration.
-function OptionsLine({ ctx, component, base, keys, bare, children }: { ctx: Ctx; component: Options; base: Path; keys: string[]; bare?: boolean; children?: ReactNode }) {
-  const { defs, set } = ctx;
-  const properties = propertiesOfType(defs, component.type);
-  const setOption = (key: string, value: unknown) => set([...base, key], value, { moved: inPlace });
+function OptionLine({ ctx, component, base, option, children }: { ctx: Ctx; component: Options; base: Path; option: string; children?: ReactNode }) {
+  const node = propertiesOfType(ctx.defs, component.type)[option] ?? {};
+  const title = typeof node.title === 'string' ? node.title : option;
+  const value = component[option];
+  const fallback = node.default;
+  const setOption = (next: unknown) => ctx.set([...base, option], next === fallback ? undefined : next, { moved: inPlace });
+  const choices = choicesOf(node);
+  let control: ReactNode;
+  if (node.type === 'boolean') {
+    const on = (value ?? fallback) === true;
+    control = (
+      <button className="gm-toggle" aria-pressed={on} aria-label={title} onClick={() => setOption(!on)}>
+        {on ? 'on' : 'off'}
+      </button>
+    );
+  } else if (choices) {
+    const current = String(value ?? fallback ?? '');
+    control = (
+      <DropMenu
+        label={title}
+        width={220}
+        entries={choices.map((c) => ({ label: c.title, current: String(c.value) === current, onClick: () => setOption(c.value) }))}
+        target={<button className="gm-ty gm-ty-quiet">{choices.find((c) => String(c.value) === current)?.title ?? current}</button>}
+      />
+    );
+  } else {
+    // (a number: in its unit, within its bounds, a whole one if it must
+    // be; emptied, none or its default)
+    const branches = (node.anyOf as Schema[] | undefined) ?? [node];
+    const nullable = branches.some((b) => b.type === 'null');
+    const number = branches.find((b) => b.type !== 'null') ?? node;
+    const fits = (n: number) => (typeof number.exclusiveMinimum === 'number' ? n > number.exclusiveMinimum : typeof number.minimum === 'number' ? n >= number.minimum : true);
+    control = (
+      <NumberText
+        value={typeof value === 'number' ? value : NaN}
+        label={title}
+        unit={(node.unit ?? number.unit) === 'arcsec' ? '″' : undefined}
+        placeholder={nullable ? 'auto' : typeof fallback === 'number' ? String(fallback) : undefined}
+        onCommit={(typed) => {
+          const next = number.type === 'integer' ? Math.round(typed) : typed;
+          if (fits(next)) setOption(next);
+        }}
+        onClear={nullable || fallback !== undefined ? () => setOption(undefined) : undefined}
+      />
+    );
+  }
+  const keys = keysOf(title, [option]);
   return (
-    <div className="gm-span gm-options">
-      {keys.map((key) => {
-        const node = properties[key] ?? {};
-        const title = (typeof node.title === 'string' ? node.title : key).toLowerCase();
-        const value = component[key];
-        const fallback = node.default;
-        if (node.type === 'boolean') {
-          const on = (value ?? fallback) === true;
-          return (
-            <button key={key} className="gm-toggle" aria-pressed={on} title={typeof node.description === 'string' ? node.description : undefined} onClick={() => setOption(key, on ? undefined : true)}>
-              {title}
-            </button>
-          );
-        }
-        const choices = choicesOf(node);
-        if (choices) {
-          const current = String(value ?? fallback ?? '');
-          return (
-            <span key={key} className="gm-option">
-              {!bare && <span className="gm-setting-label">{title}</span>}
-              <DropMenu
-                label={title}
-                width={220}
-                entries={choices.map((c) => ({ label: c.title, current: String(c.value) === current, onClick: () => setOption(key, c.value === fallback ? undefined : c.value) }))}
-                target={<button className="gm-ty gm-ty-quiet">{choices.find((c) => String(c.value) === current)?.title ?? current}</button>}
-              />
-            </span>
-          );
-        }
-        // (a number: in its unit, within its bounds, a whole one if it must
-        // be; emptied, none or its default)
-        const branches = (node.anyOf as Schema[] | undefined) ?? [node];
-        const nullable = branches.some((b) => b.type === 'null');
-        const number = branches.find((b) => b.type !== 'null') ?? node;
-        const fits = (n: number) => (typeof number.exclusiveMinimum === 'number' ? n > number.exclusiveMinimum : typeof number.minimum === 'number' ? n >= number.minimum : true);
-        return (
-          <span key={key} className="gm-option">
-            {!bare && <span className="gm-setting-label">{title}</span>}
-            <NumberText
-              value={typeof value === 'number' ? value : NaN}
-              label={title}
-              unit={(node.unit ?? number.unit) === 'arcsec' ? '″' : undefined}
-              placeholder={nullable ? 'auto' : typeof fallback === 'number' ? String(fallback) : undefined}
-              onCommit={(typed) => {
-                const next = number.type === 'integer' ? Math.round(typed) : typed;
-                if (fits(next)) setOption(key, next === fallback ? undefined : next);
-              }}
-              onClear={nullable || fallback !== undefined ? () => setOption(key, undefined) : undefined}
-            />
-          </span>
-        );
-      })}
-      {children}
+    <div className="gm-oline">
+      <span className="gm-cell-head" title={typeof node.description === 'string' ? node.description : undefined}>
+        <span className="gm-oline-label">{title}</span>
+        {keys && <code className="gm-key">{keys}</code>}
+      </span>
+      <span className="gm-cell-nums">
+        {control}
+        {children}
+      </span>
     </div>
   );
 }
 
 // A single setting of a component (e.g. its pressure support, its
 // opacity), a line of its own: its title (and its key), and beside it its
-// type (or none) and its numbers, its other options under it; of options
-// of their own (e.g. clouds), on or off and those options
+// type (or none), its other options and its parameters under it; of
+// options of their own (e.g. clouds), on or off and those options
 function SingleLine({ ctx, part, path, rings, problems }: { ctx: Ctx; part: PartInfo; path: Path; rings: number[] | null; problems: Problem[] }) {
   const { defs, options, params, set, project } = ctx;
   const [more, setMore] = useState(false);
@@ -1031,13 +1238,12 @@ function SingleLine({ ctx, part, path, rings, problems }: { ctx: Ctx; part: Part
   return (
     <>
       <div className="gm-single" data-bad={problems.length > 0 || undefined}>
-        <span className="gm-single-label" title={part.description}>
-          {part.title}
+        <span className="gm-cell-head" title={part.description}>
+          <span className="gm-oline-label">{part.title}</span>
           {keys && <code className="gm-key">{keys}</code>}
         </span>
-        <span className="gm-single-value">
+        <span className="gm-cell-nums">
           {pick}
-          {item && part.family !== null && <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} />}
           {form && <MoreButton on={more} count={count} onClick={() => setMore(!more)} />}
         </span>
       </div>
@@ -1046,6 +1252,7 @@ function SingleLine({ ctx, part, path, rings, problems }: { ctx: Ctx; part: Part
           <div className="gm-more-form">{form}</div>
         </Expand>
       )}
+      {item && part.family !== null && <NumberRows ctx={ctx} owned={ownedBy(params, path)} rings={rings} />}
       <Problems list={problems} />
     </>
   );
@@ -1069,11 +1276,11 @@ function FluidLine({ ctx, component, base }: { ctx: Ctx; component: Options; bas
   return (
     <>
       <div className="gm-single" data-bad={own.length > 0 || undefined}>
-        <span className="gm-single-label" title={typeof node.description === 'string' ? node.description : undefined}>
-          {title}
+        <span className="gm-cell-head" title={typeof node.description === 'string' ? node.description : undefined}>
+          <span className="gm-oline-label">{title}</span>
           <code className="gm-key">fluid</code>
         </span>
-        <span className="gm-single-value">
+        <span className="gm-cell-nums">
           <DropMenu
             label={title}
             width={260}
@@ -1093,9 +1300,9 @@ function FluidLine({ ctx, component, base }: { ctx: Ctx; component: Options; bas
 // A list of traits (e.g. the velocity of a disk), a group under its
 // title and its keys (of its traits and their heights), with what adds
 // one: a line for each, with the height paired with it (or one that they
-// share, after them)
-function TraitGroup({ ctx, part, base, rings, problems }: { ctx: Ctx; part: PartInfo; base: Path; rings: number[] | null; problems: Problem[] }) {
-  const { defs, draft, options } = ctx;
+// share, after them); folded, their types, directions and heights
+function TraitGroup({ ctx, part, base, rings, problems, fold }: { ctx: Ctx; part: PartInfo; base: Path; rings: number[] | null; problems: Problem[]; fold: Fold }) {
+  const { defs, draft, options, params } = ctx;
   const family = part.family!;
   const listPath = [...base, part.option];
   const items = asList(getAt(options, listPath));
@@ -1125,6 +1332,7 @@ function TraitGroup({ ctx, part, base, rings, problems }: { ctx: Ctx; part: Part
       }
       return { ...s, options: next };
     });
+    fold.show();
   };
   const remove = (index: number) => {
     const perItem = heights && !shared ? hpath : null;
@@ -1156,12 +1364,35 @@ function TraitGroup({ ctx, part, base, rings, problems }: { ctx: Ctx; part: Part
   const noHeights = !!heights && heights.nullable && !hlist.some(isObject);
   const shown = (i: number) => !!heights && !shared && (!heights.nullable || isObject(hlist[i]));
   const heightActions = heights !== null && hpath !== null && (noHeights || (items.length > 1 && (shared || given !== undefined)));
+  const typeOf = (value: unknown) => (isObject(value) ? String(value.type) : '');
+  const summary =
+    items.length === 0
+      ? 'none'
+      : [
+          ...items.map((item, i) => (
+            <span key={i}>
+              {i > 0 && ' · '}
+              {typeOf(item)}
+              {typeof item.direction === 'string' && (
+                <span className="gm-dir">
+                  <DirectionMark direction={item.direction} />
+                  {item.direction}
+                </span>
+              )}
+              {shown(i) && ` ↳ ${typeOf(hlist[i])}`}
+            </span>
+          )),
+          ...(shared ? [<span key="all"> · ↳ all {typeOf(hlist[0])}</span>] : []),
+        ];
   return (
     <Group
       title={part.title}
       keys={keysOf(part.title, [part.option, ...(heights ? [heights.option] : [])])}
       description={part.description}
-      bad={problems.length > 0}
+      problems={problems}
+      fold={fold}
+      summary={summary}
+      free={freeCount(ctx, [...ownedBy(params, listPath), ...(hpath ? ownedBy(params, hpath) : [])])}
       add={
         <>
           {heightActions &&
@@ -1199,7 +1430,6 @@ function TraitGroup({ ctx, part, base, rings, problems }: { ctx: Ctx; part: Part
         {heights && shared && <HeightLine ctx={ctx} part={heights} path={[...hpath!, 0]} count={1} rings={rings} all />}
         {items.length === 0 && <span className="gm-note">none</span>}
       </div>
-      <Problems list={problems} />
     </Group>
   );
 }
@@ -1210,9 +1440,9 @@ function OneItem({ ctx, part, path, rings, onRemove }: { ctx: Ctx; part: PartInf
   return <ItemLine ctx={ctx} part={part} path={path} item={isObject(item) ? item : {}} rings={rings} onRemove={onRemove} />;
 }
 
-// An item's line: its type (and direction), its numbers, the lines of an
-// emission of lines; its other options behind "options", and what removes
-// it, as the line is pointed at
+// An item's line: its type (and direction), the lines of an emission of
+// lines; its other options behind "options", and what removes it, as the
+// line is pointed at; its parameters a line each under it
 function ItemLine({ ctx, part, path, item, rings, onRemove }: { ctx: Ctx; part: PartInfo; path: Path; item: Options; rings: number[] | null; onRemove?: () => void }) {
   const { defs, params, set, project } = ctx;
   const family = part.family!;
@@ -1238,7 +1468,8 @@ function ItemLine({ ctx, part, path, item, rings, onRemove }: { ctx: Ctx; part: 
               width={240}
               entries={directions.map((d) => ({ label: d.title, current: String(d.value) === direction, onClick: () => set(path, { ...item, direction: d.value }) }))}
               target={
-                <button className="gm-dir-pick" title={directions.find((d) => String(d.value) === direction)?.title}>
+                <button className="gm-dir-pick" title={`Its direction: ${directions.find((d) => String(d.value) === direction)?.title ?? direction}`}>
+                  <DirectionMark direction={direction} />
                   {direction}
                 </button>
               }
@@ -1246,12 +1477,11 @@ function ItemLine({ ctx, part, path, item, rings, onRemove }: { ctx: Ctx; part: 
           )}
         </span>
         <span className="gm-cell-nums">
-          <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} />
           {lines && <LinesLine emission={item} onChange={(next) => set(path, next)} />}
-        </span>
-        <span className="gm-cell-tools">
-          {rest && <MoreButton on={more} count={given} onClick={() => setMore(!more)} />}
-          {onRemove && <Close label={`Remove it`} onClick={onRemove} />}
+          <span className="gm-cell-tools">
+            {rest && <MoreButton on={more} count={given} onClick={() => setMore(!more)} />}
+            {onRemove && <Close label={`Remove it`} onClick={onRemove} />}
+          </span>
         </span>
       </div>
       {rest && defs && (
@@ -1267,12 +1497,13 @@ function ItemLine({ ctx, part, path, item, rings, onRemove }: { ctx: Ctx; part: 
           </div>
         </Expand>
       )}
+      <NumberRows ctx={ctx} owned={ownedBy(params, path)} rings={rings} />
     </>
   );
 }
 
 // The height trait paired with a trait (or the one they share): its type,
-// or none if it can be, and its numbers
+// or none if it can be, and its parameters a line each under it
 function HeightLine({ ctx, part, path, count, rings, all }: { ctx: Ctx; part: PartInfo; path: Path; count: number; rings: number[] | null; all?: boolean }) {
   const { defs, draft, options, params, project } = ctx;
   const [more, setMore] = useState(false);
@@ -1311,9 +1542,8 @@ function HeightLine({ ctx, part, path, count, rings, all }: { ctx: Ctx; part: Pa
           />
         </span>
         <span className="gm-cell-nums">
-          {item && <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} limit={typeof item.zmax === 'number' ? item.zmax : undefined} />}
+          <span className="gm-cell-tools">{rest && <MoreButton on={more} count={Object.keys(item ?? {}).filter((key) => key !== 'type').length} onClick={() => setMore(!more)} />}</span>
         </span>
-        <span className="gm-cell-tools">{rest && <MoreButton on={more} count={Object.keys(item ?? {}).filter((key) => key !== 'type').length} onClick={() => setMore(!more)} />}</span>
       </div>
       {rest && defs && item && (
         <Expand open={more}>
@@ -1322,6 +1552,7 @@ function HeightLine({ ctx, part, path, count, rings, all }: { ctx: Ctx; part: Pa
           </div>
         </Expand>
       )}
+      {item && <NumberRows ctx={ctx} owned={ownedBy(params, path)} rings={rings} limit={typeof item.zmax === 'number' ? item.zmax : undefined} depth={2} />}
     </>
   );
 }
@@ -1717,27 +1948,33 @@ function omitKeys(options: Options, keys: Set<string>): Options {
   return Object.fromEntries(Object.entries(options).filter(([key]) => !keys.has(key)));
 }
 
-// The rings (or shells) of a component in a few words: how many, to what
-// radius and how far that is; a click opens how they are given
+// The rings (or shells) of a component in a few words: how many and to
+// what radius
+function ringsText(component: Options, value: unknown): string {
+  const radii = ringRadii(value);
+  const max = radii.length ? radii[radii.length - 1] : 0;
+  return `${radii.length} ${component.type === 'cone' ? 'shells' : 'rings'} · 0–${Number(max.toPrecision(4))}″`;
+}
+
+// The rings (or shells) of a component in a few words (see ringsText) and
+// how far their largest radius is; a click opens how they are given
 function RingsRow({ ctx, component, value, onChange }: { ctx: Ctx; component: Options; value: unknown; onChange: (value: unknown) => void }) {
   const unit = component.type === 'cone' ? 'shells' : 'rings';
   const radii = ringRadii(value);
   const max = radii.length ? radii[radii.length - 1] : 0;
-  // (whether they tilt or wander: the switches under them)
-  const notes = [ctx.kpcPerArcsec === null || !max ? null : `${significant(max * ctx.kpcPerArcsec, 3)} kpc`].filter(Boolean);
   return (
-    <div className="gm-trait">
+    <>
       <Popover position="bottom-start" offset={4} width={340} shadow="md" withinPortal trapFocus={false} classNames={{ dropdown: 'gm-pop' }}>
         <Popover.Target>
           <button className="gm-num gm-text" title={`How its ${unit} are given`}>
-            {radii.length} {unit} · 0–{Number(max.toPrecision(4))}″
+            {ringsText(component, value)}
           </button>
         </Popover.Target>
         <Popover.Dropdown>
           <RingsLine value={value} onChange={onChange} unit={unit} />
         </Popover.Dropdown>
       </Popover>
-      {notes.length > 0 && <span className="gm-note">{notes.join(' · ')}</span>}
-    </div>
+      {ctx.kpcPerArcsec !== null && max > 0 && <span className="gm-note">{significant(max * ctx.kpcPerArcsec, 3)} kpc</span>}
+    </>
   );
 }

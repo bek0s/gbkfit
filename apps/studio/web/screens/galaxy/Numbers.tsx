@@ -1,11 +1,12 @@
-// The parameters of a part of a galaxy, as numbers in its line: each its
-// short name and its value (tinted if a fit frees it, outlined if tied to
-// an expression, marked if it has a value per ring). A click opens it to
-// set (see ParamField): its value, whether a fit frees it and in what
-// range, or its tie.
+// The parameters of a part of a galaxy, as numbers: each its short name
+// and its value (tinted if a fit frees it, outlined if tied to an
+// expression, marked if it has a value per ring), in a line or a line each
+// with its title. A click opens it to set (see ParamField): its value,
+// whether a fit frees it and in what range, or its tie.
 import { Popover } from '@mantine/core';
 import { significant } from '../../components/format';
 import type { GalaxyDraft } from './draft';
+import { RingMark } from './Marks';
 import type { Options } from './options';
 import { ParamField, unitText } from './ParamField';
 import { freeRange, settingOf, shortName, withFreedom, withRange, withValues, type Param, type Setting } from './params';
@@ -49,6 +50,7 @@ export function NumberChip({ ctx, param, rings, limit, bare }: { ctx: NumbersCon
           {!bare && <i>{label}</i>}
           {valueText(setting)}
           {unit && <span className="gm-unit">{unit}</span>}
+          {param.size > 1 && <RingMark />}
         </button>
       </Popover.Target>
       <Popover.Dropdown>
@@ -86,10 +88,39 @@ export function ParamEditor({ ctx, param, rings, limit }: { ctx: NumbersContext;
 }
 
 // The text of a parameter's value (see valueText), for lines that list them
+// (a unit of a sign, e.g. °, right after the value)
 export function paramText(ctx: NumbersContext, param: Param): string {
   const setting = settingOf(ctx.draft.state?.properties ?? {}, param);
   const unit = setting.kind === 'tied' || setting.kind === 'other' ? '' : unitText(param.unit);
-  return `${shortName(param, ctx.options, ctx.params)} ${valueText(setting)}${unit ? ` ${unit}` : ''}`;
+  return `${shortName(param, ctx.options, ctx.params)} ${valueText(setting)}${unit.length > 1 ? ' ' : ''}${unit}`;
+}
+
+// How many of some parameters a fit frees
+export function freeCount(ctx: NumbersContext, params: Param[]): number {
+  const properties = ctx.draft.state?.properties ?? {};
+  return params.filter((param) => settingOf(properties, param).kind === 'free').length;
+}
+
+// The parameters of a part, a line each in the columns of the card: its
+// short name and its title, and its number (see NumberChip); at a depth
+// under the line of what owns them (0: beside it, e.g. in a frame; 2: under
+// a line that is itself under another, e.g. the height of a trait)
+export function NumberRows({ ctx, owned, rings, limit, depth = 1 }: { ctx: NumbersContext; owned: Param[]; rings: number[] | null; limit?: number; depth?: 0 | 1 | 2 }) {
+  return (
+    <>
+      {owned.map((param) => (
+        <div key={param.name} className="gm-prow" data-depth={depth}>
+          <span className="gm-cell-head">
+            <code className="gm-pn">{shortName(param, ctx.options, ctx.params)}</code>
+            <span className="gm-pt">{param.title}</span>
+          </span>
+          <span className="gm-cell-nums">
+            <NumberChip ctx={ctx} param={param} rings={rings} limit={limit} bare />
+          </span>
+        </div>
+      ))}
+    </>
+  );
 }
 
 // The numbers of the parameters an option owns
