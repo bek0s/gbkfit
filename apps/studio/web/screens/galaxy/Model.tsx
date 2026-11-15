@@ -19,7 +19,7 @@ import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { NumberChip, NumberChips, paramText, type NumbersContext } from './Numbers';
 import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
-import { ownedBy, settingOf } from './params';
+import { ownedBy, settingOf, type Param } from './params';
 import { memberOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
 import { extentOf, familyOfOption, HEAD_OPTIONS, nameBase, partsOfType, referencesOf, retypedComponent, settingsOfType, withReferencesRenamed, type ComponentTypes, type PartInfo } from './types';
 
@@ -512,6 +512,27 @@ function glanceOf(ctx: Ctx, component: Options, parts: PartInfo[]): ReactNode {
   return words.flatMap((word, i) => (i ? [<span key={`s${i}`}> · </span>, word] : [word]));
 }
 
+// The options of the geometry of a component, shown at the top of its card
+// with its rings and its frame (not among its other options): of the
+// rings (or shells) of a disk or a cone, their width and interpolation, a
+// centre and an orientation per ring, the sides of a cone; the largest
+// radius of a spheroid
+const RING_OPTIONS = ['tilted', 'loose', 'sides', 'interp', 'rstep'];
+
+// The parameters of a component that place it (see its frame): its
+// centre, systemic velocity, orientation and the wall of a cone
+const FRAME_PARAMS = ['xpos', 'ypos', 'vsys', 'posa', 'incl', 'wall'];
+const EXTENT_OPTIONS = ['rmax'];
+
+// The options of the geometry a component shows at its top (see
+// RING_OPTIONS): those of its rings if it has rings as a part, and its
+// extent
+function geometryKeys(defs: Defs | undefined, types: ComponentTypes | undefined, component: Options, parts: PartInfo[]): { rings: string[]; extent: string[] } {
+  const keys = settingsOfType(defs, types, component.type);
+  const ringed = parts.some((p) => p.def === 'Nodes');
+  return { rings: ringed ? RING_OPTIONS.filter((key) => keys.includes(key)) : [], extent: EXTENT_OPTIONS.filter((key) => keys.includes(key)) };
+}
+
 // The single settings of a component shown under the part they act on
 // (e.g. its pressure support under its velocity), by their option and
 // that of the part; the others, and the parts it can have of lists of
@@ -532,7 +553,13 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
   const attached = (part: PartInfo) => !part.many && part.optional && ACTS_ON[part.option] !== undefined && hosts.has(ACTS_ON[part.option]);
   const present = parts.filter((p) => !attached(p) && (has(p) || !p.optional));
   const absent = parts.filter((p) => !attached(p) && !has(p) && p.optional);
-  const frame = ownedBy(params, base, true);
+  // (its own parameters: those that place it, its frame, and of a spheroid
+  // that moves by the Jeans equations or orbits, those of its motion)
+  const own = ownedBy(params, base, true);
+  const placing = (p: Param) => FRAME_PARAMS.some((key) => p.name === key || p.name.endsWith(`_${key}`));
+  const moves = String(component.type).endsWith('_spheroid');
+  const frame = moves ? own.filter(placing) : own;
+  const motion = moves ? own.filter((p) => !placing(p)) : [];
   // (the problems of the component itself, not of one of its parts)
   const partOptions = new Set(parts.flatMap((p) => [p.option, ...(p.heights ? [p.heights.option] : [])]));
   const general = problems.filter((p) => startsWith(p.path, base) && !(typeof p.path[2] === 'string' && partOptions.has(p.path[2])));
@@ -550,10 +577,36 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
       </div>
     </div>
   );
+  const geometry = geometryKeys(ctx.defs, ctx.types, component, parts);
+  if (geometry.extent.length > 0) {
+    rows.push(
+      <div className="gm-fam" key="extent">
+        <span className="gm-fl">Extent</span>
+        <div className="gm-fc">
+          <OptionsLine ctx={ctx} component={component} base={base} keys={geometry.extent} />
+        </div>
+      </div>,
+    );
+  }
   if (!present.some((p) => p.def === 'Nodes')) rows.push(frameRow);
+  if (motion.length > 0) {
+    rows.push(
+      <div className="gm-fam" key="motion">
+        <span className="gm-fl" title="The parameters of its motion (e.g. of the Jeans equations)">
+          Motion
+        </span>
+        <div className="gm-fc">
+          <div className="gm-span gm-chips">
+            <NumberChips ctx={ctx} owned={motion} rings={rings} />
+          </div>
+        </div>
+      </div>,
+    );
+  }
   for (const part of present) {
     const settings = parts.filter((p) => attached(p) && ACTS_ON[p.option] === part.option);
-    rows.push(<PartRow key={part.option} ctx={ctx} part={part} base={base} rings={rings} component={component} settings={settings} />);
+    const extra = part.def === 'Nodes' && geometry.rings.length > 0 ? <OptionsLine ctx={ctx} component={component} base={base} keys={geometry.rings} /> : null;
+    rows.push(<PartRow key={part.option} ctx={ctx} part={part} base={base} rings={rings} component={component} settings={settings} extra={extra} />);
     if (part.def === 'Nodes') rows.push(frameRow);
   }
 
@@ -568,7 +621,7 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
       <div className="gm-cfoot">
         {absent.length === 1 && <AddPart ctx={ctx} part={absent[0]} base={base} />}
         {absent.length > 1 && <AddParts ctx={ctx} parts={absent} base={base} />}
-        <Settings ctx={ctx} component={component} base={base} />
+        <Settings ctx={ctx} component={component} base={base} shown={[...geometry.rings, ...geometry.extent]} />
       </div>
     </div>
   );
@@ -645,10 +698,11 @@ function withDirection(item: Options, part: PartInfo): Options {
 
 // The settings of a component: its options that are not its parts, out of
 // sight behind "N more options" (their titles)
-function Settings({ ctx, component, base }: { ctx: Ctx; component: Options; base: Path }) {
+function Settings({ ctx, component, base, shown }: { ctx: Ctx; component: Options; base: Path; shown: string[] }) {
   const { defs, types, set, project } = ctx;
   const [open, setOpen] = useState(false);
-  const keys = settingsOfType(defs, types, component.type);
+  // (those not shown elsewhere, e.g. with its rings)
+  const keys = settingsOfType(defs, types, component.type).filter((key) => !shown.includes(key));
   const others = Object.keys(propertiesOfType(defs, component.type)).filter((key) => !keys.includes(key));
   const node = restOf(defs, memberOf(defs, 'component', component.type), new Set(others));
   if (!defs || !node || keys.length === 0) return null;
@@ -689,7 +743,7 @@ function propertiesOfType(defs: Defs | undefined, type: unknown): Record<string,
 // ---------------------------------------------------------------------
 // A part of a component
 
-function PartRow({ ctx, part, base, rings, component, settings }: { ctx: Ctx; part: PartInfo; base: Path; rings: number[] | null; component: Options; settings: PartInfo[] }) {
+function PartRow({ ctx, part, base, rings, component, settings, extra }: { ctx: Ctx; part: PartInfo; base: Path; rings: number[] | null; component: Options; settings: PartInfo[]; extra?: ReactNode }) {
   const { options, problems, set } = ctx;
   const path = [...base, part.option];
   const value = getAt(options, path);
@@ -719,6 +773,7 @@ function PartRow({ ctx, part, base, rings, component, settings }: { ctx: Ctx; pa
         ) : (
           content
         )}
+        {extra}
         {settings.map((setting) => (
           <SettingLine key={setting.option} ctx={ctx} part={setting} path={[...base, setting.option]} rings={rings} />
         ))}
@@ -728,6 +783,63 @@ function PartRow({ ctx, part, base, rings, component, settings }: { ctx: Ctx; pa
           </p>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Options of a component in a line, each as its schema has it: a switch
+// of a yes or no (its title), a choice of a few (its title and its value),
+// a number (its title, and its value or "auto" if it can be none); an
+// option set to its default is left out of the configuration
+function OptionsLine({ ctx, component, base, keys }: { ctx: Ctx; component: Options; base: Path; keys: string[] }) {
+  const { defs, set } = ctx;
+  const properties = propertiesOfType(defs, component.type);
+  const setOption = (key: string, value: unknown) => set([...base, key], value, { moved: inPlace });
+  return (
+    <div className="gm-span gm-options">
+      {keys.map((key) => {
+        const node = properties[key] ?? {};
+        const title = (typeof node.title === 'string' ? node.title : key).toLowerCase();
+        const value = component[key];
+        const fallback = node.default;
+        if (node.type === 'boolean') {
+          const on = (value ?? fallback) === true;
+          return (
+            <button key={key} className="gm-toggle" aria-pressed={on} title={typeof node.description === 'string' ? node.description : undefined} onClick={() => setOption(key, on ? undefined : true)}>
+              {title}
+            </button>
+          );
+        }
+        const choices = choicesOf(node);
+        if (choices) {
+          const current = String(value ?? fallback ?? '');
+          return (
+            <span key={key} className="gm-option">
+              <span className="gm-setting-label">{title}</span>
+              <DropMenu
+                label={title}
+                width={220}
+                entries={choices.map((c) => ({ label: c.title, current: String(c.value) === current, onClick: () => setOption(key, c.value === fallback ? undefined : c.value) }))}
+                target={<button className="gm-ty gm-ty-quiet">{choices.find((c) => String(c.value) === current)?.title ?? current}</button>}
+              />
+            </span>
+          );
+        }
+        const nullable = Array.isArray(node.anyOf) && (node.anyOf as Schema[]).some((b) => b.type === 'null');
+        return (
+          <span key={key} className="gm-option">
+            <span className="gm-setting-label">{title}</span>
+            <NumberText
+              value={typeof value === 'number' ? value : NaN}
+              label={title}
+              unit="″"
+              placeholder={nullable ? 'auto' : undefined}
+              onCommit={(number) => number > 0 && setOption(key, number)}
+              onClear={nullable ? () => setOption(key, undefined) : undefined}
+            />
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -1253,19 +1365,24 @@ function NameText({ value, onCommit, required, onCancel, autoFocus }: { value: s
 
 // A number of an option (not a parameter), as typed: set once it reads as
 // one, at least 0
-function NumberText({ value, onCommit, label, unit, bare }: { value: number; onCommit: (value: number) => void; label: string; unit?: string; bare?: boolean }) {
+function NumberText({ value, onCommit, label, unit, bare, placeholder, onClear }: { value: number; onCommit: (value: number) => void; label: string; unit?: string; bare?: boolean; placeholder?: string; onClear?: () => void }) {
   const [text, setText] = useState<string | null>(null);
   return (
     <label className={bare ? 'gm-numtext gm-numtext-bare' : 'gm-numtext'}>
       <input
         value={text ?? (Number.isFinite(value) ? String(value) : '')}
+        placeholder={placeholder}
         onChange={(event) => {
           const next = event.currentTarget.value;
           setText(next);
           const number = Number(next);
           if (next.trim() !== '' && Number.isFinite(number) && number >= 0) onCommit(number);
         }}
-        onBlur={() => setText(null)}
+        // (emptied, none, if it can be)
+        onBlur={() => {
+          if (text !== null && text.trim() === '' && onClear) onClear();
+          setText(null);
+        }}
         aria-label={label}
         inputMode="decimal"
       />
@@ -1419,17 +1536,13 @@ function omitKeys(options: Options, keys: Set<string>): Options {
 }
 
 // The rings (or shells) of a component in a few words: how many, to what
-// radius, how far that is, and whether they tilt or wander; a click opens
-// how they are given
+// radius and how far that is; a click opens how they are given
 function RingsRow({ ctx, component, value, onChange }: { ctx: Ctx; component: Options; value: unknown; onChange: (value: unknown) => void }) {
   const unit = component.type === 'cone' ? 'shells' : 'rings';
   const radii = ringRadii(value);
   const max = radii.length ? radii[radii.length - 1] : 0;
-  const notes = [
-    ctx.kpcPerArcsec === null || !max ? null : `${significant(max * ctx.kpcPerArcsec, 3)} kpc`,
-    component.tilted === true ? 'tilted' : null,
-    component.loose === true ? 'loose' : null,
-  ].filter(Boolean);
+  // (whether they tilt or wander: the switches under them)
+  const notes = [ctx.kpcPerArcsec === null || !max ? null : `${significant(max * ctx.kpcPerArcsec, 3)} kpc`].filter(Boolean);
   return (
     <div className="gm-trait">
       <Popover position="bottom-start" offset={4} width={340} shadow="md" withinPortal trapFocus={false} classNames={{ dropdown: 'gm-pop' }}>

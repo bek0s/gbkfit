@@ -995,6 +995,19 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-span { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; min-width: 0; min-height: 24px; }
 .gm-height .gm-cell-head { padding-left: 2px; }
 /* (a setting under the part it acts on: quiet) */
+/* (options of the geometry in a line: switches, choices and numbers) */
+.gm-options { gap: 4px 12px; }
+.gm-option { display: inline-flex; align-items: center; gap: 4px; }
+.gm-toggle { height: 22px; padding: 0 9px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--muted); font: var(--text-caption); white-space: nowrap; cursor: pointer; }
+.gm-toggle::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border: 1px solid var(--faint); border-radius: 50%; vertical-align: 1px; }
+.gm-toggle:hover { border-color: var(--muted); color: var(--fg2); }
+.gm-toggle[aria-pressed="true"] { border-color: var(--muted); background: var(--panel2); color: var(--fg); }
+.gm-toggle[aria-pressed="true"]::before { border-color: var(--accent); background: var(--accent); }
+.gm-options .gm-numtext { border-color: transparent; background: none; }
+.gm-options .gm-numtext:hover { border-color: var(--line2); }
+.gm-options .gm-numtext:focus-within { border-color: var(--accent); background: var(--field); }
+.gm-options .gm-numtext input { width: auto; min-width: 1ch; field-sizing: content; text-align: left; }
+.gm-options .gm-numtext input::placeholder { color: var(--faint); }
 .gm-setting-head, .gm-setting-nums { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .gm-setting-label { font: var(--text-caption); color: var(--faint); white-space: nowrap; }
 .gm-ty.gm-ty-quiet { border-color: transparent; background: none; color: var(--fg2); font-weight: 400; }
