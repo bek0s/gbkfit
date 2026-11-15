@@ -512,11 +512,26 @@ function glanceOf(ctx: Ctx, component: Options, parts: PartInfo[]): ReactNode {
   return words.flatMap((word, i) => (i ? [<span key={`s${i}`}> · </span>, word] : [word]));
 }
 
+// The single settings of a component shown under the part they act on
+// (e.g. its pressure support under its velocity), by their option and
+// that of the part; the others, and the parts it can have of lists of
+// traits, are added from the foot of the card
+const ACTS_ON: Record<string, string> = { pressure_support: 'vptraits', opacity: 'emission', clouds: 'rptraits' };
+
+// The open card of a component, on one grid (label, type, direction,
+// numbers) so that the numbers of every trait start at one edge: its
+// frame, its parts in the order of the library, each with the settings
+// that act on it, and at its foot what adds the parts it has not (a
+// menu) and its other options
 function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; index: number; component: Options; parts: PartInfo[]; rings: number[] | null }) {
   const { params, problems } = ctx;
   const base: Path = ['components', index];
-  const present = parts.filter((p) => component[p.option] !== undefined || !p.optional);
-  const absent = parts.filter((p) => component[p.option] === undefined && p.optional);
+  const has = (part: PartInfo) => component[part.option] !== undefined;
+  const hosts = new Set(parts.map((p) => p.option));
+  // (a single setting with its part shows under it, there or not)
+  const attached = (part: PartInfo) => !part.many && part.optional && ACTS_ON[part.option] !== undefined && hosts.has(ACTS_ON[part.option]);
+  const present = parts.filter((p) => !attached(p) && (has(p) || !p.optional));
+  const absent = parts.filter((p) => !attached(p) && !has(p) && p.optional);
   const frame = ownedBy(params, base, true);
   // (the problems of the component itself, not of one of its parts)
   const partOptions = new Set(parts.flatMap((p) => [p.option, ...(p.heights ? [p.heights.option] : [])]));
@@ -529,7 +544,7 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
         Frame
       </span>
       <div className="gm-fc">
-        <div className="gm-trait">
+        <div className="gm-span gm-chips">
           <NumberChips ctx={ctx} owned={frame} rings={rings} />
         </div>
       </div>
@@ -537,7 +552,8 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
   );
   if (!present.some((p) => p.def === 'Nodes')) rows.push(frameRow);
   for (const part of present) {
-    rows.push(<PartRow key={part.option} ctx={ctx} part={part} base={base} rings={rings} component={component} />);
+    const settings = parts.filter((p) => attached(p) && ACTS_ON[p.option] === part.option);
+    rows.push(<PartRow key={part.option} ctx={ctx} part={part} base={base} rings={rings} component={component} settings={settings} />);
     if (part.def === 'Nodes') rows.push(frameRow);
   }
 
@@ -549,16 +565,31 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
         </p>
       ))}
       {rows}
-      {absent.length > 0 && (
-        <div className="gm-addfam">
-          {absent.map((part) => (
-            <AddPart key={part.option} ctx={ctx} part={part} base={base} />
-          ))}
-        </div>
-      )}
-      <Settings ctx={ctx} component={component} base={base} />
+      <div className="gm-cfoot">
+        {absent.length === 1 && <AddPart ctx={ctx} part={absent[0]} base={base} />}
+        {absent.length > 1 && <AddParts ctx={ctx} parts={absent} base={base} />}
+        <Settings ctx={ctx} component={component} base={base} />
+      </div>
     </div>
   );
+}
+
+// The parts a component can have but has not, to add: a menu of them,
+// each with what it is; one of several types opens their menu
+function AddParts({ ctx, parts, base }: { ctx: Ctx; parts: PartInfo[]; base: Path }) {
+  const { defs, set } = ctx;
+  const entries: MenuEntry[] = parts.map((part) => {
+    const path = [...base, part.option];
+    if (part.family === null) {
+      const start = part.def && defs?.[part.def] ? startOfDef(defs[part.def]) : {};
+      return { label: part.title, description: part.description, onClick: () => set(path, start) };
+    }
+    const types = typesOf(defs, part.family, part.types);
+    const add = (type: string) => set(path, withDirection(startOf(defs, part.family!, type), part));
+    if (types.length === 1) return { label: part.title, description: part.description, onClick: () => add(types[0].value) };
+    return { label: part.title, entries: types.map((t) => ({ label: t.label, description: t.description, onClick: () => add(t.value) })) };
+  });
+  return <DropMenu label="Add a part" width={300} entries={entries} target={<button className="gm-add gm-add-small">+ part</button>} />;
 }
 
 // A part a component does not have, to add: of one type, added at once;
@@ -625,7 +656,7 @@ function Settings({ ctx, component, base }: { ctx: Ctx; component: Options; base
   const titles = keys.map((key) => (typeof properties[key]?.title === 'string' ? (properties[key].title as string) : key).toLowerCase());
   const given = keys.filter((key) => component[key] !== undefined).length;
   return (
-    <div className="gm-settings">
+    <>
       <button className="gm-morel" onClick={() => setOpen(!open)} aria-expanded={open}>
         {open ? 'Fewer options' : `${keys.length} more ${keys.length === 1 ? 'option' : 'options'}`}
         {!open && <span> · {titles.join(', ')}</span>}
@@ -645,7 +676,7 @@ function Settings({ ctx, component, base }: { ctx: Ctx; component: Options; base
           />
         </div>
       </Expand>
-    </div>
+    </>
   );
 }
 
@@ -658,13 +689,19 @@ function propertiesOfType(defs: Defs | undefined, type: unknown): Record<string,
 // ---------------------------------------------------------------------
 // A part of a component
 
-function PartRow({ ctx, part, base, rings, component }: { ctx: Ctx; part: PartInfo; base: Path; rings: number[] | null; component: Options }) {
+function PartRow({ ctx, part, base, rings, component, settings }: { ctx: Ctx; part: PartInfo; base: Path; rings: number[] | null; component: Options; settings: PartInfo[] }) {
   const { options, problems, set } = ctx;
   const path = [...base, part.option];
   const value = getAt(options, path);
-  const own = problems.filter((p) => startsWith(p.path, path) || (part.heights !== null && startsWith(p.path, [...base, part.heights.option])));
+  const owners = [part.option, ...(part.heights ? [part.heights.option] : []), ...settings.map((p) => p.option)];
+  const own = problems.filter((p) => owners.some((owner) => startsWith(p.path, [...base, owner])));
   let content: ReactNode;
-  if (part.def === 'Nodes') content = <RingsRow ctx={ctx} component={component} value={value} onChange={(next) => set(path, next)} />;
+  if (part.def === 'Nodes')
+    content = (
+      <div className="gm-span">
+        <RingsRow ctx={ctx} component={component} value={value} onChange={(next) => set(path, next)} />
+      </div>
+    );
   else if (part.family !== null && part.many) content = <TraitList ctx={ctx} part={part} base={base} rings={rings} />;
   else if (part.family !== null)
     content = <OneItem ctx={ctx} part={part} path={path} rings={rings} onRemove={part.optional ? () => set(path, undefined) : undefined} />;
@@ -675,7 +712,16 @@ function PartRow({ ctx, part, base, rings, component }: { ctx: Ctx; part: PartIn
         {part.title}
       </span>
       <div className="gm-fc">
-        {value === undefined && !part.optional ? <AddPart ctx={ctx} part={part} base={base} /> : content}
+        {value === undefined && !part.optional ? (
+          <div className="gm-span">
+            <AddPart ctx={ctx} part={part} base={base} />
+          </div>
+        ) : (
+          content
+        )}
+        {settings.map((setting) => (
+          <SettingLine key={setting.option} ctx={ctx} part={setting} path={[...base, setting.option]} rings={rings} />
+        ))}
         {own.map((p, i) => (
           <p key={i} className="gm-why">
             {problemText(p.message)}
@@ -683,6 +729,83 @@ function PartRow({ ctx, part, base, rings, component }: { ctx: Ctx; part: PartIn
         ))}
       </div>
     </div>
+  );
+}
+
+// A single setting of a component under the part it acts on (e.g. its
+// pressure support under its velocity), quietly: its title and its type
+// (or none), its numbers, and its other options; of options of their own
+// (e.g. clouds), on or off and those options
+function SettingLine({ ctx, part, path, rings }: { ctx: Ctx; part: PartInfo; path: Path; rings: number[] | null }) {
+  const { defs, options, params, set, project } = ctx;
+  const [more, setMore] = useState(false);
+  const value = getAt(options, path);
+  const item = isObject(value) ? value : null;
+  const title = part.title.toLowerCase();
+  if (part.family === null) {
+    const start = part.def && defs?.[part.def] ? startOfDef(defs[part.def]) : {};
+    return (
+      <>
+        <div className="gm-span gm-setting">
+          <span className="gm-setting-head">
+            <span className="gm-setting-label" title={part.description}>
+              {title}
+            </span>
+            <DropMenu
+              label={part.title}
+              width={220}
+              entries={[
+                { label: 'Off', current: item === null, onClick: () => set(path, undefined) },
+                { label: 'On', description: part.description, current: item !== null, onClick: () => item === null && set(path, start) },
+              ]}
+              target={<button className="gm-ty gm-ty-quiet">{item ? 'on' : 'off'}</button>}
+            />
+          </span>
+          <span className="gm-setting-nums">{item && part.def && <MoreButton on={more} count={Object.keys(item).length} onClick={() => setMore(!more)} />}</span>
+        </div>
+        {item && part.def && defs?.[part.def] && (
+          <Expand open={more}>
+            <div className="gm-more-form">
+              <SchemaForm defs={defs} def={part.def} project={project} value={item} onChange={(next) => set(path, next)} />
+            </div>
+          </Expand>
+        )}
+      </>
+    );
+  }
+  const family = part.family;
+  const member = memberOf(defs, family, item?.type);
+  const rest = item ? restOf(defs, member, new Set(['type'])) : null;
+  return (
+    <>
+      <div className="gm-span gm-setting">
+        <span className="gm-setting-head">
+          <span className="gm-setting-label" title={part.description}>
+            {title}
+          </span>
+          <TypePick
+            items={typesOf(defs, family, part.types)}
+            value={String(item?.type ?? '')}
+            text={item ? String(item.type) : 'none'}
+            none="None"
+            label={part.title}
+            onChange={(type) => set(path, type === '' ? undefined : retyped(defs, family, item, type))}
+            quiet
+          />
+        </span>
+        <span className="gm-setting-nums">
+          {item && <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} />}
+          {rest && <MoreButton on={more} count={Object.keys(item ?? {}).filter((key) => key !== 'type').length} onClick={() => setMore(!more)} />}
+        </span>
+      </div>
+      {rest && defs && item && (
+        <Expand open={more}>
+          <div className="gm-more-form">
+            <SchemaForm defs={defs} node={rest} project={project} value={omit(item, 'type')} onChange={(next) => set(path, { type: item.type, ...next })} />
+          </div>
+        </Expand>
+      )}
+    </>
   );
 }
 
@@ -806,34 +929,44 @@ function ItemLine({ ctx, part, path, item, rings, onRemove }: { ctx: Ctx; part: 
   return (
     <>
       <div className="gm-trait">
-        <TypePick items={typesOf(defs, family, part.types)} value={String(item.type ?? '')} text={String(item.type ?? '')} label={`The type of the ${part.title.toLowerCase()}`} onChange={(type) => set(path, retyped(defs, family, item, type))} />
-        {directions && directions.length > 0 && (
-          <DropMenu
-            label="Its direction"
-            width={240}
-            entries={directions.map((d) => ({ label: d.title, current: String(d.value) === direction, onClick: () => set(path, { ...item, direction: d.value }) }))}
-            target={
-              <button className="gm-dir gm-dir-pick" title={directions.find((d) => String(d.value) === direction)?.title}>
-                {direction}
-              </button>
-            }
-          />
-        )}
-        <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} />
-        {lines && <LinesLine emission={item} onChange={(next) => set(path, next)} />}
-        {rest && <MoreButton on={more} count={given} onClick={() => setMore(!more)} />}
-        {onRemove && <Close label={`Remove it`} onClick={onRemove} />}
+        <span className="gm-cell-type">
+          <TypePick items={typesOf(defs, family, part.types)} value={String(item.type ?? '')} text={String(item.type ?? '')} label={`The type of the ${part.title.toLowerCase()}`} onChange={(type) => set(path, retyped(defs, family, item, type))} />
+        </span>
+        <span className="gm-cell-dir">
+          {directions && directions.length > 0 && (
+            <DropMenu
+              label="Its direction"
+              width={240}
+              entries={directions.map((d) => ({ label: d.title, current: String(d.value) === direction, onClick: () => set(path, { ...item, direction: d.value }) }))}
+              target={
+                <button className="gm-dir-pick" title={directions.find((d) => String(d.value) === direction)?.title}>
+                  {direction}
+                </button>
+              }
+            />
+          )}
+        </span>
+        <span className="gm-cell-nums">
+          <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} />
+          {lines && <LinesLine emission={item} onChange={(next) => set(path, next)} />}
+        </span>
+        <span className="gm-cell-tools">
+          {rest && <MoreButton on={more} count={given} onClick={() => setMore(!more)} />}
+          {onRemove && <Close label={`Remove it`} onClick={onRemove} />}
+        </span>
       </div>
-      {more && rest && defs && (
-        <div className="gm-more-form">
-          <SchemaForm
-            defs={defs}
-            node={rest}
-            project={project}
-            value={omitKeys(item, without)}
-            onChange={(next) => set(path, { ...Object.fromEntries(Object.entries(item).filter(([key]) => without.has(key))), ...next }, { moved: inPlace })}
-          />
-        </div>
+      {rest && defs && (
+        <Expand open={more}>
+          <div className="gm-more-form">
+            <SchemaForm
+              defs={defs}
+              node={rest}
+              project={project}
+              value={omitKeys(item, without)}
+              onChange={(next) => set(path, { ...Object.fromEntries(Object.entries(item).filter(([key]) => without.has(key))), ...next }, { moved: inPlace })}
+            />
+          </div>
+        </Expand>
       )}
     </>
   );
@@ -865,22 +998,28 @@ function HeightLine({ ctx, part, path, count, rings, all }: { ctx: Ctx; part: Pa
   return (
     <>
       <div className="gm-trait gm-height">
-        <span className="gm-times">{all ? 'height of all' : 'height'}</span>
-        <TypePick
-          items={typesOf(defs, family, part.types)}
-          value={String(item?.type ?? '')}
-          text={item ? String(item.type) : undefined}
-          none={part.nullable ? 'the same at every height' : undefined}
-          label={part.title}
-          onChange={(type) => set(type === '' ? null : retyped(defs, family, item, type))}
-        />
-        {item && <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} limit={typeof item.zmax === 'number' ? item.zmax : undefined} />}
-        {rest && <MoreButton on={more} count={Object.keys(item ?? {}).filter((key) => key !== 'type').length} onClick={() => setMore(!more)} />}
+        <span className="gm-cell-head">
+          <span className="gm-times">{all ? '↳ height of all' : '↳ height'}</span>
+          <TypePick
+            items={typesOf(defs, family, part.types)}
+            value={String(item?.type ?? '')}
+            text={item ? String(item.type) : undefined}
+            none={part.nullable ? 'the same at every height' : undefined}
+            label={part.title}
+            onChange={(type) => set(type === '' ? null : retyped(defs, family, item, type))}
+          />
+        </span>
+        <span className="gm-cell-nums">
+          {item && <NumberChips ctx={ctx} owned={ownedBy(params, path)} rings={rings} limit={typeof item.zmax === 'number' ? item.zmax : undefined} />}
+        </span>
+        <span className="gm-cell-tools">{rest && <MoreButton on={more} count={Object.keys(item ?? {}).filter((key) => key !== 'type').length} onClick={() => setMore(!more)} />}</span>
       </div>
-      {more && rest && defs && item && (
-        <div className="gm-more-form">
-          <SchemaForm defs={defs} node={rest} project={project} value={omit(item, 'type')} onChange={(next) => set({ type: item.type, ...next })} />
-        </div>
+      {rest && defs && item && (
+        <Expand open={more}>
+          <div className="gm-more-form">
+            <SchemaForm defs={defs} node={rest} project={project} value={omit(item, 'type')} onChange={(next) => set({ type: item.type, ...next })} />
+          </div>
+        </Expand>
       )}
     </>
   );
@@ -892,7 +1031,7 @@ function ObjectItem({ ctx, part, path, onRemove }: { ctx: Ctx; part: PartInfo; p
   const value = getAt(options, path);
   if (!defs || !part.def || !defs[part.def]) return null;
   return (
-    <div className="gm-object">
+    <div className="gm-object gm-span">
       <SchemaForm defs={defs} def={part.def} project={project} value={isObject(value) ? value : {}} onChange={(next) => set(path, next)} />
       {onRemove && <Close label={`Remove the ${part.title.toLowerCase()}`} onClick={onRemove} />}
     </div>
@@ -1053,7 +1192,7 @@ function MassRow({
 // A type of a family to choose (e.g. of a velocity trait): its title (or
 // the text given, e.g. its type), a menu of the types, each with what it
 // is; none, if it can be
-function TypePick({ items, value, onChange, label, none, text }: { items: TypeChoice[]; value: string; onChange: (type: string) => void; label: string; none?: string; text?: string }) {
+function TypePick({ items, value, onChange, label, none, text, quiet }: { items: TypeChoice[]; value: string; onChange: (type: string) => void; label: string; none?: string; text?: string; quiet?: boolean }) {
   const current = items.find((t) => t.value === value);
   const entries: MenuEntry[] = [
     ...(none ? [{ label: none, current: value === '', onClick: () => onChange('') }] : []),
@@ -1065,7 +1204,7 @@ function TypePick({ items, value, onChange, label, none, text }: { items: TypeCh
       width={300}
       entries={entries}
       target={
-        <button className="gm-ty" title={current?.label}>
+        <button className={quiet ? 'gm-ty gm-ty-quiet' : 'gm-ty'} title={current?.label}>
           {text ?? current?.label ?? (value === '' ? (none ?? 'Choose…') : value)}
         </button>
       }
