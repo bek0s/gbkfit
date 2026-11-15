@@ -122,6 +122,28 @@ class JeansTables(ComponentState):
     sigma_z: np.ndarray
 
 
+def midplane(tables: JeansTables, R: np.ndarray) -> np.ndarray:
+    """
+    Return the mean rotation and the dispersions of the Jeans tables of a
+    spheroid at its midplane, at the radii R (arcsec), as its kernels draw
+    them (see gmodel_spheroid_jeans_kinematics): from the row of their
+    lowest height, linearly in ln R between their radii, and beyond them,
+    their first or last values. An array of shape (4, len(R)): <v_phi>,
+    sigma_R, sigma_phi and sigma_z (km/s).
+    """
+    nr = tables.vphi.shape[0]
+    with np.errstate(divide='ignore'):
+        p = np.clip(
+            (np.log(np.asarray(R, dtype=float)) - tables.lnr_zero)
+            / tables.lnr_step, 0, nr - 1)
+    i = np.minimum(np.floor(p).astype(int), nr - 2)
+    t = p - i
+    rows = np.stack((
+        tables.vphi, tables.sigma_r, tables.sigma_phi,
+        tables.sigma_z))[:, :, 0]
+    return (1 - t) * rows[:, i] + t * rows[:, i + 1]
+
+
 def table_shape() -> tuple[int, int]:
     """Return the shape of the tables (nR, nz)."""
     return _TABLE_SIZE, _TABLE_SIZE

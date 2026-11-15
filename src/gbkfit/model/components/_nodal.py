@@ -8,7 +8,7 @@ their radial nodes (parse_component_rnode_args).
 """
 
 import typing
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 import dataclasses
 from dataclasses import dataclass
 from typing import Any
@@ -608,3 +608,34 @@ def parse_component_rnode_args(
     return dict(
         rnodes=nodes, rstep=step,
         interp=interpolation.INTERPOLATORS[interp])
+
+
+def evaluate_native_traits(
+        driver: Driver,
+        dtype: np.dtype,
+        function: Callable[..., None],
+        native: Any,
+        ntraits: int,
+        points: dict[str, np.ndarray],
+        **options: Any
+) -> np.ndarray:
+    """
+    Return the values of the traits of one kind of a component at points,
+    by a native function of traits (e.g. disk_ptraits_evaluate) of its
+    native description: points has the arrays of the coordinates of the
+    points by name (r, and theta or z), of one shape, and options the
+    other arguments of the function (e.g. the kind). An array of a row
+    for each of its ntraits traits, of the shape of the points. The
+    native function checks the arguments (e.g. that the component has
+    traits of the kind).
+    """
+    shape = points['r'].shape
+
+    def to_device(values: np.ndarray) -> DeviceArray:
+        return driver.mem_copy_h2d(np.ascontiguousarray(values.ravel(), dtype))
+    out = driver.mem_alloc_d((ntraits, points['r'].size), dtype)
+    function(
+        native, out=out,
+        **{name: to_device(values) for name, values in points.items()},
+        **options)
+    return np.asarray(driver.mem_copy_d2h(out)).reshape((ntraits,) + shape)

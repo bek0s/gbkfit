@@ -1015,6 +1015,10 @@ def test_the_curves_of_a_disk_are_along_each_direction(client):
     assert curves['speed_gas:rad'] \
         == pytest.approx([-8] * len(curves['radius']))
     assert curves['speed_gas:tan'] == pytest.approx(curves['rotation_gas'])
+    # (and its position angle and inclination)
+    assert curves['orientation_gas:incl'] == pytest.approx(
+        [curves['orientation_gas:incl'][0]] * len(curves['radius']))
+    assert 'orientation_gas:posa' in curves
 
 
 def test_a_galaxy_is_rendered_in_3d(client):

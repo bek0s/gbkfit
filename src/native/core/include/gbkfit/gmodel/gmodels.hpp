@@ -2075,7 +2075,8 @@ gmodel_smspheroid_evaluate_pixel(
 }
 
 // The polar traits of the set of a DiskTraitsArgs at its point j, in the
-// ring rnidx, passed to visit(i, value) one at a time (see traits_each)
+// ring rnidx, passed to visit(i, value) one at a time (see traits_each):
+// at its planar coordinates r xy_scale (cos theta, sin theta)
 template<auto PTraitFunT, typename T, typename VisitT> constexpr void
 gmodel_disk_ptraits_point(
         VisitT visit, int j, int rnidx, const DiskTraitsArgs<T>& a)
@@ -2083,10 +2084,11 @@ gmodel_disk_ptraits_point(
     const TraitSet<T>& t = a.traits;
     const T r = a.r[j];
     const T theta = a.theta[j] * DEG_TO_RAD<T>;
+    const T planar = r * a.xy_scale;
     traits_each<PTraitFunT>(
             visit, t.n, t.uids, t.cvalues, t.ccounts, t.pvalues, t.pcounts,
             rnidx, a.rnodes, a.nrnodes,
-            r * std::cos(theta), r * std::sin(theta), r, theta);
+            planar * std::cos(theta), planar * std::sin(theta), r, theta);
 }
 
 // The height traits of the set of a DiskTraitsArgs at its point j, in the

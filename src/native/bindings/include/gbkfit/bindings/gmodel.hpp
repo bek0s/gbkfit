@@ -10,6 +10,7 @@
 #include <nanobind/stl/vector.h>
 
 #include <gbkfit/constants.hpp>
+#include <gbkfit/math/math.hpp>
 #include <gbkfit/gmodel/cone.hpp>
 #include <gbkfit/gmodel/disk.hpp>
 #include <gbkfit/gmodel/spheroid.hpp>
@@ -479,7 +480,8 @@ struct GModel
             Values r, Values theta, TraitValues out, std::optional<T> incl)
     {
         const typename Kernels::DeviceScope scope(out.device_id());
-        auto a = make_traits_args(disk, kind, true, r, out);
+        auto a = make_traits_args(
+                disk, DISK_KINDS, "disk", kind, true, r, out);
         require(theta.shape(0) == r.shape(0),
                 "theta needs one value for each point");
         require(!incl.has_value() || a.kind == TraitKind::VPT,
@@ -500,7 +502,82 @@ struct GModel
             Values r, Values z, TraitValues out)
     {
         const typename Kernels::DeviceScope scope(out.device_id());
-        auto a = make_traits_args(disk, kind, false, r, out);
+        auto a = make_traits_args(
+                disk, DISK_KINDS, "disk", kind, false, r, out);
+        require(z.shape(0) == r.shape(0), "z needs one value for each point");
+        a.z = z.data();
+        Kernels::gmodel_disk_traits_evaluate(a);
+    }
+
+    // Evaluate each polar trait of one kind of a cone ('rpt', 'vpt', 'dpt'
+    // or 'spt') at the points (r, theta) of the mid-surface of its walls
+    // (r: the distance from its apex), into out (a row for each trait), as
+    // the cone kernels evaluate them: at the planar coordinates r
+    // sin(wall) (cos theta, sin theta), of the angle wall (degrees) of its
+    // walls from its axis (see gbkfit::DiskTraitsArgs). The velocity
+    // traits give their speeds, each along its direction.
+    static void
+    cone_ptraits_evaluate(
+            const Cone& cone, const std::string& kind,
+            Values r, Values theta, TraitValues out, T wall)
+    {
+        const typename Kernels::DeviceScope scope(out.device_id());
+        auto a = make_traits_args(
+                cone, CONE_KINDS, "cone", kind, true, r, out);
+        require(theta.shape(0) == r.shape(0),
+                "theta needs one value for each point");
+        a.theta = theta.data();
+        a.xy_scale = std::sin(wall * DEG_TO_RAD<T>);
+        Kernels::gmodel_disk_traits_evaluate(a);
+    }
+
+    // Evaluate each height trait of one kind of a cone ('rht', 'vht' or
+    // 'dht') at the points (r, z), into out (a row for each trait), as the
+    // cone kernels evaluate them: r the distance from its apex, and z the
+    // distance from the mid-surface of its walls
+    static void
+    cone_htraits_evaluate(
+            const Cone& cone, const std::string& kind,
+            Values r, Values z, TraitValues out)
+    {
+        const typename Kernels::DeviceScope scope(out.device_id());
+        auto a = make_traits_args(
+                cone, CONE_KINDS, "cone", kind, false, r, out);
+        require(z.shape(0) == r.shape(0), "z needs one value for each point");
+        a.z = z.data();
+        Kernels::gmodel_disk_traits_evaluate(a);
+    }
+
+    // Evaluate each polar trait of one kind of a spheroid ('vpt' or 'dpt')
+    // at the points (R, theta) of its midplane (R: the distance from its
+    // axis), into out (a row for each trait), as the spheroid kernels
+    // evaluate them; the velocity traits give their speeds, each along its
+    // direction
+    static void
+    spheroid_ptraits_evaluate(
+            const Spheroid& spheroid, const std::string& kind,
+            Values r, Values theta, TraitValues out)
+    {
+        const typename Kernels::DeviceScope scope(out.device_id());
+        auto a = make_traits_args(
+                spheroid, SPHEROID_KINDS, "spheroid", kind, true, r, out);
+        require(theta.shape(0) == r.shape(0),
+                "theta needs one value for each point");
+        a.theta = theta.data();
+        Kernels::gmodel_disk_traits_evaluate(a);
+    }
+
+    // Evaluate each height trait of one kind of a spheroid ('vht' or
+    // 'dht') at the points (R, z), into out (a row for each trait), as the
+    // spheroid kernels evaluate them: z the height along its axis
+    static void
+    spheroid_htraits_evaluate(
+            const Spheroid& spheroid, const std::string& kind,
+            Values r, Values z, TraitValues out)
+    {
+        const typename Kernels::DeviceScope scope(out.device_id());
+        auto a = make_traits_args(
+                spheroid, SPHEROID_KINDS, "spheroid", kind, false, r, out);
         require(z.shape(0) == r.shape(0), "z needs one value for each point");
         a.z = z.data();
         Kernels::gmodel_disk_traits_evaluate(a);
@@ -745,21 +822,45 @@ struct GModel
                 nb::arg("disk"), nb::arg("kind"),
                 nb::arg("r").noconvert(), nb::arg("z").noconvert(),
                 nb::arg("out").noconvert());
+        cls.def_static("cone_ptraits_evaluate", &cone_ptraits_evaluate,
+                ReleaseGil(),
+                nb::arg("cone"), nb::arg("kind"),
+                nb::arg("r").noconvert(), nb::arg("theta").noconvert(),
+                nb::arg("out").noconvert(), nb::arg("wall"));
+        cls.def_static("cone_htraits_evaluate", &cone_htraits_evaluate,
+                ReleaseGil(),
+                nb::arg("cone"), nb::arg("kind"),
+                nb::arg("r").noconvert(), nb::arg("z").noconvert(),
+                nb::arg("out").noconvert());
+        cls.def_static(
+                "spheroid_ptraits_evaluate", &spheroid_ptraits_evaluate,
+                ReleaseGil(),
+                nb::arg("spheroid"), nb::arg("kind"),
+                nb::arg("r").noconvert(), nb::arg("theta").noconvert(),
+                nb::arg("out").noconvert());
+        cls.def_static(
+                "spheroid_htraits_evaluate", &spheroid_htraits_evaluate,
+                ReleaseGil(),
+                nb::arg("spheroid"), nb::arg("kind"),
+                nb::arg("r").noconvert(), nb::arg("z").noconvert(),
+                nb::arg("out").noconvert());
     }
 
 private:
 
-    // The kinds of traits of a disk: their names (those of the Python
-    // disks), whether they are polar or height traits, and their sets
+    // The kinds of traits of a disk, a cone or a spheroid (Arrays): their
+    // names (those of the Python components), whether they are polar or
+    // height traits, and their sets
+    template<typename Arrays>
     struct Kind
     {
         const char* name;
         TraitKind kind;
         bool polar;
-        typename Disk::Traits Disk::* set;
+        typename Arrays::Traits Arrays::* set;
     };
 
-    static constexpr std::array<Kind, 9> KINDS = {{
+    static constexpr std::array<Kind<Disk>, 9> DISK_KINDS = {{
             {"rpt", TraitKind::RPT, true, &Disk::rpt},
             {"rht", TraitKind::RHT, false, &Disk::rht},
             {"vpt", TraitKind::VPT, true, &Disk::vpt},
@@ -770,39 +871,58 @@ private:
             {"spt", TraitKind::SPT, true, &Disk::spt},
             {"opt", TraitKind::OPT, true, &Disk::opt}}};
 
+    static constexpr std::array<Kind<Cone>, 7> CONE_KINDS = {{
+            {"rpt", TraitKind::RPT, true, &Cone::rpt},
+            {"rht", TraitKind::RHT, false, &Cone::rht},
+            {"vpt", TraitKind::VPT, true, &Cone::vpt},
+            {"vht", TraitKind::VHT, false, &Cone::vht},
+            {"dpt", TraitKind::DPT, true, &Cone::dpt},
+            {"dht", TraitKind::DHT, false, &Cone::dht},
+            {"spt", TraitKind::SPT, true, &Cone::spt}}};
+
+    static constexpr std::array<Kind<Spheroid>, 4> SPHEROID_KINDS = {{
+            {"vpt", TraitKind::VPT, true, &Spheroid::vpt},
+            {"vht", TraitKind::VHT, false, &Spheroid::vht},
+            {"dpt", TraitKind::DPT, true, &Spheroid::dpt},
+            {"dht", TraitKind::DHT, false, &Spheroid::dht}}};
+
     // The arguments of an evaluation of the traits of one kind of a disk,
-    // polar traits (polar) or height traits, at the points of radii r,
-    // into out (see gbkfit::DiskTraitsArgs)
+    // a cone or a spheroid (what, of the kinds of its traits), polar
+    // traits (polar) or height traits, at the points of radii r, into out
+    // (see gbkfit::DiskTraitsArgs)
+    template<typename Arrays, size_t N>
     static DiskTraitsArgs<T>
     make_traits_args(
-            const Disk& disk, const std::string& kind, bool polar,
+            const Arrays& arrays, const std::array<Kind<Arrays>, N>& kinds,
+            const std::string& what, const std::string& kind, bool polar,
             const Values& r, const TraitValues& out)
     {
         std::string names;
-        for (const Kind& k : KINDS) {
+        for (const auto& k : kinds) {
             if (k.polar == polar) {
                 names += (names.empty() ? "'" : ", '") + std::string(k.name)
                         + "'";
             }
         }
         const auto it = std::find_if(
-                KINDS.begin(), KINDS.end(), [&](const Kind& k) {
+                kinds.begin(), kinds.end(), [&](const auto& k) {
                     return k.polar == polar && kind == k.name;
                 });
-        require(it != KINDS.end(),
+        require(it != kinds.end(),
                 "kind must be one of " + names + "; it is '" + kind + "'");
-        const auto& set = disk.*(it->set);
+        const auto& set = arrays.*(it->set);
         require(set.has_value(),
-                "the disk has no traits of kind '" + kind + "'");
+                "the " + what + " has no traits of kind '" + kind + "'");
 
         DiskTraitsArgs<T> a;
         a.kind = it->kind;
-        a.nrnodes = int(disk.rnodes.shape(0));
-        a.rnodes = disk.rnodes.data();
-        require(a.nrnodes >= 2, "a disk needs at least two radial nodes");
+        a.nrnodes = int(arrays.rnodes.shape(0));
+        a.rnodes = arrays.rnodes.data();
+        require(a.nrnodes >= 2,
+                "a " + what + " needs at least two radial nodes");
         a.traits = set->raw();
         if (a.kind == TraitKind::VPT)
-            a.directions = vpt_directions(disk);
+            a.directions = vpt_directions(arrays);
         a.npoints = int(r.shape(0));
         a.r = r.data();
         require(out.shape(0) == size_t(a.traits.n)

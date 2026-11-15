@@ -4,17 +4,19 @@ smoothly (SmoothCone).
 """
 
 import abc
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import astropy.units
 import numpy as np
+import numpy.typing as npt
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from .._native import NativePlan, ParamBuffer, evaluate_native
-from .._nodal import NodalTraits, native_traits, subring_radii
+from .._nodal import (
+    NodalTraits, evaluate_native_traits, native_traits, subring_radii)
 from ..base import (
     ComponentState, FieldsLayout, FrameParams, NativeGrid)
 from ..geometries import GEOMETRY_UNITS, geometry_pdesc
@@ -116,6 +118,17 @@ class NodalCone(abc.ABC):
     def traits(self, kind: str) -> tuple[Trait, ...]:
         return self._traits.traits(kind)
 
+    def trait_values(
+            self, kind: str, params: ParamValues
+    ) -> tuple[dict[str, np.ndarray], ...]:
+        """
+        Return the values of the parameters of each trait of one kind, by
+        their names in the trait, from the values of the parameters of the
+        cone: the node-wise ones at the subnodes, as the cone evaluates
+        them.
+        """
+        return self._traits.values(kind, params)
+
     def shared(self, kind: str) -> bool:
         """
         Check whether the traits of one kind are one height trait that the
@@ -211,6 +224,65 @@ class SmoothConePlan(NativePlan):
     def fields_layout(self) -> FieldsLayout:
         # (a cone fills the voxels with j, v and s)
         return FieldsLayout(layer=False, nslots=3)
+
+    def evaluate_polar_traits(
+            self,
+            params: ParamValues,
+            kind: str,
+            r: npt.ArrayLike,
+            theta: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Evaluate each polar trait of one kind ('rpt', 'vpt', 'dpt' or
+        'spt') at points of the mid-surface of the walls of the cone, as
+        the cone is evaluated: r the distance (arcsec) from its apex, and
+        theta the azimuth (degrees) around its axis; the velocity traits
+        give their speeds, each along its direction. A row for each trait,
+        of the shape of the points (see profiles.TraitsPlan).
+        """
+        r, theta = np.broadcast_arrays(r, theta)
+        return self._evaluate_traits(
+            self._backend.cone_ptraits_evaluate, params, kind,
+            dict(r=r, theta=theta), wall=float(params['wall']))
+
+    def evaluate_height_traits(
+            self,
+            params: ParamValues,
+            kind: str,
+            r: npt.ArrayLike,
+            z: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Evaluate each height trait of one kind ('rht', 'vht' or 'dht') at
+        points of the cone, as the cone is evaluated: r the distance
+        (arcsec) from its apex, and z the distance (arcsec) from the
+        mid-surface of its walls. A row for each trait, of the shape of the
+        points.
+        """
+        r, z = np.broadcast_arrays(r, z)
+        return self._evaluate_traits(
+            self._backend.cone_htraits_evaluate, params, kind,
+            dict(r=r, z=z))
+
+    def _evaluate_traits(
+            self,
+            function: Callable[..., None],
+            params: ParamValues,
+            kind: str,
+            points: dict[str, np.ndarray],
+            **options: Any
+    ) -> np.ndarray:
+        """
+        Evaluate the traits of one kind with a native function of traits
+        at points (see _nodal.evaluate_native_traits), of the values of
+        the parameters of the cone.
+        """
+        # (an unknown kind has no rows: the native function says so)
+        ntraits = len(self._cone.traits(kind)) if kind in TRAIT_KINDS else 0
+        self._write_params(params, None)
+        return evaluate_native_traits(
+            self._driver, self._dtype, function, self._native_cone, ntraits,
+            points, kind=kind, **options)
 
     def _write_params(
             self, params: ParamValues, lines: np.ndarray | None

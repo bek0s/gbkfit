@@ -14,7 +14,8 @@ from gbkfit.params import (
     ParamDesc, ParamValues)
 from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import (
-    NodalTraits, TraitParams, fill_param_values, native_traits, subring_radii)
+    NodalTraits, TraitParams, evaluate_native_traits, fill_param_values,
+    native_traits, subring_radii)
 from ..base import ComponentState, FrameParams, NativeGrid
 from .._needs import Need, density_needs
 from ...gravity import Capability
@@ -203,6 +204,23 @@ class NodalDisk(abc.ABC):
         polar traits share (see NodalTraits.shared).
         """
         return self._traits.shared(kind)
+
+    def orientation(
+            self, params: ParamValues, R: np.ndarray, which: str
+    ) -> np.ndarray:
+        """
+        Return its position angle or inclination (which: 'posa' or
+        'incl'; degrees) at the radii R (arcsec), as it is evaluated: of a
+        disk that tilts (or wanders), its values at the nodes interpolated
+        to the subnodes (see interp), linearly between them, and beyond
+        them their first or last values; else its one value.
+        """
+        values = params[which]
+        if not self._geometry_isnw[which]:
+            return np.full(np.shape(R), float(values))
+        subrnodes = self.subrnodes()
+        at_subnodes = self._interp(self._rnodes, values)(subrnodes)
+        return np.interp(R, subrnodes, at_subnodes)
 
     def trait_values(
             self, kind: str, params: ParamValues
@@ -629,26 +647,14 @@ class DiskPlan(NativePlan):
         function checks the arguments (e.g. that the disk has traits of
         the kind: with none, the output has no rows).
         """
-        driver = self._driver
-        dtype = self._dtype
-        shape = points['r'].shape
         # (an unknown kind has no rows: the native function says so)
         ntraits = len(self._disk.traits(kind)) if kind in TRAIT_KINDS else 0
-
-        def to_device(values: np.ndarray) -> DeviceArray:
-            return driver.mem_copy_h2d(
-                np.ascontiguousarray(values.ravel(), dtype))
-
         # (the values that the galaxy gives, if not in params: no profile
         # of the traits depends on them, see NodalDisk.trait_inputs)
         self._write_params(self._disk.trait_inputs(None) | dict(params))
-        out = driver.mem_alloc_d((ntraits, points['r'].size), dtype)
-        function(
-            self._native_disk, kind, out=out,
-            **{name: to_device(values) for name, values in points.items()},
-            **options)
-        return np.asarray(driver.mem_copy_d2h(out)).reshape(
-            (ntraits,) + shape)
+        return evaluate_native_traits(
+            self._driver, self._dtype, function, self._native_disk, ntraits,
+            points, kind=kind, **options)
 
     @abc.abstractmethod
     def _impl_evaluate(

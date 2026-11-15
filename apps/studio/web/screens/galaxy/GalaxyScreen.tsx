@@ -168,8 +168,6 @@ export function GalaxyScreen({ name }: { name: string }) {
               components={renderedComponents.map((c, i) => ({ name: componentName(c, i), colour: COLOURS[i % COLOURS.length] }))}
               isolated={isolated}
               options={options}
-              params={draft.params}
-              draftProperties={draft.state?.properties ?? {}}
               kpcPerArcsec={kpcPerArcsecOf(draft)}
               rings={rings}
             />

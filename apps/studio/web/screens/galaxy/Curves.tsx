@@ -12,6 +12,9 @@ import { significant } from '../../components/format';
 
 const PAD = { left: 44, right: 14, top: 10, bottom: 22 };
 
+// The most decades of a logarithmic axis, below its highest value
+const LOG_DECADES = 5;
+
 // The colours of the mass components, in turn (tokens)
 const MASS_COLOURS = ['cat2', 'cat3', 'cat4', 'cat5', 'cat6', 'cat1'];
 
@@ -29,7 +32,7 @@ export interface Curve {
 
 // The circular speeds of the mass of a render: in all (and in Newtonian
 // gravity, if it differs), of each mass component, with the rotation of
-// its disks over them (each in the colour of its component)
+// its components over them (each in the colour of its component)
 export function massCurves(render: GalaxyRender, colours: Map<string, string>): Curve[] {
   const curves: Curve[] = [];
   const names = Object.keys(render.curves);
@@ -43,9 +46,10 @@ export function massCurves(render: GalaxyRender, colours: Map<string, string>): 
     curves.push({ name: 'vnewton', label: 'Newtonian', colour: 'muted', values: render.curves.vnewton, dash: '2 3' });
   }
   if (render.curves.vcirc) curves.push({ name: 'vcirc', label: 'circular speed', colour: 'fg', values: render.curves.vcirc, width: 2.4 });
-  for (const name of names.filter((n) => n === 'rotation' || n.startsWith('rotation_'))) {
+  // (of the components that rotate: not e.g. a cone that flows out only)
+  for (const name of names.filter((n) => (n === 'rotation' || n.startsWith('rotation_')) && render.curves[n].some((v) => v !== null && v !== 0))) {
     const component = own(name, 'rotation');
-    curves.push({ name, label: `rotation · ${component || 'disk'}`, colour: colours.get(component) ?? 'fg2', values: render.curves[name], width: 1.4 });
+    curves.push({ name, label: `rotation · ${component || 'component'}`, colour: colours.get(component) ?? 'fg2', values: render.curves[name], width: 1.4 });
   }
   return curves;
 }
@@ -72,6 +76,7 @@ export function CurvePlot({
   rings = null,
   unit,
   empty: emptyText,
+  log = false,
 }: {
   curves: Curve[];
   // The radii of the curves (arcsec), and those of the rings to mark
@@ -81,6 +86,10 @@ export function CurvePlot({
   unit: string;
   // What shows without curves
   empty: string;
+  // Whether the values are on a logarithmic axis (of decades, from at
+  // most LOG_DECADES below the highest value; values at or below 0 not
+  // drawn)
+  log?: boolean;
 }) {
   const { ref, width, height } = useElementSize();
   const [at, setAt] = useState<number | null>(null);
@@ -92,20 +101,27 @@ export function CurvePlot({
     for (const v of c.values) if (v !== null && Number.isFinite(v)) [high, low] = [Math.max(high, v), Math.min(low, v)];
     for (const r of radiusOf(c)) if (r !== null) rmax = Math.max(rmax, r);
   }
-  const empty = curves.length === 0 || rmax === 0 || high === low;
-  const yTicks = empty ? [] : ticks(low, high * 1.06, 4);
+  // (on a log axis: the decades from the lowest positive value, at most
+  // LOG_DECADES below the highest, to the highest)
+  const positive = log ? curves.flatMap((c) => c.values.filter((v): v is number => v !== null && Number.isFinite(v) && v > 0)) : [];
+  const decades = positive.length ? [Math.max(Math.floor(Math.log10(Math.min(...positive))), Math.ceil(Math.log10(Math.max(...positive))) - LOG_DECADES), Math.ceil(Math.log10(Math.max(...positive)))] : [0, 1];
+  if (decades[1] === decades[0]) decades[0] -= 1;
+  const empty = curves.length === 0 || rmax === 0 || (log ? positive.length === 0 : high === low);
+  const yTicks = empty ? [] : log ? Array.from({ length: decades[1] - decades[0] + 1 }, (_, i) => 10 ** (decades[0] + i)) : ticks(low, high * 1.06, 4);
   const top = yTicks.length ? Math.max(high * 1.06, yTicks[yTicks.length - 1]) : 1;
   const plotW = Math.max(10, width - PAD.left - PAD.right);
   const plotH = Math.max(10, height - PAD.top - PAD.bottom);
   const x = (r: number) => PAD.left + (r / (rmax || 1)) * plotW;
-  const y = (v: number) => PAD.top + ((top - v) / (top - low || 1)) * plotH;
+  const y = log
+    ? (v: number) => PAD.top + ((decades[1] - Math.log10(Math.max(v, 10 ** decades[0]))) / (decades[1] - decades[0])) * plotH
+    : (v: number) => PAD.top + ((top - v) / (top - low || 1)) * plotH;
   const path = (c: Curve) => {
     const radii = radiusOf(c);
     let d = '';
     let pen = false;
     c.values.forEach((v, i) => {
       const r = radii[i];
-      if (v === null || r === null || r === undefined || !Number.isFinite(v)) {
+      if (v === null || r === null || r === undefined || !Number.isFinite(v) || (log && v <= 0)) {
         pen = false;
         return;
       }
@@ -115,7 +131,7 @@ export function CurvePlot({
     return d;
   };
   // (each curve read at the radius of its nearest point)
-  const read = at === null ? [] : curves.map((c) => ({ c, i: nearest(radiusOf(c), at) })).filter(({ c, i }) => i !== null && c.values[i] !== null);
+  const read = at === null ? [] : curves.map((c) => ({ c, i: nearest(radiusOf(c), at) })).filter(({ c, i }) => i !== null && c.values[i] !== null && (!log || (c.values[i] as number) > 0));
   return (
     <div className="gx-plot" ref={ref}>
       {empty ? (
@@ -135,7 +151,7 @@ export function CurvePlot({
           >
             {yTicks.map((t) => (
               <g key={t}>
-                <line className={t === 0 ? 'gx-axis' : 'gx-grid'} x1={PAD.left} x2={PAD.left + plotW} y1={y(t)} y2={y(t)} />
+                <line className={t === 0 || (log && t === yTicks[0]) ? 'gx-axis' : 'gx-grid'} x1={PAD.left} x2={PAD.left + plotW} y1={y(t)} y2={y(t)} />
                 <text className="gx-tick" x={PAD.left - 6} y={y(t) + 3.5} textAnchor="end">
                   {significant(t, 3)}
                 </text>

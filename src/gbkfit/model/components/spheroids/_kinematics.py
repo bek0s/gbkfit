@@ -372,6 +372,24 @@ class TraitsMotion(SpheroidMotion):
         """
         return self._traits.owners()
 
+    def traits(self, kind: str) -> tuple[traits.Trait, ...]:
+        """Return its traits of one kind (see TRAIT_KINDS)."""
+        return self._traits.traits(kind)
+
+    def trait_values(
+            self, kind: str, params: ParamValues
+    ) -> tuple[dict[str, np.ndarray], ...]:
+        """
+        Return the values of the parameters of each trait of one kind, by
+        their names in the trait, from the values of the parameters of the
+        spheroid: the node-wise ones at the subnodes, as it is evaluated.
+        """
+        return self._traits.values(kind, params)
+
+    def subrnodes(self) -> tuple[float, ...]:
+        """Return the radii of its subnodes (arcsec, of R)."""
+        return tuple(self._subrnodes)
+
     def takes_light(self) -> bool:
         return False
 

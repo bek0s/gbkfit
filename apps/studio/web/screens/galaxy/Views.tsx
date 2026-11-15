@@ -19,7 +19,6 @@ import { Choice } from '../../components/ui/inputs';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
 import { CurvePlot, massCurves } from './Curves';
 import type { Options } from './options';
-import type { Param, Properties } from './params';
 import { Profiles, PROFILE_QUANTITIES, type ProfileQuantity } from './Profiles';
 import { SeenView } from './Seen';
 import { hasHeight, RenderMap, type Orientation, type Quantity } from './Viewer';
@@ -48,8 +47,6 @@ interface ViewsData {
   observations: string[];
   seenBy: string | null;
   options: Options;
-  params: Param[];
-  draftProperties: Properties;
   kpcPerArcsec: number | null;
   rings: number[] | null;
   // The render of the galaxy as seen, small: its curves, and the list of
@@ -319,7 +316,7 @@ function ViewContent({ kind, data, galaxy }: { kind: ViewKind; data: ViewsData; 
     case 'map':
       return <RenderMap project={data.project} galaxy={galaxy} properties={data.properties} orientation={kind.orientation} quantity={kind.quantity} isolated={data.isolated} />;
     case 'profiles':
-      return <Profiles render={data.render} quantity={kind.quantity} options={data.options} params={data.params} properties={data.draftProperties} colours={colours} rings={data.rings} />;
+      return <Profiles render={data.render} quantity={kind.quantity} options={data.options} colours={colours} rings={data.rings} />;
     case 'mass':
       return data.render ? (
         <CurvePlot curves={massCurves(data.render, colours)} radius={data.render.curves.radius ?? []} rings={data.rings} unit="km/s" empty="Add mass to the galaxy to see its circular speeds." />

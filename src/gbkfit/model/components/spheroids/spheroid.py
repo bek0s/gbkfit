@@ -9,7 +9,7 @@ shape, whose type says how its stars move: as traits give, or not at all
 import abc
 import functools
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Annotated, Any
 
 from annotated_types import Ge, Gt
@@ -37,6 +37,7 @@ from .._needs import Need
 from .._native import (
     NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
     evaluate_native, make_bands)
+from .._nodal import evaluate_native_traits
 from .._units import mass_per_unit
 from ..base import (
     Component, ComponentLinks, ComponentPart, ComponentState, FieldsLayout,
@@ -48,7 +49,7 @@ from ..roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
 from ._jeans import JeansKinematics
 from ._kinematics import (
-    SpheroidKinematics, SpheroidLight, SpheroidMotion,
+    TRAIT_KINDS, SpheroidKinematics, SpheroidLight, SpheroidMotion,
     SpheroidTraitsKinematics, TraitsMotion)
 from ._schwarzschild import SchwarzschildKinematics
 from ._stage import SpheroidStage
@@ -1032,6 +1033,73 @@ class SpheroidPlan(NativePlan):
     def fields_layout(self) -> FieldsLayout:
         # (a spheroid fills the voxels with j, v and s)
         return FieldsLayout(layer=False, nslots=3)
+
+    def evaluate_polar_traits(
+            self,
+            params: ParamValues,
+            kind: str,
+            r: npt.ArrayLike,
+            theta: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Evaluate each polar trait of one kind ('vpt' or 'dpt') of the
+        kinematics of the spheroid, of traits (see TraitsMotion), at
+        points of its midplane, as it is evaluated: r the distance
+        (arcsec) from its axis, and theta the azimuth (degrees); the
+        velocity traits give their speeds, each along its direction. A row
+        for each trait, of the shape of the points (see
+        profiles.TraitsPlan).
+        """
+        r, theta = np.broadcast_arrays(r, theta)
+        return self._evaluate_traits(
+            self._backend.spheroid_ptraits_evaluate, params, kind,
+            dict(r=r, theta=theta))
+
+    def evaluate_height_traits(
+            self,
+            params: ParamValues,
+            kind: str,
+            r: npt.ArrayLike,
+            z: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Evaluate each height trait of one kind ('vht' or 'dht') of the
+        kinematics of the spheroid, of traits, at its points of the
+        distance r from its axis and the height z along it (arcsec), as it
+        is evaluated. A row for each trait, of the shape of the points.
+        """
+        r, z = np.broadcast_arrays(r, z)
+        return self._evaluate_traits(
+            self._backend.spheroid_htraits_evaluate, params, kind,
+            dict(r=r, z=z))
+
+    def _evaluate_traits(
+            self,
+            function: Callable[..., None],
+            params: ParamValues,
+            kind: str,
+            points: dict[str, np.ndarray]
+    ) -> np.ndarray:
+        """
+        Evaluate the traits of one kind with a native function of traits
+        at points (see _nodal.evaluate_native_traits), of the values of
+        the parameters of the spheroid.
+
+        Raises
+        ------
+        ValueError
+            If its kinematics are not of traits.
+        """
+        motion = self._spheroid.motion()
+        if not isinstance(motion, TraitsMotion):
+            raise ValueError(
+                "only a spheroid of the kinematics of traits has traits")
+        # (an unknown kind has no rows: the native function says so)
+        ntraits = len(motion.traits(kind)) if kind in TRAIT_KINDS else 0
+        self._write_params(params, False, None, None)
+        return evaluate_native_traits(
+            self._driver, self._dtype, function, self._native_spheroid,
+            ntraits, points, kind=kind)
 
     def _write_params(
             self,

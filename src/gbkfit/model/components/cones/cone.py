@@ -166,6 +166,13 @@ class Cone(Component):
     def thick(self, seen_by: 'type[Emission]') -> bool:
         return True
 
+    def nodal_cone(self) -> _nodal.NodalCone:
+        """
+        Return its cone of traits (see NodalCone): e.g. for the profiles
+        of its traits (see GalaxyFunctions).
+        """
+        return self._cone
+
     def frame_params(self) -> FrameParams:
         return self._cone.frame_params()
 

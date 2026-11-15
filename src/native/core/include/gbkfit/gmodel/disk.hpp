@@ -71,7 +71,12 @@ enum class TraitKind
 // the midplane for height traits; and if project, the inclination
 // (degrees) at which the velocity polar traits are projected on the line
 // of sight, each by its direction (directions; otherwise their speeds).
-// out gets the value of trait i at point j at i * npoints + j.
+// out gets the value of trait i at point j at i * npoints + j. The traits
+// of a cone and of a spheroid are evaluated alike (their nodes and
+// traits are those of a disk), at the points of the mid-surface of the
+// walls of a cone: r the distance from its apex, and its planar
+// coordinates r xy_scale (cos theta, sin theta), xy_scale the sine of the
+// angle of its walls from its axis (1 for a disk or a spheroid).
 template<typename T>
 struct DiskTraitsArgs
 {
@@ -86,6 +91,7 @@ struct DiskTraitsArgs
     const T* z = nullptr;
     bool project = false;
     T incl = 0;
+    T xy_scale = 1;
     T* out = nullptr;
 };
 

@@ -787,9 +787,10 @@ def _curves(
     radius (arcsec): 'radius', and each of its functions of radii at them
     (e.g. the rotation of a disk; those of its mass, of radii in kpc, at
     the same radii on the sky), with the problems of those that failed: of
-    a disk, its speeds along each direction it has traits along (e.g.
+    a component, its speeds along each direction it has traits along (e.g.
     'speed_gas:rad'), and its dispersion along each direction if it is not
-    isotropic (e.g. 'dispersion_gas:tan').
+    isotropic (e.g. 'dispersion_gas:tan'), and its position angle and
+    inclination ('orientation_gas:posa', 'orientation_gas:incl').
     """
     radii = np.linspace(radius / _NCURVE, radius, _NCURVE)
     curves = dict(radius=radii.tolist())
@@ -808,6 +809,11 @@ def _curves(
             continue
         at = radii * kpc if in_kpc else radii
         family = GalaxyFunctions.family(name)
+        if family == 'orientation':
+            for which in ('posa', 'incl'):
+                curves[f'{name}:{which}'] = _listed(
+                    np.asarray(function(at, which), dtype=float))
+            continue
         if family == 'speed':
             for direction in _SPEED_DIRECTIONS:
                 try:

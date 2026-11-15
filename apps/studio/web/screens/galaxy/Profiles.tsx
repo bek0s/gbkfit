@@ -1,16 +1,16 @@
 // The profiles of a galaxy along its radius, as one view draws them all
-// (see Views): the speeds of its disks along each direction they move in
-// (the circular speeds of its mass under them, dashed), their dispersion
-// (along each direction, of one that is not isotropic), their surface
-// density, and the orientation of their rings (their position angle and
-// inclination at each ring). Each curve is in the colour of its component,
-// and its dash says its direction. The library gives them for disks (see
-// its GalaxyFunctions): cones and spheroids have none yet.
+// (see Views): the speeds of its components along each direction they
+// move in (the circular speeds of its mass under them, dashed), their
+// dispersion (along each direction, of one that is not isotropic), their
+// density (each relative to its peak, on a logarithmic axis: densities of
+// different units, e.g. of gas and of starlight, side by side), and their
+// orientation (their position angle and inclination). Each curve is in
+// the colour of its component, and its dash says its direction. The
+// library gives them (see its GalaxyFunctions): of a disk along its
+// radius, of a cone from its apex, of a spheroid from its axis.
 import type { GalaxyRender } from '../../api/queries';
-import type { Param, Properties } from './params';
-import { settingOf } from './params';
 import { CurvePlot, type Curve } from './Curves';
-import { componentName, componentsOf, ringRadii, type Options } from './options';
+import { componentName, componentsOf, type Options } from './options';
 
 export type ProfileQuantity = 'speed' | 'dispersion' | 'density' | 'orientation';
 
@@ -32,7 +32,7 @@ const DIRECTIONS: Record<string, { word: string; dash?: string }> = {
 };
 
 // (a curve's name: its family, its component's suffix and its direction,
-// e.g. 'speed_gas:rad'; of one disk without a name, 'speed:rad')
+// e.g. 'speed_gas:rad'; of one component without a name, 'speed:rad')
 function parse(name: string, family: string): { component: string; direction: string | null } | null {
   if (name !== family && !name.startsWith(`${family}_`) && !name.startsWith(`${family}:`)) return null;
   const [head, direction] = name.split(':');
@@ -43,23 +43,19 @@ export function Profiles({
   render,
   quantity,
   options,
-  params,
-  properties,
   colours,
   rings,
 }: {
   render: GalaxyRender | undefined;
   quantity: ProfileQuantity;
   options: Options;
-  params: Param[];
-  properties: Properties;
   // The colour of each component, by name, and the rings to mark
   colours: Map<string, string>;
   rings: number[] | null;
 }) {
   const components = componentsOf(options);
-  // (one disk without a name: its curves are named after none)
-  const nameOf = (suffix: string) => suffix || (components.length ? componentName(components[0], 0) : 'disk');
+  // (one component without a name: its curves are named after none)
+  const nameOf = (suffix: string) => suffix || (components.length ? componentName(components[0], 0) : 'component');
   const colourOf = (suffix: string) => colours.get(nameOf(suffix)) ?? 'fg2';
   const curves: Curve[] = [];
   const all = render?.curves ?? {};
@@ -80,40 +76,30 @@ export function Profiles({
       }
     }
   } else if (quantity === 'density') {
-    unit = 'in the unit of each';
+    // (each relative to its peak)
+    unit = 'relative to its peak';
     for (const name of Object.keys(all)) {
       const parsed = parse(name, 'density');
       if (parsed === null) continue;
-      curves.push({ name, label: nameOf(parsed.component), colour: colourOf(parsed.component), values: all[name] });
+      const peak = Math.max(0, ...all[name].filter((v): v is number => v !== null && Number.isFinite(v)));
+      if (peak <= 0) continue;
+      curves.push({ name, label: nameOf(parsed.component), colour: colourOf(parsed.component), values: all[name].map((v) => (v === null ? null : v / peak)) });
     }
   } else {
-    // (the position angle and inclination of each component, at its rings:
-    // one value of each, or one per ring of a tilted disk)
+    // (the position angle, and the inclination dashed, of each component)
     unit = '°';
-    components.forEach((component, index) => {
-      const radii = ringRadii(component.rnodes);
-      for (const [key, dash] of [
-        ['posa', undefined],
-        ['incl', '5 3'],
-      ] as const) {
-        const param = params.find((p) => p.owner.length === 2 && p.owner[0] === 'components' && p.owner[1] === index && (p.name === key || p.name.endsWith(`_${key}`)));
-        if (!param) continue;
-        const setting = settingOf(properties, param);
-        if (setting.kind !== 'fixed' && setting.kind !== 'free') continue;
-        const values = setting.values.length ? setting.values : param.default === null ? [] : [param.default];
-        if (values.length === 0) continue;
-        const along = radii.length > 1 ? radii : [0, typeof component.rmax === 'number' ? component.rmax : 1];
-        const each = along.map((_, i) => values[Math.min(i, values.length - 1)]);
-        const name = componentName(component, index);
-        curves.push({ name: `${name}/${key}`, label: `${name} · ${key === 'posa' ? 'position angle' : 'inclination'}`, colour: colours.get(name) ?? 'fg2', values: each, radius: along, dash });
-      }
-    });
+    for (const name of Object.keys(all)) {
+      const parsed = parse(name, 'orientation');
+      if (parsed === null) continue;
+      const incl = parsed.direction === 'incl';
+      curves.push({ name, label: `${nameOf(parsed.component)} · ${incl ? 'inclination' : 'position angle'}`, colour: colourOf(parsed.component), values: all[name], dash: incl ? '5 3' : undefined });
+    }
   }
   const empty: Record<ProfileQuantity, string> = {
-    speed: 'No speeds: they are drawn of disks with velocity traits.',
-    dispersion: 'No dispersion: it is drawn of disks with dispersion traits.',
-    density: 'No densities: they are drawn of disks.',
+    speed: 'No speeds: they are drawn of the components that move by traits or by the Jeans equations.',
+    dispersion: 'No dispersion: it is drawn of the components that move by traits or by the Jeans equations.',
+    density: 'No densities: no component has any.',
     orientation: 'No orientation: the components have no position angle or inclination.',
   };
-  return <CurvePlot curves={curves} radius={all.radius ?? []} rings={rings} unit={unit} empty={render ? empty[quantity] : 'Rendering…'} />;
+  return <CurvePlot curves={curves} radius={all.radius ?? []} rings={rings} unit={unit} empty={render ? empty[quantity] : 'Rendering…'} log={quantity === 'density'} />;
 }

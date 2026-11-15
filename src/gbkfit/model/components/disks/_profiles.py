@@ -7,7 +7,9 @@ its vertical equilibrium (see traits.DPTraitEquilibrium and
 traits.RHTraitEquilibrium); its rotation, for its density waves (see
 traits.VPTraitSpiral); and its rotation, speeds along each direction,
 dispersion and surface density, for the functions of its galaxy (see
-GalaxyFunctions).
+GalaxyFunctions). The azimuthal means of its traits are those of any
+component of nodal traits (see components._profiles); here, what a disk
+adds to them: its gravity and its vertical equilibrium.
 """
 
 import dataclasses
@@ -18,6 +20,9 @@ import numpy as np
 
 from gbkfit.params import ParamValues
 from .._nodal import subring_radii, tail_end, tail_radii
+from .._profiles import (
+    at_heights, at_midplane, axisymmetric, azimuthal_edges, azimuthal_mean,
+    directional_sums, polar_densities, selected, trait_speed)
 from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
 from ._nodal import NodalDisk, DiskPlan
 
@@ -37,20 +42,6 @@ __all__ = [
 ]
 
 
-# The azimuthal means of traits that are not axisymmetric: the trapezoid
-# rule on at least and at most these numbers of azimuths, doubled until
-# two means agree to the tolerance, relative to the largest value
-_NAZIMUTHS_MIN = 64
-_NAZIMUTHS_MAX = 4096
-_AZIMUTHAL_TOLERANCE = 1e-6
-
-# The azimuthal means of traits that split the circles (where they jump,
-# and around their narrow structure): Gauss-Legendre quadrature on each
-# piece between two splits, of at least and at most these numbers of
-# points, doubled until two means agree to the tolerance
-_NPOINTS_MIN = 4
-_NPOINTS_MAX = 256
-
 # The heights of the vertical profile of a disk (see _VerticalProfile):
 # Gauss-Legendre points on panels of geometric widths, from 1e-9 of the
 # zmax of each density height trait to its zmax (in units of it)
@@ -59,146 +50,6 @@ _HEIGHT_NPOINTS = 16
 
 # How close to 1 the integral of a height pdf over its heights must be
 _PDF_TOLERANCE = 1e-6
-
-
-def _azimuthal_mean(
-        values: Callable[[np.ndarray], np.ndarray],
-        axisymmetric: bool,
-        edges: np.ndarray | None = None
-) -> np.ndarray:
-    """
-    Return the mean over the azimuth of values(theta), an array of shape
-    (rows, radii, len(theta)) at the azimuths theta (degrees; an array of
-    shape (radii, n) with edges), as an array of shape (rows, radii). If
-    axisymmetric (the values are the same at every azimuth), their values
-    at one azimuth, exactly. With edges, the azimuths (degrees) at which
-    to split the circles (see _azimuthal_mean_pieces). Otherwise by the
-    trapezoid rule, exact for harmonics of orders below the number of
-    azimuths, to _AZIMUTHAL_TOLERANCE of the largest absolute value of
-    each row: structure narrower than the spacing of the azimuths (2 pi R
-    / 128 at least) can go unseen by two successive numbers of azimuths,
-    and be missed.
-
-    Raises
-    ------
-    ValueError
-        If the mean does not converge on _NAZIMUTHS_MAX azimuths.
-    """
-    if axisymmetric:
-        return values(np.zeros(1))[..., 0]
-    if edges is not None:
-        return _azimuthal_mean_pieces(values, edges)
-    count = _NAZIMUTHS_MIN
-    sampled = values(np.arange(count) * 360 / count)
-    mean = sampled.mean(axis=-1)
-    largest = np.max(np.abs(sampled), axis=(-2, -1), initial=0)
-    while count < _NAZIMUTHS_MAX:
-        sampled = values((np.arange(count) + 0.5) * 360 / count)
-        largest = np.maximum(
-            largest, np.max(np.abs(sampled), axis=(-2, -1), initial=0))
-        refined = (mean + sampled.mean(axis=-1)) / 2
-        change = np.max(np.abs(refined - mean), axis=-1, initial=0)
-        mean = refined
-        count *= 2
-        if np.all(change <= _AZIMUTHAL_TOLERANCE * largest):
-            return mean
-    raise ValueError(
-        f"the azimuthal mean of the density of a disk does not converge "
-        f"on {_NAZIMUTHS_MAX} azimuths: its azimuthal structure is too fine "
-        f"or too sharp (e.g. narrow blobs, or the edges of selection "
-        f"traits)")
-
-
-def _azimuthal_mean_pieces(
-        values: Callable[[np.ndarray], np.ndarray], edges: np.ndarray
-) -> np.ndarray:
-    """
-    Return the mean over the azimuth of values(theta) (see
-    _azimuthal_mean), which are smooth between the azimuths edges
-    (degrees, an array of shape (radii, n), NaN where a radius has fewer;
-    see traits.PTrait.azimuthal_edges): by Gauss-Legendre quadrature on
-    each piece between two of them (exact for polynomials of degree below
-    twice its number of points), of _NPOINTS_MIN points, doubled until two
-    means agree to _AZIMUTHAL_TOLERANCE of the largest mean absolute value
-    of each row (its light, also for narrow structure, whose peak is far
-    above its mean).
-
-    Raises
-    ------
-    ValueError
-        If the mean does not converge on _NPOINTS_MAX points per piece.
-    """
-    # The pieces of each circle, from its first edge to the same one a turn
-    # later (from 0 to 360 without edges), and pieces of no length for the
-    # missing edges of a radius
-    edges = np.sort(np.mod(edges, 360), axis=-1)
-    first = np.where(np.isnan(edges[:, :1]), 0, edges[:, :1])
-    bounds = np.sort(np.concatenate(
-        (first, np.where(np.isnan(edges), first + 360, edges), first + 360),
-        axis=-1), axis=-1)
-    lo, hi = bounds[:, :-1, None], bounds[:, 1:, None]
-
-    # TODO: speed. The values at every point are copied from the device
-    # and summed here (most of the time: e.g. 14 ms on CUDA for ten blobs
-    # on 200 circles, against 7 ms with the trapezoid rule); a kernel that
-    # evaluates the traits and sums them with the weights on the device
-    # would return only the means
-    def means(npoints: int) -> tuple[np.ndarray, np.ndarray]:
-        # The mean, and the largest mean absolute value of each row
-        x, w = np.polynomial.legendre.leggauss(npoints)
-        theta = ((hi + lo) + (hi - lo) * x) / 2
-        weights = ((hi - lo) * w / 2).reshape(len(lo), -1) / 360
-        sampled = values(theta.reshape(len(theta), -1))
-        return (np.sum(sampled * weights, axis=-1),
-                np.max(np.sum(np.abs(sampled) * weights, axis=-1), axis=-1))
-    npoints = _NPOINTS_MIN
-    previous, _ = means(npoints)
-    while npoints < _NPOINTS_MAX:
-        npoints *= 2
-        current, scale = means(npoints)
-        change = np.max(np.abs(current - previous), axis=-1, initial=0)
-        if np.all(change <= _AZIMUTHAL_TOLERANCE * scale):
-            return current
-        previous = current
-    raise ValueError(
-        f"the azimuthal mean of the density of a disk does not converge "
-        f"on {_NPOINTS_MAX} points between each two of its splits: its "
-        f"azimuthal structure is too fine or too sharp")
-
-
-def _edges(
-        disk: NodalDisk,
-        params: ParamValues,
-        kinds: Sequence[str],
-        r: np.ndarray
-) -> np.ndarray | None:
-    """
-    Return the azimuths (degrees) at which the polar traits of the given
-    kinds of a disk split the circles of the radii r (arcsec), all
-    together: an array of shape (len(r), n), NaN where a circle has fewer;
-    None if all of them are smooth (see traits.PTrait.azimuthal_edges).
-    """
-    edges = [
-        trait_edges
-        for kind in kinds if disk.traits(kind)
-        for trait, values in zip(
-            disk.traits(kind), disk.trait_values(kind, params))
-        if (trait_edges := trait.azimuthal_edges(
-            r, values, disk.subrnodes())) is not None]
-    if not edges:
-        return None
-    # (without the columns of no edge at any radius, which cost points)
-    edges = np.sort(np.concatenate(edges, axis=1), axis=1)
-    return edges[:, :np.max(np.sum(~np.isnan(edges), axis=1), initial=0)]
-
-
-def _axisymmetric(disk: NodalDisk, kinds: Sequence[str]) -> bool:
-    """
-    Check whether the polar traits of the given kinds of a disk all have
-    the same value at every azimuth (see RPTrait.axisymmetric).
-    """
-    return all(
-        trait.axisymmetric() for kind in kinds for trait in disk.traits(kind))
 
 
 def _isotropic(disk: NodalDisk) -> bool:
@@ -233,15 +84,11 @@ def _dispersions(
     """
     equilibrium = disk.equilibrium()
     vertical = equilibrium is not None and equilibrium.direction() == 'ver'
-    result = []
-    for direction in directions:
-        rows = [
-            i for i, trait in enumerate(disk.traits('dpt'))
-            if trait.direction() in (DPT_DIRECTION_DEFAULT, direction)]
-        total = np.sum(values[rows], axis=0, dtype=float)
-        balances = not vertical or direction == 'ver'
-        result.append(np.hypot(total, balanced) if balances else np.abs(total))
-    return result
+    totals = directional_sums(disk, values, directions)
+    return [
+        np.hypot(total, balanced)
+        if not vertical or direction == 'ver' else np.abs(total)
+        for total, direction in zip(totals, directions)]
 
 
 def _with_inputs(
@@ -257,71 +104,6 @@ def _with_inputs(
     return disk.trait_inputs(state) | dict(params)
 
 
-def _selected(
-        disk: NodalDisk, plan: DiskPlan, params: ParamValues, r: np.ndarray,
-        theta: np.ndarray
-) -> np.ndarray:
-    """
-    Return whether the selection traits of a disk keep each point (r,
-    theta) of it (all if it has none), as an array of their shape.
-    """
-    if not disk.traits('spt'):
-        return np.ones(np.broadcast_shapes(r.shape, theta.shape), dtype=bool)
-    return plan.evaluate_polar_traits(
-        params, 'spt', r, theta).sum(axis=0) != 0
-
-
-def _at_midplane(
-        disk: NodalDisk, plan: DiskPlan, params: ParamValues, kind: str,
-        r: np.ndarray
-) -> np.ndarray:
-    """
-    Return the height traits of one kind of a disk at z = 0 and the radii
-    r (arcsec, an array of shape (radii, 1)), which multiply the polar
-    traits they pair with: an array of shape (traits, radii, 1), ones
-    without them.
-    """
-    if not disk.traits(kind):
-        return np.ones((1, len(r), 1))
-    return plan.evaluate_height_traits(params, kind, r, np.zeros(1))
-
-
-def _at_heights(
-        disk: NodalDisk, plan: DiskPlan, params: ParamValues, kind: str,
-        r: np.ndarray, z: np.ndarray
-) -> np.ndarray:
-    """
-    Return the height traits of one kind of a disk at the radii r (arcsec,
-    an array of shape (radii, 1)) and the heights z (arcsec), which
-    multiply the polar traits they pair with: an array of shape (traits,
-    len(z), radii, 1), ones without them.
-    """
-    if not disk.traits(kind):
-        return np.ones((1, 1, len(r), 1))
-    values = plan.evaluate_height_traits(params, kind, r, z)
-    return np.moveaxis(np.asarray(values, dtype=float), -1, 1)[..., None]
-
-
-def _surface_densities(
-        disk: NodalDisk, plan: DiskPlan, params: ParamValues, r: np.ndarray
-) -> np.ndarray:
-    """
-    Return the azimuthal mean of each density polar trait of a disk where
-    its selection traits keep it, at the radii r (arcsec, on the disk):
-    an array of shape (traits, len(r)).
-    """
-    r = r[:, None]
-
-    def values(theta: np.ndarray) -> np.ndarray:
-        out = np.asarray(
-            plan.evaluate_polar_traits(params, 'rpt', r, theta), dtype=float)
-        return out * _selected(disk, plan, params, r, theta)
-    kinds = ('rpt', 'spt')
-    return _azimuthal_mean(
-        values, _axisymmetric(disk, kinds),
-        _edges(disk, params, kinds, r[:, 0]))
-
-
 def surface_density(
         disk: NodalDisk, plan: DiskPlan, params: ParamValues, r: np.ndarray
 ) -> np.ndarray:
@@ -330,7 +112,7 @@ def surface_density(
     its density polar traits, where its selection traits keep it) at the
     radii r (arcsec, on the disk).
     """
-    return _surface_densities(
+    return polar_densities(
         disk, plan, _with_inputs(disk, params),
         np.asarray(r, dtype=float)).sum(axis=0)
 
@@ -382,7 +164,7 @@ class _VerticalProfile:
         weights = ((hi - lo) / 2 * w).ravel()
         pdfs = np.asarray(plan.evaluate_height_traits(
             params, 'rht', r[:, None], z[None, :]), dtype=float)
-        surfaces = _surface_densities(disk, plan, params, r)
+        surfaces = polar_densities(disk, plan, params, r)
         profile = cls(z, weights, surfaces, pdfs)
         mass = profile.mass()
         unresolved = (np.abs(mass - 1) > _PDF_TOLERANCE) & (mass != 0) \
@@ -528,7 +310,8 @@ def rotation(
         'mass', or the pressure support of its tangential traits), if
         anything.
     """
-    v = _speed(disk, plan, _with_inputs(disk, params, state), radii, 'tan')
+    v = trait_speed(
+        disk, plan, _with_inputs(disk, params, state), radii, 'tan')
     if state is None or state.pressure is None:
         return v
     pressure = np.interp(
@@ -561,39 +344,8 @@ def speed(
     """
     if direction == 'tan':
         return rotation(disk, plan, params, radii, state)
-    return _speed(
+    return trait_speed(
         disk, plan, _with_inputs(disk, params, state), radii, direction)
-
-
-def _speed(
-        disk: NodalDisk,
-        plan: DiskPlan,
-        params: ParamValues,
-        radii: np.ndarray,
-        direction: str
-) -> np.ndarray:
-    """
-    Return the azimuthal mean of the sum of the velocity traits of a disk
-    along a direction, each times its velocity height trait at z = 0, at
-    the radii (arcsec), of the values of its parameters with those its
-    galaxy gives its traits; 0 without them.
-    """
-    r = np.asarray(radii, dtype=float)[:, None]
-    along = [trait.direction() == direction for trait in disk.traits('vpt')]
-    if not any(along):
-        return np.zeros(len(r))
-    heights = _at_midplane(disk, plan, params, 'vht', r)
-
-    def values(theta: np.ndarray) -> np.ndarray:
-        speeds = plan.evaluate_polar_traits(params, 'vpt', r, theta) \
-            * heights
-        return np.sum(speeds[along], axis=0, keepdims=True, dtype=float)
-    # (the other traits, e.g. a spiral wave, do not make its sum vary)
-    axisymmetric = all(
-        trait.axisymmetric()
-        for trait, kept in zip(disk.traits('vpt'), along) if kept)
-    return _azimuthal_mean(
-        values, axisymmetric, _edges(disk, params, ('vpt',), r[:, 0]))[0]
 
 
 def density_waves(
@@ -658,11 +410,12 @@ def _density_without_waves(
         densities = plan.evaluate_polar_traits(params, 'rpt', r, theta)
         return np.sum(
             densities[others], axis=0, keepdims=True, dtype=float)
-    axisymmetric = all(
+    smooth = all(
         trait.axisymmetric()
         for trait, other in zip(disk.traits('rpt'), others) if other)
-    return _azimuthal_mean(
-        values, axisymmetric, _edges(disk, params, ('rpt',), r[:, 0]))[0]
+    return azimuthal_mean(
+        values, smooth,
+        azimuthal_edges(disk, params, ('rpt',), r[:, 0]))[0]
 
 
 def dispersion(
@@ -718,7 +471,7 @@ def dispersion(
         else np.interp(r, disk.subrnodes(), equilibrium)
     if not disk.traits('dpt'):
         return balanced[:, 0]
-    heights = _at_midplane(disk, plan, params, 'dht', r)
+    heights = at_midplane(disk, plan, params, 'dht', r)
 
     def values(theta: np.ndarray) -> np.ndarray:
         return _dispersions(
@@ -726,9 +479,9 @@ def dispersion(
             plan.evaluate_polar_traits(params, 'dpt', r, theta) * heights,
             balanced, (direction or DPT_DIRECTION_DEFAULT,))[0][None]
     kinds = ('dpt',)
-    return _azimuthal_mean(
-        values, _axisymmetric(disk, kinds),
-        _edges(disk, params, kinds, r[:, 0]))[0]
+    return azimuthal_mean(
+        values, axisymmetric(disk, kinds),
+        azimuthal_edges(disk, params, kinds, r[:, 0]))[0]
 
 
 def pressure_support(
@@ -802,8 +555,8 @@ def pressure_support(
     z = np.zeros(1) if heights is None else np.asarray(heights, dtype=float)
     # (the height traits before the azimuths: of shape (traits, heights,
     # radii, 1))
-    density_heights = _at_heights(disk, plan, params, 'rht', r, z)
-    dispersion_heights = _at_heights(disk, plan, params, 'dht', r, z)
+    density_heights = at_heights(disk, plan, params, 'rht', r, z)
+    dispersion_heights = at_heights(disk, plan, params, 'dht', r, z)
     given = None if density is None \
         else np.asarray(density, dtype=float).reshape(len(r), -1).T[..., None]
     if midplane is not None:
@@ -832,7 +585,7 @@ def pressure_support(
             own = np.sum(
                 plan.evaluate_polar_traits(params, 'rpt', r, theta)[:, None]
                 * density_heights, axis=0, dtype=float)
-            own = own * _selected(disk, plan, params, r, theta)
+            own = own * selected(disk, plan, params, r, theta)
         rows = (own, own * radial ** 2)
         if not isotropic:
             rows += (own * tangential ** 2,)
@@ -840,9 +593,10 @@ def pressure_support(
         # (the heights in the rows of the azimuthal means)
         return rows.reshape(-1, *rows.shape[2:])
     kinds = ('rpt', 'spt', 'dpt') if density is None else ('dpt',)
-    density, pressure, *tangential = _azimuthal_mean(
-        values, _axisymmetric(disk, kinds),
-        _edges(disk, params, kinds, r[:, 0])).reshape(-1, len(z), len(r))
+    density, pressure, *tangential = azimuthal_mean(
+        values, axisymmetric(disk, kinds),
+        azimuthal_edges(disk, params, kinds, r[:, 0])
+    ).reshape(-1, len(z), len(r))
     gradient = np.gradient(pressure, r[:, 0], axis=-1, edge_order=2)
     support = r[:, 0] * gradient
     if not isotropic:
@@ -941,7 +695,7 @@ class NodalDiskDensity:
         end = tail_end(self._disk.subrnodes())
         return np.where(
             r < end,
-            _surface_densities(self._disk, self._plan, self._params, r), 0)
+            polar_densities(self._disk, self._plan, self._params, r), 0)
 
     def height_pdfs(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
         """

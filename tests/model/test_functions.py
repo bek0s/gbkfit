@@ -68,7 +68,7 @@ def test_circular_velocity_of_the_mass():
         'vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo', 'mass', 'mass_bh',
         'mass_halo', 'slope', 'slope_bh', 'slope_halo', 'kpc_per_arcsec',
         'redshift_at', 'rotation_gas', 'speed_gas', 'dispersion_gas',
-        'density_gas')
+        'density_gas', 'orientation_gas')
     bound = functions.bind(PARAMS)
     R = np.array([0.5, 2.0, 8.0])
     np.testing.assert_allclose(
@@ -200,7 +200,8 @@ def test_functions_of_a_disk_without_mass():
     galaxy = galaxy_parser.load(dict(components=[copy.deepcopy(DISK)]))
     functions = galaxy.plan_functions()
     assert functions.names() == (
-        'redshift_at', 'rotation', 'speed', 'dispersion', 'density')
+        'redshift_at', 'rotation', 'speed', 'dispersion', 'density',
+        'orientation')
     bound = functions.bind(DISK_PARAMS)
     R = np.array([[0.0, 1.3], [7.1, 20.0]])
     np.testing.assert_allclose(
@@ -214,6 +215,130 @@ def test_functions_of_a_disk_without_mass():
     np.testing.assert_array_equal(bound['speed'](R, 'rad'), 0)
     np.testing.assert_allclose(
         bound['density'](R), np.exp(-R / 4), rtol=1e-12)
+    # (its orientation, the same at every radius)
+    np.testing.assert_array_equal(bound['orientation'](R, 'posa'), 30)
+    np.testing.assert_array_equal(bound['orientation'](R, 'incl'), 60)
+    with pytest.raises(ValueError, match="'posa' or 'incl'"):
+        bound['orientation'](R, 'tilt')
+
+
+def test_the_orientation_of_a_tilted_disk_is_as_it_is_evaluated():
+    # Its angles at its nodes, interpolated to its subnodes and linearly
+    # between them; beyond them, their last values
+    disk = copy.deepcopy(DISK) | dict(tilted=True, rstep=0.5)
+    galaxy = galaxy_parser.load(dict(components=[disk]))
+    rnodes = np.arange(0, 21, 2.0)
+    posa, incl = 30 + rnodes ** 1.5, 60 - rnodes
+    bound = galaxy.plan_functions().bind(
+        DISK_PARAMS | dict(posa=posa, incl=incl))
+    subrnodes = np.array(galaxy.components()[0].density_disk().subrnodes())
+    R = np.array([0.0, 3.3, 9.0, 19.7, 25.0])
+    for which, values in (('posa', posa), ('incl', incl)):
+        np.testing.assert_allclose(
+            bound['orientation'](R, which),
+            np.interp(R, subrnodes, np.interp(subrnodes, rnodes, values)),
+            rtol=1e-12)
+
+
+# A cone of an outflow: its traits along the distance from its apex
+CONE = dict(
+    type='cone', rnodes=list(range(0, 21, 2)),
+    rptraits=dict(type='exponential'), rhtraits=dict(type='gauss', zmax=4),
+    vptraits=dict(type='uniform', direction='out'),
+    dptraits=dict(type='uniform'), emission=dict(type='lines'))
+CONE_PARAMS = dict(
+    xpos=0, ypos=0, posa=30, incl=60, wall=35, vsys=0, rpt_a=1, rpt_s=4,
+    rht_s=1, vpt_vo=150, dpt_a=12)
+
+
+def test_functions_of_a_cone():
+    # Those of its traits, at the mid-surface of its walls
+    galaxy = galaxy_parser.load(dict(components=[copy.deepcopy(CONE)]))
+    functions = galaxy.plan_functions()
+    assert functions.names() == (
+        'redshift_at', 'rotation', 'speed', 'dispersion', 'density',
+        'orientation')
+    bound = functions.bind(CONE_PARAMS)
+    R = np.array([0.5, 3.0, 11.0, 24.0])
+    np.testing.assert_allclose(bound['speed'](R, 'out'), 150, rtol=1e-12)
+    np.testing.assert_array_equal(bound['rotation'](R), 0)
+    np.testing.assert_allclose(bound['dispersion'](R), 12, rtol=1e-12)
+    np.testing.assert_allclose(
+        bound['density'](R), np.exp(-R / 4), rtol=1e-12)
+    np.testing.assert_array_equal(bound['orientation'](R, 'incl'), 60)
+
+
+# A spheroid of starlight, of the Sersic profile
+SPHEROID = dict(
+    type='spheroid', rmax=30, profile=dict(type='sersic'),
+    emission=dict(type='stars'))
+SPHEROID_PARAMS = dict(xpos=0, ypos=0, ie=2.5, re=4, n=2)
+
+
+def test_functions_of_a_spheroid_of_traits():
+    # Its density seen face-on (its surface brightness at its effective
+    # radius, ie), and those of its traits at its midplane
+    spheroid = copy.deepcopy(SPHEROID) | dict(
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'))
+    galaxy = galaxy_parser.load(dict(components=[spheroid]))
+    functions = galaxy.plan_functions()
+    assert functions.names() == (
+        'redshift_at', 'rotation', 'speed', 'dispersion', 'density',
+        'orientation')
+    bound = functions.bind(SPHEROID_PARAMS | dict(
+        posa=30, incl=60, vsys=0, vpt_rt=3, vpt_vt=200, dpt_a=20))
+    R = np.array([0.0, 1.3, 7.1, 20.0])
+    np.testing.assert_allclose(
+        bound['rotation'](R), 200 * 2 / np.pi * np.arctan(R / 3),
+        rtol=1e-12)
+    np.testing.assert_allclose(bound['dispersion'](R), 20, rtol=1e-12)
+    np.testing.assert_allclose(bound['density'](4.0), 2.5, rtol=1e-9)
+    assert np.all(np.diff(bound['density'](R)) < 0)
+    # (its motion within its rmax, where it has stars)
+    assert galaxy.function_radius_range('rotation') == (0.0, 30)
+    assert galaxy.function_radius_range('density') == (0.0, np.inf)
+    assert np.isnan(bound['rotation'](31.0))
+    # Without kinematics, its density alone
+    galaxy = galaxy_parser.load(dict(components=[copy.deepcopy(
+        SPHEROID) | dict(emission=dict(type='band'))]))
+    functions = galaxy.plan_functions()
+    assert functions.names() == ('redshift_at', 'density')
+    np.testing.assert_allclose(
+        functions.bind(SPHEROID_PARAMS)['density'](4.0), 2.5, rtol=1e-9)
+
+
+def test_functions_of_a_spheroid_of_jeans_kinematics():
+    # Those of its Jeans tables at its midplane: it rotates, as kappa
+    # says, and has no other speed; its dispersion is along a direction
+    # (sigma_R = sigma_z where beta_z = 0)
+    bulge = copy.deepcopy(SPHEROID) | dict(
+        type='jeans_spheroid', name='bulge', shape=dict(type='flattened'))
+    galaxy = galaxy_parser.load(dict(
+        components=[bulge],
+        mass=[dict(type='traced_spheroid', name='bulge', component='bulge')],
+        distance=dict(type='parameter')))
+    functions = galaxy.plan_functions()
+    assert {'rotation_bulge', 'speed_bulge', 'dispersion_bulge',
+            'density_bulge', 'orientation_bulge'} <= set(functions.names())
+    params = {f'bulge_{k}': v for k, v in SPHEROID_PARAMS.items()} | dict(
+        bulge_posa=0, bulge_incl=60, bulge_vsys=0, bulge_q=0.6,
+        bulge_beta_z=0, bulge_kappa=0, distance=10, mass_bulge_upsilon=1)
+    R = np.array([1.0, 4.0, 10.0])
+    still = functions.bind(params)
+    np.testing.assert_array_equal(still['rotation_bulge'](R), 0)
+    np.testing.assert_array_equal(still['speed_bulge'](R, 'rad'), 0)
+    np.testing.assert_allclose(
+        still['dispersion_bulge'](R, 'rad'),
+        still['dispersion_bulge'](R, 'ver'), rtol=1e-9)
+    assert np.all(still['dispersion_bulge'](R, 'rad') > 0)
+    with pytest.raises(ValueError, match="give its direction"):
+        still['dispersion_bulge'](R)
+    turning = functions.bind(params | dict(bulge_kappa=1))
+    assert np.all(turning['rotation_bulge'](R) > 0)
+    np.testing.assert_allclose(
+        turning['speed_bulge'](R, 'tan'), turning['rotation_bulge'](R),
+        rtol=1e-12)
 
 
 def test_the_speeds_of_a_disk_are_along_each_direction():
