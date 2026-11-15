@@ -23,6 +23,7 @@ import numpy as np
 
 import gbkfit.moments
 from gbkfit import prep
+from gbkfit.analysis import PVDiagram, pv_diagram
 from gbkfit.config import ConfigError
 from gbkfit.io import describe_fits, read_oriented
 
@@ -65,31 +66,56 @@ _PERCENTILES = (50, 99.9)
 
 
 @dataclasses.dataclass(frozen=True)
+class CubeAxis:
+    """
+    How the velocities of a galaxy (its systemic velocity and its motions,
+    km/s) land on the spectral axis of a cube rendered of it: at the
+    velocity of the axis of the Doppler factor shift D(v) (shift the 1 + z
+    of its lines at the systemic velocity 0), in the convention of the
+    axis: 'optical' (c (D - 1)), 'radio' (c (1 - 1 / D)) or
+    'relativistic' (c (D^2 - 1) / (D^2 + 1)).
+    """
+    convention: Literal['optical', 'radio', 'relativistic']
+    shift: float
+
+
+@dataclasses.dataclass(frozen=True)
 class Cube:
     """
     A cube in the orientation of the model: its values (channels, ny,
     nx), the coordinates of its channels along its spectral axis and
     their unit (see _SPECTRAL_UNITS; None if its header does not give
     them), the range of its values for colours (percentiles of its
-    finite values, see cube_range), and the least and the greatest of its
-    finite values (None if it has none; see cube_extent).
+    finite values, see cube_range), the least and the greatest of its
+    finite values (None if it has none; see cube_extent); and of a cube
+    rendered of a galaxy, the size of its pixels (arcsec) and how its
+    velocities land on its spectral axis (see CubeAxis; both None of a
+    file).
     """
     values: np.ndarray
     spectral: np.ndarray | None
     unit: str | None
     range: tuple[float, float]
     extent: tuple[float, float] | None
+    step: float | None = None
+    axis: CubeAxis | None = None
 
     @classmethod
     def of(
             cls,
             values: np.ndarray,
             spectral: np.ndarray | None = None,
-            unit: str | None = None
+            unit: str | None = None,
+            step: float | None = None,
+            axis: CubeAxis | None = None
     ) -> 'Cube':
-        """Return the cube of values (with the coordinates of channels)."""
+        """
+        Return the cube of values (with the coordinates of channels, and
+        of a galaxy rendered, the size of its pixels and its axis).
+        """
         return cls(
-            values, spectral, unit, cube_range(values), cube_extent(values))
+            values, spectral, unit, cube_range(values), cube_extent(values),
+            step, axis)
 
     def velocities(self) -> np.ndarray | None:
         """Return the velocities of its channels (km/s), if they are."""
@@ -211,6 +237,34 @@ class Views:
         pixels = values[:, y0:y1 + 1, x0:x1 + 1]
         missing = np.isnan(pixels).all(axis=(1, 2))
         return np.where(missing, np.nan, np.nansum(pixels, axis=(1, 2)))
+
+    def pv(
+            self, path: str, hdu: int, pa: float,
+            centre: tuple[float, float] | None = None, width: int = 1
+    ) -> PVDiagram:
+        """
+        Return the position-velocity diagram of a cube along a slit (see
+        gbkfit.analysis.pv_diagram), on its pixels: through the centre (x,
+        y; by default that of the cube) at the position angle pa (degrees,
+        as the posa of the models), of the width (pixels), every pixel.
+        Its positions are in pixels from the centre, and its velocities
+        the coordinates of the channels (or their indices without them).
+
+        Raises
+        ------
+        Invalid
+            If the width is less than 1 (or as cube).
+        """
+        cube = self.cube(path, hdu)
+        nchannels, ny, nx = cube.values.shape
+        if centre is None:
+            centre = ((nx - 1) / 2, (ny - 1) / 2)
+        spectral = np.arange(nchannels, dtype=float) \
+            if cube.spectral is None else cube.spectral
+        try:
+            return pv_diagram(cube.values, spectral, centre, pa, width)
+        except ValueError as e:
+            raise Invalid(str(e)) from e
 
     def moments(
             self, path: str, hdu: int, snr: float,

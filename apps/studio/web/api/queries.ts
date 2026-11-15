@@ -583,6 +583,34 @@ export function useGalaxyExtra(
   });
 }
 
+// The position-velocity diagram of a cube along a slit (see the server's
+// /views/pv): its values (channels, positions), its positions (pixels from
+// the centre, positive towards the position angle), the coordinates of
+// its channels and their unit, and the size of the pixels of the cube
+// (arcsec; null if not known)
+export interface PVDiagram {
+  values: Float32Array;
+  positions: number[];
+  spectral: number[];
+  unit: string | null;
+  step: number | null;
+}
+
+export function usePV(path: string | undefined, hdu: number, pa: number, centre: [number, number] | null, width = 1) {
+  return useQuery({
+    queryKey: keys.view('pv', path ?? '', hdu, pa, JSON.stringify(centre), width),
+    enabled: path !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: async ({ signal }): Promise<PVDiagram> => {
+      const query = { hdu, pa, width, ...(centre ? { x: centre[0], y: centre[1] } : {}) };
+      const frame = decodeFrame(await data(api.GET('/api/v1/views/pv/{path}', { signal, params: { path: { path: path ?? '' }, query }, parseAs: 'arrayBuffer' })));
+      const header = frame.header as { positions: number[]; spectral: number[]; unit: string | null; step: number | null };
+      return { values: frame.arrays[0].values, positions: header.positions, spectral: header.spectral, unit: header.unit, step: header.step };
+    },
+  });
+}
+
 // The cube of a galaxy rendered (see the server's /views/galaxy-cube): the
 // path the views of cubes take it at, its shape (x, y, channels) and the
 // unit of its channels; made again as the galaxy or its values change

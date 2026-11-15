@@ -282,6 +282,36 @@ def view_moments(
         media_type='application/octet-stream')
 
 
+@router.get(
+    '/views/pv/{path:path}', response_class=Response, responses=_FRAME)
+def view_pv(
+        server: ServerDep, path: str, hdu: int, pa: float,
+        x: float | None = None, y: float | None = None, width: int = 1
+) -> Response:
+    """
+    Return the position-velocity diagram of a cube along a slit through
+    the pixel (x, y; by default its centre) at the position angle pa
+    (degrees, as the posa of the models), of the width (pixels; see
+    Views.pv): a frame of one array, 'pv' (channels, positions; NaN where
+    the slit has no pixel), whose header has the positions (pixels from
+    the centre, positive towards pa), the coordinates of the channels and
+    their unit (none without them), and the size of the pixels of the
+    cube (arcsec; none if not known).
+    """
+    centre = None if x is None or y is None else (x, y)
+    diagram = server.views.pv(path, hdu, pa, centre, width)
+    cube = server.views.cube(path, hdu)
+    header = dict(
+        positions=diagram.positions.tolist(),
+        spectral=diagram.velocities.tolist(),
+        unit=cube.unit if cube.spectral is not None else None,
+        step=cube.step)
+    return Response(
+        frames.array_frame(
+            header, [(dict(name='pv'), diagram.data.astype(np.float32))]),
+        media_type='application/octet-stream')
+
+
 @router.post('/views/psf')
 def view_psf(server: ServerDep, request: PSFRequest) -> PSFViewInfo:
     """
@@ -419,7 +449,9 @@ async def view_galaxy_cube(
     path = server.views.put(cube)
     nchannels, ny, nx = cube.values.shape
     return CubeRenderInfo(
-        path=path, shape=[nx, ny, nchannels], unit=cube.unit or '')
+        path=path, shape=[nx, ny, nchannels], unit=cube.unit or '',
+        step=cube.step, convention=cube.axis.convention,
+        shift=cube.axis.shift)
 
 
 @router.post('/views/observed')

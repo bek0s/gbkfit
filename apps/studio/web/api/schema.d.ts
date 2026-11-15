@@ -277,6 +277,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/views/pv/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * View Pv
+         * @description Return the position-velocity diagram of a cube along a slit through
+         *     the pixel (x, y; by default its centre) at the position angle pa
+         *     (degrees, as the posa of the models), of the width (pixels; see
+         *     Views.pv): a frame of one array, 'pv' (channels, positions; NaN where
+         *     the slit has no pixel), whose header has the positions (pixels from
+         *     the centre, positive towards pa), the coordinates of the channels and
+         *     their unit (none without them), and the size of the pixels of the
+         *     cube (arcsec; none if not known).
+         */
+        get: operations["view_pv_api_v1_views_pv__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/views/psf": {
         parameters: {
             query?: never;
@@ -1103,8 +1130,11 @@ export interface components {
          * CubeRenderInfo
          * @description The cube of a galaxy rendered (see Renders.cube): the path the views
          *     of cubes take it at (its array 0; kept for a while, see Views.put), its
-         *     shape in the order of the model (nx, ny, nchannels), and the unit of
-         *     the coordinates of its channels (km/s).
+         *     shape in the order of the model (nx, ny, nchannels), the unit of the
+         *     coordinates of its channels (km/s), the size of its pixels (arcsec),
+         *     and how the velocities of the galaxy land on its channels (see
+         *     CubeAxis): the convention of their velocities ('optical', 'radio' or
+         *     'relativistic') and the 1 + z of its lines (shift).
          */
         CubeRenderInfo: {
             /** Path */
@@ -1113,6 +1143,15 @@ export interface components {
             shape: number[];
             /** Unit */
             unit: string;
+            /** Step */
+            step: number;
+            /**
+             * Convention
+             * @enum {string}
+             */
+            convention: "optical" | "radio" | "relativistic";
+            /** Shift */
+            shift: number;
         };
         /**
          * Diagnostic
@@ -2321,6 +2360,43 @@ export interface operations {
                 rest?: string | null;
                 velocity?: ("radio" | "optical") | null;
                 spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
+            };
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_pv_api_v1_views_pv__path__get: {
+        parameters: {
+            query: {
+                hdu: number;
+                pa: number;
+                x?: number | null;
+                y?: number | null;
+                width?: number;
             };
             header?: never;
             path: {

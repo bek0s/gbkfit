@@ -13,12 +13,14 @@ import { useIsFetching } from '@tanstack/react-query';
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelHeaderProps, type IDockviewPanelProps } from 'dockview-react';
 import 'dockview-react/dist/styles/dockview.css';
 import { createContext, useContext, useMemo, useRef, type ReactNode } from 'react';
-import { useGalaxyExtra, useGalaxyRender, useGalaxyVolume, type GalaxyExtraInfo, type GalaxyRender } from '../../api/queries';
+import { useGalaxyCube, useGalaxyExtra, useGalaxyRender, useGalaxyVolume, usePV, type GalaxyExtraInfo, type GalaxyRender } from '../../api/queries';
 import { MapPanel } from '../../components/MapPanel';
 import { Choice } from '../../components/ui/inputs';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
 import { CurvePlot, massCurves } from './Curves';
-import type { Options } from './options';
+import { componentsOf, type Options } from './options';
+import { settingOf, type Param } from './params';
+import { PVPlot } from './PV';
 import { Profiles, PROFILE_QUANTITIES, type ProfileQuantity } from './Profiles';
 import { SeenView } from './Seen';
 import { hasHeight, RenderMap, type Orientation, type Quantity } from './Viewer';
@@ -33,6 +35,7 @@ export type ViewKind =
   | { kind: 'mass' }
   | { kind: 'slices' }
   | { kind: '3d' }
+  | { kind: 'pv'; axis: 'major' | 'minor' }
   | { kind: 'extra'; name: string; ids: Record<string, string>; title: string };
 
 // What the views share: the galaxy as it settles, what sees it, its
@@ -47,6 +50,8 @@ interface ViewsData {
   observations: string[];
   seenBy: string | null;
   options: Options;
+  // The parameters of the galaxy (e.g. for the axes of its main component)
+  params: Param[];
   kpcPerArcsec: number | null;
   rings: number[] | null;
   // The render of the galaxy as seen, small: its curves, and the list of
@@ -207,6 +212,8 @@ function titleOf(kind: ViewKind, seenBy: string | null = null): { title: string;
       return { title: 'Slices of the light', small: '3d, along z' };
     case '3d':
       return { title: 'In 3d', small: 'the light, to turn' };
+    case 'pv':
+      return { title: 'Position–velocity', small: `along its ${kind.axis} axis` };
     case 'extra':
       return { title: kind.title, small: 'an output of the library' };
   }
@@ -236,6 +243,7 @@ function viewEntries(current: ViewKind, data: ViewsData, choose: (kind: ViewKind
     entry('Mass model', 'The circular speeds of its mass and of each part', { kind: 'mass' }),
     entry('Slices of the light', 'Its light in 3d, at heights above its plane', { kind: 'slices' }),
     entry('In 3d', 'Its light as a volume to turn', { kind: '3d' }),
+    entry('Position–velocity', 'Its cube along a slit through its centre, on the major or the minor axis of its main component, with its rotation over it', { kind: 'pv', axis: 'major' }),
     ...(extras.length ? [{ section: 'Extra outputs of the library' } as MenuEntry] : []),
     ...extras.map((x) => entry(extraLabel(x), x.description, { kind: 'extra', name: x.name, ids: x.ids, title: extraLabel(x) })),
   ];
@@ -265,6 +273,12 @@ function ViewHead(props: IDockviewPanelHeaderProps<{ view: ViewKind }>) {
     switches = (['light', 'velocity', 'dispersion'] as Quantity[]).map((q) => (
       <button key={q} data-on={kind.quantity === q || undefined} onClick={() => choose({ ...kind, quantity: q })}>
         {q[0].toUpperCase() + q.slice(1)}
+      </button>
+    ));
+  } else if (kind.kind === 'pv') {
+    switches = (['major', 'minor'] as const).map((axis) => (
+      <button key={axis} data-on={kind.axis === axis || undefined} onClick={() => choose({ ...kind, axis })}>
+        {axis === 'major' ? 'Major axis' : 'Minor axis'}
       </button>
     ));
   } else if (kind.kind === 'profiles') {
@@ -327,9 +341,79 @@ function ViewContent({ kind, data, galaxy }: { kind: ViewKind; data: ViewsData; 
       return <SlicesView data={data} galaxy={galaxy} />;
     case '3d':
       return <Volume3DView data={data} galaxy={galaxy} />;
+    case 'pv':
+      return <PVView data={data} galaxy={galaxy} axis={kind.axis} />;
     case 'extra':
       return <ExtraView data={data} galaxy={galaxy} extra={kind} />;
   }
+}
+
+// The position-velocity diagram of the galaxy (see PVPlot): of its cube,
+// as seen, along a slit through the centre of its main component (its
+// first disk, else its first component with a position angle), on its
+// major axis (its position angle; their mean, of one per ring) or its
+// minor axis; on the major axis, with the line of sight velocity of its
+// rotation over it
+function PVView({ data, galaxy, axis }: { data: ViewsData; galaxy: Options; axis: 'major' | 'minor' }) {
+  const cube = useGalaxyCube(data.project, galaxy, data.properties, 'sky', 128);
+  const main = mainAxes(data, galaxy);
+  const step = cube.data?.step;
+  const [nx, ny] = cube.data?.shape ?? [0, 0];
+  const centre: [number, number] | null = main && step ? [(nx - 1) / 2 + main.xpos / step, (ny - 1) / 2 + main.ypos / step] : null;
+  const pa = (main?.posa ?? 0) + (axis === 'minor' ? 90 : 0);
+  const pv = usePV(cube.data?.path, 0, pa, centre);
+  const error = cube.error ?? pv.error;
+  if (error) return <p className="gx-error gv-note">{error.message}</p>;
+  if (!pv.data) return <div className="gx-map-wait" />;
+  // (the rotation of the main component along the major axis, on the line
+  // of sight, positive positions on its receding side; at the velocities
+  // of the channels where it lands, see onAxis)
+  const curves = data.render?.curves;
+  const rotation = main && curves ? curves[main.suffix ? `rotation_${main.suffix}` : 'rotation'] : undefined;
+  const sine = Math.sin(((main?.incl ?? 0) * Math.PI) / 180);
+  const cubeAxis = cube.data;
+  const model =
+    axis === 'major' && main && rotation && curves?.radius && cubeAxis
+      ? curves.radius
+          .flatMap((r, i) => {
+            const v = rotation[i];
+            return r === null || v === null ? [] : [-1, 1].map((side) => ({ position: side * r, velocity: onAxis(main.vsys + side * v * sine, cubeAxis) }));
+          })
+          .sort((a, b) => a.position - b.position)
+      : null;
+  return <PVPlot pv={pv.data} model={model} />;
+}
+
+// The velocity of the channels of a cube of a galaxy where a velocity of
+// the galaxy lands (see the server's CubeAxis): of the Doppler factor
+// shift D(v), in the convention of the channels
+function onAxis(velocity: number, axis: { convention: 'optical' | 'radio' | 'relativistic'; shift: number }): number {
+  const c = 299792.458;
+  const factor = axis.shift * Math.sqrt((1 + velocity / c) / (1 - velocity / c));
+  if (axis.convention === 'optical') return c * (factor - 1);
+  if (axis.convention === 'radio') return c * (1 - 1 / factor);
+  return (c * (factor ** 2 - 1)) / (factor ** 2 + 1);
+}
+
+// The axes of the main component of a galaxy (its first disk, else its
+// first component with a position angle): its centre, position angle,
+// inclination and systemic velocity (the mean of the values of each, of
+// one per ring), and the suffix of its functions (its name, if named)
+function mainAxes(data: ViewsData, galaxy: Options): { xpos: number; ypos: number; posa: number; incl: number; vsys: number; suffix: string } | null {
+  const components = componentsOf(galaxy);
+  const own = (index: number, key: string) => data.params.find((p) => p.owner.length === 2 && p.owner[0] === 'components' && p.owner[1] === index && (p.name === key || p.name.endsWith(`_${key}`)));
+  const disks = components.map((_, i) => i).filter((i) => String(components[i].type).endsWith('disk'));
+  const index = [...disks, ...components.map((_, i) => i)].find((i) => own(i, 'posa') !== undefined);
+  if (index === undefined) return null;
+  const value = (key: string) => {
+    const param = own(index, key);
+    if (!param) return 0;
+    const setting = settingOf(data.properties, param);
+    const values = setting.kind === 'fixed' || setting.kind === 'free' ? setting.values.filter(Number.isFinite) : [];
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : (param.default ?? 0);
+  };
+  const name = components[index].name;
+  return { xpos: value('xpos'), ypos: value('ypos'), posa: value('posa'), incl: value('incl'), vsys: value('vsys'), suffix: typeof name === 'string' ? name : '' };
 }
 
 function SlicesView({ data, galaxy }: { data: ViewsData; galaxy: Options }) {

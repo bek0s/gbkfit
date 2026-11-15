@@ -28,6 +28,7 @@ import gbkfit.setup
 import gbkfit.units
 from gbkfit.config import ConfigError, error_message, paths_relative_to
 from gbkfit.driver.drivers.host import DriverHost
+from gbkfit.grid import doppler
 from gbkfit.model import (
     BandEmission, Extras, Galaxy, GalaxyFunctions, LineEmission,
     galaxy_parser)
@@ -35,7 +36,7 @@ from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.params import ParamSpace
 
 from .errors import Invalid
-from .views import Cube
+from .views import Cube, CubeAxis
 from .workspace import Workspace
 
 
@@ -365,9 +366,10 @@ class Renders:
         components that emit lines, through an ideal cube of the pixels of
         its maps, whose channels of velocities (km/s; of the rest of the
         first line named, if any) hold their light: the velocities of its
-        maps, each within _SIGMAS times its dispersion, of each line (at
-        most _NCHANNELS channels, of a round width); telling progress the
-        stage it reaches, if given.
+        maps, each within _SIGMAS times its dispersion, of each line, at
+        its redshift (see _cube_axis; at most _NCHANNELS
+        channels, of a round width); telling progress the stage it
+        reaches, if given.
 
         Raises
         ------
@@ -392,7 +394,9 @@ class Renders:
             extras = Extras()
             tell('evaluating the maps')
             group.plan(DriverHost()).model_h(values, extras)
-            low, high = _velocity_range(_maps(galaxy, extras))
+            axis = _cube_axis(galaxy.redshift(), seen)
+            low, high = _observed_velocities(
+                _velocity_range(_maps(galaxy, extras)), axis)
             offsets = _line_offsets(seen)
             low, high = low + min(offsets), high + max(offsets)
             width = _round_width((high - low) / (_NCHANNELS - 1))
@@ -407,7 +411,7 @@ class Renders:
             raise Invalid(error_message(e)) from e
         cube_values = np.array(data['spectra'].data, dtype=np.float32)
         velocities = low + width * np.arange(nchannels)
-        return Cube.of(cube_values, velocities, 'km/s')
+        return Cube.of(cube_values, velocities, 'km/s', step, axis)
 
     def observed(
             self,
@@ -637,6 +641,46 @@ def _velocity_range(maps: Mapping[str, np.ndarray]) -> tuple[float, float]:
     return min(lows), max(highs)
 
 
+def _cube_axis(redshift: float, components: list[Any]) -> CubeAxis:
+    """
+    Return how the velocities of a galaxy land on the spectral axis of its
+    cube (see _observations), as its lines are placed (see LinePlacement
+    and Lines.factors): at the 1 + z of its redshift, in the convention of
+    the rest of the first line named by the components that emit lines
+    (optical for a wavelength, radio for a frequency); without names, one
+    line at the rest of the axis whatever the redshift, on an axis of
+    relativistic velocities.
+    """
+    rests = [
+        lines[0].rest() for component in components
+        if (lines := component.emission().lines().lines())]
+    if not rests:
+        return CubeAxis('relativistic', 1.0)
+    return CubeAxis(
+        'optical' if rests[0].unit.physical_type == 'length' else 'radio',
+        1 + redshift)
+
+
+def _observed_velocities(
+        velocities: tuple[float, float], axis: CubeAxis
+) -> tuple[float, float]:
+    """
+    Return the velocities (km/s) of the spectral axis of the cube of a
+    galaxy where the light of the given velocities of its maps lands (see
+    CubeAxis): of the Doppler factor (1 + z) D(v), in the convention of
+    the axis.
+    """
+    c = astropy.constants.c.to_value('km/s')
+    factor = axis.shift * doppler(np.asarray(velocities, dtype=float))
+    if axis.convention == 'relativistic':
+        observed = c * (factor ** 2 - 1) / (factor ** 2 + 1)
+    elif axis.convention == 'optical':
+        observed = c * (factor - 1)
+    else:
+        observed = c * (1 - 1 / factor)
+    return float(observed[0]), float(observed[1])
+
+
 def _line_offsets(components: list[Any]) -> list[float]:
     """
     Return the velocities (km/s) of the lines that components emit
@@ -821,7 +865,8 @@ def _curves(
                 except (ValueError, TypeError, RuntimeError) as e:
                     problems.append(f"{name}: {error_message(e)}")
                     break
-                if np.any(result != 0):
+                # (of the directions it moves along, where it is defined)
+                if np.any((result != 0) & np.isfinite(result)):
                     curves[f'{name}:{direction}'] = _listed(result)
             continue
         try:

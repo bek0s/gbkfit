@@ -957,6 +957,102 @@
         }
       }
     },
+    "/api/v1/views/pv/{path}": {
+      "get": {
+        "summary": "View Pv",
+        "description": "Return the position-velocity diagram of a cube along a slit through\nthe pixel (x, y; by default its centre) at the position angle pa\n(degrees, as the posa of the models), of the width (pixels; see\nViews.pv): a frame of one array, 'pv' (channels, positions; NaN where\nthe slit has no pixel), whose header has the positions (pixels from\nthe centre, positive towards pa), the coordinates of the channels and\ntheir unit (none without them), and the size of the pixels of the\ncube (arcsec; none if not known).",
+        "operationId": "view_pv_api_v1_views_pv__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          },
+          {
+            "name": "hdu",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Hdu"
+            }
+          },
+          {
+            "name": "pa",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "title": "Pa"
+            }
+          },
+          {
+            "name": "x",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X"
+            }
+          },
+          {
+            "name": "y",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Y"
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Width"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/views/psf": {
       "post": {
         "summary": "View Psf",
@@ -2551,16 +2647,36 @@
           "unit": {
             "type": "string",
             "title": "Unit"
+          },
+          "step": {
+            "type": "number",
+            "title": "Step"
+          },
+          "convention": {
+            "type": "string",
+            "enum": [
+              "optical",
+              "radio",
+              "relativistic"
+            ],
+            "title": "Convention"
+          },
+          "shift": {
+            "type": "number",
+            "title": "Shift"
           }
         },
         "type": "object",
         "required": [
           "path",
           "shape",
-          "unit"
+          "unit",
+          "step",
+          "convention",
+          "shift"
         ],
         "title": "CubeRenderInfo",
-        "description": "The cube of a galaxy rendered (see Renders.cube): the path the views\nof cubes take it at (its array 0; kept for a while, see Views.put), its\nshape in the order of the model (nx, ny, nchannels), and the unit of\nthe coordinates of its channels (km/s)."
+        "description": "The cube of a galaxy rendered (see Renders.cube): the path the views\nof cubes take it at (its array 0; kept for a while, see Views.put), its\nshape in the order of the model (nx, ny, nchannels), the unit of the\ncoordinates of its channels (km/s), the size of its pixels (arcsec),\nand how the velocities of the galaxy land on its channels (see\nCubeAxis): the convention of their velocities ('optical', 'radio' or\n'relativistic') and the 1 + z of its lines (shift)."
       },
       "Diagnostic": {
         "properties": {

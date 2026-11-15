@@ -60,7 +60,7 @@ function differs(a: (number | null)[], b: (number | null)[] | undefined): boolea
 }
 
 // Round ticks from 0 (or a low below it) to a high: about count of them
-function ticks(low: number, high: number, count: number): number[] {
+export function ticks(low: number, high: number, count: number): number[] {
   const span = high - low || 1;
   const raw = span / count;
   const power = 10 ** Math.floor(Math.log10(raw));

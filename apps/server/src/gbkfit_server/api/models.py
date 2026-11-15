@@ -271,12 +271,18 @@ class CubeRenderInfo(BaseModel):
     """
     The cube of a galaxy rendered (see Renders.cube): the path the views
     of cubes take it at (its array 0; kept for a while, see Views.put), its
-    shape in the order of the model (nx, ny, nchannels), and the unit of
-    the coordinates of its channels (km/s).
+    shape in the order of the model (nx, ny, nchannels), the unit of the
+    coordinates of its channels (km/s), the size of its pixels (arcsec),
+    and how the velocities of the galaxy land on its channels (see
+    CubeAxis): the convention of their velocities ('optical', 'radio' or
+    'relativistic') and the 1 + z of its lines (shift).
     """
     path: str
     shape: list[int]
     unit: str
+    step: float
+    convention: Literal['optical', 'radio', 'relativistic']
+    shift: float
 
 
 class PSFRequest(BaseModel):

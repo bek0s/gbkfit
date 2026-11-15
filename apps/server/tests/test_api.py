@@ -1119,6 +1119,36 @@ def test_the_cube_of_a_galaxy_is_rendered_and_viewed(client):
     response = client.get(
         f"/api/v1/views/moments/{info['path']}", params=dict(hdu=0, snr=0))
     assert response.status_code == 200
+    # Its position-velocity diagram along its major axis: the light of the
+    # receding side (towards its position angle) at positive velocities,
+    # that of the other at negative ones
+    response = client.get(
+        f"/api/v1/views/pv/{info['path']}", params=dict(hdu=0, pa=0))
+    assert response.status_code == 200, response.text
+    header, data = frames.decode(response.content)
+    pv, = frames.arrays(header, data)
+    positions = np.array(header['positions'])
+    spectral = np.array(header['spectral'])
+    assert pv.shape == (nchannels, len(positions))
+    assert header['unit'] == 'km/s' and header['step'] == info['step'] > 0
+    far = np.argmin(np.abs(positions - 12)), np.argmin(np.abs(positions + 12))
+    assert spectral[np.nanargmax(pv[:, far[0]])] > 50
+    assert spectral[np.nanargmax(pv[:, far[1]])] < -50
+    # At a redshift, its light is in its channels all the same: at the
+    # velocities where its lines land (here of a frequency, radio ones)
+    for line in (None, 'hi21'):
+        gas = dict(RENDERED['components'][0])
+        if line:
+            gas['emission'] = dict(type='lines', lines=line)
+        info = client.post('/api/v1/views/galaxy-cube', json=dict(
+            project='study', galaxy=dict(components=[gas], redshift=0.002),
+            properties=dict(gas_vpt_vt=200, gas_posa=0), size=32)).json()
+        values = np.array(client.get(
+            f"/api/v1/views/spectrum/{info['path']}", params=dict(hdu=0)
+        ).json()['values'])
+        assert max(values[0], values[-1]) < 1e-3 * values.max()
+        assert (info['convention'], info['shift']) == (
+            ('radio', 1.002) if line else ('relativistic', 1))
     # A galaxy without lines has no cube
     stars = dict(components=[RENDERED['components'][1]])
     response = client.post('/api/v1/views/galaxy-cube', json=dict(

@@ -835,6 +835,9 @@ h2 { margin: 0; font: var(--text-heading); }
 .gv-note { margin: auto; text-align: center; }
 .gx-plot { position: relative; min-width: 0; min-height: 0; height: 100%; }
 .gx-plot svg { display: block; touch-action: none; }
+.gx-pv-frame { fill: none; stroke: var(--line2); }
+.gx-pv-model { fill: none; stroke: var(--fg); stroke-width: 1.4; stroke-dasharray: 5 3; opacity: .85; }
+.gx-pv-cursor { stroke: var(--fg2); stroke-width: 1; opacity: .6; }
 .gx-legend-box { position: absolute; right: 8px; top: 6px; display: grid; gap: 3px; max-width: 60%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in srgb, var(--panel) 88%, transparent); pointer-events: none; }
 .gx-legend-box span { display: flex; align-items: center; gap: 7px; font: var(--text-caption); color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gx-legend-box svg { flex: none; width: 22px; height: 8px; }
