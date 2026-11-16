@@ -3,7 +3,6 @@ Point components (e.g. an unresolved nucleus), and the parameters and
 the light of a point, which particles share.
 """
 
-from collections.abc import Sequence
 from typing import Any
 
 import astropy.units
@@ -12,18 +11,16 @@ import scipy.special
 
 from gbkfit.config import check_options
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
 from ._common import (
     Fluxes, dump_name, systemic_velocity)
-from ._units import DataUnit, band_factors, line_factors
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid, SceneTarget)
 from .geometries import geometry_pdesc
-from .lines import Band, Bands, LinePlacement, Lines
+from .lines import Bands, LinePlacement, Lines
 from .roles import (
-    STARS, BandEmission, Emission, LineEmission, emission_parser)
+    Emission, View, emission_parser)
 
 
 __all__ = [
@@ -83,51 +80,8 @@ def _light_pdescs(
     return pdescs | light.pdescs()
 
 
-def line_light(
-        spectral: Grid,
-        lines: Lines,
-        unit: astropy.units.UnitBase | None,
-        names: Sequence[str] | None,
-        data_unit: DataUnit | None,
-        redshift: float
-) -> tuple[Fluxes, LinePlacement]:
-    """
-    Return the fluxes of the rows and the placement of the lines of the
-    given names (all if None) of a component with the given lines and
-    unit of its light (if any), at the redshift of its galaxy, in the unit
-    of the data (see Component.plan).
-    """
-    selected = lines.select(names)
-    factors = lines.factors(spectral, redshift)[list(selected)]
-    # (with a unit, the frequency at which the galaxy emits each line)
-    frequencies = None if unit is None \
-        else lines.frequencies(spectral, redshift)[list(selected)]
-    ratios = [
-        (row, lines.ratio_name(index))
-        for row, index in enumerate(selected)
-        if lines.ratio_name(index) is not None]
-    return Fluxes(
-        len(factors), ratios,
-        line_factors(unit, data_unit, factors, spectral, frequencies)), \
-        LinePlacement(factors, spectral)
 
 
-def band_light(
-        bands: Bands,
-        unit: astropy.units.UnitBase | None,
-        band: Band | None,
-        data_unit: DataUnit | None,
-        redshift: float
-) -> Fluxes:
-    """
-    Return the flux of the one row of the light of a component in the
-    given band, with its bands and the unit of its light (if any), in the
-    unit of the data (see Component.plan).
-    """
-    ratio = bands.ratio_name(band)
-    return Fluxes(
-        1, [(0, ratio)] if ratio is not None else [],
-        band_factors(unit, data_unit, band, redshift))
 
 
 def _pixels(
@@ -375,23 +329,20 @@ class Point(Component):
         check_options(Point.__init__, locals())
         super().__init__(name, emission, None)
         self._depth = depth
-        self._lines = None
-        self._bands = None
-        if isinstance(emission, LineEmission):
-            self._lines = emission.lines()
-            self._pdescs = _light_pdescs(
-                self._lines, True, depth, emission.unit())
-        if isinstance(emission, BandEmission):
-            self._bands = emission.bands()
-            self._pdescs = _light_pdescs(
-                self._bands, False, depth, emission.unit())
+        self._pdescs = _light_pdescs(
+            emission.light(), emission.needs_velocities(), depth,
+            emission.unit())
 
     def depth(self) -> bool:
         """Check whether its depth along the line of sight is a parameter."""
         return self._depth
 
-    def thick(self, seen_by: 'type[Emission]') -> bool:
+    def needs_depth(self, view: View) -> bool:
         return False
+
+    def moves(self) -> bool:
+        # (a point of lines has their systemic velocity and dispersion)
+        return self.emission().needs_velocities()
 
     def frame_params(self) -> FrameParams:
         vsys = 'vsys' if 'vsys' in self._pdescs else None
@@ -400,13 +351,6 @@ class Point(Component):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return self._pdescs
 
-    def check_lines(self, lines: tuple[str, ...] | None) -> None:
-        if lines is not None and STARS in lines:
-            raise ValueError(
-                "a spectral cube does not see the stars of a point: they "
-                "have no velocities to place in channels (points of lines "
-                "have their vsys and dispersion)")
-
     def plan(
             self,
             target: SceneTarget,
@@ -414,15 +358,10 @@ class Point(Component):
             opacity_ratios: np.ndarray | None,
             redshift: float
     ) -> PointPlan:
-        driver, spectral, dtype = target.driver, target.spectral, target.dtype
-        lines, band, data_unit = target.lines, target.band, target.data_unit
         # (it always emits: it has no opacity, so that a plan of it that
         # does not emit, which would take no unit of the data, is not made)
-        unit = self.emission().unit()
-        if self._lines is None:
-            return PointPlan(
-                driver, dtype, self._depth, opacity_ratios,
-                band_light(self._bands, unit, band, data_unit, redshift))
+        setup = self.emission().setup(
+            target.view, target.spectral, target.data_unit, redshift)
         return PointPlan(
-            driver, dtype, self._depth, opacity_ratios, *line_light(
-                spectral, self._lines, unit, lines, data_unit, redshift))
+            target.driver, target.dtype, self._depth, opacity_ratios,
+            setup.fluxes, setup.lines)

@@ -26,7 +26,7 @@ from gbkfit.grid import (
 from gbkfit.instrument import Instrument, instrument_parser
 from gbkfit.io import Beam
 from gbkfit.model import (
-    Band, BandEmission, DataUnit, Emission, LightUnit, Scene, band_parser)
+    Band, DataUnit, LightUnit, Scene, View, band_parser)
 from gbkfit.model.components.lines import catalogue_in_use
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .._scene import check_component_names, make_scene
@@ -187,6 +187,11 @@ class ObservationSky(Observation, abc.ABC):
     lines : Sequence of str, optional
         The names of the emission lines it sees (e.g. the line of the
         data); all by default.
+    continuum : bool, optional
+        Whether a spectral observation sees the velocities of the
+        continuum light of the components that emit in bands and move
+        (e.g. the kinematics of their stars), besides their lines; not by
+        default. Not of images.
     band : str or Band, optional
         The band of an image, or the name of a band of the catalogue in
         use (that of GBKFIT, or of a configuration, see lines_from): it
@@ -198,7 +203,7 @@ class ObservationSky(Observation, abc.ABC):
         minor axis of a disk); none by default.
     flux_scale : str, optional
         The flux scale of its model (see above): 'one', or of a kind that
-        has them (see flux_scales), 'per_spectrum' or 'per_row'; its name
+        has them (see flux_scale_kinds), 'per_spectrum' or 'per_row'; its name
         is then required. None by default. Mock data take scales per
         spectrum or per row of 1 only.
     offsets : Mapping, optional
@@ -282,9 +287,9 @@ class ObservationSky(Observation, abc.ABC):
 
     dataset_class: ClassVar[type[Dataset]]
 
-    # The emission it sees: in a band (BandEmission) for an image, lines
-    # (LineEmission) for a spectral cube and what is made of one
-    emission: ClassVar[type[Emission]]
+    # Whether it sees a spectral axis (a spectral cube and what is made of
+    # one), or a band (an image); see view
+    spectral_view: ClassVar[bool]
 
     # What it sees of the stars on orbits whose weights are solved (see
     # Component.orbit_weights and _check_scene): their light ('light', of
@@ -364,6 +369,7 @@ class ObservationSky(Observation, abc.ABC):
         components = {} if self._components is None else dict(
             components=list(self._components))
         lines = {} if self._lines is None else dict(lines=list(self._lines))
+        continuum = dict(continuum=True) if self._continuum else {}
         band = {} if self._band is None else dict(
             band=band_parser.dump(self._band))
         pixel_weights = {} if options.pixel_weights is None else dict(
@@ -382,7 +388,8 @@ class ObservationSky(Observation, abc.ABC):
             dtype=self._given_dtype)
         return dict(type=self.type()) | name \
             | self._dump_kind(prefix, dump_path, overwrite) | galaxies \
-            | components | lines | band | pixel_weights | flux_scale \
+            | components | lines | continuum | band | pixel_weights \
+            | flux_scale \
             | offsets | unit | dataset | dtype | dict(
                 depth=options.depth.dump(),
                 foreground=foreground_parser.dump(
@@ -559,6 +566,7 @@ class ObservationSky(Observation, abc.ABC):
             galaxies: Sequence[str] | None,
             components: Sequence[str] | None,
             lines: Sequence[str] | None,
+            continuum: bool,
             band: str | Band | None,
             pixel_weights: Weights | None,
             flux_scale: str | None,
@@ -576,7 +584,7 @@ class ObservationSky(Observation, abc.ABC):
         checks its options first (see check_options of gbkfit.config),
         completes those of its kind (see _options), and sets what it needs
         to give its data items (see keys) and its flux scales (see
-        flux_scales).
+        flux_scale_kinds).
         """
         self._grid = grid
         if isinstance(band, str):
@@ -591,10 +599,14 @@ class ObservationSky(Observation, abc.ABC):
                 check_name(line)
         check_flux_scale(flux_scale, self, name)
         offsets = check_offsets(offsets, name)
-        if band is not None and self.emission is not BandEmission:
+        if band is not None and self.spectral_view:
             raise ValueError(
                 "only images have a band; the lines of spectral cubes are "
                 "their option lines")
+        if continuum and not self.spectral_view:
+            raise ValueError(
+                "an image sees the light in its band; the continuum is of "
+                "spectral observations")
         if foreground is None:
             foreground = Foreground()
         if name is None and foreground.pdescs():
@@ -616,6 +628,7 @@ class ObservationSky(Observation, abc.ABC):
             self.check_dataset(dataset)
         self._components = components
         self._lines = lines
+        self._continuum = continuum
         self._band = band
         self._flux_scale = flux_scale
         self._offsets = offsets
@@ -685,7 +698,7 @@ class ObservationSky(Observation, abc.ABC):
                if key not in from_data},
             foreground=options.foreground, instrument=options.instrument,
             galaxies=self._galaxies, components=self._components,
-            lines=self._lines, band=self._band,
+            lines=self._lines, continuum=self._continuum, band=self._band,
             pixel_weights=options.pixel_weights, flux_scale=self._flux_scale,
             offsets=self._offsets, dataset=dataset,
             oversampling=options.oversampling, depth=options.depth,
@@ -820,11 +833,11 @@ class ObservationSky(Observation, abc.ABC):
         """
         Return the names of its data items of light (e.g. 'spectra' or
         'moment0'): those that are times the flux of the model, which a
-        flux scale multiplies (see flux_scales); none for data of
+        flux scale multiplies (see flux_scale_kinds); none for data of
         velocities only.
         """
 
-    def flux_scales(self) -> dict[str, FluxScale]:
+    def flux_scale_kinds(self) -> dict[str, FluxScale]:
         """
         Return the flux scales that its model can have (see the class), by
         kind: 'one', of its items of light, if any. Kinds of spectra add
@@ -910,6 +923,18 @@ class ObservationSky(Observation, abc.ABC):
         """Return the names of the emission lines it sees, if given."""
         return self._lines
 
+    def continuum(self) -> bool:
+        """Check whether it sees the continuum (see the class)."""
+        return self._continuum
+
+    def view(self) -> View:
+        """
+        Return what it sees of the light of the components (see View): its
+        band, or its spectral axis with its lines and continuum.
+        """
+        return View(
+            self.spectral_view, self._band, self._lines, self._continuum)
+
     def band(self) -> Band | None:
         """Return its band (of an image), if given."""
         return self._band
@@ -986,7 +1011,7 @@ class ObservationSky(Observation, abc.ABC):
         if self._flux_scale is None:
             return None
         return (f'{self._name}_flux_scale',
-                self.flux_scales()[self._flux_scale])
+                self.flux_scale_kinds()[self._flux_scale])
 
     def foreground(self) -> Foreground:
         """Return the foreground."""
@@ -1091,15 +1116,13 @@ class ObservationSky(Observation, abc.ABC):
         Return the scene of the galaxies it sees (see make_scene).
         """
         return make_scene(
-            seen, self._components, self._lines, self._band,
-            self.emission, self.data_unit())
+            seen, self._components, self.view(), self.data_unit())
 
     def check(self, seen: SeenGalaxies) -> None:
         scene = self._scene(seen)
         options = self._sky_options
         # (the light of an image is blurred by its PSF and again by ours)
-        for trait in scene.image_traits():
-            trait.check_psf(options.instrument.psf())
+        scene.check_psf(options.instrument.psf())
         if options.pixel_weights is not None:
             weights_geometry(options.pixel_weights, scene)
         check_scene(scene)
@@ -1130,7 +1153,8 @@ class ObservationSky(Observation, abc.ABC):
             seeing = sorted(
                 f"{type_} (their {cls.orbit_stars})" for type_, cls
                 in observation_parser.registered_classes().items()
-                if getattr(cls, 'orbit_stars', None) is not None)
+                if issubclass(cls, ObservationSky)
+                and cls.orbit_stars is not None)
             raise ValueError(
                 f"stars on orbits whose weights are solved to fit the data "
                 f"(e.g. of Schwarzschild kinematics) are seen by "

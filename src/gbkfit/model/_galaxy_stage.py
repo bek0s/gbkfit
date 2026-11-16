@@ -15,7 +15,8 @@ import numpy as np
 
 from gbkfit.cosmology import DEFAULT, Cosmology
 from gbkfit.driver import Driver
-from gbkfit.params import ParamValues, ParamView, StageCache
+from gbkfit.params import (
+    ModelEvaluationError, ParamValues, ParamView, StageCache)
 from .components.base import GalaxyMass
 from .extras import Extras
 from .mass import MassContext
@@ -34,15 +35,18 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-# The offset of the centre of a ring from the reference centre, as a
-# share of its radius, and the angle (degrees) between their planes,
-# above which a warning says that the gravity takes the disks too simply
-# (see GalaxyStage.evaluate). Measured on an exponential disk whose outer
-# rings drift or tilt: each makes its own circular velocity about 1%
-# wrong (2026-10-14: 1% at a drift of about 15% of the radius, and at a
-# tilt of about 20 degrees).
-_MAX_OFFSET = 0.15
+# The angle (degrees) between the plane of a part that the gravity takes
+# as in the plane of the mass and the plane of the first, above which a
+# warning says that the gravity takes the components too simply (see
+# GalaxyStage.evaluate). Measured on an exponential disk whose outer rings
+# tilt: that makes their circular velocity about 1% wrong (2026-10-14: 1%
+# at a tilt of about 20 degrees).
 _MAX_TILT = 20.0
+
+# The largest difference (arcsec) between the centres of the components
+# that the mass moves, holds up or follows: one centre, that of the mass;
+# centres tied or fixed at the same values are equal to the last bits
+_CENTRE_TOLERANCE = 1e-9
 
 
 @dataclasses.dataclass(frozen=True)
@@ -122,12 +126,13 @@ class GalaxyStage:
     of them again, nor a step in the anisotropy of its stars the
     groundwork of its state.
 
-    It takes the rings of the disks that the mass moves, holds up and
-    follows as concentric and flat: around one centre, in one plane,
-    whatever their geometries (their rotation is then projected with
-    their own geometries). With extra outputs, a warning says where their
-    centres or planes depart from those of the first enough to matter
-    (see evaluate).
+    The components that the mass moves, holds up and follows are at one
+    centre, that of the mass: an evaluation where their centres differ
+    fails (see ComponentStage.frames). It takes their parts as in one
+    plane, whatever their orientations (their rotation is then projected
+    with their own orientations); with extra outputs, a warning says
+    where their planes tilt from that of the first enough to matter (see
+    evaluate).
 
     Parameters
     ----------
@@ -183,7 +188,7 @@ class GalaxyStage:
         for i, component in enumerate(components):
             label = component.name() or f'component{i}'
             stage = component.plan_stage(
-                driver, sky_origin, links.of(i, component), label)
+                driver, sky_origin, links.of(component), label)
             if stage is not None:
                 self._stages[i] = stage
                 self._labels[i] = label
@@ -259,15 +264,21 @@ class GalaxyStage:
             Where the extra outputs go, if wanted (those of the components,
             with their name, or their position, as the id 'component', see
             ComponentStage.state). With them and mass, a warning says where
-            the rings of the disks it moves, holds up and follows depart
-            from the centre or the plane of the first ring of the first: by
-            more than 15% of their radius, or 20 degrees (which makes their
-            circular velocities about 1% wrong, or more).
+            the parts of the components it moves, holds up and follows
+            tilt from the plane of the first part of the first by more
+            than 20 degrees (which makes their circular velocities about
+            1% wrong, or more).
 
         Returns
         -------
         GalaxyState
             The galaxy.
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the components that the mass moves, holds up or follows have
+            different centres (see the class).
         """
         lights = {
             i: parts.light.evaluate(
@@ -279,8 +290,7 @@ class GalaxyStage:
                 else self._scale_cache.evaluate(params, self._scale)
             mass = self._mass_cache.evaluate(params, functools.partial(
                 self._mass, scale=scale, lights=lights))
-            if out_extra is not None:
-                self._warn_geometry(params)
+            self._check_frames(params, out_extra is not None)
         states = {}
         for i, parts in self._parts.items():
             groundwork = parts.groundwork.evaluate(params, functools.partial(
@@ -444,48 +454,58 @@ class GalaxyStage:
         mapping = self._galaxy.component_param_names(index)
         return ParamView((name, view[mapping[name]]) for name in names)
 
-    def _warn_geometry(self, params: ParamValues) -> None:
+    def _check_frames(self, params: ParamValues, warn: bool) -> None:
         """
-        Log a warning if the rings that the gravity takes as concentric and
-        flat (see ComponentStage.rings) depart from the centre or the plane
-        of the first ring of the first by more than _MAX_OFFSET of their
-        radius (on the sky), or _MAX_TILT.
+        Check where the gravity takes the components that the mass moves,
+        holds up or follows (see ComponentStage.frames): at one centre,
+        that of the mass; and with warn, log a warning if their planes
+        tilt from that of the first part of the first by more than
+        _MAX_TILT.
+
+        Raises
+        ------
+        ModelEvaluationError
+            If their centres differ.
         """
         components = self._galaxy.components()
-        rings = [
-            (self._labels[i], *ring)
+        frames = [
+            (self._labels[i], frame)
             for i, stage in self._stages.items()
-            for ring in stage.rings({
+            for frame in stage.frames({
                 p: params[self._galaxy.component_param_names(i)[p]]
                 for p in components[i].pdescs()})]
         # (a galaxy of mass alone has none)
-        if not rings:
+        if not frames:
             return
-        ref, _, x0, y0, posa0, incl0 = rings[0]
-        normal0 = _normal(posa0, incl0)
-        offset = max(
-            (np.hypot(x - x0, y - y0) / r, label, r)
-            for label, r, x, y, _, _ in rings if r > 0)
-        tilt = max(
+        ref, first = frames[0]
+        for label, frame in frames[1:]:
+            if not np.allclose(
+                    (frame.x, frame.y), (first.x, first.y), rtol=0,
+                    atol=_CENTRE_TOLERANCE):
+                where = f" at the radius {frame.radius:g}" \
+                    if frame.radius else ""
+                raise ModelEvaluationError(
+                    f"the mass of a galaxy has one centre, but the "
+                    f"components it moves, holds up or follows have "
+                    f"different centres: {label}{where} at ({frame.x:g}, "
+                    f"{frame.y:g}), {ref} at ({first.x:g}, {first.y:g}); "
+                    f"tie them (e.g. its xpos and ypos to those of {ref})")
+        planes = [(label, f) for label, f in frames if f.posa is not None]
+        if not warn or not planes:
+            return
+        ref, first = planes[0]
+        normal0 = _normal(first.posa, first.incl)
+        tilt, label, radius = max(
             (np.degrees(np.arccos(min(1.0, abs(
-                _normal(posa, incl) @ normal0)))), label, r)
-            for label, r, _, _, posa, incl in rings)
-        if offset[0] > _MAX_OFFSET:
+                _normal(f.posa, f.incl) @ normal0)))), label, f.radius)
+            for label, f in planes)
+        if tilt > _MAX_TILT:
+            where = f" at the radius {radius:g}" if radius else ""
             _log.warning(
-                f"the gravity takes the disks it moves, holds up and "
-                f"follows as concentric, but the centre of the ring of "
-                f"{offset[1]} at the radius {offset[2]:g} is "
-                f"{offset[0]:.0%} of its radius from that of the first ring "
-                f"of {ref} (on the sky): their circular velocities can be "
-                f"off by 1% or more there")
-        if tilt[0] > _MAX_TILT:
-            _log.warning(
-                f"the gravity takes the disks it moves, holds up and "
-                f"follows as flat, but the ring of {tilt[1]} at the radius "
-                f"{tilt[2]:g} is tilted by {tilt[0]:.0f} degrees from the "
-                f"plane of the first ring of {ref}: their circular "
+                f"the gravity takes the components it moves, holds up and "
+                f"follows as in one plane, but {label}{where} is tilted by "
+                f"{tilt:.0f} degrees from the plane of {ref}: its circular "
                 f"velocities can be off by 1% or more there")
-
 
 def _normal(posa: float, incl: float) -> np.ndarray:
     """

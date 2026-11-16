@@ -8,7 +8,7 @@ from gbkfit.params import ParamValues
 from ...extras import Extras
 from ...mass import SpheroidDensity
 from ..base import GalaxyMass
-from ..base import ComponentStage, ComponentState
+from ..base import ComponentStage, ComponentState, Frame
 
 if TYPE_CHECKING:
     from .spheroid import Spheroid
@@ -36,6 +36,16 @@ class SpheroidStage(ComponentStage):
     def __init__(self, spheroid: 'Spheroid', mass_per_unit: float | None):
         self._spheroid = spheroid
         self._mass_per_unit = mass_per_unit
+
+    def frames(self, values: ParamValues) -> list[Frame]:
+        # (it has a stage only when the mass moves or follows it: its
+        # centre, and its axis, if it has one)
+        frame = self._spheroid.frame_params()
+        angles = [
+            None if name is None else float(values[name])
+            for name in (frame.posa, frame.incl)]
+        return [Frame(
+            0.0, float(values[frame.x]), float(values[frame.y]), *angles)]
 
     def light_params(self) -> tuple[str, ...]:
         return self._spheroid.light_params()

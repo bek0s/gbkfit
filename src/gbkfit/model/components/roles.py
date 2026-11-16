@@ -4,37 +4,81 @@ and what they remove from the light behind them (Opacity).
 """
 
 import abc
+import dataclasses
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import astropy.units
+import numpy as np
 
 import gbkfit.units
 from gbkfit.config import (
     TypedParser, TypedSerializable, check_options, config_path)
 from gbkfit.utils import iterutils
 from . import _units
+from ._common import Fluxes
+from ._units import DataUnit, OpacityScales, band_factors, line_factors
 from .extinction import ExtinctionLaw, extinction_law_parser
 from .lines import (
-    Band, Bands, Line, Lines, band_parser, catalogue_in_use, line_parser)
+    Band, Bands, Light, Line, LinePlacement, Lines, band_parser,
+    catalogue_in_use, line_parser)
+
+if TYPE_CHECKING:
+    from gbkfit.grid import Grid
 
 
 __all__ = [
-    'STARS',
+    'CONTINUUM',
     'BandEmission',
+    'EmissionSetup',
     'DustOpacity',
     'Emission',
     'LineEmission',
     'Opacity',
-    'StarsEmission',
+    'View',
     'emission_parser',
     'opacity_parser'
 ]
 
 
-# The name of the light of stars in the lines that a spectral cube sees
-# (see StarsEmission), which no emission line can have
-STARS = 'stars'
+# What the spectral axis of a spectral view draws of the continuum of a
+# component (see Emission.spectral_lines): not a name, which no line can
+# have (names are identifiers)
+CONTINUUM = 'the continuum'
+
+
+@dataclasses.dataclass(frozen=True)
+class EmissionSetup:
+    """
+    What the plan of a component evaluates of its light, seen in a view
+    (see Emission.setup): the number of lines its plan adds to spectral
+    axes (0 in an image, or without light), the row of the line of each
+    of its traits of line opacity among them (-1 for a line it does not
+    evaluate; None without lines), the fluxes of its lines or band, the
+    place of each line on the spectral axis, and the scales of its line
+    opacity.
+    """
+    nlines: int = 0
+    opacity_rows: list[int] | None = None
+    fluxes: Fluxes | None = None
+    lines: LinePlacement | None = None
+    opacity_scales: OpacityScales | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class View:
+    """
+    What an observation sees of the light of the components (see
+    Emission.seen_in): an image, in a band (None if not known), or a
+    spectral axis (spectral), where it sees the emission lines of the
+    given names (all if None) and, with continuum, the velocities of the
+    continuum light of the components that move (e.g. the kinematics of
+    their stars).
+    """
+    spectral: bool
+    band: Band | None = None
+    lines: tuple[str, ...] | None = None
+    continuum: bool = False
 
 
 def _named(
@@ -72,6 +116,54 @@ class Emission(TypedSerializable, abc.ABC):
         known); here, in every band.
         """
         return True
+
+    def line_names(self) -> tuple[str, ...]:
+        """Return the names of its emission lines; none here."""
+        return ()
+
+    @abc.abstractmethod
+    def setup(
+            self,
+            view: View,
+            spectral: 'Grid',
+            data_unit: DataUnit | None,
+            redshift: float,
+            opacity_lines: Sequence[int] = ()
+    ) -> EmissionSetup:
+        """
+        Return what a plan of its component evaluates of its light, seen
+        in the view (see EmissionSetup), on the spectral axis (spectral),
+        in the unit of the data (if any; see Component.plan), at the
+        redshift of its galaxy. opacity_lines has the line of each trait
+        of line opacity of its component: its index among its lines.
+        """
+
+    @abc.abstractmethod
+    def needs_velocities(self) -> bool:
+        """
+        Check whether its light is placed at the velocities of its
+        component (lines, on a spectral axis), which must then move.
+        """
+
+    @abc.abstractmethod
+    def seen_in(self, view: View, moves: bool) -> bool:
+        """
+        Check whether an observation of the given view sees its light, of
+        a component that moves or not (has kinematics).
+        """
+
+    @abc.abstractmethod
+    def light(self) -> Light:
+        """Return its light: its lines or its bands (see Light)."""
+
+    @abc.abstractmethod
+    def spectral_lines(self, view: View) -> tuple[str | None, ...]:
+        """
+        Return what it draws on the spectral axis of a spectral view, one
+        entry for each line: the names of its lines that the view sees
+        (None for the one line of an emission without named lines), or
+        CONTINUUM for the velocities of its continuum; none in an image.
+        """
 
     @abc.abstractmethod
     def unit(self) -> astropy.units.UnitBase | None:
@@ -154,10 +246,6 @@ class LineEmission(Emission):
         check_options(LineEmission.__init__, locals())
         self._lines = Lines(None if lines is None else _named(
             lines, catalogue_in_use().line, 'lines'))
-        if STARS in self._lines.names():
-            raise ValueError(
-                f"no line can be named {STARS!r}: that is the light of "
-                f"stars (see StarsEmission)")
         self._unit = _parse_unit(unit)
         if self._unit is not None:
             _units.check_line_unit(self._unit, self._lines.names())
@@ -168,6 +256,62 @@ class LineEmission(Emission):
     def lines(self) -> Lines:
         """Return the lines."""
         return self._lines
+
+    def seen_in(self, view: View, moves: bool) -> bool:
+        # (spectral axes that see lines (all if None, none if empty); which
+        # of them is checked against the lines of the components seen)
+        return view.spectral and view.lines != ()
+
+    def light(self) -> Lines:
+        return self._lines
+
+    def line_names(self) -> tuple[str, ...]:
+        return self._lines.names()
+
+    def needs_velocities(self) -> bool:
+        return True
+
+    def setup(
+            self,
+            view: View,
+            spectral: 'Grid',
+            data_unit: DataUnit | None,
+            redshift: float,
+            opacity_lines: Sequence[int] = ()
+    ) -> EmissionSetup:
+        lines, unit = self._lines, self._unit
+        # (and the row of the line of each trait of line opacity among the
+        # lines it evaluates)
+        selected = lines.select(view.lines)
+        opacity_rows = [
+            selected.index(line) if line in selected else -1
+            for line in opacity_lines]
+        factors = lines.factors(spectral, redshift)[list(selected)]
+        # (with a unit, the frequency at which the galaxy emits each line)
+        frequencies = None if unit is None \
+            else lines.frequencies(spectral, redshift)[list(selected)]
+        ratios = [
+            (row, lines.ratio_name(index))
+            for row, index in enumerate(selected)
+            if lines.ratio_name(index) is not None]
+        # (with a unit, the coefficients of line opacity are 1/S in 1/K)
+        opacity_scales = None
+        if opacity_lines and unit is not None:
+            opacity_scales = OpacityScales(
+                unit, data_unit, factors, spectral, frequencies)
+        return EmissionSetup(
+            len(selected), opacity_rows,
+            Fluxes(len(factors), ratios, line_factors(
+                unit, data_unit, factors, spectral, frequencies)),
+            LinePlacement(factors, spectral), opacity_scales)
+
+    def spectral_lines(self, view: View) -> tuple[str | None, ...]:
+        if not self.seen_in(view, True):
+            return ()
+        names = self._lines.names()
+        if not names:
+            return (None,)
+        return tuple(names[i] for i in self._lines.select(view.lines))
 
     def wavelengths(
             self,
@@ -253,6 +397,44 @@ class BandEmission(Emission):
     def emits_in(self, band: Band | None) -> bool:
         return self._bands.emits_in(band)
 
+    def seen_in(self, view: View, moves: bool) -> bool:
+        # (an image in its bands; a spectral axis the velocities of its
+        # continuum, of a component that has them)
+        if view.spectral:
+            return view.continuum and moves
+        return self.emits_in(view.band)
+
+    def light(self) -> Bands:
+        return self._bands
+
+    def needs_velocities(self) -> bool:
+        # (an image sees it at rest; a continuum view sees its velocities
+        # only if its component has them, see seen_in)
+        return False
+
+    def setup(
+            self,
+            view: View,
+            spectral: 'Grid',
+            data_unit: DataUnit | None,
+            redshift: float,
+            opacity_lines: Sequence[int] = ()
+    ) -> EmissionSetup:
+        ratio = self._bands.ratio_name(view.band)
+        fluxes = Fluxes(
+            1, [(0, ratio)] if ratio is not None else [],
+            band_factors(self._unit, data_unit, view.band, redshift))
+        if view.continuum:
+            # (the velocities of its continuum: one line, without a rest,
+            # of the flux of its band; see seen_in)
+            return EmissionSetup(
+                nlines=1, fluxes=fluxes,
+                lines=LinePlacement(np.ones(1), spectral))
+        return EmissionSetup(fluxes=fluxes)
+
+    def spectral_lines(self, view: View) -> tuple[str | None, ...]:
+        return (CONTINUUM,) if view.spectral and view.continuum else ()
+
     def wavelengths(
             self,
             lines: Sequence[str] | None,
@@ -262,40 +444,6 @@ class BandEmission(Emission):
         if band is None:
             return (None,)
         return (band.wavelength().to_value(astropy.units.um) / (1 + redshift),)
-
-
-class StarsEmission(BandEmission):
-    """
-    The light of stars: light in bands, seen by images, and its
-    distribution of velocities, seen by the spectral cubes that ask for
-    it. Images see it as BandEmission, and the spectral cubes whose lines
-    name it ('stars') as one line on an axis of velocities (without a
-    rest), at the velocity and of the dispersion of the kinematics of its
-    component, of the flux of its light in the band of the cube, if known
-    (as an image takes it). Spectral cubes of gas do not see it.
-
-    Parameters
-    ----------
-    bands : str or Band or Sequence of them, optional
-        The bands (see BandEmission).
-    unit : str or astropy.units.UnitBase, optional
-        The physical unit of the density (see BandEmission).
-
-    Raises
-    ------
-    ValueError
-        If there are no bands, a name is not in the catalogue, the names
-        repeat, or the unit is not one of bands (see
-        _units.check_band_unit).
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'stars'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Stars (light and velocities)'
 
 
 def _parse_unit(
@@ -374,8 +522,7 @@ class DustOpacity(Opacity):
 
 emission_parser = TypedParser(Emission, [
     LineEmission,
-    BandEmission,
-    StarsEmission], family='emission')
+    BandEmission], family='emission')
 
 # (the disks register their line opacity, LineOpacity)
 opacity_parser = TypedParser(Opacity, [

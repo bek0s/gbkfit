@@ -192,7 +192,7 @@ IMAGE_SEES_NONE = (
     "a band; it sees none")
 CUBE_SEES_NONE = (
     "the observation is a spectral cube, which sees the components that "
-    "emit lines (and stars, when its lines name 'stars'); it sees none")
+    "emit lines; it sees none")
 
 
 @pytest.mark.parametrize('kind, component, message', [

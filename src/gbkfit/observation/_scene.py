@@ -10,8 +10,7 @@ from collections.abc import Sequence
 import gbkfit.units
 from gbkfit.config import check_name
 from gbkfit.model import (
-    STARS, Band, BandEmission, Component, DataUnit, DepthUnit, Emission,
-    Galaxy, LineEmission, Scene, SceneEvaluation, StarsEmission,
+    Component, DataUnit, DepthUnit, Galaxy, Scene, SceneEvaluation, View,
     check_data_unit, named_components)
 from .observation import SeenGalaxies
 
@@ -25,29 +24,27 @@ __all__ = [
 def make_scene(
         seen: SeenGalaxies,
         components: Sequence[str] | None,
-        lines: tuple[str, ...] | None,
-        band: Band | None,
-        emission: type[Emission],
+        view: View,
         data_unit: DataUnit | None = None
 ) -> Scene:
     """
     Return the scene of an observation of the galaxies it sees (see
-    Scene), which sees the emission of the given type (see
-    ObservationSky.emission), in the given band if known (an image),
-    and of the unit of its data, if any (see ObservationSky.data_unit). The
-    names of the components it sees (all those with that emission, in its
-    band, if None) are qualified by the names of their galaxies
-    ('galaxy.component') when it sees several (see named_components). A
-    spectral cube sees the light of stars (see StarsEmission) too when its
-    lines name it (STARS).
+    Scene), of what it sees (see View: its band, or its spectral axis with
+    its lines and continuum; see ObservationSky.view), and of the unit of
+    its data, if any (see ObservationSky.data_unit). The
+    names of the components it sees (all those whose emission the view
+    sees, if None; see Emission.seen_in) are qualified by the names of
+    their galaxies ('galaxy.component') when it sees several (see
+    named_components). A spectral view of the continuum sees the
+    velocities of the light in bands of the components that move (e.g.
+    the kinematics of stars).
 
     Raises
     ------
     ValueError
         If a name is unknown or repeats, a component does not emit what it
         sees, it sees nothing, a line is not one of the components it
-        sees, a component cannot be seen by a spectral cube of its lines
-        (see Component.check_lines), it sees several galaxies with opacity
+        sees, it sees several galaxies with opacity
         (which radiative transfer marches one after the other, see
         Scene.evaluation) that the order of the galaxies along the line of
         sight does not all place (see ObservationGroup: depth_order), or
@@ -58,19 +55,14 @@ def make_scene(
     """
     galaxies, order = seen.galaxies, seen.order
     kind = "an image, which sees the components that emit in a band" \
-        if emission is BandEmission else \
-        "a spectral cube, which sees the components that emit lines (and " \
-        f"stars, when its lines name {STARS!r})"
-    # (the types of emission it sees: a cube whose lines name the stars
-    # sees them, and only them if they are all it names)
-    types = (emission,)
-    if emission is LineEmission and lines is not None and STARS in lines:
-        types = (StarsEmission,) if set(lines) == {STARS} \
-            else (LineEmission, StarsEmission)
-    emitters = _select_emitters(galaxies, components, types, band, kind)
+        if not view.spectral else \
+        "a spectral cube, which sees the components that emit lines" + (
+            " and the continuum of those that emit in bands and move"
+            if view.continuum else "")
+    emitters = _select_emitters(galaxies, components, view, kind)
     if not any(emitters):
         raise ValueError(f"the observation is {kind}; it sees none")
-    _check_lines(galaxies, emitters, lines)
+    _check_lines(galaxies, emitters, view.lines)
     if data_unit is None:
         _check_one_unit(galaxies, emitters)
     # (here, before any plan: the copies of an observation with other
@@ -81,14 +73,12 @@ def make_scene(
             component = galaxy.components()[i]
             try:
                 check_data_unit(component.emission().unit(), data_unit)
-                if emission is LineEmission:
-                    component.check_lines(lines)
             except ValueError as e:
                 raise ValueError(
                     f"component {_label(galaxy, i)}: {e}") from e
     scene = Scene(
         galaxies, seen.mappings, seen.labels, [tuple(e) for e in emitters],
-        lines, band, emission, order, data_unit)
+        view, order, data_unit)
     if len(galaxies) > 1 \
             and scene.evaluation() is SceneEvaluation.TRANSFER:
         _check_order(galaxies, order)
@@ -126,20 +116,19 @@ def _label(galaxy: Galaxy, index: int) -> str:
 def _select_emitters(
         galaxies: Sequence[Galaxy],
         names: Sequence[str] | None,
-        types: tuple[type[Emission], ...],
-        band: Band | None,
+        view: View,
         kind: str
 ) -> list[list[int]]:
     """
     Return the indices of the components of each galaxy whose light is
     seen: those of the given names (qualified when there are several
-    galaxies), or all those whose emission is of one of the given types,
-    in the given band (see Emission.emits_in), in their order. kind
-    describes the observation in messages.
+    galaxies), or all those whose emission the view sees (see
+    Emission.seen_in), in their order. kind describes the observation in
+    messages.
     """
     def seen(cmp: Component) -> bool:
-        return isinstance(cmp.emission(), types) \
-            and cmp.emission().emits_in(band)
+        return cmp.emission() is not None \
+            and cmp.emission().seen_in(view, cmp.moves())
     if names is None:
         return [
             [i for i, cmp in enumerate(galaxy.components()) if seen(cmp)]
@@ -152,14 +141,10 @@ def _select_emitters(
     selected = [[] for _ in galaxies]
     for name in names:
         g, i = known[name]
-        if not isinstance(galaxies[g].components()[i].emission(), types):
-            raise ValueError(
-                f"the component {name!r} is selected, but the observation "
-                f"is {kind}")
         if not seen(galaxies[g].components()[i]):
             raise ValueError(
-                f"the component {name!r} is selected, but it does not emit "
-                f"in the band {band.name()!r} of the image")
+                f"the component {name!r} is selected, but the observation "
+                f"is {kind}: it does not see it")
         selected[g].append(i)
     return [sorted(indices) for indices in selected]
 
@@ -178,7 +163,7 @@ def _check_lines(
     known = set()
     for galaxy, indices in zip(galaxies, emitters):
         for i in indices:
-            known |= set(galaxy.components()[i].line_names())
+            known |= set(galaxy.components()[i].emission().line_names())
     if unknown := [name for name in names if name not in known]:
         raise ValueError(
             f"no component has the lines {unknown}; the lines of the "

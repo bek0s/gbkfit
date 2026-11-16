@@ -257,25 +257,6 @@ class DiskSurface(TypedSerializable, abc.ABC):
         pass
 
 
-def _force_law(
-        force: _disk_forces.DiskForce,
-        sigma: np.ndarray,
-        vertical: DiskVertical,
-        params: ParamValues,
-        context: MassContext
-) -> np.ndarray:
-    """
-    Return the force of the disk of the surface density sigma at the
-    density points of force, thin or of a vertical law.
-    """
-    if vertical.thin(context):
-        return force.thin(sigma)
-    hz = params['hz']
-    return force.thick(
-        sigma[None], vertical.pdf(force.heights, hz)[None, None],
-        lambda R, z: vertical.pdf(z, hz)[None, None])
-
-
 class SurfaceExponential(DiskSurface):
     """
     An exponential disk: the surface density M / (2 pi rd^2) exp(-R /
@@ -346,14 +327,14 @@ class SurfaceExponential(DiskSurface):
                 scipy.special.i0e(y_safe) * scipy.special.k0e(y_safe)
                 - scipy.special.i1e(y_safe) * scipy.special.k1e(y_safe))
             return np.where(y > 0, 2 * G * mass / rd * y_safe ** 2 * bessel, 0)
-        if isinstance(vertical, VerticalLaw):
+        if (law := vertical.law()) is not None:
             # v^2 = G M / rd F(R / rd) (see _exponential_shape)
             x = R / rd
             out = np.zeros_like(R)
             positive = x > 0
             if positive.any():
                 out[positive] = _exponential_shape(
-                    x[positive], type(vertical), params['hz'] / rd)
+                    x[positive], type(law), params['hz'] / rd)
             return G * mass / rd * out
         return self._vcirc2_component(R, vertical, params, context)
 
@@ -413,11 +394,11 @@ class SurfaceExponential(DiskSurface):
             axis, R, z, rd, vertical.height_cuts(context))
         if vertical.thin(context):
             return force.thin(mass).reshape(R.shape)
-        if isinstance(vertical, VerticalLaw):
+        if (law := vertical.law()) is not None:
             hz = params['hz']
             return force.thick(
-                mass, vertical.pdf(force.heights, hz),
-                lambda r, h: vertical.pdf(h, hz)[None, None]
+                mass, law.pdf(force.heights, hz),
+                lambda r, h: law.pdf(h, hz)[None, None]
             ).reshape(R.shape)
         edge = vertical.knots(context)[-1:]
 
@@ -624,24 +605,10 @@ class SurfaceNodewise(DiskSurface):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        R = np.asarray(R, dtype=float)
-        if vertical.thin(context):
-            gravity = _disk_gravity.thin_disk_gravity(self._nodes, R.ravel())
-            v2 = gravity.vcirc2(
-                self.surface_density(gravity.radii, params, context))
-        elif isinstance(vertical, VerticalLaw):
-            gravity = _disk_gravity.thick_disk_gravity(self._nodes, R.ravel())
-            v2 = gravity.vcirc2(
-                self.surface_density(gravity.radii, params, context)[None],
-                vertical.pdf(gravity.heights, params['hz']))
-        else:
-            gravity = _disk_gravity.thick_disk_gravity(
-                np.union1d(self._nodes, vertical.knots(context)), R.ravel(),
-                degree=2, cuts=vertical.height_cuts(context))
-            v2 = gravity.vcirc2(
-                self.surface_density(gravity.radii, params, context)[None],
-                vertical.shapes(gravity.radii, gravity.heights, context)[None])
-        return v2.reshape(R.shape)
+        return vertical.vcirc2(
+            self._nodes, np.asarray(R, dtype=float),
+            lambda radii: self.surface_density(radii, params, context),
+            params, context)
 
     def force(
             self,
@@ -654,19 +621,10 @@ class SurfaceNodewise(DiskSurface):
     ) -> np.ndarray:
         R, z = np.broadcast_arrays(
             np.asarray(R, dtype=float), np.asarray(z, dtype=float))
-        if vertical.thin(context) or isinstance(vertical, VerticalLaw):
-            force = _disk_forces.disk_force(axis, self._nodes, R, z)
-            sigma = self.surface_density(force.radii, params, context)
-            return _force_law(
-                force, sigma, vertical, params, context).reshape(R.shape)
-        force = _disk_forces.disk_force(
-            axis, np.union1d(self._nodes, vertical.knots(context)), R, z,
-            degree=2, cuts=vertical.height_cuts(context))
-        return force.thick(
-            self.surface_density(force.radii, params, context)[None],
-            vertical.shapes(force.radii, force.heights, context)[None],
-            lambda r, h: vertical.shapes(r, h, context)[None]
-        ).reshape(R.shape)
+        return vertical.force(
+            axis, self._nodes, R, z,
+            lambda radii: self.surface_density(radii, params, context),
+            params, context)
 
 
 class SurfaceComponent(DiskSurface):
@@ -778,36 +736,23 @@ class SurfaceComponent(DiskSurface):
         knots = density.knots(self._rstep)
         upsilon = self._upsilon(density, params)
         R = np.asarray(R, dtype=float)
-        if vertical.thin(context):
-            gravity = _disk_gravity.thin_disk_gravity(knots, R.ravel())
-            v2 = gravity.vcirc2(upsilon * np.sum(
-                density.surface_densities(gravity.radii), axis=0))
-        elif isinstance(vertical, VerticalLaw):
-            gravity = _disk_gravity.thick_disk_gravity(knots, R.ravel())
-            v2 = gravity.vcirc2(
-                upsilon * np.sum(
-                    density.surface_densities(gravity.radii), axis=0,
-                    keepdims=True),
-                vertical.pdf(gravity.heights, params['hz']))
-        elif self._own_layer(vertical):
-            # In the layer of the same component (see disks.TracedDisk):
-            # its density, each term of the pdf of its height
+        if self._own_layer(vertical, context):
+            # In the thick layer of the same component (see
+            # disks.TracedDisk): its density, each term of the pdf of its
+            # height
             gravity = _disk_gravity.thick_disk_gravity(
                 np.union1d(knots, vertical.knots(context)), R.ravel(),
                 cuts=vertical.height_cuts(context))
-            v2 = gravity.vcirc2(
+            return gravity.vcirc2(
                 upsilon * density.surface_densities(gravity.radii),
-                density.height_pdfs(gravity.radii, gravity.heights))
-        else:
-            # In the layer of another component: its shape, as that of a
-            # node-wise surface density
-            gravity = _disk_gravity.thick_disk_gravity(
-                np.union1d(knots, vertical.knots(context)), R.ravel(),
-                degree=2, cuts=vertical.height_cuts(context))
-            v2 = gravity.vcirc2(
-                self.surface_density(gravity.radii, params, context)[None],
-                vertical.shapes(gravity.radii, gravity.heights, context)[None])
-        return v2.reshape(R.shape)
+                density.height_pdfs(gravity.radii, gravity.heights)
+            ).reshape(R.shape)
+        # (its surface density as its gravity takes it, linear between
+        # its subnodes: see surface_density)
+        return vertical.vcirc2(
+            knots, R,
+            lambda radii: self.surface_density(radii, params, context),
+            params, context)
 
     def force(
             self,
@@ -823,14 +768,8 @@ class SurfaceComponent(DiskSurface):
         upsilon = self._upsilon(density, params)
         R, z = np.broadcast_arrays(
             np.asarray(R, dtype=float), np.asarray(z, dtype=float))
-        if vertical.thin(context) or isinstance(vertical, VerticalLaw):
-            force = _disk_forces.disk_force(axis, knots, R, z)
-            sigma = upsilon * np.sum(
-                density.surface_densities(force.radii), axis=0)
-            return _force_law(
-                force, sigma, vertical, params, context).reshape(R.shape)
-        if self._own_layer(vertical):
-            # (in the layer of the same component: each term)
+        if self._own_layer(vertical, context):
+            # (in the thick layer of the same component: each term)
             force = _disk_forces.disk_force(
                 axis, np.union1d(knots, vertical.knots(context)), R, z,
                 cuts=vertical.height_cuts(context))
@@ -838,23 +777,19 @@ class SurfaceComponent(DiskSurface):
                 upsilon * density.surface_densities(force.radii),
                 density.height_pdfs(force.radii, force.heights),
                 density.height_pdfs).reshape(R.shape)
-        # (in the layer of another component: its shape)
-        force = _disk_forces.disk_force(
-            axis, np.union1d(knots, vertical.knots(context)), R, z,
-            degree=2, cuts=vertical.height_cuts(context))
-        return force.thick(
-            self.surface_density(force.radii, params, context)[None],
-            vertical.shapes(force.radii, force.heights, context)[None],
-            lambda r, h: vertical.shapes(r, h, context)[None]
-        ).reshape(R.shape)
+        return vertical.force(
+            axis, knots, R, z,
+            lambda radii: self.surface_density(radii, params, context),
+            params, context)
 
-    def _own_layer(self, vertical: DiskVertical) -> bool:
+    def _own_layer(
+            self, vertical: DiskVertical, context: MassContext) -> bool:
         """
-        Check whether a vertical structure is the layer of the component
-        it follows (see vertical.VerticalComponent).
+        Check whether a vertical structure is the thick layer of the
+        component it follows (see vertical.VerticalComponent).
         """
-        return isinstance(vertical, VerticalComponent) \
-            and vertical.component() == self._component
+        return vertical.followed_component() == self._component \
+            and not vertical.thin(context)
 
     def upsilon(self, params: ParamValues, context: MassContext) -> float:
         """

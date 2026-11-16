@@ -14,6 +14,7 @@ import scipy.interpolate
 from annotated_types import Gt
 
 import gbkfit.units
+from .._capabilities import Need
 from gbkfit.config import Column, FilePath, Unit, check_options
 from gbkfit.io import read_column, read_table
 from gbkfit.params import ParamDesc, ParamValues
@@ -209,12 +210,13 @@ class MassTable(MassComponent):
             desc="the ratio of its mass to that of its table (e.g. a "
                  "mass-to-light ratio)", min=0, unit='', default=1))
 
-    def needs_distance(self) -> str | None:
+    def needs(self) -> tuple[Need, ...]:
         if self._radii.unit.is_equivalent(u.arcsec):
-            return "is a table of radii in angles"
+            return (self._distance_need("is a table of radii in angles"),)
         if self._assumed_distance is not None:
-            return "is a table measured at a distance (D0)"
-        return None
+            return (self._distance_need(
+                "is a table measured at a distance (D0)"),)
+        return ()
 
     def gives_enclosed_mass(self) -> bool:
         return False
@@ -259,7 +261,7 @@ class MassTable(MassComponent):
         galaxy, D/D0 (1 without D0; see the class).
 
         (Of angles or a D0, the context has the length of an arcsec:
-        see needs_distance.)
+        see needs.)
         """
         angles = self._radii.unit.is_equivalent(u.arcsec)
         if not angles and self._assumed_distance is None:

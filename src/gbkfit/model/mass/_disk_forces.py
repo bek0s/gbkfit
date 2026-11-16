@@ -2,8 +2,8 @@
 The forces of axisymmetric mass disks anywhere, the radial force F_R(R,
 z) = -dPhi/dR and the vertical force F_z(R, z) = -dPhi/dz (for the
 vertical equilibrium 'galaxy' of the disks of a galaxy, see
-traits.DPTraitEquilibrium), from the pull of their rings off their plane, as their circular velocity in
-it (see _disk_gravity).
+traits.DispersionEquilibrium), from the pull of their rings off their
+plane, as their circular velocity in it (see _disk_gravity).
 
 A disk is a stack of thin sheets, at the heights h of its density rho(a,
 h): F(R, z) = int F_s[rho(., h)](R, z - h) dh, with the field of a sheet

@@ -3,6 +3,7 @@ Tests for the API of the server: its token, and the round trips of a
 project, a job and its run, and a live session.
 """
 
+import copy
 import json
 import os
 import pathlib
@@ -341,12 +342,12 @@ def test_the_traits_each_type_of_component_takes_are_given(client):
     assert 'spiral' in takes['thin_disk']['traits']['rpt']
     assert 'spiral' not in takes['cone']['traits']['rpt']
     # (a thin disk has no heights but the vertical equilibrium that it does
-    # not draw, no dispersion of an equilibrium, warps out of its plane, or
-    # speeds away from it; a thick one has them)
+    # not draw, warps out of its plane, or speeds away from it; a thick one
+    # has them; the equilibrium of the dispersion is no trait, but the
+    # option equilibrium of a thick disk)
     assert takes['thin_disk']['traits']['rht'] == ['equilibrium']
     assert 'equilibrium' in takes['thick_disk']['traits']['rht']
-    assert 'equilibrium' not in takes['thin_disk']['traits']['dpt']
-    assert 'equilibrium' in takes['thick_disk']['traits']['dpt']
+    assert 'equilibrium' not in takes['thick_disk']['traits']['dpt']
     for kind in ('vht', 'dht', 'zpt'):
         assert takes['thin_disk']['traits'][kind] == []
         assert takes['thick_disk']['traits'][kind]
@@ -989,6 +990,22 @@ RENDERED = dict(components=[
     dict(type='thin_disk', name='stars', rnodes=[0, 2, 4, 6, 8],
          rptraits=dict(type='exponential'),
          emission=dict(type='band'))])
+
+
+def test_a_render_takes_keys_that_select_elements(client):
+    # A warp whose inner rings are tied to another disk (keys with slices
+    # and ties, as in parameter files), the elements of a vector each
+    # given once
+    warped = copy.deepcopy(RENDERED)
+    warped['components'][0]['tilted'] = True
+    _, sliced = render(client, warped, properties={
+        'gas_vpt_vt': 200, 'stars_posa': 30, 'gas_posa[0:3]': 'stars_posa',
+        'gas_posa[3:]': 40}, size=32)
+    _, plain = render(client, warped, properties=dict(
+        gas_vpt_vt=200, stars_posa=30, gas_posa=[30, 30, 30, 40, 40, 40]),
+        size=32)
+    for name in plain:
+        np.testing.assert_array_equal(sliced[name], plain[name])
 
 
 def test_a_galaxy_is_rendered_as_it_is_built(client):

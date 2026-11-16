@@ -17,7 +17,7 @@ from .components.base import Component, ComponentLinks
 from .distance import Distance
 from .gravity import Capability, Gravity, GravityNewton
 from .mass import (
-    ComponentDensity, DiskDensity, MassComponent, MassDisk, MassModel,
+    ComponentDensity, DiskDensity, MassComponent, MassModel,
     SpheroidDensity, mass_component_parser)
 
 
@@ -47,24 +47,30 @@ class GalaxyParams:
 class MassLinks:
     """
     The links of the components of a galaxy and its mass: the names of
-    the components whose densities the mass follows (followed: by their
-    surface density or their layer), and of those whose layer it follows
-    (layers), the names of the components whose densities have a height
-    (thick, which the gravity of the mass takes), and the fluid of each
-    component that has one (see Component.fluid), by its index: the mass
-    disks that it names, or else those that follow it (see
-    MassModel.fluid). A galaxy without mass has none.
+    the mass components that follow the density of each component, by
+    its name (followers: by its surface density or its layer), the names
+    of the components whose layer the mass follows (layers), the names of
+    the components whose densities have a height (thick, which the
+    gravity of the mass takes), and whether the galaxy has mass (mass).
+    A galaxy without mass has none.
     """
-    followed: frozenset[str] = frozenset()
+    followers: dict[str, tuple[str, ...]] = dataclasses.field(
+        default_factory=dict)
     layers: frozenset[str] = frozenset()
     thick: tuple[str, ...] = ()
-    fluids: dict[int, tuple[str, ...]] = dataclasses.field(
-        default_factory=dict)
+    mass: bool = False
 
-    def of(self, index: int, component: Component) -> ComponentLinks:
-        """Return the links of a component of the galaxy, of its index."""
+    @property
+    def followed(self) -> frozenset[str]:
+        """The names of the components whose densities the mass follows."""
+        return frozenset(self.followers)
+
+    def of(self, component: Component) -> ComponentLinks:
+        """Return the links of a component of the galaxy."""
+        name = component.name()
         return ComponentLinks(
-            component.name() in self.followed, self.fluids.get(index, ()))
+            self.followers.get(name, ()) if name is not None else (),
+            self.mass, name in self.layers)
 
 
 def link(
@@ -155,85 +161,24 @@ def _with_mass(
     # see DiskDensity.thick)
     thick = [cmp.name() for cmp in components if cmp.density_has_height()]
     gravity.check_mass_model(mass_model, thick)
+    followers: dict[str, tuple[str, ...]] = {}
+    for mass_component in mass_model.components():
+        for name in mass_component.followed_components():
+            followers[name] = followers.get(name, ()) + (
+                mass_component.name(),)
     links = MassLinks(
-        followed=frozenset(
-            name for mass_component in mass_model.components()
-            for name in mass_component.followed_components()),
+        followers=followers,
         layers=frozenset(
-            mass.vertical().followed_component()
-            for mass in mass_model.components() if isinstance(mass, MassDisk)
+            mass.followed_layer() for mass in mass_model.components()
         ) - {None},
-        thick=tuple(thick))
-    links = dataclasses.replace(
-        links, fluids=_check_fluids(components, mass_model, links))
+        thick=tuple(thick), mass=True)
     _check_needs(components, links, mass_model, gravity)
-    check_needs([
-        Need(Capability.SHARES,
-             f"the mass component {mass_component.name()!r} takes the "
-             f"shares of the components in the squared circular velocity "
-             f"(its dark fraction)")
-        for mass_component in mass_model.components()
-        if mass_component.takes_shares()], mass_model, gravity)
     emissions = {cmp.name(): cmp.emission() for cmp in components}
     mass = pdescs_with_units(mass_model.pdescs(), {
         name: _units.mass_ratio_unit(emissions[followed])
         for name, followed in mass_model.mass_ratios().items()})
     own = {} if distance is None else distance.pdescs()
     return _with_params(params, own | mass | gravity.pdescs()), links
-
-
-def _check_fluids(
-        components: Sequence[Component],
-        mass_model: MassModel,
-        links: MassLinks
-) -> dict[int, tuple[str, ...]]:
-    """
-    Return the fluid of each component of a galaxy of a mass model that
-    has one, by its index (see MassLinks), after checking the fluids and
-    the vertical balance of the components, of the given links (see
-    Component.fluid and Component.balance_gravity): the mass disks that
-    their fluids name, or the mass disks that follow each, whose surface
-    density its equilibrium 'sheet' takes; that none balances its rotation
-    (the equilibrium 'rotation') next to a mass model, where the vertical
-    frequency of a disk is 2.5-3 times its angular speed; and that no mass
-    disk follows the layer of one whose thickness is its equilibrium in
-    the field of the mass (the mass would take the thickness that its own
-    force sets: not yet).
-
-    Raises
-    ------
-    ValueError
-        If one of these does not hold, of the path of the component.
-    """
-    fluids = {}
-    for index, cmp in enumerate(components):
-        gravity = cmp.balance_gravity()
-        with config_path('components', index):
-            label = repr(cmp.name()) if cmp.name() is not None else ''
-            if gravity == 'rotation':
-                raise ValueError(
-                    f"the vertical equilibrium 'rotation' of the component "
-                    f"{label} takes the pull of a spherical mass of its "
-                    f"rotation, which is not that of a galaxy of mass (a "
-                    f"disk pulls 2.5-3 times harder where it dominates): "
-                    f"give it the equilibrium 'galaxy' or 'sheet'")
-            if cmp.thickness_in_field() and cmp.name() in links.layers:
-                raise ValueError(
-                    f"a mass disk follows the layer of the component "
-                    f"{label}, whose thickness is its equilibrium in the "
-                    f"force of the mass: a mass that takes the thickness "
-                    f"that its own force sets is not supported yet; give "
-                    f"the mass disk a vertical structure of its own, or the "
-                    f"disk the equilibrium 'sheet'")
-            fluid = mass_model.fluid(cmp.name(), cmp.fluid())
-            if fluid and (cmp.fluid() or gravity == 'sheet'):
-                fluids[index] = fluid
-            if gravity == 'sheet' and not fluid:
-                raise ValueError(
-                    f"the vertical equilibrium 'sheet' of the component "
-                    f"{label} takes the surface density of its fluid: give "
-                    f"it a fluid, or a mass disk that follows it")
-    return fluids
 
 
 def _check_needs(
@@ -254,8 +199,8 @@ def _check_needs(
         If one does not hold, of the path of the component.
     """
     for index, cmp in enumerate(components):
-        needs = cmp.needs(links.of(index, cmp))
         with config_path('components', index):
+            needs = cmp.needs(links.of(cmp))
             check_needs(needs, mass_model, gravity)
             if mass_model is not None:
                 check_densities(needs, mass_model, links.thick)
@@ -270,7 +215,7 @@ def _distance_needs(
     mass model (see Capability.DISTANCE): the components that take its
     mass (see Component.uses_mass), whose radii in arcsec meet its kpc,
     and the mass components that need it (see
-    MassComponent.needs_distance).
+    MassComponent.needs).
     """
     needs = [
         Need(Capability.DISTANCE, (
@@ -279,13 +224,10 @@ def _distance_needs(
             f"distance)") if cmp.name() is not None else (
             "the component moves in the mass of its galaxy, and so takes "
             "the length of an arcsec in it (its distance)"))
-        for cmp in components if cmp.uses_mass()]
+        for cmp in components if cmp.needs()]
     return needs + [
-        Need(Capability.DISTANCE, (
-            f"the mass component {mass_component.name()!r} {why}, and so "
-            f"takes the length of an arcsec in its galaxy (its distance)"))
-        for mass_component in mass_model.components()
-        if (why := mass_component.needs_distance()) is not None]
+        need for mass_component in mass_model.components()
+        for need in mass_component.needs()]
 
 
 def _with_params(

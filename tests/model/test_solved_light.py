@@ -114,7 +114,7 @@ def test_solved_amplitudes_are_the_least_squares_of_their_parts(driver):
 ])
 def test_amplitudes_of_models_not_linear_in_them_are_refused(
         driver, change, message):
-    core = CORE | dict(emission=dict(type='stars'))
+    core = CORE | dict(emission=dict(type='band'))
     if 'type' in change:
         core |= dict(type=change['type'])
     galaxy = dict(components=[core])
@@ -132,7 +132,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
         moments = DatasetPixelMoments({1: Data(data, error=data + 1)})
         obs = ObservationPixelMoments(
             SpectralAxis(convention='relativistic'), depth=Depth(step=0.5),
-            dataset=moments, lines=['stars'])
+            dataset=moments, lines=[], continuum=True)
     else:
         obs = observation(None, data)
     group = ObservationGroup([galaxy_parser.load(galaxy)], [obs])

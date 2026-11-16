@@ -14,8 +14,8 @@ import gbkfit.units
 from gbkfit.config import config_path, make_typed_desc, warn
 from gbkfit.dataset import Dataset
 from gbkfit.grid import VelocityConvention
-from gbkfit.instrument import PSF, Instrument, PSFGauss
-from gbkfit.io import Beam, beam_area
+from gbkfit.instrument import PSF, Instrument
+from gbkfit.io import Beam
 from gbkfit.model import LightUnit
 
 if TYPE_CHECKING:
@@ -55,7 +55,7 @@ def light_unit(
             f"a unit per beam ({gbkfit.units.format_unit(unit)}) takes the "
             f"beam of the PSF of the instrument, which has none")
     if not psf.varies():
-        beam = _psf_beam(psf)
+        beam = psf.beam()
         return LightUnit(unit, beam.area()), beam
     spectral = observation.spectral()
     if spectral is None:
@@ -68,25 +68,11 @@ def light_unit(
         * astropy.units.km / astropy.units.s
     convention = VelocityConvention(
         spectral.rest(), spectral.medium(), spectral.convention())
-    beams = [_psf_beam(channel) for channel in psf.at(velocities, convention)]
+    beams = [channel.beam() for channel in psf.at(velocities, convention)]
     beam = Beam(
         np.array([b.bmaj for b in beams]), np.array([b.bmin for b in beams]),
         np.array([b.bpa for b in beams]), velocities)
     return LightUnit(unit, beam.area(), velocities), beam
-
-
-def _psf_beam(psf: PSF) -> Beam:
-    """
-    Return the beam of a PSF (of one channel), as of the unit of light
-    per beam: a Gaussian PSF is its own beam (see PSFGauss.beam); another
-    PSF is a round Gaussian beam of its solid angle (see PSF.beam_area),
-    the beam that data per beam carry (see Data).
-    """
-    if isinstance(psf, PSFGauss):
-        return psf.beam()
-    # (the solid angle of a round Gaussian beam is beam_area(1, 1) fwhm^2)
-    fwhm = float(np.sqrt(psf.beam_area() / beam_area(1, 1)))
-    return Beam(fwhm, fwhm)
 
 
 def check_offsets(
@@ -120,11 +106,11 @@ def check_flux_scale(
 ) -> None:
     """
     Raise ValueError unless a flux scale is one of an observation (see
-    ObservationSky.flux_scales), and the observation has a name.
+    ObservationSky.flux_scale_kinds), and the observation has a name.
     """
     if flux_scale is None:
         return
-    kinds = observation.flux_scales()
+    kinds = observation.flux_scale_kinds()
     if flux_scale not in kinds:
         desc = make_typed_desc(observation.__class__, 'observation')
         raise ValueError(
@@ -207,9 +193,9 @@ def _is_beam(psf: PSF | None, beam: Beam) -> bool:
     Return whether a PSF is a beam (of one channel): a Gaussian of its
     axes, and of its angle unless it is round.
     """
-    if not isinstance(psf, PSFGauss):
+    own = None if psf is None else psf.exact_beam()
+    if own is None:
         return False
-    own = psf.beam()
     return bool(np.allclose(
         (beam.bmaj, beam.bmin), (own.bmaj, own.bmin), rtol=1e-3, atol=0)
         and (np.isclose(beam.bmaj, beam.bmin, rtol=1e-3)
@@ -225,6 +211,6 @@ def _psf_text(psf: PSF | None) -> str:
     """A PSF, in messages: its beam, if it is a Gaussian."""
     if psf is None:
         return "none (a point)"
-    if isinstance(psf, PSFGauss):
-        return f"the beam {_beam_text(psf.beam())}"
+    if (own := psf.exact_beam()) is not None:
+        return f"the beam {_beam_text(own)}"
     return f"of type {psf.type()!r}, not a Gaussian"

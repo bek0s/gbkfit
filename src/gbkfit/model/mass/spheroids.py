@@ -17,6 +17,7 @@ import scipy.integrate
 import scipy.interpolate
 import scipy.optimize
 
+from .._capabilities import Capability, Need
 from gbkfit.config import TypedParser, check_name, check_options
 from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
@@ -397,8 +398,16 @@ class Halo(_ShapedMass):
     def responds_to(self) -> tuple[str, ...]:
         return self._baryons
 
-    def takes_shares(self) -> bool:
-        return self._profile.parameterisation() in DARK_FRACTIONS
+    def needs(self) -> tuple[Need, ...]:
+        # (a dark fraction takes the shares of the components in the
+        # squared circular velocity, which the gravity must give)
+        if self._profile.parameterisation() not in DARK_FRACTIONS:
+            return super().needs()
+        return (*super().needs(), Need(
+            Capability.SHARES,
+            f"the mass component {self.name()!r} takes the shares of the "
+            f"components in the squared circular velocity (its dark "
+            f"fraction)"))
 
     def takes_enclosed_masses(self) -> bool:
         return self._responds()

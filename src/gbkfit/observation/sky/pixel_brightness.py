@@ -12,7 +12,7 @@ from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, grid_options
 from gbkfit.instrument import Instrument
-from gbkfit.model import Band, BandEmission, DataUnit, LightUnit
+from gbkfit.model import Band, DataUnit, LightUnit
 from ..depth import Depth
 from ..foreground import Foreground
 from ..plan import ModelData, ModelItem
@@ -75,7 +75,7 @@ class ObservationPixelBrightness(ObservationSky):
 
     dataset_class = DatasetPixelBrightness
 
-    emission = BandEmission
+    spectral_view = False
     orbit_stars = 'light'
 
     # An image has no spectral axis
@@ -117,6 +117,7 @@ class ObservationPixelBrightness(ObservationSky):
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
+            continuum: bool = False,
             band: str | Band | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
@@ -136,8 +137,9 @@ class ObservationPixelBrightness(ObservationSky):
         self._median_size = median_size
         super().__init__(
             self._make_grid(**grid), foreground, instrument, galaxies,
-            components, lines, band, pixel_weights, flux_scale, offsets,
-            dataset, oversampling, depth, dtype, fft_dtype, name, unit)
+            components, lines, continuum, band, pixel_weights, flux_scale,
+            offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
+            unit)
 
     def keys(self) -> tuple[str, ...]:
         return ('brightness',)

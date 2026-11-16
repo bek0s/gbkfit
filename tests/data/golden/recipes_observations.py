@@ -75,7 +75,7 @@ _MOMENTS = _sky(
 # A flattened Sersic spheroid of stars, of Jeans kinematics, whose mass
 # (with that of an NFW halo) holds it up
 _STARS = dict(
-    type='jeans_spheroid', name='stars', rmax=8, emission=dict(type='stars'),
+    type='jeans_spheroid', name='stars', rmax=8, emission=dict(type='band'),
     profile=dict(type='sersic'), shape=dict(type='flattened'))
 
 _STARS_TRUTH = dict(
@@ -104,7 +104,7 @@ def _mge_stars(kind: str, **options: Any) -> list[dict[str, Any]]:
     return [dict(
         components=[dict(
             type=kind, name='stars', rmax=20,
-            emission=dict(type='stars'), profile=dict(type='mge', ngauss=2),
+            emission=dict(type='band'), profile=dict(type='mge', ngauss=2),
             **options)],
         mass=[dict(type='traced_spheroid', name='lum', component='stars'),
               dict(type='point', name='bh')],
@@ -458,7 +458,7 @@ CASES: list[dict[str, Any]] = [
                 method='moments',
                 spectral=dict(size=101, step=10, convention='log')),
             depth=dict(step=0.5),
-            lines=['stars'], instrument=dict(psf=_PSF))],
+            lines=[], continuum=True, instrument=dict(psf=_PSF))],
         truth=_STARS_TRUTH, trial=_STARS_TRIAL,
         noises=[_gauss(0.0002)],
         likelihoods=[dict(type='gauss', missing_residual=3)],
@@ -484,7 +484,7 @@ CASES: list[dict[str, Any]] = [
                 orders=[1, 2, 3, 4], method='gauss_hermite',
                 spectral=dict(size=101, step=10, convention='log')),
             depth=dict(step=0.5),
-            lines=['stars'], instrument=dict(psf=_PSF))],
+            lines=[], continuum=True, instrument=dict(psf=_PSF))],
         truth=_MGE_STARS_TRUTH | dict(stars_beta_z=0.0, stars_kappa=0.5),
         trial=_MGE_STARS_TRUTH | dict(
             stars_posa=dict(value=42, min=0, max=90),

@@ -5,17 +5,20 @@ its model per item, spectrum or row (see FluxScale): the model at scale 1
 is their piece, and the sums of its comparison solve each alone.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.observation import FluxScale, ModelData, ObservationGroup
+from gbkfit.driver import DeviceArray
+from gbkfit.observation import (
+    FluxScale, GroupPlan, ModelData, ObservationGroup)
 from gbkfit.params import ParamValues, Solution, Solve, element_names
 from ._block import Block
 from ._comparisons import Comparison
 
 
 __all__ = [
+    'FluxScales',
     'ScaleBlock',
     'scale_blocks'
 ]
@@ -162,3 +165,93 @@ def scale_blocks(
                 i, param, None if pdesc.is_scalar() else np.array(indices),
                 scale, solves[names[indices[0]]], comparisons[i]))
     return tuple(result)
+
+
+class FluxScales:
+    """
+    The solved flux scales of the observations of a group plan (see
+    ScaleBlock), solved after their models: the models are evaluated with
+    them at 1 (see neutral), their blocks solve them from the models, and
+    the comparisons compare the models times them (see solve).
+
+    Parameters
+    ----------
+    group_plan : GroupPlan
+        The plan of the observations.
+    blocks : Sequence of ScaleBlock
+        The blocks of the solved elements of their scales.
+    """
+
+    def __init__(self, group_plan: GroupPlan, blocks: Sequence[ScaleBlock]):
+        self._group = group_plan.group()
+        self._drivers = group_plan.observation_drivers()
+        self._blocks = tuple(blocks)
+        self._observations = tuple(sorted(
+            {block.observation() for block in blocks}))
+        # The scales of each observation with solved ones, on the host (h)
+        # and the device (d), by index (see prepare)
+        self._h_scales: dict[int, np.ndarray] = {}
+        self._d_scales: dict[int, DeviceArray] = {}
+
+    def blocks(self) -> tuple[ScaleBlock, ...]:
+        """Return the blocks of the solved elements of the scales."""
+        return self._blocks
+
+    def observations(self) -> tuple[int, ...]:
+        """Return the observations with solved scales, by index."""
+        return self._observations
+
+    def prepare(self) -> None:
+        """
+        Allocate the memory of the scales of the observations: of the
+        shape of the data of each, but 1 along the axis of its scale.
+        """
+        for i in self._observations:
+            observation = self._group.observations()[i]
+            _, scale = observation.flux_scale()
+            shape = tuple(
+                1 if scale.axis in (None, k) else n
+                for k, n in enumerate(observation.dataset().shape()))
+            self._h_scales[i], self._d_scales[i] = \
+                self._drivers[i].mem_alloc_s(shape, observation.dtype())
+
+    def close(self) -> None:
+        """Release its memory; prepare allocates it again."""
+        self._h_scales = {}
+        self._d_scales = {}
+
+    def neutral(self, params: ParamValues) -> ParamValues:
+        """
+        Return the values of the parameters with the solved elements of
+        the scales at 1 (copies of those of their parameters).
+        """
+        values = params
+        for block in self._blocks:
+            values = block.neutral(values)
+        return values
+
+    def solve(
+            self,
+            models: Sequence[ModelData],
+            params: ParamValues
+    ) -> tuple[dict[Block, Solution], dict[int, dict[str, DeviceArray]]]:
+        """
+        Solve the elements of the scales from the models of the
+        observations (see ScaleBlock), with the scales at 1, and return
+        the solution of each block, and the scales of the data items of
+        each observation with solved scales, by index, on its device, by
+        name (see Comparison.evaluate).
+        """
+        solutions: dict[Block, Solution] = {}
+        for i in self._observations:
+            self._h_scales[i][...] = 1
+        for block in self._blocks:
+            i = block.observation()
+            solutions[block] = solution = block.solve(models[i], params)
+            block.place(solution.values, self._h_scales[i])
+        scales = {}
+        for i in self._observations:
+            self._drivers[i].mem_copy_h2d(self._h_scales[i], self._d_scales[i])
+            _, scale = self._group.observations()[i].flux_scale()
+            scales[i] = dict.fromkeys(scale.items, self._d_scales[i])
+        return solutions, scales

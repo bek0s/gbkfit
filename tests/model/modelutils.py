@@ -18,7 +18,7 @@ def split_case(case):
     observation['instrument'] = {
         k: observation.pop(k) for k in ('primary_beam', 'psf', 'lsf')
         if k in observation}
-    for key in ('depth', 'lines', 'band', 'unit'):
+    for key in ('depth', 'lines', 'continuum', 'band', 'unit'):
         if key in case:
             observation[key] = case.pop(key)
     galaxy = dict(case.pop('galaxy'))

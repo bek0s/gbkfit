@@ -31,7 +31,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     'GroupPlan',
-    'LinearPieces'
+    'LinearPieces',
+    'place_drivers'
 ]
 
 
@@ -812,3 +813,74 @@ class _GroupFunctions(ParamFunctions):
                 {name: values[full] for name, full in mapping.items()})
             bound |= {f'{prefix}{name}': value for name, value in own.items()}
         return bound
+
+
+def place_drivers(
+        group: 'ObservationGroup',
+        driver: Driver | None = None,
+        placement: Mapping[str, Driver] | None = None
+) -> tuple[tuple[Driver, ...], tuple[Driver, ...]]:
+    """
+    Return the driver of each galaxy and of each observation of a group
+    (see ObservationGroup.plan): that of its label in the placement, or
+    else the given one. A galaxy that follows its observations (one without
+    mass, see ObservationGroup.follows_observations) and that the placement
+    leaves out has the driver of the observations that see it, if they
+    share one: its stage is for them alone, and on another driver it would
+    be copied to theirs at every evaluation.
+
+    Parameters
+    ----------
+    driver : Driver, optional
+        The driver of those that the placement leaves out; the host by
+        default.
+    placement : Mapping of str to Driver, optional
+        The drivers of some galaxies and observations, by label.
+
+    Returns
+    -------
+    galaxies, observations : tuple of Driver
+        The driver of each galaxy, and of each observation.
+
+    Raises
+    ------
+    ValueError
+        If the placement names unknown galaxies or observations, or a
+        label that is of a galaxy and of an observation.
+    """
+    if driver is None:
+        # (imported here: the host driver needs its native module)
+        from gbkfit.driver.drivers.host import DriverHost
+        driver = DriverHost()
+    placement = dict(placement or {})
+    galaxy_labels = [
+        group.galaxy_label(g) for g in range(len(group.galaxies()))]
+    observation_labels = [
+        group.observation_label(i) for i in range(group.nobservations())]
+    labels = {*galaxy_labels, *observation_labels}
+    if unknown := sorted(placement.keys() - labels):
+        raise ValueError(
+            f"the placement names unknown galaxies or observations "
+            f"{unknown}; the galaxies are {galaxy_labels} and the "
+            f"observations {observation_labels}")
+    if both := sorted(
+            placement.keys() & set(galaxy_labels)
+            & set(observation_labels)):
+        raise ValueError(
+            f"the placement names {both}, which are labels of a galaxy "
+            f"and of an observation; name them apart")
+    observations = tuple(
+        placement.get(label, driver) for label in observation_labels)
+    galaxies = []
+    for g, label in enumerate(galaxy_labels):
+        if label in placement or not group.follows_observations(g):
+            galaxies.append(placement.get(label, driver))
+            continue
+        seen_on = [
+            observation_driver
+            for i, observation_driver in enumerate(observations)
+            if g in group.seen_galaxies(i)]
+        shared = bool(seen_on) and all(
+            other is seen_on[0] for other in seen_on)
+        galaxies.append(seen_on[0] if shared else driver)
+    return tuple(galaxies), observations

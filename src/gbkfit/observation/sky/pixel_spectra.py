@@ -12,7 +12,7 @@ from gbkfit.dataset import Data, Dataset, DatasetPixelSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis, grid_options
 from gbkfit.instrument import Instrument
-from gbkfit.model import Band, DataUnit, LightUnit, LineEmission
+from gbkfit.model import Band, DataUnit, LightUnit
 from ..depth import Depth
 from ..foreground import Foreground
 from ..plan import FluxScale, ModelData, ModelItem
@@ -77,7 +77,7 @@ class ObservationPixelSpectra(ObservationSky):
 
     dataset_class = DatasetPixelSpectra
 
-    emission = LineEmission
+    spectral_view = True
     orbit_stars = None
 
     # The axes of a spectral cube: x, y and the spectral axis
@@ -127,6 +127,7 @@ class ObservationPixelSpectra(ObservationSky):
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
+            continuum: bool = False,
             band: str | Band | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
@@ -148,8 +149,9 @@ class ObservationPixelSpectra(ObservationSky):
         self._median_size = median_size
         super().__init__(
             self._make_grid(**grid), foreground, instrument, galaxies,
-            components, lines, band, pixel_weights, flux_scale, offsets,
-            dataset, oversampling, depth, dtype, fft_dtype, name, unit)
+            components, lines, continuum, band, pixel_weights, flux_scale,
+            offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
+            unit)
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
@@ -170,10 +172,10 @@ class ObservationPixelSpectra(ObservationSky):
     def light_items(self) -> tuple[str, ...]:
         return ('spectra',)
 
-    def flux_scales(self) -> dict[str, FluxScale]:
+    def flux_scale_kinds(self) -> dict[str, FluxScale]:
         # (each spectrum runs along the first axis, at each pixel)
         nspectra = self.size()[0] * self.size()[1]
-        return super().flux_scales() \
+        return super().flux_scale_kinds() \
             | dict(per_spectrum=FluxScale(('spectra',), 0, nspectra))
 
     def linear_in_light(self) -> bool:

@@ -13,7 +13,6 @@ from gbkfit.config import warn
 from gbkfit.grid import SpectralAxis, check_convention, make_cube_grid
 from gbkfit.dataset import Dataset
 from gbkfit.instrument import Instrument
-from gbkfit.model import STARS, LineEmission, StarsEmission
 from gbkfit.moments import DeviceMomentMaps
 from gbkfit.utils import numutils
 from . import _model_cube
@@ -172,19 +171,8 @@ def check_one_line(scene: 'Scene') -> None:
     lines = set()
     for galaxy, emitters in enumerate(scene.emitters()):
         for index in emitters:
-            emission = scene.component(galaxy, index).emission()
-            if isinstance(emission, StarsEmission):
-                if scene.lines() is not None and STARS in scene.lines():
-                    lines.add(STARS)
-            elif isinstance(emission, LineEmission):
-                names = emission.lines().names()
-                selected = emission.lines().select(scene.lines())
-                # The one line of a component without lines: whatever line
-                # the spectral axis is of, the same for all such components
-                if names:
-                    lines.update(names[i] for i in selected)
-                else:
-                    lines.add(None)
+            lines.update(scene.component(galaxy, index).emission()
+                         .spectral_lines(scene.view()))
     if len(lines) > 1:
         named = sorted(str(line) for line in lines if line is not None)
         raise ValueError(

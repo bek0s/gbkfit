@@ -27,7 +27,8 @@ from ..base import GalaxyMass
 from ..base import ComponentState
 from ._jeans import light
 from ._kinematics import SpheroidKinematics, SpheroidLight, SpheroidMotion
-from ._orbits import PotentialTable, potential_table
+from ._orbits import (
+    OrbitIntegrator, PotentialTable, SkyGrid, potential_table)
 
 
 __all__ = [
@@ -201,6 +202,31 @@ class OrbitLibraryState(ComponentState):
         Return the most steps of an orbit: _STEPS_PER_TURN per turn.
         """
         return int(_STEPS_PER_TURN * self.turns)
+
+    def integrator(
+            self,
+            driver: Driver,
+            cells: bool = False,
+            sky: Sequence[SkyGrid] = (),
+            order: int | None = None,
+            nchannels: int | None = None,
+            cell_moments: bool = False
+    ) -> OrbitIntegrator:
+        """
+        Return an integrator of its orbits and their twins on the device
+        of a driver (see OrbitIntegrator), in float64 whatever the dtype of
+        what records them (chaotic orbits turn float32 rounding into
+        noise), as it integrates them: recording them in its cells, if
+        cells, and on the given sky grids, in the series of the given
+        order or the given channels, and the moments of its cells, if
+        cell_moments.
+        """
+        return OrbitIntegrator(
+            driver, np.float64, len(self.starts), tolerance=self.tolerance,
+            max_steps=self.max_steps(), nsamples=self.samples,
+            nphi=self.copies, twins=True,
+            cells=self.cell_light.shape if cells else None, sky=sky,
+            order=order, nchannels=nchannels, cell_moments=cell_moments)
 
     def orbit_light(self, factors: npt.ArrayLike) -> np.ndarray:
         """

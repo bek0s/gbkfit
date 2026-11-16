@@ -174,31 +174,35 @@ def kinematic_traits(
         vhtraits:
         traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
         dhtraits:
-        traits.DHTrait | Sequence[traits.DHTrait | None] | None = None
+        traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
+        equilibrium: traits.DispersionEquilibrium | None = None
 ) -> 'KinematicTraits | None':
     """
     Return the kinematic traits of a component (see KinematicTraits), or
-    None if it has none: a component without velocity and dispersion
-    traits does not move (e.g. one seen only by images).
+    None if it has none: a component without velocity traits and a
+    dispersion (its dispersion traits, or the vertical equilibrium of a
+    thick disk) does not move (e.g. one seen only by images).
 
     Raises
     ------
     ValueError
-        If only one of vptraits and dptraits is given, height traits are
-        given without them, or the traits are not valid (see
+        If only one of the velocity and the dispersion is given, height
+        traits are given without them, or the traits are not valid (see
         KinematicTraits).
     """
-    if vptraits is None and dptraits is None:
+    dispersion = dptraits is not None or equilibrium is not None
+    if vptraits is None and not dispersion:
         if vhtraits is not None or dhtraits is not None:
             raise ValueError(
                 "vhtraits and dhtraits are the heights of the velocity and "
                 "dispersion traits: give vptraits and dptraits")
         return None
-    if vptraits is None or dptraits is None:
+    if vptraits is None or not dispersion:
         raise ValueError(
             "a component that moves takes both its velocity traits "
             "(vptraits) and its dispersion traits (dptraits)")
-    return KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
+    return KinematicTraits(
+        vptraits, dptraits, vhtraits, dhtraits, equilibrium)
 
 
 class KinematicTraits:
@@ -214,14 +218,11 @@ class KinematicTraits:
     ----------
     vptraits : VPTrait or Sequence of VPTrait
         The velocity polar traits (parameters 'vpt_*').
-    dptraits : DPTrait or Sequence of DPTrait
+    dptraits : DPTrait or Sequence of DPTrait, optional
         The velocity dispersion polar traits (parameters 'dpt_*'),
         isotropic or each along a direction (see traits): once one is
         along a direction, every direction needs its own or an isotropic
-        one. The last can be the vertical equilibrium of a thick disk
-        (see traits.DPTraitEquilibrium), whose dispersion its galaxy
-        derives and adds in quadrature; the others are fitted, and add
-        up.
+        one. They add up; none with an equilibrium alone.
     vhtraits : VHTrait or Sequence of VHTrait, optional
         The velocity height traits of a thick component: one that every
         velocity polar trait shares (parameters 'vht_*'), or one for each
@@ -229,8 +230,11 @@ class KinematicTraits:
         distance from the surface).
     dhtraits : DHTrait or Sequence of DHTrait, optional
         The dispersion height traits of a thick component, one shared or
-        one for each fitted dispersion polar trait (as vhtraits; the
-        equilibrium, isothermal in z, takes none).
+        one for each dispersion polar trait (as vhtraits).
+    equilibrium : DispersionEquilibrium, optional
+        The vertical equilibrium of a thick disk, whose dispersion its
+        galaxy derives and adds in quadrature to that of the dispersion
+        traits (isothermal in z: it takes no height trait).
 
     Raises
     ------
@@ -240,19 +244,20 @@ class KinematicTraits:
         dispersion without a dispersion trait, several velocity traits
         'mass' (the rotation in the gravity would count more than once),
         a velocity height trait 'mass' that does not pair with the
-        velocity trait 'mass' (see traits.VHTraitMass), or an equilibrium
-        that is not the last of the dispersion traits.
+        velocity trait 'mass' (see traits.VHTraitMass).
     """
 
     def dump(self) -> dict[str, Any]:
         """Return the options of the traits."""
-        info = dict(
-            vptraits=dump_traits(traits.vpt_parser, self._vptraits),
-            dptraits=dump_traits(traits.dpt_parser, self._dptraits))
+        info = dict(vptraits=dump_traits(traits.vpt_parser, self._vptraits))
+        if self._dptraits:
+            info['dptraits'] = dump_traits(traits.dpt_parser, self._dptraits)
         if self._vhtraits is not None:
             info['vhtraits'] = dump_traits(traits.vht_parser, self._vhtraits)
         if self._dhtraits is not None:
             info['dhtraits'] = dump_traits(traits.dht_parser, self._dhtraits)
+        if self._equilibrium is not None:
+            info['equilibrium'] = self._equilibrium.dump()
         return info
 
     def __init__(
@@ -262,7 +267,8 @@ class KinematicTraits:
             vhtraits:
             traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
             dhtraits:
-            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None
+            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
+            equilibrium: traits.DispersionEquilibrium | None = None
     ):
         self._vptraits = _polar_traits('vptraits', vptraits)
         if sum(isinstance(trait, traits.VPTraitMass)
@@ -270,20 +276,15 @@ class KinematicTraits:
             raise ValueError(
                 "a disk takes at most one velocity trait 'mass': each "
                 "adds the whole rotation in the gravity")
-        self._dptraits = _polar_traits('dptraits', dptraits)
-        last = self._dptraits[-1]
-        self._equilibrium = last \
-            if isinstance(last, traits.DPTraitEquilibrium) else None
-        self._fitted = self._dptraits[:-1] if self._equilibrium is not None \
-            else self._dptraits
-        if any(isinstance(trait, traits.DPTraitEquilibrium)
-               for trait in self._fitted):
+        if dptraits is None and equilibrium is None:
             raise ValueError(
-                "a disk takes at most one dispersion trait 'equilibrium', "
-                "the last of its dptraits: its dispersion adds in "
-                "quadrature to the sum of the others")
-        if self._fitted:
-            _check_dispersion_directions(self._fitted)
+                "a component that moves takes its dispersion: dptraits, or "
+                "the vertical equilibrium of a thick disk")
+        self._dptraits = () if dptraits is None \
+            else _polar_traits('dptraits', dptraits)
+        self._equilibrium = equilibrium
+        if self._dptraits:
+            _check_dispersion_directions(self._dptraits)
         self._vhtraits = _height_traits(
             'vhtraits', vhtraits, len(self._vptraits), 'vptraits')
         # (a shared height trait pairs with every velocity trait)
@@ -293,35 +294,28 @@ class KinematicTraits:
         for vptrait, vhtrait in zip(self._vptraits, vhtraits):
             if isinstance(vhtrait, traits.VHTraitMass):
                 _check_rotation_at_heights(vptrait)
-        if dhtraits is not None and not self._fitted:
+        if dhtraits is not None and not self._dptraits:
             raise ValueError(
-                "dhtraits are the heights of the fitted dispersion traits, "
-                "and the equilibrium, isothermal in z, takes none: give "
-                "none")
+                "dhtraits are the heights of the dispersion traits, and the "
+                "equilibrium, isothermal in z, takes none: give none")
         self._dhtraits = _height_traits(
-            'dhtraits', dhtraits, len(self._fitted),
-            'dptraits' if self._equilibrium is None
-            else 'dptraits but the equilibrium')
+            'dhtraits', dhtraits, len(self._dptraits), 'dptraits')
 
     def vptraits(self) -> tuple[traits.VPTrait, ...]:
         """Return the velocity polar traits."""
         return self._vptraits
 
     def dptraits(self) -> tuple[traits.DPTrait, ...]:
-        """Return the velocity dispersion polar traits."""
+        """
+        Return the velocity dispersion polar traits (none with an
+        equilibrium alone).
+        """
         return self._dptraits
 
-    def fitted_dptraits(self) -> tuple[traits.DPTrait, ...]:
+    def equilibrium(self) -> traits.DispersionEquilibrium | None:
         """
-        Return the velocity dispersion polar traits but the equilibrium:
-        those of parameters, which the kernels evaluate.
-        """
-        return self._fitted
-
-    def equilibrium(self) -> traits.DPTraitEquilibrium | None:
-        """
-        Return the vertical equilibrium, if any: the last of the
-        dispersion traits, whose dispersion the galaxy derives.
+        Return the vertical equilibrium, if any, whose dispersion the
+        galaxy derives (see traits.DispersionEquilibrium).
         """
         return self._equilibrium
 

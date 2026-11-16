@@ -90,7 +90,7 @@ class Setup:
     placement : Mapping of str to Driver, optional
         Other drivers of some of them, by their labels; the galaxies
         without mass that it leaves out follow the observations that see
-        them (see ObservationGroup.drivers).
+        them (see place_drivers).
     workers : Workers, optional
         The workers of copies of the objective, which evaluate the batches
         of points of fits at once (see Workers.start).

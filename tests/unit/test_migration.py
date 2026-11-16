@@ -802,12 +802,12 @@ def test_components_are_flat():
     # (in the order of the options they replace)
     assert list(thick) == [
         'type', 'name', 'rptraits', 'rhtraits', 'vptraits', 'dptraits',
-        'emission']
+        'equilibrium', 'emission']
     assert thick['rhtraits'] == dict(type='sech2', zmax=8)
-    # (and its equilibrium its last dispersion trait: see
+    # (and its equilibrium its option equilibrium: see
     # test_the_vertical_balance_is_stated_once)
-    assert thick['dptraits'] == [
-        dict(type='uniform'), dict(type='equilibrium', gravity='galaxy')]
+    assert thick['dptraits'] == [dict(type='uniform')]
+    assert thick['equilibrium'] == dict(gravity='galaxy')
     assert spheroids == [
         dict(type='jeans_spheroid', name='a'),
         dict(type='orbit_spheroid', name='b', norbits=200),
@@ -843,13 +843,14 @@ def test_the_vertical_balance_is_stated_once():
     massive = dict(components=disks, mass=[dict(type='point', name='bh')])
     central = dict(components=[thick(dict(type='central'))])
     changes = migration.migrate(dict(galaxies=[massive, central]), 7)
+    # (version 14: the equilibrium is the option equilibrium of the disk,
+    # without the name of the trait it was)
     fitted = dict(type='uniform')
     assert [disk['dptraits'] for disk in disks[:3]] == [
-        [fitted, dict(type='equilibrium', gravity='galaxy', direction='ver')],
-        [fitted, dict(type='equilibrium', gravity='sheet')],
-        # (the traits of a list are named all or none)
-        [dict(type='uniform', name='floor'),
-         dict(type='equilibrium', gravity='sheet', name='equilibrium')]]
+        [fitted], [fitted], [dict(type='uniform', name='floor')]]
+    assert [disk['equilibrium'] for disk in disks[:3]] == [
+        dict(gravity='galaxy', direction='ver'), dict(gravity='sheet'),
+        dict(gravity='sheet')]
     assert [disk.get('fluid') for disk in disks] == [
         None, 'hi', ['hi', 'h2'], ['hi', 'h2']]
     # (the self-gravitating support of a thin disk is that of jeans in the
@@ -858,10 +859,10 @@ def test_the_vertical_balance_is_stated_once():
         None, dict(type='jeans'), None, dict(type='jeans')]
     assert disks[3]['rhtraits'] == dict(type='equilibrium', gravity='sheet')
     assert disks[1]['vptraits'] == [dict(type='mass')]
-    assert not any('equilibrium' in disk for disk in disks)
+    assert 'equilibrium' not in disks[3]
     # (without mass, the central equilibrium is that of its rotation)
-    assert central['components'][0]['dptraits'][-1] == dict(
-        type='equilibrium', gravity='rotation')
+    assert central['components'][0]['equilibrium'] == dict(
+        gravity='rotation')
     assert not any(c.message.startswith('by hand') for c in changes)
     from gbkfit.model import galaxy_parser
     for disk in disks[:1]:
@@ -1838,3 +1839,54 @@ def test_the_observable_of_an_observation_is_merged_into_it(tmp_path):
     assert [line.split() for line in lines[1:]] == [
         ['observations:'], ['-', 'type:', 'pixel_spectra', '#', 'a', 'cube'],
         ['size:', '[8,', '8]', '#', 'of', 'KMOS'], ['name:', 'kmos']]
+
+
+def test_the_light_of_stars_is_light_in_bands_and_the_continuum(tmp_path):
+    # Version 13: the emission 'stars' is light in bands, and a spectral
+    # observation sees the velocities of the continuum by its option
+    # continuum (was 'stars' among its lines; lines: [] if alone)
+    config = dict(
+        galaxies=[dict(components=[
+            dict(type='jeans_spheroid', name='bulge',
+                 emission=dict(type='stars', bands=['sdss_r'])),
+            dict(type='thin_disk', name='gas',
+                 emission=dict(type='lines', lines=['halpha']))])],
+        observations=[
+            dict(type='region_moments', name='stars', lines=['stars']),
+            dict(type='pixel_spectra', name='both',
+                 lines=['halpha', 'stars']),
+            dict(type='pixel_spectra', name='gas', lines=['halpha'])])
+    changes = migration.migrate(config, 12)
+    bulge, gas = config['galaxies'][0]['components']
+    assert bulge['emission'] == dict(type='band', bands=['sdss_r'])
+    assert gas['emission'] == dict(type='lines', lines=['halpha'])
+    stars, both, gas_only = config['observations']
+    assert list(stars) == ['type', 'name', 'lines', 'continuum']
+    assert (stars['lines'], stars['continuum']) == ([], True)
+    assert (both['lines'], both['continuum']) == (['halpha'], True)
+    assert gas_only == dict(
+        type='pixel_spectra', name='gas', lines=['halpha'])
+    assert migration.Change(
+        ['observations', 0, 'lines'], "'stars' -> continuum: true") \
+        in changes
+
+
+def test_the_dispersion_equilibrium_is_an_option_of_the_disk():
+    # Version 14: the dispersion trait 'equilibrium' is the option
+    # equilibrium of its thick disk, after its dptraits, which keep the
+    # other traits (none left: none)
+    beside = dict(
+        type='thick_disk', dptraits=[
+            dict(type='uniform'),
+            dict(type='equilibrium', gravity='galaxy', direction='ver')],
+        emission=dict(type='lines'))
+    alone = dict(
+        type='thick_disk',
+        dptraits=dict(type='equilibrium', gravity='sheet', name='eq'))
+    changes = migration.migrate(
+        dict(version=13, galaxies=dict(components=[beside, alone])))
+    assert list(beside) == ['type', 'dptraits', 'equilibrium', 'emission']
+    assert beside['dptraits'] == [dict(type='uniform')]
+    assert beside['equilibrium'] == dict(gravity='galaxy', direction='ver')
+    assert alone == dict(type='thick_disk', equilibrium=dict(gravity='sheet'))
+    assert sum('option equilibrium' in c.message for c in changes) == 2

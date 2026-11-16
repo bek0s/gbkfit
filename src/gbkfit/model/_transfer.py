@@ -210,7 +210,8 @@ class TransferPlan:
     ):
         check_emitters(sum(len(member.emitters) for member in members))
         driver, dtype = target.driver, target.dtype
-        lines, band, data_unit = target.lines, target.band, target.data_unit
+        lines, band = target.view.lines, target.view.band
+        data_unit = target.data_unit
         # The depth axis: that of the galaxy, or of several, as long as
         # theirs together and a margin of 2 voxels each (see _placement)
         depth = members[0].depth

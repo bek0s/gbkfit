@@ -23,8 +23,8 @@ from astropy.stats import gaussian_fwhm_to_sigma, gaussian_sigma_to_fwhm
 from gbkfit.config import (
     DataFile, TypedParser, Unit, Varying, check_options, split_data_file)
 from gbkfit.io import (
-    Beam, header_beam, model_header, parse_wcs, read_header, read_image,
-    spectral_points)
+    Beam, beam_area, header_beam, model_header, parse_wcs, read_header,
+    read_image, spectral_points)
 from . import _detail, _profiles
 from ._detail import WING_FLUX
 from .varying import SpectralTable
@@ -151,6 +151,30 @@ class PSF(_detail.SpreadFunction):
                 "a PSF that varies has a beam at each point of the spectral "
                 "axis (see PSF.at)")
         return self._beam_area_impl()
+
+    def beam(self) -> Beam:
+        """
+        Return it as a radio beam (see Beam), as of the unit of light per
+        beam: here, a round Gaussian beam of its solid angle (see
+        beam_area), the beam that data per beam carry (see Data); a
+        Gaussian PSF is its own beam.
+
+        Raises
+        ------
+        ValueError
+            If it has no beam (see beam_area).
+        """
+        # (the solid angle of a round Gaussian beam is beam_area(1, 1)
+        # fwhm^2)
+        fwhm = float(np.sqrt(self.beam_area() / beam_area(1, 1)))
+        return Beam(fwhm, fwhm)
+
+    def exact_beam(self) -> Beam | None:
+        """
+        Return it as a radio beam if it is one exactly (a Gaussian; see
+        beam), else None.
+        """
+        return None
 
     def _beam_area_impl(self) -> float:
         """
@@ -462,6 +486,9 @@ class PSFGauss(_AnalyticPSF):
         """
         fwhm = float(self._scale * gaussian_sigma_to_fwhm)
         return Beam(fwhm, fwhm * self._ratio, self._posa)
+
+    def exact_beam(self) -> Beam:
+        return self.beam()
 
     def _beam_area_impl(self) -> float:
         # (2 pi sigma^2 times the axis ratio)

@@ -17,8 +17,7 @@ from gbkfit.grid import doppler
 from gbkfit.params import ParamValues
 from .components.base import OpacityCubes
 from .components.extinction import ExtinctionLaw
-from .components.lines import Band
-from .components.roles import BandEmission
+from .components.roles import View
 
 if TYPE_CHECKING:
     from .galaxy import Galaxy
@@ -164,8 +163,7 @@ class _DustModel:
 def opacity_cubes(
         galaxies: Sequence['Galaxy'],
         emitters: Sequence[Sequence[int]],
-        lines: tuple[str, ...] | None,
-        band: Band | None,
+        view: View,
         dtype: np.dtype
 ) -> list[OpacityCubes]:
     """
@@ -212,10 +210,10 @@ def opacity_cubes(
         for i in galaxy_emitters:
             emission = components[i].emission()
             # (the band of an image: its wavelength, as observed)
-            at_band = band is not None and isinstance(emission, BandEmission)
+            at_band = not view.spectral and view.band is not None
             light[g, i] = [
                 _Light(wavelength, frame(i, not at_band))
-                for wavelength in emission.wavelengths(lines, band, redshift)]
+                for wavelength in emission.wavelengths(view.lines, view.band, redshift)]
     kinds, cubes, grey = _layout(dust, [
         row for rows in light.values() for row in rows])
     model = _DustModel(kinds, dust, list(light.values()), grey, dtype)

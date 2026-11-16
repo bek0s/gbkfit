@@ -26,13 +26,12 @@ from ._galaxy_stage import GalaxyState
 from .components._units import DataUnit
 from .components.base import (
     ComponentState, DepthAxis, FrameParams, SceneTarget)
-from .components.disks.disk import Disk
-from .components.lines import Band
-from .components.roles import STARS, Emission
-from .components.traits import RPTraitImage
+from .components.roles import View
 from .extras import Extras
 
 if TYPE_CHECKING:
+    from gbkfit.instrument import PSF
+
     from .components.base import Component
     from .galaxy import Galaxy
 
@@ -96,10 +95,9 @@ class Scene:
     Galaxies drawn together on one grid (e.g. those an observation sees;
     see gbkfit.observation): the galaxies, the indices of the components
     of each whose light is drawn (its emitters; the opacity of all
-    components applies), the emission lines drawn (all if None) or the
-    band (if known), the type of the emission it is seen in (see
-    ObservationSky.emission of gbkfit.observation: BandEmission for an image,
-    LineEmission for a spectral cube), the order of the galaxies along the
+    components applies), what it sees of their light (see View: a band,
+    or a spectral axis with its lines and continuum), the order of the
+    galaxies along the
     line of sight, front to back (in units: galaxies or groups of them;
     those it leaves out after them, in their order), and the unit of the
     data, which the
@@ -116,9 +114,7 @@ class Scene:
             mappings: Sequence[dict[str, str]],
             labels: Sequence[str],
             emitters: Sequence[tuple[int, ...]],
-            lines: tuple[str, ...] | None,
-            band: Band | None,
-            emission: type[Emission],
+            view: View,
             order: Sequence[DepthUnit] | None = None,
             data_unit: DataUnit | None = None
     ):
@@ -126,9 +122,7 @@ class Scene:
         self._mappings = tuple(mappings)
         self._labels = tuple(labels)
         self._emitters = tuple(emitters)
-        self._lines = lines
-        self._band = band
-        self._emission = emission
+        self._view = view
         self._data_unit = data_unit
         order = tuple(order or ())
         ordered = {g for unit in order for g in unit.galaxies}
@@ -143,13 +137,9 @@ class Scene:
         """
         return self._data_unit
 
-    def lines(self) -> tuple[str, ...] | None:
-        """Return the names of the emission lines drawn (all if None)."""
-        return self._lines
-
-    def band(self) -> Band | None:
-        """Return the band of an image, if known."""
-        return self._band
+    def view(self) -> View:
+        """Return what it sees of the light of its components (see View)."""
+        return self._view
 
     def emitters(self) -> tuple[tuple[int, ...], ...]:
         """
@@ -157,10 +147,6 @@ class Scene:
         drawn.
         """
         return self._emitters
-
-    def emission(self) -> type[Emission]:
-        """Return the type of the emission it is seen in."""
-        return self._emission
 
     def order(self) -> tuple[DepthUnit, ...]:
         """
@@ -194,7 +180,7 @@ class Scene:
                 or (len(drawn) > 1 and any(opacities)):
             return SceneEvaluation.TRANSFER
         if any(opacities) or any(
-                c.thick(self._emission)
+                c.needs_depth(self._view)
                 for components in drawn for c in components):
             return SceneEvaluation.DEPTH
         return SceneEvaluation.PLANE
@@ -217,7 +203,7 @@ class Scene:
         return SceneTarget(
             driver, grid if image else grid.spatial(),
             IMAGE_SPECTRAL_AXIS if image else grid.spectral(), dtype,
-            self._lines, self._band, self._data_unit, smoothing)
+            self._view, self._data_unit, smoothing)
 
     def galaxy_label(self, galaxy: int) -> str:
         """
@@ -235,9 +221,8 @@ class Scene:
         Return the names of the parameters of a component of a galaxy (by
         their indices) in the group of the galaxies, by their own names.
         """
-        mapping = self._mappings[galaxy]
-        names = self._galaxies[galaxy].component_param_names(component)
-        return {param: mapping[name] for param, name in names.items()}
+        return self._galaxies[galaxy].component_param_names(
+            component, self._mappings[galaxy])
 
     def orbit_emitters(self) -> tuple[tuple[int, int], ...]:
         """
@@ -247,7 +232,7 @@ class Scene:
         their light, as that of any component), each as the index of its
         galaxy (in the scene) and its own index.
         """
-        if self._lines is None or STARS not in self._lines:
+        if not self._view.continuum:
             return ()
         return tuple(
             (g, i)
@@ -270,18 +255,15 @@ class Scene:
             _bounding_radius(galaxy, emitters)
             for galaxy, emitters in zip(self._galaxies, self._emitters))
 
-    def image_traits(self) -> tuple[RPTraitImage, ...]:
+    def check_psf(self, psf: 'PSF | None') -> None:
         """
-        Return the image traits of the disks whose light is drawn (see
-        traits.RPTraitImage).
+        Check that the components whose light is drawn can be seen through
+        the PSF of an observation (None without one; see
+        Component.check_psf).
         """
-        return tuple(
-            trait
-            for galaxy, emitters in zip(self._galaxies, self._emitters)
-            for i in emitters
-            if isinstance(component := galaxy.components()[i], Disk)
-            for trait in component.density_disk().traits('rpt')
-            if isinstance(trait, RPTraitImage))
+        for galaxy, emitters in zip(self._galaxies, self._emitters):
+            for i in emitters:
+                galaxy.components()[i].check_psf(psf)
 
     def frame_params(self, name: str) -> FrameParams:
         """
@@ -291,11 +273,7 @@ class Scene:
         if no component has the name.
         """
         g, i = named_components(self._galaxies, [name])[name]
-        galaxy = self._galaxies[g]
-        names = galaxy.component_param_names(i)
-        return FrameParams(*(
-            None if own is None else self._mappings[g][names[own]]
-            for own in galaxy.components()[i].frame_params()))
+        return self._galaxies[g].component_frame_params(i, self._mappings[g])
 
 
 class ScenePlan(abc.ABC):
@@ -384,7 +362,7 @@ class AdditiveScenePlan(ScenePlan):
         # (the dust of each galaxy alone, see opacity_cubes)
         cubes = [
             opacity_cubes(
-                [galaxy], [emitters], target.lines, target.band, dtype)[0]
+                [galaxy], [emitters], target.view, dtype)[0]
             for galaxy, emitters in zip(scene._galaxies, scene._emitters)]
         self._plans: tuple[GalaxyPlan, ...] = tuple(
             galaxy.plan(target, emitters, galaxy_cubes, depth)
@@ -406,7 +384,7 @@ class AdditiveScenePlan(ScenePlan):
         """
         for galaxy, emitters in zip(scene._galaxies, scene._emitters):
             opacity_cubes(
-                [galaxy], [emitters], scene.lines(), scene.band(), np.float64)
+                [galaxy], [emitters], scene.view(), np.float64)
 
     def _evaluate(
             self,
@@ -462,7 +440,7 @@ class TransferScenePlan(ScenePlan):
             If it cannot.
         """
         opacity_cubes(
-            scene._galaxies, scene._emitters, scene.lines(), scene.band(),
+            scene._galaxies, scene._emitters, scene.view(),
             np.float64)
         for unit in scene._order:
             check_emitters(
@@ -483,7 +461,7 @@ class TransferScenePlan(ScenePlan):
         super().__init__(scene, grid, target)
         spatial = self._spatial
         cubes = opacity_cubes(
-            scene._galaxies, scene._emitters, target.lines, target.band,
+            scene._galaxies, scene._emitters, target.view,
             dtype)
         # (the dust of all the galaxies, which dims the light of those
         # behind it: one model, see opacity_cubes)

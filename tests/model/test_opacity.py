@@ -471,14 +471,18 @@ def test_dust_reads_its_law_in_its_frame():
     band = catalogue_in_use().band('sdss_r')
     galaxy = dusty_galaxy(dict(type='band'), redshift=0.1)
     law = galaxy.components()[1].opacity().law()
-    cubes = opacity_cubes([galaxy], [[0]], None, band, np.float64)[0]
+    cubes = opacity_cubes(
+        [galaxy], [[0]], gbkfit.model.View(spectral=False, band=band),
+        np.float64)[0]
     for vsys in (0, 10000):
         cubes.model.update([dict(dust0_vsys=vsys, gas_vsys=-3000)])
         np.testing.assert_allclose(cubes.ratios[0], [[law.ratio(
             band.wavelength().to_value('um') / (1.1 * doppler(vsys)))]],
             rtol=1e-12)
     galaxy = dusty_galaxy(dict(type='lines', lines=['halpha']))
-    cubes = opacity_cubes([galaxy], [[0]], ['halpha'], None, np.float64)[0]
+    cubes = opacity_cubes(
+        [galaxy], [[0]], gbkfit.model.View(spectral=True, lines=('halpha',)),
+        np.float64)[0]
     rest = 0.656461
     for gas, dust in ((3000, 3000), (3000, -2000)):
         cubes.model.update([dict(dust0_vsys=dust, gas_vsys=gas)])
@@ -492,8 +496,10 @@ def test_dust_of_each_systemic_velocity_is_a_kind():
     from gbkfit.model._opacity import opacity_cubes
     lines = dict(type='lines', lines=['halpha', 'nii6583'])
     cubes = opacity_cubes(
-        [dusty_galaxy(lines, dusts=2)], [[0]], None, None, np.float64)[0]
+        [dusty_galaxy(lines, dusts=2)], [[0]], gbkfit.model.View(spectral=True),
+        np.float64)[0]
     assert cubes.ncubes == 2
     with pytest.raises(ValueError, match="each systemic velocity"):
         opacity_cubes(
-            [dusty_galaxy(lines, dusts=5)], [[0]], None, None, np.float64)
+            [dusty_galaxy(lines, dusts=5)], [[0]],
+            gbkfit.model.View(spectral=True), np.float64)

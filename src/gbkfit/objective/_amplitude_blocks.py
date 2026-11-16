@@ -10,12 +10,12 @@ from typing import NamedTuple
 
 import numpy as np
 
-from gbkfit.driver import DeviceArray, Driver
-from gbkfit.observation import LinearPieces, ObservationGroup
+from gbkfit.driver import DeviceArray
+from gbkfit.observation import GroupPlan
 from gbkfit.params import (
     ParamValues, Solution, Solve, check_together, element_name,
-    element_names, solve_together)
-from ._block import Block
+    element_names, solve_together, with_elements)
+from ._block import BasisBlock
 from ._comparisons import Comparison
 
 
@@ -40,7 +40,7 @@ class _Sums(NamedTuple):
     d_rhs: DeviceArray
 
 
-class AmplitudeBlock(Block):
+class AmplitudeBlock(BasisBlock):
     """
     Amplitudes of the light of the models (see Component.light_amplitudes)
     solved together (see solve_together), where their parts of the model
@@ -64,11 +64,11 @@ class AmplitudeBlock(Block):
         of its elements.
     observations : Sequence of int
         The observations with data whose models take them, by index.
+    group_plan : GroupPlan
+        The plan of the observations, which gives their pieces.
     comparisons : Mapping of int to Comparison
         The comparison of each observation with data of the group, by
         index.
-    drivers : Sequence of Driver
-        The driver of each observation of the group.
     """
 
     def __init__(
@@ -76,14 +76,16 @@ class AmplitudeBlock(Block):
             amplitudes: Sequence[tuple[str, int | None]],
             runs: Sequence[tuple[Solve, int]],
             observations: Sequence[int],
-            comparisons: Mapping[int, Comparison],
-            drivers: Sequence[Driver]
+            group_plan: GroupPlan,
+            comparisons: Mapping[int, Comparison]
     ):
+        drivers = group_plan.observation_drivers()
         self._amplitudes = tuple(amplitudes)
         self._elements = tuple(
             element_name(*element) for element in amplitudes)
         self._runs = tuple(runs)
         self._observations = tuple(observations)
+        self._group_plan = group_plan
         self._comparisons = tuple(comparisons[i] for i in observations)
         self._drivers = tuple(drivers[i] for i in observations)
         self._sums: list[_Sums] = []
@@ -117,19 +119,17 @@ class AmplitudeBlock(Block):
         """Release its memory; the next solve allocates it again."""
         self._sums = []
 
-    def solve(
-            self,
-            pieces: Mapping[int, LinearPieces],
-            params: ParamValues
-    ) -> Solution:
+    def solve(self, params: ParamValues) -> Solution:
         """
         Solve the amplitudes from the pieces of the models of their
-        observations (see GroupPlan.amplitude_pieces), by index, at the
-        values of the parameters, and return them. It overwrites the
+        observations at the values of the parameters (see
+        GroupPlan.amplitude_pieces), and return them. It overwrites the
         residuals of the comparisons of the observations.
         """
         if not self._sums:
             self._prepare()
+        pieces = self._group_plan.amplitude_pieces(
+            params, self._amplitudes, self._observations)
         size = len(self._amplitudes)
         normal = np.zeros((size, size))
         rhs = np.zeros(size)
@@ -149,6 +149,11 @@ class AmplitudeBlock(Block):
             [solve for solve, _ in self._runs],
             [count for _, count in self._runs], normal, rhs)
 
+    def solved(
+            self, params: ParamValues, solution: Solution
+    ) -> ParamValues:
+        return with_elements(params, self._amplitudes, solution.values)
+
     def _prepare(self) -> None:
         """Allocate the memory of the sums of each observation."""
         size = len(self._amplitudes)
@@ -163,16 +168,15 @@ class AmplitudeBlock(Block):
 
 
 def amplitude_blocks(
-        group: ObservationGroup,
+        group_plan: GroupPlan,
         comparisons: Mapping[int, Comparison],
-        drivers: Sequence[Driver],
         solves: Mapping[str, Solve],
         scaled_observations: Collection[int]
 ) -> tuple[AmplitudeBlock, ...]:
     """
-    Return the solves of the amplitudes of the light of a group (see
-    AmplitudeBlock), of the comparison of each observation with data (by
-    index) and the driver of each observation, the solve of each solved
+    Return the solves of the amplitudes of the light of the group of a
+    plan (see AmplitudeBlock), of the comparison of each observation with
+    data (by index), the solve of each solved
     element (by element name; all must be amplitudes of the light) and the
     observations with solved flux scales (by index): those of parameters
     whose models fall on the same observations together. They are solved
@@ -191,6 +195,7 @@ def amplitude_blocks(
     """
     if not solves:
         return ()
+    group = group_plan.group()
     pdescs = group.pdescs()
     # The observations with data that take each amplitude of the light, and
     # why their models are not linear in it, if not
@@ -256,5 +261,5 @@ def amplitude_blocks(
         check_together(
             [solve for solve, _ in runs], [count for _, count in runs])
         result.append(AmplitudeBlock(
-            members, runs, sorted(observations), comparisons, drivers))
+            members, runs, sorted(observations), group_plan, comparisons))
     return tuple(result)

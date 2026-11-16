@@ -1,15 +1,19 @@
 """
-The radial profiles of the nodal traits of a component (a disk, a cone,
-or the traits of a spheroid; see NodalTraited): the azimuthal means of
-its polar traits, each times its height trait at its midplane (or the
-mid-surface of the walls of a cone), at radii: the sum of its density
-traits where its selection traits keep it, of its velocity traits along
-a direction, and of its dispersion traits (see disks._profiles, for what
-a disk adds: its gravity and its vertical equilibrium).
+The radial profiles of a component, as the functions of its galaxy give
+them (see ComponentProfiles and Component.profiles), and those of the
+nodal traits of a component (a disk, a cone, or the traits of a
+spheroid; see NodalTraited): the azimuthal means of its polar traits,
+each times its height trait at its midplane (or the mid-surface of the
+walls of a cone), at radii: the sum of its density traits where its
+selection traits keep it, of its velocity traits along a direction, and
+of its dispersion traits (see disks._profiles, for what a disk adds: its
+gravity and its vertical equilibrium).
 """
 
+import abc
+import math
 from collections.abc import Callable, Sequence
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -17,23 +21,40 @@ import numpy.typing as npt
 from gbkfit.params import ParamValues
 from .traits import DPT_DIRECTION_DEFAULT, Trait
 
+if TYPE_CHECKING:
+    from .base import ComponentState
+
 
 __all__ = [
+    'ANGLES',
+    'MOTION_FAMILIES',
+    'ComponentProfiles',
     'NodalTraited',
+    'TraitProfiles',
     'TraitsPlan',
     'at_heights',
     'at_midplane',
     'axisymmetric',
     'azimuthal_edges',
     'azimuthal_mean',
+    'checked_angle',
     'directional_sums',
     'isotropic',
     'polar_densities',
     'selected',
     'trait_density',
     'trait_dispersion',
-    'trait_speed'
+    'trait_speed',
+    'traited_families'
 ]
+
+
+# The families of the profiles of the motion of a component (see
+# ComponentProfiles); the others are 'density' and 'orientation'
+MOTION_FAMILIES = ('rotation', 'speed', 'dispersion')
+
+# The angles of the orientation of a component (see ComponentProfiles)
+ANGLES = ('posa', 'incl')
 
 
 # The azimuthal means of traits that are not axisymmetric: the trapezoid
@@ -429,3 +450,111 @@ def trait_dispersion(
     return azimuthal_mean(
         values, axisymmetric(traited, kinds),
         azimuthal_edges(traited, params, kinds, r[:, 0]))[0]
+
+
+class ComponentProfiles(abc.ABC):
+    """
+    The radial profiles of a component (see Component.profiles), at the
+    values of its parameters (by its own names) and with what its galaxy
+    gives it (its state), at the radii R (arcsec, from its centre, in the
+    frame of its traits):
+
+    - rotation(R): its rotation at its midplane (km/s): its speed around
+      its axis
+    - speed(R, direction): its speed along a direction at its midplane
+      (km/s; see traits.VPT_DIRECTIONS)
+    - dispersion(R, direction=None): its velocity dispersion at its
+      midplane (km/s), along a direction ('rad', 'tan' or 'ver') if it is
+      not isotropic
+    - density(R): its density seen face-on, in the unit of its density
+    - orientation(R, which): its position angle or its inclination
+      (which: 'posa' or 'incl'; degrees)
+
+    Those of the families of its component only (see
+    Component.profile_families).
+    """
+
+    def rotation(
+            self, params: ParamValues, state: 'ComponentState | None',
+            R: np.ndarray
+    ) -> np.ndarray:
+        return self.speed(params, state, R, 'tan')
+
+    def speed(
+            self, params: ParamValues, state: 'ComponentState | None',
+            R: np.ndarray, direction: str
+    ) -> np.ndarray:
+        raise NotImplementedError
+
+    def dispersion(
+            self, params: ParamValues, state: 'ComponentState | None',
+            R: np.ndarray, direction: str | None = None
+    ) -> np.ndarray:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def density(self, params: ParamValues, R: np.ndarray) -> np.ndarray:
+        pass
+
+    def orientation(
+            self, params: ParamValues, R: np.ndarray, which: str
+    ) -> np.ndarray:
+        """(of one value of each angle, its value at every radius)"""
+        return np.full(np.shape(R), float(params[checked_angle(which)]))
+
+
+class TraitProfiles(ComponentProfiles):
+    """
+    The profiles of a component of nodal traits (see NodalTraited), those
+    of its traits along the radius, from its plan: e.g. of a cone, along
+    the distance from its apex, at the mid-surface of its walls, its
+    density per unit area of the mid-surface.
+    """
+
+    def __init__(self, traited: NodalTraited, plan: TraitsPlan):
+        self._traited = traited
+        self._plan = plan
+
+    def speed(
+            self, params: ParamValues, state: 'ComponentState | None',
+            R: np.ndarray, direction: str
+    ) -> np.ndarray:
+        return trait_speed(self._traited, self._plan, params, R, direction)
+
+    def dispersion(
+            self, params: ParamValues, state: 'ComponentState | None',
+            R: np.ndarray, direction: str | None = None
+    ) -> np.ndarray:
+        return trait_dispersion(
+            self._traited, self._plan, params, R, direction)
+
+    def density(self, params: ParamValues, R: np.ndarray) -> np.ndarray:
+        return trait_density(self._traited, self._plan, params, R)
+
+
+def traited_families(
+        traited: NodalTraited
+) -> dict[str, tuple[float, float]]:
+    """
+    Return the families of the profiles of a component of nodal traits
+    (see Component.profile_families): its density and its orientation,
+    and those of its motion if it has velocity or dispersion traits, all
+    from its centre on (it does not end at its last node).
+    """
+    moves = bool(traited.traits('vpt') or traited.traits('dpt'))
+    families = (*(MOTION_FAMILIES if moves else ()), 'density', 'orientation')
+    return dict.fromkeys(families, (0.0, math.inf))
+
+
+def checked_angle(which: str) -> str:
+    """
+    Return an angle of the orientation of a component ('posa' or 'incl').
+
+    Raises
+    ------
+    ValueError
+        If it is not one.
+    """
+    if which not in ANGLES:
+        raise ValueError(f"which must be 'posa' or 'incl'; it is {which!r}")
+    return which

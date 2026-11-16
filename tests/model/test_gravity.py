@@ -61,8 +61,8 @@ def balanced_by(gravity, **options):
     The disk in the vertical equilibrium of the given gravity, with the
     given options of its kinematics.
     """
-    return with_kinematics(dptraits=[
-        dict(type='uniform'), dict(type='equilibrium', gravity=gravity)],
+    return with_kinematics(
+        dptraits=[dict(type='uniform')], equilibrium=dict(gravity=gravity),
         **options)
 
 

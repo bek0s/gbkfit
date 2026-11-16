@@ -102,7 +102,7 @@ class CloudDisk(_nodal.NodalDisk):
             prefixes: dict[str, str | Sequence[str]],
             density_units: dict[str, astropy.units.UnitBase | None],
             opacity_lines: Sequence[int] = (),
-            equilibrium: traits.DPTraitEquilibrium | None = None,
+            equilibrium: traits.DispersionEquilibrium | None = None,
             height: traits.RHTraitEquilibrium | None = None,
             pressure_support: traits.PressureSupport | None = None,
             fluid: tuple[str, ...] = ()

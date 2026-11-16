@@ -8,6 +8,7 @@ LinePlacement).
 import contextlib
 import contextvars
 from collections.abc import Generator, Mapping, Sequence
+from typing import ClassVar, Protocol
 
 import astropy.units
 import numpy as np
@@ -26,6 +27,7 @@ __all__ = [
     'Bands',
     'Line',
     'LineCatalogue',
+    'Light',
     'LinePlacement',
     'Lines',
     'band_parser',
@@ -314,6 +316,23 @@ def catalogue_in_use() -> LineCatalogue:
     return LineCatalogue() if catalogue is None else catalogue
 
 
+class Light(Protocol):
+    """
+    The light of an emission (see Emission.light): its emission lines
+    (Lines) or its bands (Bands), by name, with the parameters of the flux
+    ratios of all but the first ('{name}_ratio'), and the option of the
+    emission that gives them (option: 'lines' or 'bands').
+    """
+
+    option: ClassVar[str]
+
+    def names(self) -> tuple[str, ...]:
+        """Return the names of its lines or bands, in their order."""
+
+    def pdescs(self) -> dict[str, ParamScalarDesc]:
+        """Return the parameters of its flux ratios, by name."""
+
+
 class Lines:
     """
     The emission lines of a spectral component. Without lines, it has one
@@ -333,6 +352,8 @@ class Lines:
     ValueError
         If there are no lines, or their names repeat.
     """
+
+    option = 'lines'
 
     def __init__(self, lines: Sequence[Line] | None):
         if lines is not None:
@@ -574,6 +595,8 @@ class Bands:
     ValueError
         If there are no bands, or their names repeat.
     """
+
+    option = 'bands'
 
     def __init__(self, bands: Sequence[Band] | None):
         if bands is not None:

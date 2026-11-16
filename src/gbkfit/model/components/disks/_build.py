@@ -6,7 +6,6 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 
-import astropy.units
 import numpy as np
 
 from gbkfit.config import warn
@@ -23,10 +22,10 @@ from .._nodal import (
 from .. import _units
 from .._units import DataUnit
 from ..base import Component
-from ..lines import Band, Bands, Lines
 from ..nodes import Nodes
 from ..roles import (
-    Emission, LineEmission, Opacity, emission_parser, opacity_parser)
+    Emission, Opacity, View, emission_parser,
+    opacity_parser)
 from . import _nodal
 from .clouds import CloudDisk, Clouds
 from .smooth import SmoothDisk
@@ -76,10 +75,7 @@ THICK_DISK_TRAITS = TraitTable('thick disk', {
 # midplane; it is not among the traits that the disk evaluates, see
 # NodalDisk.height_equilibrium)
 _THIN_ONLY = dict(
-    rht=(traits.RHTraitEquilibrium,), vht=(), dht=(), zpt=(),
-    dpt=tuple(
-        cls for cls in THICK_DISK_TRAITS.classes['dpt']
-        if cls is not traits.DPTraitEquilibrium))
+    rht=(traits.RHTraitEquilibrium,), vht=(), dht=(), zpt=())
 THIN_DISK_TRAITS = TraitTable('thin disk', {
     kind: _THIN_ONLY.get(kind, classes)
     for kind, classes in THICK_DISK_TRAITS.classes.items()},
@@ -228,11 +224,11 @@ def line_opacity_traits(
     """
     if not isinstance(opacity, LineOpacity):
         return (), (), ()
-    if not isinstance(emission, LineEmission):
+    if emission is None or not emission.needs_velocities():
         raise ValueError(
             "line opacity is the opacity of the lines of a component: it "
             "needs emission lines (emission: {type: lines})")
-    names = emission.lines().names()
+    names = emission.line_names()
     coefficients = opacity.coefficients()
     if not names:
         if isinstance(coefficients, dict):
@@ -290,7 +286,8 @@ def _disk_traits(
     velocity and dispersion traits where it has none. Raise ValueError if
     the traits and roles do not go together.
     """
-    if isinstance(emission, LineEmission) and kinematics is None:
+    if emission is not None and emission.needs_velocities() \
+            and kinematics is None:
         raise ValueError(
             "a disk that emits lines needs kinematics: give it vptraits and "
             "dptraits")
@@ -305,10 +302,9 @@ def _disk_traits(
         rpt=rptraits, rht=rhtraits, zpt=zptraits, spt=sptraits)
     if kinematics is None:
         return result
-    # (the kernels evaluate the fitted dispersion traits; its galaxy
-    # derives that of the equilibrium)
-    dptraits = kinematics.fitted_dptraits()
-    result.update(vpt=kinematics.vptraits(), dpt=dptraits)
+    # (the kernels evaluate the dispersion traits; its galaxy derives the
+    # dispersion of the equilibrium)
+    result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
     if not thick:
         return result
     vhtraits, dhtraits = kinematics.vhtraits(), kinematics.dhtraits()
@@ -325,20 +321,17 @@ def _disk_traits(
         vht=with_default_height_traits(
             vhtraits, traits.VHTraitOne),
         dht=with_default_height_traits(
-            dhtraits, traits.DHTraitOne) if dptraits else ())
+            dhtraits, traits.DHTraitOne) if kinematics.dptraits() else ())
     return result
 
 
 def disk_plan(
         disk: _nodal.NodalDisk,
-        lines: Lines | None,
-        bands: Bands | None,
-        unit: astropy.units.UnitBase | None,
+        emission: Emission | None,
         driver: Driver,
         spectral: Grid,
         dtype: np.dtype,
-        names: tuple[str, ...] | None,
-        band: Band | None,
+        view: View,
         emits: bool,
         opacity_ratios: np.ndarray | None,
         data_unit: DataUnit | None,
@@ -347,18 +340,19 @@ def disk_plan(
     """
     Return the plan of a disk component made of the given disk, with the
     given emission lines or bands (if any) and the unit of its light (if
-    any), of which it evaluates, if it emits, the lines of the given names
-    (all if None), at the redshift of its galaxy, or the given band (if
-    known), dimmed by the opacity with the given ratios, in the unit of
-    the data (see Component.plan and emission_setup).
+    any), of which it evaluates, if it emits, what the view sees (see
+    View: its lines, at the redshift of its galaxy, or its band, or the
+    velocities of its continuum), dimmed by the opacity with the given
+    ratios, in the unit of the data (see Component.plan and
+    emission_setup).
     """
-    emission = emission_setup(
-        lines, bands, unit, spectral, names, band, emits, data_unit,
-        redshift, disk.opacity_lines())
+    setup = emission_setup(
+        emission, view, spectral, emits, data_unit, redshift,
+        disk.opacity_lines())
     return DiskComponentPlan(
         driver, disk,
-        disk.plan(driver, emission.nlines, dtype, emission.opacity_rows),
-        emission, opacity_ratios)
+        disk.plan(driver, setup.nlines, dtype, setup.opacity_rows),
+        setup, opacity_ratios)
 
 
 class DiskComponentPlan(NativeComponentPlan):

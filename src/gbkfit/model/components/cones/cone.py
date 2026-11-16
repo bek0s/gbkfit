@@ -8,15 +8,17 @@ from typing import Annotated, Any, Literal
 import numpy as np
 
 from gbkfit.config import Choices, check_options
+from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from .. import traits
-from .._native import make_bands, make_lines
 from .._common import Interp, RNodes, RStep
+from .._native import light_pdescs
+from .._profiles import ComponentProfiles, TraitProfiles, traited_families
 from ..base import (
     Component, ComponentPart, ComponentPlan, FrameParams, SceneTarget)
 from ..nodes import Nodes, as_nodes
 from ..parts import KinematicTraits, density_traits, kinematic_traits
-from ..roles import STARS, Emission, Opacity
+from ..roles import Emission, Opacity, View
 from . import _build, _nodal
 
 
@@ -146,14 +148,7 @@ class Cone(Component):
             _nodal.SmoothCone, rptraits, rhtraits, kinematics, emission,
             opacity, sptraits, sides, rnodes=rnodes, rstep=rstep,
             interp=interp)
-        self._lines = make_lines(self._cone.pdescs(), emission)
-        self._bands = make_bands(self._cone.pdescs(), emission)
-
-    def check_lines(self, lines: tuple[str, ...] | None) -> None:
-        if lines is not None and STARS in lines and self.kinematics() is None:
-            raise ValueError(
-                "a spectral cube sees the stars of a cone with kinematics "
-                "only (its stars have no velocities to place in channels)")
+        self._light_pdescs = light_pdescs(self._cone.pdescs(), emission)
 
     def kinematics(self) -> KinematicTraits | None:
         """Return its kinematic traits, if it moves."""
@@ -163,8 +158,11 @@ class Cone(Component):
         """Return its sides."""
         return self._cone.sides()
 
-    def thick(self, seen_by: 'type[Emission]') -> bool:
+    def needs_depth(self, view: View) -> bool:
         return True
+
+    def moves(self) -> bool:
+        return self._kinematics is not None
 
     def nodal_cone(self) -> _nodal.NodalCone:
         """
@@ -177,9 +175,7 @@ class Cone(Component):
         return self._cone.frame_params()
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        lines = self._lines.pdescs() if self._lines is not None else {}
-        bands = self._bands.pdescs() if self._bands is not None else {}
-        return self._cone.pdescs() | lines | bands
+        return self._cone.pdescs() | self._light_pdescs
 
     def param_owners(self) -> dict[str, tuple[str | int, ...]]:
         owners = super().param_owners()
@@ -193,6 +189,15 @@ class Cone(Component):
         return dict(
             rnodes=self._cone.rnodes(), subrnodes=self._cone.subrnodes())
 
+    def profile_families(self) -> dict[str, tuple[float, float]]:
+        # (along the distance from its apex, at the mid-surface of its
+        # walls: those of its traits)
+        return traited_families(self._cone)
+
+    def profiles(self, driver: Driver) -> ComponentProfiles:
+        return TraitProfiles(
+            self._cone, self._cone.plan(driver, 0, np.float64))
+
     def plan(
             self,
             target: SceneTarget,
@@ -200,11 +205,7 @@ class Cone(Component):
             opacity_ratios: np.ndarray | None,
             redshift: float
     ) -> ComponentPlan:
-        driver, spectral, dtype = target.driver, target.spectral, target.dtype
-        lines, band, data_unit = target.lines, target.band, target.data_unit
-        emission = self.emission()
         return _build.cone_plan(
-            self._cone, self._lines, self._bands,
-            emission.unit() if emission is not None else None, driver,
-            spectral, dtype, lines, band, emits, opacity_ratios, data_unit,
-            redshift)
+            self._cone, self.emission(), target.driver, target.spectral,
+            target.dtype, target.view, emits, opacity_ratios,
+            target.data_unit, redshift)

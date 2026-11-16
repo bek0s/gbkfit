@@ -2,7 +2,7 @@
 Galaxies: their components and their mass, at one distance.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from gbkfit.config import (
@@ -18,12 +18,11 @@ from ._galaxy_plan import GalaxyPlan
 from ._galaxy_stage import GalaxyStage
 from ._relations import MassLinks, link
 from .components.base import (
-    Component, DepthAxis, OpacityCubes, SceneTarget)
+    Component, DepthAxis, FrameParams, OpacityCubes, SceneTarget)
 from .components.cones import Cone
 from .components.disks import ThickDisk, ThinDisk
 from .components.particles import Particles
 from .components.points import Point
-from .components.roles import BandEmission
 from .components.spheroids import (
     JeansSpheroid, OrbitSpheroid, TraitSpheroid)
 from .distance import Distance, distance_parser
@@ -186,12 +185,33 @@ class Galaxy(Serializable):
             if component.opacity() is not None
             and component.opacity().dims_others())
 
-    def component_param_names(self, index: int) -> dict[str, str]:
+    def component_param_names(
+            self, index: int, mapping: Mapping[str, str] | None = None
+    ) -> dict[str, str]:
         """
         Return the names of the parameters of its component of the given
-        index among its parameters, by the names of the component.
+        index among its parameters, by the names of the component; or
+        among those of a group of galaxies, of the mapping of its
+        parameters to theirs (e.g. ObservationGroup.mappings).
         """
-        return self._params.mappings[index]
+        names = self._params.mappings[index]
+        if mapping is None:
+            return names
+        return {param: mapping[name] for param, name in names.items()}
+
+    def component_frame_params(
+            self, index: int, mapping: Mapping[str, str] | None = None
+    ) -> FrameParams:
+        """
+        Return the parameters that place its component of the given index
+        in a frame (see Component.frame_params), by their names among its
+        parameters, or among those of a group of galaxies (see
+        component_param_names).
+        """
+        names = self.component_param_names(index, mapping)
+        return FrameParams(*(
+            None if own is None else names[own]
+            for own in self._components[index].frame_params()))
 
     def links(self) -> MassLinks:
         """
@@ -249,12 +269,13 @@ class Galaxy(Serializable):
 
     def components_use_mass(self) -> bool:
         """
-        Check whether its components use its mass: moved by it ('mass'
-        velocity traits) or held up by it (a vertical equilibrium).
-        Observations of profiles of its functions and derived values can
-        use it too (see ObservationProfile and ParamSpace).
+        Check whether its components use its mass: whether any needs
+        anything of it (see Component.needs: e.g. 'mass' velocity traits,
+        or a vertical equilibrium). Observations of profiles of its
+        functions and derived values can use it too (see
+        ObservationProfile and ParamSpace).
         """
-        return any(cmp.uses_mass() for cmp in self._components)
+        return any(cmp.needs() for cmp in self._components)
 
     def distance(self) -> Distance | None:
         """Return its distance, if given."""
@@ -435,9 +456,8 @@ def _check_redshift_not_needed(components: Sequence[Component]) -> None:
     """
     for i, component in enumerate(components):
         emission = component.emission()
-        if isinstance(emission, BandEmission) \
-                and emission.unit() is not None \
-                and 'vsys' not in component.pdescs():
+        if emission is not None and emission.unit() is not None \
+                and component.frame_params().vsys is None:
             label = component.name() or f'component{i}'
             raise ValueError(
                 f"the light of component {label!r} is in a unit, as the "

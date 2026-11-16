@@ -9,7 +9,7 @@ from modelutils import observation_group
 
 from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, Grid
-from gbkfit.model import Extras, SceneTarget, galaxy_parser
+from gbkfit.model import Extras, SceneTarget, View, galaxy_parser
 from gbkfit.observation import DepthGroup
 
 
@@ -54,7 +54,7 @@ def component_plan(driver, component):
     return galaxy.components()[0].plan(
         SceneTarget(
             driver, None, SPECTRAL, np.dtype(np.float32),
-            None, None, None, None),
+            View(spectral=True), None, None),
         True, None, 0.0)
 
 

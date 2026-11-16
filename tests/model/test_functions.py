@@ -20,7 +20,7 @@ G = 4.30091727e-6
 KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 
 # The vertical equilibrium of a disk in the gravity of its galaxy
-EQUILIBRIUM = dict(type='equilibrium', gravity='galaxy')
+EQUILIBRIUM = dict(gravity='galaxy')
 
 # A thick gas disk in the mass of a black hole and a halo: its rotation
 # in that gravity, with jeans pressure support, and its dispersion with
@@ -31,7 +31,7 @@ GAS = dict(
     rptraits=dict(type='exponential'),
     rhtraits=dict(type='gauss', zmax=10),
     vptraits=dict(type='mass'),
-    dptraits=[dict(type='uniform'), EQUILIBRIUM],
+    dptraits=[dict(type='uniform')], equilibrium=EQUILIBRIUM,
     pressure_support=dict(type='jeans'),
     emission=dict(type='lines'))
 MASS = [
@@ -157,7 +157,7 @@ def test_pressure_support_of_the_velocity_ellipsoid():
     # along every direction is isotropic
     def with_dispersion(dptraits):
         gas = copy.deepcopy(GAS)
-        gas['dptraits'] = dptraits + [EQUILIBRIUM]
+        gas['dptraits'] = dptraits
         return gas_galaxy(components=[gas], mass=[copy.deepcopy(MASS[1])])
 
     def rotation_table(galaxy, params):
@@ -271,7 +271,7 @@ def test_functions_of_a_cone():
 # A spheroid of starlight, of the Sersic profile
 SPHEROID = dict(
     type='spheroid', rmax=30, profile=dict(type='sersic'),
-    emission=dict(type='stars'))
+    emission=dict(type='band'))
 SPHEROID_PARAMS = dict(xpos=0, ypos=0, ie=2.5, re=4, n=2)
 
 

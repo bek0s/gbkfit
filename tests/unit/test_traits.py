@@ -31,9 +31,8 @@ def kernel_consts_cases():
     for kind, parser in parsers.items():
         for type_, cls in parser.registered_classes().items():
             # (an image is a file; its constants are those of the map, see
-            # test_image_light; the kernels do not evaluate the vertical
-            # equilibrium, whose dispersion its galaxy derives)
-            if cls in (traits.RPTraitImage, traits.DPTraitEquilibrium):
+            # test_image_light)
+            if cls is traits.RPTraitImage:
                 continue
             if kind == 'rht' and type_ == 'equilibrium':
                 # (node-wise: its scale heights at the subnodes)
@@ -85,13 +84,13 @@ SHARING = dict(rpt='Shape', vpt='Shape', dpt='Shape', zpt='Shape',
 def kernel_classes(kind):
     """
     The types of traits of a family that the kernels evaluate as their
-    own, by type: all but the vertical equilibria, whose dispersion its
-    galaxy derives, and whose thickness the kernels draw as the profile
-    of its gravity (see test_the_equilibrium_is_drawn_as_its_profile).
+    own, by type: all but the vertical equilibrium of the thickness, which
+    the kernels draw as the profile of its gravity (see
+    test_the_equilibrium_is_drawn_as_its_profile).
     """
     return {
         type_: cls for type_, cls in PARSERS[kind].registered_classes().items()
-        if cls not in (traits.DPTraitEquilibrium, traits.RHTraitEquilibrium)}
+        if cls is not traits.RHTraitEquilibrium}
 
 
 def test_the_equilibrium_is_drawn_as_its_profile():

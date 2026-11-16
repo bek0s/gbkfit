@@ -63,13 +63,12 @@ def trait_configs(parser):
         # mass of their galaxy, see test_mass; the spiral waves take the
         # rotation of other traits, see test_flows; the images are files,
         # whose light their galaxy makes, see test_image_light; and the
-        # vertical equilibria have no parameters: their galaxy derives
-        # their dispersion or their thickness, see test_equilibrium)
+        # vertical equilibrium of the thickness has no parameters: its
+        # galaxy derives it, see test_equilibrium)
         if cls in (
                 traits.VPTraitMass, traits.VHTraitMass,
                 traits.VPTraitSpiral, traits.RPTraitSpiral,
-                traits.RPTraitImage, traits.DPTraitEquilibrium,
-                traits.RHTraitEquilibrium):
+                traits.RPTraitImage, traits.RHTraitEquilibrium):
             continue
         options = inspect.signature(cls.__init__).parameters
         config = dict(type=type_)

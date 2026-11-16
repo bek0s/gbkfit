@@ -9,7 +9,7 @@ full widths at half maximum of both.
 import dataclasses
 import math
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 import astropy.units as u
@@ -17,10 +17,11 @@ import numpy as np
 
 import gbkfit.io
 import gbkfit.units
-from gbkfit.config import ConfigError, TypedParser, paths_relative_to
+from gbkfit.config import (
+    ConfigError, TypedParser, config_leaves, paths_relative_to)
 from gbkfit.grid.spectral import VelocityConvention, make_rest
-from gbkfit.instrument.lsfs import Channel, ChannelLSF, lsf_parser
-from gbkfit.instrument.psfs import psf_parser
+from gbkfit.instrument.lsfs import LSF, Channel, ChannelLSF, lsf_parser
+from gbkfit.instrument.psfs import PSF, psf_parser
 
 from .errors import Invalid
 from .workspace import Workspace
@@ -116,7 +117,7 @@ class Responses:
             If the options are not those of a PSF, or one that varies
             along the spectral axis, or it needs too many pixels.
         """
-        psf = self._load(psf_parser, project, options, 'PSF')
+        psf = self._load(psf_parser, PSF, project, options, 'PSF')
         try:
             own = _own_step(psf)
             if step is None:
@@ -179,7 +180,7 @@ class Responses:
             both are given, or a width of the channels is not positive or
             is given of an axis of pixels.
         """
-        lsf = self._load(lsf_parser, project, options, 'LSF')
+        lsf = self._load(lsf_parser, LSF, project, options, 'LSF')
         for width in (step, channel):
             if width is not None and width <= 0:
                 raise Invalid(
@@ -237,13 +238,15 @@ class Responses:
     def _load(
             self,
             parser: TypedParser,
+            base: type,
             project: str,
             options: Mapping[str, Any],
             what: str
     ) -> Any:
         """
-        Load a response of the options of a piece of a project, its files
-        relative to the project (and in the workspace).
+        Load a response of a family (its parser and its base class) of the
+        options of a piece of a project, its files relative to the project
+        (and in the workspace).
 
         Raises
         ------
@@ -252,8 +255,9 @@ class Responses:
             it varies along the spectral axis.
         """
         folder = self._workspace.path(project)
-        for file in _files(options):
-            self._workspace.path(os.path.join(project, file))
+        for leaf in config_leaves(options, base):
+            if leaf.kind == 'file':
+                self._workspace.path(os.path.join(project, leaf.value))
         try:
             with paths_relative_to(folder):
                 response = parser.load(dict(options))
@@ -264,26 +268,6 @@ class Responses:
                 f"this {what} varies along the spectral axis; the Studio "
                 f"cannot draw one yet")
         return response
-
-
-def _files(options: Any) -> Iterator[str]:
-    """Yield the files that options name (their options 'file')."""
-    if isinstance(options, Mapping):
-        for key, value in options.items():
-            if key == 'file':
-                if isinstance(value, str):
-                    yield value
-                elif isinstance(value, Mapping) \
-                        and isinstance(value.get('file'), str):
-                    yield value['file']
-                elif isinstance(value, list) and value \
-                        and isinstance(value[0], str):
-                    yield value[0]
-            else:
-                yield from _files(value)
-    elif isinstance(options, list):
-        for item in options:
-            yield from _files(item)
 
 
 # How many times finer than its own scale a PSF is drawn to measure its

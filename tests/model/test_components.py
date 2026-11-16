@@ -11,7 +11,8 @@ import pytest
 from gbkfit.config import ConfigError, strict_mode
 from gbkfit.grid import Coords, Grid
 from gbkfit.model import (
-    BandEmission, LineEmission, SceneTarget, component_parser, galaxy_parser)
+    SceneTarget, View, component_parser,
+    galaxy_parser)
 from gbkfit.model.components._nodal import HEIGHT_KINDS, TRAIT_OPTIONS
 from gbkfit.model._opacity import opacity_cubes
 from gbkfit.observation import Depth
@@ -218,8 +219,9 @@ def test_a_shared_height_trait_is_one_for_each_polar_trait(
 def test_a_disk_is_thin_or_thick_by_its_type(name):
     galaxy = galaxy_parser.load(dict(components=[component_info(name)]))
     thick = COMPONENTS[name]['type'] == 'thick_disk'
-    for seen_by in (BandEmission, LineEmission):
-        assert galaxy.components()[0].thick(seen_by) == thick
+    for spectral in (False, True):
+        assert galaxy.components()[0].needs_depth(
+            View(spectral=spectral)) == thick
 
 
 @pytest.mark.parametrize('rhtraits, message', [
@@ -301,9 +303,9 @@ def test_thick_disk_with_several_velocity_traits(name):
     spatial = grid.spatial()
     plan = galaxy.plan(
         SceneTarget(
-            DriverHost(), spatial, grid.spectral(), np.float32, None, None,
+            DriverHost(), spatial, grid.spectral(), np.float32, View(spectral=True),
             None, None), (0,),
-        opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
+        opacity_cubes([galaxy], [(0,)], View(spectral=True), np.float32)[0],
         Depth(extent='legacy').axis(spatial, 0))
     plan.evaluate(params, {}, dict(scube=scube), None)
     assert scube.sum() > 0

@@ -14,6 +14,9 @@ __all__ = [
 # 8, of 2026-11-11 on, 9, of 2026-11-12, 10, of 2026-11-12 on (the
 # likelihoods of setups), 11, of 2026-11-14 on (no lines of sight: the
 # components decide, and the option depth), and 12, of 2026-11-14 on (the
-# observable merged into the observation); gbkfit.migration rewrites the
-# older ones
-FORMAT_VERSION = 12
+# observable merged into the observation), 13, of 2026-11-16 on (no
+# emission 'stars': light in bands, and the option continuum of spectral
+# observations), and 14, of 2026-11-16 on (the vertical equilibrium of the
+# dispersion of a thick disk is its option equilibrium, not a dispersion
+# trait); gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 14

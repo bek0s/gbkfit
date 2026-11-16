@@ -156,34 +156,25 @@ class MassModel(Serializable):
         """
         return self._components[self._index(name)]
 
-    def fluid(
-            self, component: str | None, given: Sequence[str] = ()
-    ) -> tuple[str, ...]:
+    def check_fluid(self, names: Sequence[str], what: str) -> None:
         """
-        Return the names of the mass disks of the fluid of a component of
-        its galaxy (of the given name, None if unnamed): those given (the
-        option fluid of a disk), or else those that follow the component.
+        Check that the mass components of the given names, the fluid of a
+        component of its galaxy (its gas, see Need.fluid), are mass disks,
+        of what takes them (e.g. "the jeans pressure support of the
+        component 'gas' takes the density of its fluid").
 
         Raises
         ------
         ValueError
-            If a given name is not that of one of its mass disks.
+            If one is not.
         """
-        names = {mass.name(): mass for mass in self._components}
-        label = f" {component!r}" if component is not None else ''
-        for name in given:
-            if not isinstance(names.get(name), MassDisk):
-                what = 'no mass component' if name not in names \
-                    else f'a {names[name].type()}'
+        components = {mass.name(): mass for mass in self._components}
+        for name in names:
+            if not isinstance(components.get(name), MassDisk):
+                kind = 'no mass component' if name not in components \
+                    else f'a {components[name].type()}'
                 raise ValueError(
-                    f"the fluid of the component{label} names mass disks; "
-                    f"{name!r} is {what}")
-        if given or component is None:
-            return tuple(given)
-        return tuple(
-            mass.name() for mass in self._components
-            if isinstance(mass, MassDisk)
-            and component in mass.followed_components())
+                    f"{what}, which names mass disks; {name!r} is {kind}")
 
     def mappings(self) -> tuple[dict[str, str], ...]:
         """

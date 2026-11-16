@@ -11,7 +11,7 @@ from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis, grid_options
 from gbkfit.instrument import Instrument
-from gbkfit.model import Band, DataUnit, LightUnit, LineEmission
+from gbkfit.model import Band, DataUnit, LightUnit
 from gbkfit.moments import (
     FluxFloor, Method, MomentsPlan, check_moment_items, check_moment_orders,
     moment_item, split_moments)
@@ -108,7 +108,7 @@ class ObservationPixelMoments(ObservationSky):
 
     dataset_class = DatasetPixelMoments
 
-    emission = LineEmission
+    spectral_view = True
     orbit_stars = None
 
     # Moment maps have no spectral axis
@@ -177,6 +177,7 @@ class ObservationPixelMoments(ObservationSky):
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
+            continuum: bool = False,
             band: str | Band | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
@@ -201,8 +202,9 @@ class ObservationPixelMoments(ObservationSky):
         self._method = method
         super().__init__(
             self._make_grid(**options), foreground, instrument, galaxies,
-            components, lines, band, pixel_weights, flux_scale, offsets,
-            dataset, oversampling, depth, dtype, fft_dtype, name, unit)
+            components, lines, continuum, band, pixel_weights, flux_scale,
+            offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
+            unit)
 
     def keys(self) -> tuple[str, ...]:
         return tuple(moment_item(i, self._method) for i in self._orders)

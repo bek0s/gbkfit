@@ -38,7 +38,8 @@ from typing import Any, NamedTuple
 
 import ruamel.yaml
 
-from gbkfit.config import FORMAT_VERSION, ConfigError, config_path
+from gbkfit.config import (
+    FORMAT_VERSION, ConfigError, config_path, plain_values)
 
 
 __all__ = [
@@ -400,7 +401,7 @@ class Project:
         # a Gaussian of dispersion 1.5 arcsec', goes as it changes)
         header = _header(TEMPLATES.get(folder, ''))
         if isinstance(old, Mapping) and header and text.startswith(header) \
-                and _plain(old) != dict(content):
+                and plain_values(old) != dict(content):
             old = _yaml_rt().load(text[len(header):])
         if not isinstance(old, Mapping):
             with Path(filename).open('w') as f:
@@ -409,7 +410,7 @@ class Project:
         for key in [key for key in old if key not in content]:
             del old[key]
         for key, value in content.items():
-            if key not in old or _plain(old[key]) != value:
+            if key not in old or plain_values(old[key]) != value:
                 old[key] = value
         with Path(filename).open('w') as f:
             _yaml_rt().dump(old, f)
@@ -940,23 +941,6 @@ def _load_quietly(filename: str) -> Any:
         return _yaml().load(Path(filename))
     except (OSError, ruamel.yaml.YAMLError):
         return None
-
-
-def _plain(value: Any) -> Any:
-    """
-    Return a value read in round trip (e.g. a CommentedMap) as plain
-    values (dict, list, str, int, float, bool, None).
-    """
-    if isinstance(value, Mapping):
-        return {key: _plain(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_plain(item) for item in value]
-    if isinstance(value, bool) or value is None:
-        return value
-    for kind in (int, float, str):
-        if isinstance(value, kind):
-            return kind(value)
-    return value
 
 
 def _header(text: str) -> str:

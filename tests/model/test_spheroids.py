@@ -460,7 +460,7 @@ def test_a_mass_follows_components_of_its_kind(mass, message):
 # sqrt(pi / 2) / s exp(r^2 / (2 s^2)) erfc(r / (sqrt(2) s))], s in kpc
 S = 10
 LOG_M = 10
-STARS_EMISSION = dict(type='stars')
+STARS_EMISSION = dict(type='band')
 JEANS_SPHEROID = dict(
     type='jeans_spheroid', name='stars', rmax=40, emission=STARS_EMISSION,
     profile=dict(type='mge', ngauss=1))
@@ -617,7 +617,7 @@ def test_a_jeans_rotation_beyond_the_motion_of_the_stars_is_capped(kappa):
 
 def stars_cube(driver, spheroid):
     """
-    A case of a spectral cube of the stars of a spheroid (lines: [stars]),
+    A case of a spectral cube of the stars of a spheroid (its continuum),
     of 32 by 32 pixels of 2 arcsec and 181 channels of 10 km/s, with a
     depth axis of voxels of 1 arcsec.
     """
@@ -627,7 +627,7 @@ def stars_cube(driver, spheroid):
             type='pixel_spectra', size=[32, 32], step=[2, 2],
             spectral=dict(size=181, step=10, convention='relativistic'),
             dtype='float64'),
-        depth=dict(step=1), lines=['stars'],
+        depth=dict(step=1), lines=[], continuum=True,
         galaxy=dict(components=[spheroid], mass=[dict(
             type='point', name='bh')], distance=DISTANCE))
 
@@ -700,10 +700,10 @@ def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
 
 
 @pytest.mark.parametrize('change, message', [
-    # (a cube sees the stars only when its lines name them)
-    (dict(lines=None), "it sees none"),
-    # (a cube needs their kinematics: a spheroid without traits)
-    (dict(kinematics=None), "with kinematics only"),
+    # (a cube sees the stars only when it sees the continuum)
+    (dict(continuum=None), "it sees none"),
+    # (and only those that move: not a spheroid without traits)
+    (dict(kinematics=None), "it sees none"),
 ])
 def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
                                            change, message):
@@ -712,8 +712,8 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
         spheroid['type'] = 'spheroid'
 
     case = stars_cube(driver, spheroid)
-    if 'lines' in change:
-        del case['lines']
+    if 'continuum' in change:
+        del case['continuum']
     properties = {
         name: value for name, value in JEANS_PROPERTIES.items()
         if 'kinematics' not in change
@@ -723,11 +723,12 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
 
 
 @pytest.mark.parametrize('component, message', [
+    # (the continuum is seen of the components that move only: not of a
+    # disk without kinematics, or of a point in bands)
     (dict(type='thin_disk', rnodes=[0, 5, 10],
           rptraits=dict(type='exponential'),
-          emission=STARS_EMISSION), "stars of a disk with kinematics only"),
-    (dict(type='point', emission=STARS_EMISSION),
-     "does not see the stars of a point"),
+          emission=STARS_EMISSION), "it sees none"),
+    (dict(type='point', emission=STARS_EMISSION), "it sees none"),
 ])
 def test_a_cube_sees_only_stars_that_move(driver, component, message):
     # (stars without velocities have none to place in its channels: a disk
@@ -748,15 +749,6 @@ def test_an_image_sees_the_stars_of_a_spheroid(driver, evaluate_cases):
     flux = data[0]['brightness'].data.sum() * STEP ** 2
     within = scipy.special.erf(64 * STEP / 2 / (np.sqrt(2) * S)) ** 2
     assert flux == pytest.approx(2 * np.pi * S ** 2 * within, rel=1e-3)
-
-
-def test_no_line_is_named_stars():
-    with pytest.raises(ValueError, match="no line can be named 'stars'"):
-        galaxy_parser.load(dict(components=[dict(
-            type='thin_disk', rnodes=[0, 1, 2],
-            rptraits=dict(type='exponential'),
-            emission=dict(type='lines', lines=[
-                dict(name='stars', rest='656.28 nm')]))]))
 
 
 # A round Gaussian of stars of the kinematics of traits: a uniform rotation

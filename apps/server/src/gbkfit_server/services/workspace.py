@@ -14,7 +14,7 @@ import shutil
 import threading
 import uuid
 import warnings
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,7 @@ from astropy.io import fits
 
 import gbkfit.io
 import gbkfit.outputs
+from gbkfit.config import DataFile, with_files
 import gbkfit.project
 import gbkfit.units
 
@@ -55,6 +56,9 @@ _PREPARED = '.prepared.json'
 # The options of prep that name files of data (a path, or a path and an
 # HDU, {file, hdu}; of moment maps, a list of them)
 _PREP_FILES = ('file_d', 'file_e', 'file_m')
+# The form of each: a file (see DataFile), a list of them (one for each
+# map), or none
+_PREP_FILE = DataFile | Sequence[DataFile | None] | None
 
 # The folders of the pieces and of the setups of a project
 _PIECES = (
@@ -852,16 +856,9 @@ def _spatial_step(path: str, index: int) -> list[float] | None:
 
 def _file_paths(value: Any, change: Callable[[str], str]) -> Any:
     """
-    Return a file option of prep (a path, or a path and an HDU, {file,
-    hdu}; a list of them, or None) with its paths changed.
+    Return a file option of prep (see _PREP_FILE) with its paths changed.
     """
-    if isinstance(value, str):
-        return change(value)
-    if isinstance(value, dict):
-        return value | dict(file=change(value['file']))
-    if isinstance(value, list):
-        return [_file_paths(item, change) for item in value]
-    return value
+    return with_files(value, _PREP_FILE, change)
 
 
 def _read_records(folder: Path) -> dict[str, Any]:

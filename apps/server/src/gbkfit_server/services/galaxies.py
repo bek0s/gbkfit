@@ -1,9 +1,7 @@
 """
 The galaxies of the projects, as the library describes them without
-devices (see gbkfit.describe): the parameters a galaxy has, and its
-problems. A galaxy is described in a setup of its own, seen by the
-observation of the template of observations (of a cube; else of an
-image), with no values of its parameters. A galaxy the library does not
+devices or observations (see gbkfit.setup.describe_galaxy): the
+parameters a galaxy has, and its problems. A galaxy the library does not
 make as a whole (it has a problem) is described part by part, so that a
 problem in one part does not hide the parameters of the others.
 """
@@ -12,11 +10,9 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
-import ruamel.yaml
-
-import gbkfit
-from gbkfit.config import FORMAT_VERSION
-import gbkfit.project
+from gbkfit.config import config_leaves
+from gbkfit.model import Galaxy, MassComponent
+from gbkfit.setup import describe_galaxy
 
 from .workspace import Workspace
 
@@ -25,20 +21,6 @@ __all__ = [
     'Galaxies',
     'GalaxyDescription'
 ]
-
-
-# The observations a galaxy is described through, in turn: that of the
-# template (a cube), an image (e.g. for a galaxy of a band), each of which
-# sees every component that emits what it sees (thick ones, and the
-# opacity of their own lines, too: see Scene.evaluation of gbkfit.model);
-# and the circular speed of its mass, for a galaxy of mass alone, which
-# emits no light (as its rotation curve is fitted)
-_OBSERVATIONS = (
-    ruamel.yaml.YAML(typ='safe').load(
-        gbkfit.project.TEMPLATES['observations']),
-    dict(type='pixel_brightness', size=[48, 48]),
-    dict(type='profile', functions=['vcirc'],
-         radii=dict(value=[1.0], unit='kpc')))
 
 
 @dataclasses.dataclass
@@ -81,51 +63,29 @@ class Galaxies:
         of its parts made on their own (see _parameters_by_part).
         """
         root = self._workspace.path(project)
-        description = _described(root, galaxy)
-        if description.group is not None:
-            parameters = _parameters(description)
-        else:
-            parameters = _parameters_by_part(
-                root, galaxy, description.problems)
+        description = describe_galaxy(galaxy, root)
+        made = description.galaxy
+        parameters = _parameters(made) if made is not None \
+            else _parameters_by_part(root, galaxy, description.problems)
         problems = [
-            dict(severity=p.severity, path=p.path[2:], message=p.message)
-            for p in description.problems
-            if p.path[:2] == ['galaxies', 0]
-            or not p.path and description.group is None]
-        return GalaxyDescription(
-            parameters, problems, description.group is not None)
+            dict(severity=p.severity, path=list(p.path), message=p.message)
+            for p in description.problems]
+        return GalaxyDescription(parameters, problems, made is not None)
 
 
-def _described(root: str, galaxy: Mapping[str, Any]) -> Any:
+def _parameters(galaxy: Galaxy) -> list[dict[str, Any]]:
     """
-    Return the description of a galaxy by the library (see
-    gbkfit.describe), seen by the first of _OBSERVATIONS that makes it (or
-    the last, if none does).
+    Return the parameters of a galaxy, in its order (see
+    GalaxyDescription).
     """
-    description = None
-    for observation in _OBSERVATIONS:
-        description = gbkfit.describe(dict(
-            version=FORMAT_VERSION, root=root,
-            driver=dict(type='host'), galaxies=[dict(galaxy)],
-            observations=[observation], params=dict(properties={})))
-        if description.group is not None:
-            break
-    return description
-
-
-def _parameters(description: Any) -> list[dict[str, Any]]:
-    """
-    Return the parameters of the galaxy of a description that made it, in
-    its order (see GalaxyDescription).
-    """
-    owners = description.group.galaxies()[0].param_owners()
+    owners = galaxy.param_owners()
     return [
         dict(name=name, title=desc.title(), desc=desc.desc(),
              size=desc.size(), default=desc.default(),
              unit=None if desc.unit() is None else str(desc.unit()),
              range=str(desc.valid_range()), period=desc.period(),
              owner=list(owners.get(name, ())))
-        for name, desc in description.group.pdescs().items()]
+        for name, desc in galaxy.pdescs().items()]
 
 
 def _parameters_by_part(
@@ -147,15 +107,15 @@ def _parameters_by_part(
     mass = _listed(galaxy.get('mass'))
     names = [component.get('name') for component in components]
     broken = {
-        p.path[3] for p in problems
-        if p.path[:3] == ['galaxies', 0, 'mass'] and len(p.path) > 3}
+        p.path[1] for p in problems
+        if p.path[:1] == ['mass'] and len(p.path) > 1}
 
     def kept(made: set[str]) -> list[int]:
         # (the parts of the mass with no problem that follow only the
         # components made)
         return [
             j for j, part in enumerate(mass)
-            if j not in broken and _mentioned(part, names) <= made]
+            if j not in broken and _followed(part) <= made]
 
     parameters = []
     made = []
@@ -196,13 +156,13 @@ def _made_part(
         if key not in ('components', 'mass')}
     part['components'] = components
     if indices:
-        description = _described(
-            root, part | dict(mass=[mass[j] for j in indices]))
-        if description.group is not None:
-            return _parameters(description)
+        made = describe_galaxy(
+            part | dict(mass=[mass[j] for j in indices]), root).galaxy
+        if made is not None:
+            return _parameters(made)
     part.pop('gravity', None)
-    description = _described(root, part)
-    return None if description.group is None else _parameters(description)
+    made = describe_galaxy(part, root).galaxy
+    return None if made is None else _parameters(made)
 
 
 def _listed(value: Any) -> list[Any]:
@@ -212,17 +172,11 @@ def _listed(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else [value]
 
 
-def _mentioned(value: Any, names: list[Any]) -> set[str]:
+def _followed(part: Any) -> set[str]:
     """
-    Return the names among the given ones that options mention (in their
-    values, at any depth; e.g. the component a part of the mass follows).
+    Return the names of the components that a part of the mass names (e.g.
+    the component it follows; see config_leaves).
     """
-    if isinstance(value, str):
-        return {value} & set(names)
-    if isinstance(value, Mapping):
-        return set().union(*(
-            _mentioned(item, names) for key, item in value.items()
-            if key not in ('name', 'type')))
-    if isinstance(value, list):
-        return set().union(*(_mentioned(item, names) for item in value))
-    return set()
+    return {
+        leaf.value for leaf in config_leaves(part, MassComponent)
+        if leaf.kind == 'components'}

@@ -35,7 +35,7 @@ from test_spheroids import hernquist_mge
 A = 1 / (10 * 1e3 * np.pi / 648000)
 SPHEROID = dict(
     type='orbit_spheroid', name='stars', rmax=30 * A,
-    emission=dict(type='stars'), profile=dict(type='mge', ngauss=2),
+    emission=dict(type='band'), profile=dict(type='mge', ngauss=2),
     norbits=200, turns=20)
 GALAXY = dict(
     components=[SPHEROID],
@@ -90,7 +90,7 @@ def observation(regions, psf=1.0, oversampling=None, data=None):
         spectral=SpectralAxis(convention='log', rest='5000 Angstrom'),
         depth=Depth(step=2),
         instrument=Instrument(psf=None if psf is None else PSFGauss(psf)),
-        lines=['stars'], dataset=dataset, dtype='float64',
+        lines=[], continuum=True, dataset=dataset, dtype='float64',
         oversampling=oversampling)
 
 
@@ -120,7 +120,7 @@ def without_data(obs):
     """
     return moments_of(
         obs, depth=obs.depth(), instrument=obs.instrument(),
-        lines=['stars'], dtype='float64', oversampling=obs.oversampling())
+        lines=[], continuum=True, dtype='float64', oversampling=obs.oversampling())
 
 
 def sky_grid(obs):
@@ -201,7 +201,7 @@ def test_spectral_cubes_do_not_see_stars_on_orbits(driver):
         spectral=SpectralAxis(
             size=16, step=20, convention='relativistic'),
         depth=Depth(step=2),
-        lines=['stars'])
+        lines=[], continuum=True)
     # (the message names those that see them; see Observable.orbit_stars)
     with pytest.raises(ValueError, match=(
             r"seen by pixel_brightness \(their light\), region_moments "
@@ -218,7 +218,7 @@ def test_orbits_are_seen_without_what_their_recording_ignores(driver):
         seen, depth=seen.depth(),
         instrument=Instrument(
             psf=PSFGauss(1.0), lsf=LSFGauss(20.0 * u.km / u.s)),
-        lines=['stars'], dataset=seen.dataset(), dtype='float64')
+        lines=[], continuum=True, dataset=seen.dataset(), dtype='float64')
     with pytest.raises(ValueError, match="without an LSF"):
         ObservationGroup([galaxy()], [with_lsf]).plan(driver)
 
@@ -257,7 +257,7 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
     seen = observation(bins())
     stars = moments_of(
         seen, depth=seen.depth(), instrument=seen.instrument(),
-        lines=['stars'], dataset=seen.dataset(), dtype='float64', name='bins')
+        lines=[], continuum=True, dataset=seen.dataset(), dtype='float64', name='bins')
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
     image = ObservationPixelBrightness(
@@ -616,7 +616,7 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
         spectral=SpectralAxis(convention='log', rest='5000 Angstrom'),
         depth=Depth(step=2),
         instrument=Instrument(psf=PSFGauss(0.5 / np.sqrt(8 * np.log(2)))),
-        lines=['stars'], dataset=dataset)
+        lines=[], continuum=True, dataset=dataset)
     a = light.a / mock.kpc_per_arcsec()
     sigma, i0 = hernquist_mge(a)
     spheroid = SPHEROID | dict(
@@ -694,7 +694,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
     model = ObservationGroup(
         [stars(dict(type='jeans_spheroid'))],
         [ObservationRegionMoments(
-            **moments, instrument=instrument, lines=['stars'], depth=depth,
+            **moments, instrument=instrument, lines=[], continuum=True, depth=depth,
             dtype='float64')]).plan(driver).model_h(
         truth | dict(stars_beta_z=0.0, stars_kappa=0.6))[0]
     errors = {1: 3.0, 2: 3.0, 3: 0.02, 4: 0.02}
@@ -706,7 +706,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
     obs = ObservationRegionMoments(
         method='gauss_hermite',
         spectral=SpectralAxis(convention='log', rest='5000 Angstrom'),
-        depth=depth, instrument=instrument, lines=['stars'], dataset=dataset)
+        depth=depth, instrument=instrument, lines=[], continuum=True, dataset=dataset)
     group = ObservationGroup(
         [stars(dict(norbits=1500, turns=30))], [obs])
     solve = dict(solve=dict(

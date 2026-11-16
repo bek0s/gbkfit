@@ -18,7 +18,7 @@ import threadpoolctl
 from gbkfit.control import StopControl, StopFlag
 from gbkfit.driver import Driver, driver_parser
 from gbkfit.objective import Likelihoods, Objective
-from gbkfit.observation import GroupPlan
+from gbkfit.observation import GroupPlan, place_drivers
 from gbkfit.params import Solve
 
 if typing.TYPE_CHECKING:
@@ -34,7 +34,7 @@ POLL_INTERVAL = 0.2
 
 
 # The drivers of a copy: of each galaxy and of each observation (see
-# ObservationGroup.drivers)
+# place_drivers)
 Drivers: TypeAlias = tuple[tuple[Driver, ...], tuple[Driver, ...]]
 
 
@@ -200,7 +200,7 @@ def placement_drivers(objective: Objective, placement: Placement) -> Drivers:
     """
     driver, by_label = (placement, None) if isinstance(placement, Driver) \
         else placement
-    return objective.group().drivers(driver, by_label)
+    return place_drivers(objective.group(), driver, by_label)
 
 
 def dump_placements(placements: Sequence[Placement]) -> list[Any]:

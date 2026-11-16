@@ -489,7 +489,7 @@ def test_a_configuration_is_described_without_devices(tmp_path):
     assert description.problems == ()
     assert set(description.params.pdescs()) >= {'xpos', 'rpt_s'}
     stars = dict(
-        type='pixel_spectra', lines=['stars'],
+        type='pixel_spectra', lines=[], continuum=True,
         size=[8, 8], spectral=dict(
         size=11, convention='relativistic'))
     described = gbkfit.describe(config | dict(observations=[stars]))

@@ -20,6 +20,8 @@ from typing import Any, Literal
 import gbkfit.outputs
 import gbkfit.project
 import gbkfit.tasks.prep
+from gbkfit.config import (
+    ConfigError, DataFile, from_config, type_problem, with_files)
 
 from .errors import Invalid, NotFound
 from .events import Events
@@ -376,21 +378,27 @@ class Jobs:
     def _fits_file(self, value: Any) -> str | tuple[str, int | str] | None:
         """
         Return a file option of prep (a path relative to the workspace, or
-        {file, hdu}) with its absolute path (see DataFile).
+        a path and where the data are in it; see DataFile) with its
+        absolute path, as prep takes it.
 
         Raises
         ------
         Invalid
-            If it is neither, or out of the workspace.
+            If it is not one, or out of the workspace.
         """
-        if value is None or isinstance(value, str):
-            return value and self._workspace.path(value)
-        if isinstance(value, Mapping) and value.keys() == {'file', 'hdu'} \
-                and isinstance(value['hdu'], int | str):
-            return self._workspace.path(value['file']), value['hdu']
-        raise Invalid(
-            f"a file of prep is a path, or a path and an HDU ({{file, hdu}}); "
-            f"not {value!r}")
+        if value is None:
+            return None
+        try:
+            file = from_config(
+                with_files(value, DataFile, self._workspace.path), DataFile)
+            problem = type_problem(file, DataFile)
+        except ConfigError as e:
+            problem = str(e)
+        if problem:
+            raise Invalid(
+                f"a file of prep is a path, or a path and an HDU ({{file, "
+                f"hdu}}); not {value!r}: {problem}")
+        return file
 
     def _keep_prepared(self, job: Job, options: dict[str, Any]) -> None:
         """

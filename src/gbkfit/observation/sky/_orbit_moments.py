@@ -142,6 +142,9 @@ class OrbitMomentsPlan(ObservationPlan):
         self._names = scene.component_names(galaxy, component)
         spheroid = scene.component(galaxy, component)
         self._weights = spheroid.orbit_weights()
+        # (an orbit spheroid moves, and has a centre, a systemic velocity
+        # and an axis)
+        self._frame = spheroid.frame_params()
         # (the ids of the extra outputs of the component)
         self._ids = dict(
             galaxy=scene.galaxy_label(galaxy),
@@ -216,12 +219,13 @@ class OrbitMomentsPlan(ObservationPlan):
         values = {name: params[full] for name, full in self._names.items()}
         weights = np.asarray(values[self._weights], dtype=float)
         light = state.orbit_light(weights)
-        centre = [values['xpos'], values['ypos']]
-        geometry = (values['posa'], values['incl'])
+        frame = self._frame
+        centre = [values[frame.x], values[frame.y]]
+        geometry = (values[frame.posa], values[frame.incl])
         # (channel j holds the velocities vsys + v from zero + (j - 1/2)
         # step to zero + (j + 1/2) step)
         channels = (1 / self._step,
-                    (values['vsys'] - self._zero) / self._step + 0.5)
+                    (values[frame.vsys] - self._zero) / self._step + 0.5)
         if pixels:
             integrator, _ = self._outputs_of(state)
             records = integrator.integrate(
@@ -231,12 +235,8 @@ class OrbitMomentsPlan(ObservationPlan):
                 channels=channels)
             return records, weights, light
         if self._integrator is None:
-            # (in float64, see _orbits.OrbitRecording)
-            self._integrator = OrbitIntegrator(
-                self._driver, np.float64, len(state.starts),
-                tolerance=state.tolerance, max_steps=state.max_steps(),
-                nsamples=state.samples, nphi=state.copies, twins=True,
-                sky=[self._grid], nchannels=self._nchannels)
+            self._integrator = state.integrator(
+                self._driver, sky=[self._grid], nchannels=self._nchannels)
         records = self._integrator.integrate(
             state.potential, state.starts, state.turns, geometry,
             centres=np.array([centre]), light=light, channels=channels)
@@ -265,11 +265,8 @@ class OrbitMomentsPlan(ObservationPlan):
         and the cells; made once) and the moments of the pixels.
         """
         if self._outputs is None:
-            integrator = OrbitIntegrator(
-                self._driver, np.float64, len(state.starts),
-                tolerance=state.tolerance, max_steps=state.max_steps(),
-                nsamples=state.samples, nphi=state.copies, twins=True,
-                cells=state.cell_light.shape,
+            integrator = state.integrator(
+                self._driver, cells=True,
                 sky=[self._grid, self._pixels.grid],
                 nchannels=self._nchannels, cell_moments=True)
             moments = MomentsPlan(

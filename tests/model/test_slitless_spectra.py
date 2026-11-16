@@ -286,7 +286,7 @@ def test_slitless_spectra_have_flux_scales_per_row(driver):
     # (on the grid of the data, that of SLITLESS)
     observation = observation_parser.load(copy.deepcopy(SLITLESS) | dict(
         flux_scale='per_row', name='grism')).with_dataset(dataset)
-    assert observation.flux_scales()['per_row'].axis == 1
+    assert observation.flux_scale_kinds()['per_row'].axis == 1
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace.from_properties(

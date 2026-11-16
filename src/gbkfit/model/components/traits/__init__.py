@@ -213,8 +213,7 @@ dpt_parser = TypedParser(DPTrait, [
     DPTraitMixtureMoffat,
     DPTraitNWUniform,
     DPTraitNWHarmonic,
-    DPTraitNWDistortion,
-    DPTraitEquilibrium], family='dpt')
+    DPTraitNWDistortion], family='dpt')
 
 # Dispersion height traits parser
 dht_parser = TypedParser(DHTrait, [

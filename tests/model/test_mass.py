@@ -19,7 +19,7 @@ import scipy.special
 import gbkfit.cosmology
 from gbkfit.config import ConfigError
 from gbkfit.grid import SpectralAxis
-from gbkfit.model import Extras, SceneTarget, galaxy_parser
+from gbkfit.model import Extras, SceneTarget, View, galaxy_parser
 from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceCosmological, DistanceParameter)
 from gbkfit.model.mass import (
@@ -33,7 +33,7 @@ from gbkfit.model.mass import (
     VerticalSech, VerticalSech2, VerticalThin, mass_component_parser,
     sidm_core)
 from gbkfit.model.mass import _disk_gravity
-from gbkfit.params import ModelEvaluationError
+from gbkfit.params import ModelEvaluationError, ParamSpace
 
 
 # The gravitational constant (kpc (km/s)^2 / Msun)
@@ -1725,7 +1725,6 @@ def evaluate(driver, galaxy, properties):
     """
     from gbkfit.observation import (
         ObservationGroup, ObservationPixelSpectra)
-    from gbkfit.params import ParamSpace
     group = ObservationGroup([galaxy], [ObservationPixelSpectra(
         size=(32, 32), step=(1, 1),
         spectral=SpectralAxis(
@@ -1876,7 +1875,7 @@ def test_disk_densities_are_azimuthal_means(driver):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32),
-            None, None, None, None),
+            View(spectral=True), None, None),
         True, None, 0.0)
     density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
@@ -1913,7 +1912,7 @@ def test_disk_densities_are_exact_at_jumps(driver):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32),
-            None, None, None, None),
+            View(spectral=True), None, None),
         True, None, 0.0)
     density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
@@ -1963,7 +1962,7 @@ def test_disk_densities_see_small_blobs(driver):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64),
-            None, None, None, None),
+            View(spectral=True), None, None),
         True, None, 0.0)
     density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
@@ -2134,7 +2133,7 @@ def test_pressure_support_is_the_jeans_equation(driver):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32),
-            None, None, None, None),
+            View(spectral=True), None, None),
         True, None, 0.0)
     disk = component.density_disk()
     radius = np.array(disk.subrnodes())
@@ -2172,7 +2171,7 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64),
-            None, None, None, None),
+            View(spectral=True), None, None),
         True, None, 0.0)
     disk = component.density_disk()
     (name, support), = disk.pressure_supported_params().items()
@@ -2524,7 +2523,7 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64),
-            None, None, None, None),
+            View(spectral=True), None, None),
         True, None, 0.0).disk_plan()
     values = {p: params[p] for p in component.pdescs()} | state.inputs()
     heights = [0.125, 4.125, 7.875, 9]
@@ -2626,7 +2625,6 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     from gbkfit.model._galaxy_stage import GalaxyStage
     from gbkfit.observation import (
         ObservationGroup, ObservationPixelSpectra)
-    from gbkfit.params import ParamSpace
     calls = []
     evaluate_stage = GalaxyStage.evaluate
 
@@ -2655,6 +2653,31 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     np.testing.assert_allclose(
         single['spectra'].data, double['spectra'].data, rtol=1e-5,
         atol=1e-7)
+
+
+@pytest.mark.parametrize('stars_xpos', ['gas_xpos', 0.5])
+def test_the_components_of_the_mass_have_one_centre(stars_xpos):
+    # Two disks that rotate in the mass: at one centre (a tie), they are
+    # evaluated; at two, the evaluation fails, at once (every evaluation
+    # checks it, not only those with extras)
+    disks = [
+        with_traits(DISK, vptraits=dict(type='mass')) | dict(name=name)
+        for name in ('gas', 'stars')]
+    galaxy = galaxy_parser.load(dict(
+        components=disks, mass=copy.deepcopy(MASS),
+        distance=copy.deepcopy(DISTANCE)))
+    properties = {
+        f'{name}_{key}': value for name in ('gas', 'stars')
+        for key, value in DISK_PROPERTIES.items()} | MASS_PROPERTIES
+    properties |= dict(stars_xpos=stars_xpos)
+    params = ParamSpace.from_properties(
+        galaxy.pdescs(), properties).evaluate()
+    stage = galaxy.plan_stage()
+    if stars_xpos == 'gas_xpos':
+        stage.evaluate(params)
+        return
+    with pytest.raises(ModelEvaluationError, match="different centres"):
+        stage.evaluate(params)
 
 
 @pytest.mark.parametrize('tilt, warns', [(10, False), (30, True)])

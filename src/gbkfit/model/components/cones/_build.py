@@ -5,7 +5,6 @@ Helpers of the cone component (Cone).
 from collections.abc import Sequence
 from typing import Any
 
-import astropy.units
 import numpy as np
 
 from gbkfit.driver import Driver
@@ -20,11 +19,10 @@ from .._nodal import (
 from .. import _units
 from .._units import DataUnit
 from ..base import Component
-from ..lines import Band, Bands, Lines
 from ..nodes import Nodes
 from ..parts import KinematicTraits
 from ..roles import (
-    DustOpacity, Emission, LineEmission, Opacity, emission_parser,
+    DustOpacity, Emission, Opacity, View, emission_parser,
     opacity_parser)
 from . import _nodal
 
@@ -126,7 +124,8 @@ def make_cone(
         traits (see CONE_TRAITS), or the parts and roles do not go
         together (e.g. lines without kinematics).
     """
-    if isinstance(emission, LineEmission) and kinematics is None:
+    if emission is not None and emission.needs_velocities() \
+            and kinematics is None:
         raise ValueError(
             "a cone that emits lines needs kinematics: give it vptraits and "
             "dptraits")
@@ -154,14 +153,11 @@ def make_cone(
 
 def cone_plan(
         cone: _nodal.NodalCone,
-        lines: Lines | None,
-        bands: Bands | None,
-        unit: astropy.units.UnitBase | None,
+        emission: Emission | None,
         driver: Driver,
         spectral: Grid,
         dtype: np.dtype,
-        names: tuple[str, ...] | None,
-        band: Band | None,
+        view: View,
         emits: bool,
         opacity_ratios: np.ndarray | None,
         data_unit: DataUnit | None,
@@ -172,9 +168,8 @@ def cone_plan(
     disks._build.disk_plan for the arguments); a cone has no line
     opacity.
     """
-    emission = emission_setup(
-        lines, bands, unit, spectral, names, band, emits, data_unit,
-        redshift, ())
+    setup = emission_setup(
+        emission, view, spectral, emits, data_unit, redshift)
     return NativeComponentPlan(
-        driver, cone.plan(driver, emission.nlines, dtype), emission,
+        driver, cone.plan(driver, setup.nlines, dtype), setup,
         opacity_ratios)

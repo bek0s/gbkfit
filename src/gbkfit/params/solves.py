@@ -28,6 +28,7 @@ from gbkfit.params._errors import ModelEvaluationError
 
 __all__ = [
     'LIKELIHOODS',
+    'GaussianPrior',
     'Solution',
     'Solve',
     'SolveGauss',
@@ -65,6 +66,19 @@ class Solution(NamedTuple):
     residuals: np.ndarray
     log_term: float
     m_eff: float
+
+
+class GaussianPrior(NamedTuple):
+    """
+    The Gaussian prior of solved values (see Solve.gaussian_prior): its
+    mean, its standard deviation (None if AICp chooses it), the range that
+    AICp chooses it from (None without), and the minimum of the values
+    (None without).
+    """
+    mean: float
+    sigma: float | None
+    sigma_aicp: tuple[float, float] | None
+    minimum: float | None
 
 
 class Solve(TypedSerializable, abc.ABC):
@@ -152,6 +166,14 @@ class Solve(TypedSerializable, abc.ABC):
         """
         Return the merit that the fits of its values must minimise (see
         Fitter), if one; none here.
+        """
+        return None
+
+    def gaussian_prior(self) -> GaussianPrior | None:
+        """
+        Return the Gaussian prior of its values, if they have one: values
+        of Gaussian priors are solved together (see solve_together); none
+        here.
         """
         return None
 
@@ -348,6 +370,10 @@ class SolveGauss(Solve):
         """Return the smallest value, if any."""
         return self._minimum
 
+    def gaussian_prior(self) -> GaussianPrior:
+        return GaussianPrior(
+            self.mean(), self.sigma(), self.sigma_aicp(), self.minimum())
+
     def check_coupled(self, size: int) -> None:
         check_together([self], [size])
 
@@ -362,23 +388,20 @@ def check_together(solves: Sequence[Solve], sizes: Sequence[int]) -> None:
     priors and one likelihood, and 'profiled' if more than one value has
     a minimum (their integral has no exact formula).
     """
-    if not all(isinstance(solve, SolveGauss) for solve in solves):
-        raise ValueError(
-            "values solved together take Gaussian priors (solves of type "
-            "'gauss')")
+    priors = [_prior(solve) for solve in solves]
     likelihoods = {solve.likelihood() for solve in solves}
     if len(likelihoods) > 1:
         raise ValueError(
             f"values solved together take one likelihood; they have "
             f"{sorted(likelihoods)}")
     if sum(sizes) > 1 and likelihoods == {'integrated'} and any(
-            solve.minimum() is not None for solve in solves):
+            prior.minimum is not None for prior in priors):
         raise ValueError(
             f"{sum(sizes)} values solved together above a minimum have no "
             f"exact integral for the log-likelihood: give their solves the "
             f"likelihood 'profiled' (the log-likelihood at their best "
             f"values), or no minimum")
-    if len({solve.sigma_aicp() for solve in solves}) > 1:
+    if len({prior.sigma_aicp for prior in priors}) > 1:
         raise ValueError(
             "values solved together take one sigma chosen by AICp: their "
             "solves have the same sigma_aicp, or none")
@@ -696,7 +719,7 @@ def _chosen_together(
     chi-square of their data): at theirs, or chosen by AICp in their range
     (see SolveGauss).
     """
-    widths = solves[0].sigma_aicp()
+    widths = _prior(solves[0]).sigma_aicp
     if widths is None:
         return solve_with(None)[0]
     return _chosen(solve_with, widths)
@@ -736,13 +759,31 @@ def _priors(
     minimum (-inf without one) of the Gaussian prior of each value of the
     given solves, the given number of each, in their order.
     """
-    mean = np.repeat([solve.mean() for solve in solves], sizes)
-    sigma = np.repeat([solve.sigma() for solve in solves], sizes) \
+    priors = [_prior(solve) for solve in solves]
+    mean = np.repeat([prior.mean for prior in priors], sizes)
+    sigma = np.repeat([prior.sigma for prior in priors], sizes) \
         if sigma is None else np.full(len(mean), sigma)
     lower = np.repeat([
-        -np.inf if solve.minimum() is None else solve.minimum()
-        for solve in solves], sizes)
+        -np.inf if prior.minimum is None else prior.minimum
+        for prior in priors], sizes)
     return mean, sigma, lower
+
+
+def _prior(solve: Solve) -> GaussianPrior:
+    """
+    Return the Gaussian prior of the values of a solve.
+
+    Raises
+    ------
+    ValueError
+        If they have none: only values of Gaussian priors are solved
+        together (see check_together).
+    """
+    if (prior := solve.gaussian_prior()) is None:
+        raise ValueError(
+            "values solved together take Gaussian priors (solves of type "
+            "'gauss')")
+    return prior
 
 
 solve_parser = TypedParser(Solve, [SolveGauss], family='solve')

@@ -3,27 +3,24 @@ What the components evaluated by native kernels share (the disks, the
 cones and the spheroids): the plans of their evaluation (NativePlan),
 with their parameter values in one buffer (ParamBuffer) and the maps of
 their extra outputs (ExtraMaps, evaluate_native); what they evaluate of
-their light (make_lines, make_bands, emission_setup); and the plan of a
+their light (light_pdescs, emission_setup); and the plan of a
 component made of one (NativeComponentPlan).
 """
 
 import abc
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from typing import Any
 
-import astropy.units
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
-from ._common import Fluxes, systemic_velocity
-from ._units import DataUnit, OpacityScales, band_factors, line_factors
+from ._common import systemic_velocity
+from ._units import DataUnit
 from .base import ComponentPlan, ComponentState, FieldsLayout, NativeGrid
-from .lines import Band, Bands, LinePlacement, Lines
-from .roles import STARS, BandEmission, Emission, LineEmission
+from .roles import Emission, EmissionSetup, View
 
 
 _log = logging.getLogger(__name__)
@@ -227,117 +224,41 @@ class NativePlan(abc.ABC):
         pass
 
 
-def make_lines(
+def light_pdescs(
         pdescs: dict[str, ParamDesc], emission: Emission | None
-) -> Lines | None:
+) -> dict[str, ParamDesc]:
     """
-    Return the emission lines of a component (see Lines), if it emits
-    lines, whose parameters must have other names than its parameters
-    (pdescs).
+    Return the parameters of the light of a component (the flux ratios of
+    its lines or bands, see Light), if it emits, which must have other
+    names than its parameters (pdescs). Raise ValueError if they do not.
     """
-    if not isinstance(emission, LineEmission):
-        return None
-    lines = emission.lines()
-    if repeated := sorted(set(lines.pdescs()) & set(pdescs)):
+    if emission is None:
+        return {}
+    light = emission.light()
+    if repeated := sorted(set(light.pdescs()) & set(pdescs)):
         raise ValueError(
-            f"the parameters of the lines have the names of other "
-            f"parameters: {repeated}; rename the lines")
-    return lines
-
-
-def make_bands(
-        pdescs: dict[str, ParamDesc], emission: Emission | None
-) -> Bands | None:
-    """
-    Return the bands of a component (see Bands), if it emits in bands,
-    whose parameters must have other names than its parameters (pdescs).
-    """
-    if not isinstance(emission, BandEmission):
-        return None
-    bands = emission.bands()
-    if repeated := sorted(set(bands.pdescs()) & set(pdescs)):
-        raise ValueError(
-            f"the parameters of the bands have the names of other "
-            f"parameters: {repeated}; rename the bands")
-    return bands
-
-
-@dataclass(frozen=True)
-class EmissionSetup:
-    """
-    What the plan of a component on radial nodes evaluates of its light
-    (see emission_setup): the number of lines its plan adds to spectral
-    cubes (0 in an image, or without light), the row of the line of each
-    of its traits of line opacity among them (-1 for a line it does not
-    evaluate; None without lines), and for the plan of its component (see
-    NativeComponentPlan), the fluxes of its lines or band, the place of
-    each line on the spectral axis, and the scales of its line opacity.
-    """
-    nlines: int = 0
-    opacity_rows: list[int] | None = None
-    fluxes: Fluxes | None = None
-    lines: LinePlacement | None = None
-    opacity_scales: OpacityScales | None = None
+            f"the parameters of the {light.option} have the names of other "
+            f"parameters: {repeated}; rename the {light.option}")
+    return light.pdescs()
 
 
 def emission_setup(
-        lines: Lines | None,
-        bands: Bands | None,
-        unit: astropy.units.UnitBase | None,
+        emission: Emission | None,
+        view: View,
         spectral: Grid,
-        names: tuple[str, ...] | None,
-        band: Band | None,
         emits: bool,
         data_unit: DataUnit | None,
         redshift: float,
-        opacity_lines: Sequence[int]
+        opacity_lines: Sequence[int] = ()
 ) -> EmissionSetup:
     """
-    Return what the plan of a component evaluates of its light (see
-    EmissionSetup), with the given emission lines or bands (if any) and
-    the unit of its light (if any): if it emits, the lines of the given
-    names (all if None), at the redshift of its galaxy, or the given band
-    (if known), in the unit of the data (see Component.plan). opacity_lines
-    has the line of each of its traits of line opacity: its index among
-    its lines.
+    Return what the plan of a component evaluates of its light, seen in
+    the view (see Emission.setup): nothing if it does not emit (e.g. the
+    opacity of its dust alone).
     """
     if not emits:
         return EmissionSetup()
-    if lines is None:
-        ratio = bands.ratio_name(band)
-        fluxes = Fluxes(
-            1, [(0, ratio)] if ratio is not None else [],
-            band_factors(unit, data_unit, band, redshift))
-        if names is not None and STARS in names:
-            # (the light of stars in a spectral cube: one line, without a
-            # rest, of the flux of its band; see StarsEmission)
-            return EmissionSetup(
-                nlines=1, fluxes=fluxes,
-                lines=LinePlacement(np.ones(1), spectral))
-        return EmissionSetup(fluxes=fluxes)
-    # (and the row of the line of each trait of line opacity among the
-    # lines it evaluates)
-    selected = lines.select(names)
-    opacity_rows = [
-        selected.index(line) if line in selected else -1
-        for line in opacity_lines]
-    factors = lines.factors(spectral, redshift)[list(selected)]
-    # (with a unit, the frequency at which the galaxy emits each line)
-    frequencies = None if unit is None \
-        else lines.frequencies(spectral, redshift)[list(selected)]
-    ratios = [
-        (row, lines.ratio_name(index)) for row, index in enumerate(selected)
-        if lines.ratio_name(index) is not None]
-    # (with a unit, the coefficients of line opacity are 1/S in 1/K)
-    opacity_scales = None
-    if opacity_lines and unit is not None:
-        opacity_scales = OpacityScales(
-            unit, data_unit, factors, spectral, frequencies)
-    return EmissionSetup(
-        len(selected), opacity_rows,
-        Fluxes(len(factors), ratios, line_factors(
-            unit, data_unit, factors, spectral, frequencies)),
-        LinePlacement(factors, spectral), opacity_scales)
+    return emission.setup(view, spectral, data_unit, redshift, opacity_lines)
 
 
 class NativeComponentPlan(ComponentPlan):

@@ -7,8 +7,8 @@ which may change with radius.
 """
 
 import abc
-from collections.abc import Collection
-from typing import Annotated, Any
+from collections.abc import Callable, Collection
+from typing import Annotated, Any, Self
 
 import numpy as np
 import numpy.typing as npt
@@ -20,6 +20,7 @@ from gbkfit.config import (
     TypedParser, TypedSerializable, check_name, check_options)
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
+from . import _disk_forces, _disk_gravity
 from .base import DiskDensity, MassContext
 
 
@@ -71,6 +72,78 @@ class DiskVertical(TypedSerializable, abc.ABC):
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name; none here."""
         return {}
+
+    def law(self) -> 'VerticalLaw | None':
+        """
+        Return it as a vertical law, if its pdf of the height is the same
+        at every radius, of a scale height (see VerticalLaw); none here.
+        """
+        return None
+
+    def vcirc2(
+            self,
+            knots: np.ndarray,
+            R: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the squared circular velocity ((km/s)^2) at the radii R
+        (kpc) of a disk of its vertical structure and the surface density
+        sigma (Msun/kpc^2, a function of the radius) on rings between the
+        knots (kpc): thin, or thick (see _thick_vcirc2).
+        """
+        if not self.thin(context):
+            return self._thick_vcirc2(knots, R, sigma, params, context)
+        gravity = _disk_gravity.thin_disk_gravity(knots, R.ravel())
+        return gravity.vcirc2(sigma(gravity.radii)).reshape(R.shape)
+
+    def force(
+            self,
+            axis: _disk_forces.Axis,
+            knots: np.ndarray,
+            R: np.ndarray,
+            z: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the force along an axis at the points (R, z) (kpc, of one
+        shape) of a disk of its vertical structure and the surface density
+        sigma on rings between the knots (see vcirc2): thin, or thick (see
+        _thick_force).
+        """
+        if not self.thin(context):
+            return self._thick_force(
+                axis, knots, R, z, sigma, params, context)
+        force = _disk_forces.disk_force(axis, knots, R, z)
+        return force.thin(sigma(force.radii)).reshape(R.shape)
+
+    @abc.abstractmethod
+    def _thick_vcirc2(
+            self,
+            knots: np.ndarray,
+            R: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """Return vcirc2 of a disk of it where it is thick (see vcirc2)."""
+
+    @abc.abstractmethod
+    def _thick_force(
+            self,
+            axis: _disk_forces.Axis,
+            knots: np.ndarray,
+            R: np.ndarray,
+            z: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """Return the force of a disk of it where it is thick (see force)."""
 
     @abc.abstractmethod
     def thin(self, context: MassContext) -> bool:
@@ -160,6 +233,40 @@ class VerticalLaw(DiskVertical, abc.ABC):
         R, h = np.broadcast_arrays(
             np.asarray(R, dtype=float), np.asarray(h, dtype=float))
         return self.within(h, params['hz'])
+
+    def law(self) -> Self:
+        return self
+
+    def _thick_vcirc2(
+            self,
+            knots: np.ndarray,
+            R: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # (the same pdf at every radius)
+        gravity = _disk_gravity.thick_disk_gravity(knots, R.ravel())
+        return gravity.vcirc2(
+            sigma(gravity.radii)[None],
+            self.pdf(gravity.heights, params['hz'])).reshape(R.shape)
+
+    def _thick_force(
+            self,
+            axis: _disk_forces.Axis,
+            knots: np.ndarray,
+            R: np.ndarray,
+            z: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        hz = params['hz']
+        force = _disk_forces.disk_force(axis, knots, R, z)
+        return force.thick(
+            sigma(force.radii)[None],
+            self.pdf(force.heights, hz)[None, None],
+            lambda r, h: self.pdf(h, hz)[None, None]).reshape(R.shape)
 
     @staticmethod
     @abc.abstractmethod
@@ -502,6 +609,42 @@ class VerticalComponent(DiskVertical):
         if self.thin(context):
             return ()
         return context.density(self._component).height_cuts()
+
+    def _thick_vcirc2(
+            self,
+            knots: np.ndarray,
+            R: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # (its shape at each radius, on its subnodes too, of quadratic
+        # panels, cut where its component ends in height)
+        gravity = _disk_gravity.thick_disk_gravity(
+            np.union1d(knots, self.knots(context)), R.ravel(), degree=2,
+            cuts=self.height_cuts(context))
+        return gravity.vcirc2(
+            sigma(gravity.radii)[None],
+            self.shapes(gravity.radii, gravity.heights, context)[None]
+        ).reshape(R.shape)
+
+    def _thick_force(
+            self,
+            axis: _disk_forces.Axis,
+            knots: np.ndarray,
+            R: np.ndarray,
+            z: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        force = _disk_forces.disk_force(
+            axis, np.union1d(knots, self.knots(context)), R, z, degree=2,
+            cuts=self.height_cuts(context))
+        return force.thick(
+            sigma(force.radii)[None],
+            self.shapes(force.radii, force.heights, context)[None],
+            lambda r, h: self.shapes(r, h, context)[None]).reshape(R.shape)
 
     def shapes(
             self, R: np.ndarray, z: np.ndarray, context: MassContext

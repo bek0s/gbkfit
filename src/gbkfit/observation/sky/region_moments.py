@@ -14,7 +14,7 @@ from gbkfit.dataset import Data, Dataset, DatasetRegionMoments, Regions
 from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectralAxis
 from gbkfit.instrument import Instrument
-from gbkfit.model import Band, DataUnit, LightUnit, LineEmission
+from gbkfit.model import Band, DataUnit, LightUnit
 from gbkfit.moments import (
     FluxFloor, Method, MomentsPlan, check_moment_items, check_moment_orders,
     moment_item, split_moments)
@@ -57,8 +57,8 @@ class ObservationRegionMoments(ObservationRegions):
     (given too, they serve only without data); without data, regions are
     required.
 
-    E.g. the kinematics of the stars of a spheroid (lines ['stars'] of its
-    observation, see model.StarsEmission) in the Voronoi bins of pPXF.
+    E.g. the kinematics of the stars of a spheroid (the continuum of its
+    observation: continuum: true, lines: []) in the Voronoi bins of pPXF.
     Those are of the distribution of the velocities of the stars itself
     (the fit of the spectra took the LSF out), seen through the PSF: the
     instrument of their observation has a PSF and no LSF. The velocities
@@ -98,7 +98,7 @@ class ObservationRegionMoments(ObservationRegions):
 
     dataset_class = DatasetRegionMoments
 
-    emission = LineEmission
+    spectral_view = True
     orbit_stars = 'moments'
 
     # The moments have no spectral axis
@@ -167,6 +167,7 @@ class ObservationRegionMoments(ObservationRegions):
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
+            continuum: bool = False,
             band: str | Band | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
@@ -194,9 +195,9 @@ class ObservationRegionMoments(ObservationRegions):
                 "take no valid pixels of each channel (those of the spectra "
                 "of regions)")
         super().__init__(
-            grid, foreground, instrument, galaxies, components, lines, band,
-            pixel_weights, flux_scale, offsets, dataset, oversampling, depth,
-            dtype, fft_dtype, name, unit)
+            grid, foreground, instrument, galaxies, components, lines,
+            continuum, band, pixel_weights, flux_scale, offsets, dataset,
+            oversampling, depth, dtype, fft_dtype, name, unit)
 
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments, sorted."""

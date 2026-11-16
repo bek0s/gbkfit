@@ -15,10 +15,9 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from .._native import NativePlan, ParamBuffer, evaluate_native
-from .._nodal import (
-    NodalTraits, evaluate_native_traits, native_traits, subring_radii)
+from .._nodal import NodalComponent, evaluate_native_traits, native_traits
 from ..base import (
-    ComponentState, FieldsLayout, FrameParams, NativeGrid)
+    ComponentState, FieldsLayout, NativeGrid)
 from ..geometries import GEOMETRY_UNITS, geometry_pdesc
 from ..traits import Trait
 
@@ -51,7 +50,7 @@ GEOMETRY_PDESCS = {
         min=0, max=90, unit='deg', default=30))
 
 
-class NodalCone(abc.ABC):
+class NodalCone(NodalComponent):
     """
     A cone: its sides, its radial nodes (shells, spheres around its apex)
     and its traits (see traits), whose parameters are those of its traits
@@ -72,21 +71,12 @@ class NodalCone(abc.ABC):
             density_units: dict[str, astropy.units.UnitBase | None]
     ):
         """
-        traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
-        can leave kinds out (no traits); prefixes has the prefix of the
-        parameters of each trait of the kinds that are not named after
-        their kind (see NodalTraits); density_units has the unit of the density
-        of the density polar traits, if known (see NodalTraits).
+        sides is one of SIDES; the others are as those of NodalComponent.
         """
-        subrnodes = subring_radii(rnodes, rstep)
+        super().__init__(
+            TRAIT_KINDS, rnodes, rstep, interp, traits_, prefixes,
+            density_units)
         self._sides = sides
-        self._rnodes = rnodes
-        self._rstep = rstep
-        self._subrnodes = subrnodes
-        self._interp = interp
-        self._traits = NodalTraits(
-            TRAIT_KINDS, traits_, prefixes, density_units, rnodes,
-            subrnodes, interp)
         self._geometry_pdescs = {
             name: pdesc for name, pdesc in GEOMETRY_PDESCS.items()
             if name != 'vsys' or self.traits('vpt')}
@@ -96,50 +86,8 @@ class NodalCone(abc.ABC):
         """Return its sides (see SIDES)."""
         return self._sides
 
-    def rnodes(self) -> tuple[float, ...]:
-        return self._rnodes
-
-    def rstep(self) -> float:
-        return self._rstep
-
-    def subrnodes(self) -> tuple[float, ...]:
-        return self._subrnodes
-
-    def interp(self) -> type[Interpolator]:
-        return self._interp
-
-    def trait_owners(self) -> dict[str, tuple[str | int, ...]]:
-        """
-        Return the option of each parameter of its traits (see
-        NodalTraits.owners), by name.
-        """
-        return self._traits.owners()
-
-    def traits(self, kind: str) -> tuple[Trait, ...]:
-        return self._traits.traits(kind)
-
-    def trait_values(
-            self, kind: str, params: ParamValues
-    ) -> tuple[dict[str, np.ndarray], ...]:
-        """
-        Return the values of the parameters of each trait of one kind, by
-        their names in the trait, from the values of the parameters of the
-        cone: the node-wise ones at the subnodes, as the cone evaluates
-        them.
-        """
-        return self._traits.values(kind, params)
-
-    def shared(self, kind: str) -> bool:
-        """
-        Check whether the traits of one kind are one height trait that the
-        polar traits share (see NodalTraits.shared).
-        """
-        return self._traits.shared(kind)
-
-    def frame_params(self) -> FrameParams:
-        """Return its parameters that place it in a frame."""
-        vsys = 'vsys' if 'vsys' in self._geometry_pdescs else None
-        return FrameParams('xpos', 'ypos', vsys, 'posa', 'incl')
+    def geometry_pdescs(self) -> dict[str, ParamDesc]:
+        return self._geometry_pdescs
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
@@ -177,8 +125,8 @@ class SmoothConePlan(NativePlan):
         # The number of values of each group of parameters: one for each
         # geometric parameter, and the values of all the traits of each
         # kind, and the offset, scale and flux of each emission line
-        sizes = dict.fromkeys(cone._geometry_pdescs, 1) \
-            | cone._traits.sizes() | dict(lines=3 * nlines)
+        sizes = dict.fromkeys(cone.geometry_pdescs(), 1) \
+            | cone.nodal_traits().sizes() | dict(lines=3 * nlines)
         buffer = ParamBuffer(driver, dtype, sizes)
 
         # Describe the cone to the native module: its sides, its
@@ -188,8 +136,8 @@ class SmoothConePlan(NativePlan):
             positive=cone.sides() != 'negative',
             negative=cone.sides() != 'positive',
             rnodes=driver.mem_copy_h2d(np.array(cone.subrnodes(), dtype)),
-            **{name: buffer.device(name) for name in cone._geometry_pdescs},
-            **native_traits(driver, dtype, cone._traits, buffer))
+            **{name: buffer.device(name) for name in cone.geometry_pdescs()},
+            **native_traits(driver, dtype, cone.nodal_traits(), buffer))
 
         self._cone = cone
         self._driver = driver
@@ -295,9 +243,9 @@ class SmoothConePlan(NativePlan):
         """
         buffer = self._buffer
         params = dict(params)
-        for name in self._cone._geometry_pdescs:
+        for name in self._cone.geometry_pdescs():
             buffer.host(name)[:] = params[name]
-        self._cone._traits.fill(buffer, params)
+        self._cone.nodal_traits().fill(buffer, params)
         if lines is not None:
             self._lines_h[:] = lines
         buffer.copy_to_device()

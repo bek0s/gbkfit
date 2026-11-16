@@ -14,15 +14,17 @@ from gbkfit.config import TypedSerializable, check_name
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
-from .lines import Band
 from .roles import (
-    STARS, BandEmission, Emission, LineEmission, Opacity, StarsEmission)
+    Emission, Opacity, View)
 
 if TYPE_CHECKING:
+    from gbkfit.instrument import PSF
+
     from ..extras import Extras
     from ..gravity import GravityField
     from ..mass import ComponentDensity, MassContext, MassModel
     from ._needs import Need
+    from ._profiles import ComponentProfiles
     from ._units import DataUnit
 
 
@@ -35,6 +37,7 @@ __all__ = [
     'ComponentState',
     'DepthAxis',
     'FieldsLayout',
+    'Frame',
     'FrameParams',
     'GalaxyMass',
     'NativeGrid',
@@ -135,9 +138,9 @@ class SceneTarget:
     What one scene of an observation asks of each galaxy that it
     evaluates, and of their components (see Scene.target): the driver of
     the evaluation, the grid of its x and y axes (spatial) and its
-    spectral axis (one axis), the floating type, the names of the
-    emission lines evaluated (all if None), the band of an image (if
-    known), the unit of the data of the observation, which the light
+    spectral axis (one axis), the floating type, what the observation
+    sees of the light (see View: its band, or its lines and continuum),
+    the unit of the data of the observation, which the light
     takes (None without data; see Component.plan), and the dispersion
     (km/s) by which the instrument smooths the spectra of the model (None
     for an image; see LineResolution).
@@ -146,8 +149,7 @@ class SceneTarget:
     spatial: Grid
     spectral: Grid
     dtype: np.dtype
-    lines: tuple[str, ...] | None
-    band: Band | None
+    view: View
     data_unit: 'DataUnit | None'
     smoothing: float | None
 
@@ -156,12 +158,19 @@ class SceneTarget:
 class ComponentLinks:
     """
     The links of a component to the mass of its galaxy (see
-    MassLinks): whether the mass follows its density (followed), and the
-    names of the mass disks of its fluid (fluid: those that it names, or
-    else those that follow it; none without one).
+    MassLinks): the names of the mass components that follow its density
+    (followers: by its surface density or its layer), whether its galaxy
+    has mass (mass), and whether a mass disk follows its layer, its
+    vertical structure (layer).
     """
-    followed: bool = False
-    fluid: tuple[str, ...] = ()
+    followers: tuple[str, ...] = ()
+    mass: bool = False
+    layer: bool = False
+
+    @property
+    def followed(self) -> bool:
+        """Whether the mass follows its density."""
+        return bool(self.followers)
 
 
 class ComponentPart(NamedTuple):
@@ -246,14 +255,30 @@ class Component(TypedSerializable, abc.ABC):
         return self._opacity
 
     @abc.abstractmethod
-    def thick(self, seen_by: type[Emission]) -> bool:
+    def needs_depth(self, view: View) -> bool:
         """
-        Check whether it is thick: whether it needs a line of sight with a
-        depth axis, seen by an observation of emission of the given type
-        (see ObservationSky.emission: BandEmission for an image, LineEmission
-        for a spectral cube).
+        Check whether an observation of the given view (see View) needs a
+        line of sight with a depth axis to see it (e.g. a thick disk; a
+        spheroid in a spectral view, whose velocities change along the
+        line of sight).
         """
-        pass
+
+    def check_psf(self, psf: 'PSF | None') -> None:
+        """
+        Check that it can be seen through the PSF of an observation (None
+        without one), warning of what it sees badly (see warn; e.g. the
+        light of an image already blurred by a PSF of its own, see
+        traits.RPTraitImage.check_psf); nothing here.
+        """
+
+    @abc.abstractmethod
+    def moves(self) -> bool:
+        """
+        Check whether it has velocities that a spectral axis sees (its
+        kinematics, or the systemic velocity of a point of lines): a
+        spectral view of the continuum sees the light in bands of the
+        components that move (see Emission.seen_in).
+        """
 
     @abc.abstractmethod
     def pdescs(self) -> dict[str, ParamDesc]:
@@ -274,15 +299,12 @@ class Component(TypedSerializable, abc.ABC):
         owners: dict[str, tuple[str | int, ...]] = dict.fromkeys(
             self.pdescs(), ())
         emission = self.emission()
-        light = emission.lines() if isinstance(emission, LineEmission) \
-            else emission.bands() if isinstance(emission, BandEmission) \
-            else None
-        if light is not None:
-            option = 'lines' if isinstance(emission, LineEmission) \
-                else 'bands'
+        if emission is not None:
+            light = emission.light()
             for index, name in enumerate(light.names()[1:], 1):
                 if f'{name}_ratio' in owners:
-                    owners[f'{name}_ratio'] = ('emission', option, index)
+                    owners[f'{name}_ratio'] = (
+                        'emission', light.option, index)
         return owners
 
     def constants(self) -> dict[str, Any]:
@@ -291,17 +313,6 @@ class Component(TypedSerializable, abc.ABC):
         radial nodes of a disk), by name; none here.
         """
         return {}
-
-    def line_names(self) -> tuple[str, ...]:
-        """
-        Return the names of its emission lines, if any, or of its light of
-        stars (STARS; see StarsEmission).
-        """
-        if isinstance(self._emission, LineEmission):
-            return self._emission.lines().names()
-        if isinstance(self._emission, StarsEmission):
-            return (STARS,)
-        return ()
 
     def needs(
             self, links: ComponentLinks = ComponentLinks()
@@ -314,14 +325,6 @@ class Component(TypedSerializable, abc.ABC):
         """
         return ()
 
-    def uses_mass(self) -> bool:
-        """
-        Check whether it takes anything from the mass of its galaxy, when
-        there is one (e.g. its rotation in the gravity of the mass); False
-        here.
-        """
-        return False
-
     def light_amplitudes(self) -> dict[str, str | None]:
         """
         Return its parameters whose elements are amplitudes of its light,
@@ -332,19 +335,6 @@ class Component(TypedSerializable, abc.ABC):
         light). None by default.
         """
         return {}
-
-    def check_lines(self, lines: tuple[str, ...] | None) -> None:
-        """
-        Check that a spectral cube of the given lines (None: all) can see
-        its light (see observation.make_scene, which calls this for the
-        components a cube sees, before any plan). Here it can; components
-        whose stars a cube cannot place in channels override this.
-
-        Raises
-        ------
-        ValueError
-            If the cube cannot see its light.
-        """
 
     def orbit_weights(self) -> str | None:
         """
@@ -376,6 +366,22 @@ class Component(TypedSerializable, abc.ABC):
         """
         return None
 
+    def profile_families(self) -> dict[str, tuple[float, float]]:
+        """
+        Return the families of its radial profiles (see ComponentProfiles:
+        'rotation', 'speed', 'dispersion', 'density', 'orientation'), each
+        with the range of its radii (arcsec), without planning them; none
+        here.
+        """
+        return {}
+
+    def profiles(self, driver: Driver) -> 'ComponentProfiles | None':
+        """
+        Return its radial profiles (see profile_families), planned on the
+        given driver in float64, if it has any; none here.
+        """
+        return None
+
     def density_kind(self) -> 'type[ComponentDensity] | None':
         """
         Return the kind of the density that it gives the mass of its
@@ -389,31 +395,6 @@ class Component(TypedSerializable, abc.ABC):
         Check whether the density that it gives the mass of its galaxy to
         follow has a height (that of a thick disk, see
         mass.DiskDensity.thick); not here.
-        """
-        return False
-
-    def fluid(self) -> tuple[str, ...]:
-        """
-        Return the names of the mass disks of its fluid, if it names them
-        (the gas whose density its pressure support takes, and whose
-        surface density holds it up; see Disk); none here.
-        """
-        return ()
-
-    def balance_gravity(self) -> str | None:
-        """
-        Return the gravity that its vertical equilibrium balances, of its
-        dispersion or its thickness (see traits.BalanceGravity), if it has
-        one; none here.
-        """
-        return None
-
-    def thickness_in_field(self) -> bool:
-        """
-        Check whether its thickness is its vertical equilibrium in the
-        field of the mass of its galaxy (see traits.RHTraitEquilibrium,
-        gravity 'galaxy'), which the mass cannot follow (not yet); not
-        here.
         """
         return False
 
@@ -616,14 +597,29 @@ class ComponentStage(abc.ABC):
         """
         return None
 
-    def rings(self, values: ParamValues) -> list[tuple[float, ...]]:
+    def frames(self, values: ParamValues) -> list['Frame']:
         """
-        Return its rings that the gravity of its galaxy takes as concentric
-        and flat (see GalaxyStage), at the values of its parameters: the
-        radius, the centre and the plane of each (radius, xpos, ypos, posa,
-        incl; arcsec and degrees); none here.
+        Return where the gravity of its galaxy takes it to be, at the
+        values of its parameters (see Frame and GalaxyStage): the centre
+        and the plane (or axis) of each of its parts that the mass moves,
+        holds up or follows; none here.
         """
         return []
+
+
+class Frame(NamedTuple):
+    """
+    Where a part of a component is in the frame of the mass of its galaxy
+    (see ComponentStage.frames): its radius (arcsec; 0 for the whole of a
+    component without rings), its centre (x, y; arcsec), and the
+    orientation of its plane or axis (posa, incl; degrees), None for a
+    part without one (e.g. a sphere).
+    """
+    radius: float
+    x: float
+    y: float
+    posa: float | None
+    incl: float | None
 
 
 class ComponentPlan(abc.ABC):

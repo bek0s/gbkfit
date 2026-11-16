@@ -1,7 +1,8 @@
 """
 Tests of the vertical equilibrium of disks (see
-traits.DPTraitEquilibrium): the dispersion that holds a thick disk up in
-a gravity, in quadrature with that of its other dispersion traits.
+traits.DispersionEquilibrium, the option equilibrium of a thick disk):
+the dispersion that holds a thick disk up in a gravity, in quadrature
+with that of its dispersion traits.
 """
 
 import copy
@@ -30,8 +31,7 @@ DISK = dict(
     rptraits=dict(type='exponential'),
     rhtraits=dict(type='gauss', zmax=10),
     vptraits=dict(type='arctan', direction='tan'),
-    dptraits=[
-        dict(type='uniform'), dict(type='equilibrium', gravity='rotation')],
+    dptraits=dict(type='uniform'), equilibrium=dict(gravity='rotation'),
     emission=dict(type='lines'))
 
 PROPERTIES = dict(
@@ -52,18 +52,16 @@ def with_kinematics(disk, **kinematics):
 
 def balanced_by(disk, gravity, **options):
     """
-    The disk in the equilibrium of the given gravity (and options): the
-    last of its dispersion traits.
+    The disk in the equilibrium of the given gravity (and options): its
+    option equilibrium.
     """
-    fitted = [trait for trait in disk['dptraits']
-              if trait['type'] != 'equilibrium']
-    return disk | dict(dptraits=fitted + [
-        dict(type='equilibrium', gravity=gravity) | options])
+    return disk | dict(equilibrium=dict(gravity=gravity) | options)
 
 
 def unbalanced(disk, dptraits):
     """The disk of the given dispersion traits instead, in no equilibrium."""
-    return disk | dict(dptraits=dptraits)
+    return {key: value for key, value in disk.items()
+            if key != 'equilibrium'} | dict(dptraits=dptraits)
 
 
 def evaluate(driver, galaxy_, properties):
@@ -130,8 +128,8 @@ def test_equilibrium_along_z_is_the_dispersion_of_sigma_z(driver, disk_type):
 def test_the_equilibrium_alone_is_the_dispersion(driver):
     # A disk whose only dispersion trait is its equilibrium is that of
     # node-wise dispersion traits of the dispersion of the equilibrium
-    balanced = galaxy(DISK | dict(
-        dptraits=dict(type='equilibrium', gravity='rotation')))
+    balanced = galaxy({
+        key: value for key, value in DISK.items() if key != 'dptraits'})
     given = galaxy(unbalanced(
         DISK, dict(type='nw_uniform', sampling='subrings')))
     radii = np.array(given.constants()['subrnodes'])
@@ -171,7 +169,7 @@ def test_sheet_equilibrium_of_its_fluid():
     np.testing.assert_array_equal(
         states[0].equilibrium, table['sigma'])
     dumped = galaxy_parser.dump(balanced)['components'][0]
-    assert dumped['dptraits'][-1] == dict(type='equilibrium', gravity='sheet')
+    assert dumped['equilibrium'] == dict(gravity='sheet')
     assert dumped['fluid'] == 'gas'
 
 
@@ -311,13 +309,11 @@ def test_galaxy_equilibrium_needs_vertical_forces(tmp_path):
     (balanced_by(DISK, 'thin'), "'thin'"),
     (balanced_by(DISK, 'rotation', direction='rad'), "'rad'"),
     ({key: value for key, value in DISK.items() if key != 'rhtraits'}
-     | dict(type='thin_disk'), "a thin disk has none"),
+     | dict(type='thin_disk'), "unknown options: 'equilibrium'"),
     (DISK | dict(vptraits=dict(type='arctan', direction='rad')),
      "it has none"),
-    (DISK | dict(dptraits=list(reversed(DISK['dptraits']))),
-     "the last of its dptraits"),
-    (DISK | dict(dptraits=dict(type='equilibrium', gravity='rotation'),
-                 dhtraits=dict(type='one')), "takes none"),
+    ({key: value for key, value in DISK.items() if key != 'dptraits'}
+     | dict(dhtraits=dict(type='one')), "takes none"),
     ({key: value for key, value in DISK.items()
       if key not in ('loose', 'tilted')} | dict(type='cone'),
      "equilibrium")])

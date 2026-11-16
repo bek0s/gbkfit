@@ -3,7 +3,7 @@ The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
 (see mass.DiskDensity), for its pressure support (see
 traits.VPTraitMass), and its rms height, rotation and dispersions, for
-its vertical equilibrium (see traits.DPTraitEquilibrium and
+its vertical equilibrium (see traits.DispersionEquilibrium and
 traits.RHTraitEquilibrium); its rotation, for its density waves (see
 traits.VPTraitSpiral); and its rotation, speeds along each direction,
 dispersion and surface density, for the functions of its galaxy (see
@@ -13,6 +13,7 @@ adds to them: its gravity and its vertical equilibrium.
 """
 
 import dataclasses
+import typing
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
@@ -21,16 +22,19 @@ import numpy as np
 from gbkfit.params import ParamValues
 from .._nodal import subring_radii, tail_end, tail_radii
 from .._profiles import (
-    at_heights, at_midplane, axisymmetric, azimuthal_edges, azimuthal_mean,
-    directional_sums, polar_densities, selected, trait_speed)
+    ComponentProfiles, at_heights, at_midplane, axisymmetric,
+    azimuthal_edges, azimuthal_mean, checked_angle, directional_sums,
+    polar_densities, selected, trait_speed)
 from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
 from ._nodal import NodalDisk, DiskPlan
 
 if TYPE_CHECKING:
+    from ..base import ComponentState
     from ._stage import DiskState
 
 
 __all__ = [
+    'DiskProfiles',
     'NodalDiskDensity',
     'dispersion',
     'jeans_dispersions',
@@ -57,7 +61,7 @@ def _isotropic(disk: NodalDisk) -> bool:
     Check whether the dispersion of a disk is the same along every
     direction: its dispersion polar traits and the dispersion of its
     vertical equilibrium, if any, isotropic (see traits and
-    traits.DPTraitEquilibrium).
+    traits.DispersionEquilibrium).
     """
     equilibrium = disk.equilibrium()
     return all(
@@ -243,7 +247,7 @@ def jeans_dispersions(
 ) -> np.ndarray:
     """
     Return the dispersion (km/s) of the equilibrium 'galaxy' of a thick
-    disk (see traits.DPTraitEquilibrium) at radii (arcsec, on the disk):
+    disk (see traits.DispersionEquilibrium) at radii (arcsec, on the disk):
     sigma^2 = int_0^inf z rho(z) (-F_z(R, z)) dz / int_0^inf rho(z) dz,
     the dispersion of the column weighted by its density, with its
     density of rms_heights (on its heights) and the vertical force F_z of
@@ -447,8 +451,8 @@ def dispersion(
         The radii (arcsec).
     equilibrium : np.ndarray, optional
         The dispersion of the vertical equilibrium of the disk at its
-        subnodes (km/s, see traits.DPTraitEquilibrium), interpolated linearly
-        between them, as the disk is evaluated.
+        subnodes (km/s, see traits.DispersionEquilibrium), interpolated
+        linearly between them, as the disk is evaluated.
     direction : str, optional
         The direction: 'rad', 'tan' or 'ver'.
 
@@ -534,7 +538,7 @@ def pressure_support(
         a thin disk, the surface density.
     equilibrium : np.ndarray, optional
         The dispersion of the vertical equilibrium of the disk at its
-        subnodes (km/s, see traits.DPTraitEquilibrium), interpolated
+        subnodes (km/s, see traits.DispersionEquilibrium), interpolated
         linearly between them, as the disk is evaluated.
     heights : np.ndarray, optional
         The heights (arcsec) above the midplane; by default, the midplane.
@@ -711,3 +715,52 @@ class NodalDiskDensity:
     def _radii(self, R: np.ndarray) -> np.ndarray:
         """Return the radii R (kpc, on the disk) in arcsec."""
         return np.asarray(R) / self._kpc_per_arcsec
+
+
+class DiskProfiles(ComponentProfiles):
+    """
+    The profiles of a disk (see ComponentProfiles), as its galaxy moves
+    it: with the circular velocity of the mass, the pressure support and
+    the vertical equilibrium that its state gives (see rotation, speed,
+    dispersion and surface_density), from its plan.
+    """
+
+    def __init__(self, disk: NodalDisk, plan: DiskPlan):
+        self._disk = disk
+        self._plan = plan
+
+    def rotation(
+            self, params: ParamValues, state: 'ComponentState | None',
+            R: np.ndarray
+    ) -> np.ndarray:
+        return rotation(
+            self._disk, self._plan, params, R, _disk_state(state))
+
+    def speed(
+            self, params: ParamValues, state: 'ComponentState | None',
+            R: np.ndarray, direction: str
+    ) -> np.ndarray:
+        return speed(
+            self._disk, self._plan, params, R, direction, _disk_state(state))
+
+    def dispersion(
+            self, params: ParamValues, state: 'ComponentState | None',
+            R: np.ndarray, direction: str | None = None
+    ) -> np.ndarray:
+        state = _disk_state(state)
+        return dispersion(
+            self._disk, self._plan, params, R,
+            None if state is None else state.equilibrium, direction)
+
+    def density(self, params: ParamValues, R: np.ndarray) -> np.ndarray:
+        return surface_density(self._disk, self._plan, params, R)
+
+    def orientation(
+            self, params: ParamValues, R: np.ndarray, which: str
+    ) -> np.ndarray:
+        return self._disk.orientation(params, R, checked_angle(which))
+
+
+def _disk_state(state: 'ComponentState | None') -> 'DiskState | None':
+    """Return the state of a disk (see DiskStage), as its stage gives it."""
+    return typing.cast('DiskState | None', state)

@@ -4,7 +4,7 @@ group with their data (see Objective), and its evaluations and merits.
 """
 
 import dataclasses
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple, Self
 
 import numpy as np
@@ -12,15 +12,11 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray
 from gbkfit.model import Extras
-from gbkfit.observation import GroupPlan, ModelData, ObservationGroup
-from gbkfit.params import (
-    ParamDesc, ParamValues, Solution, Solve, with_elements)
-from gbkfit.utils import threadutils
-from ._amplitude_blocks import amplitude_blocks
+from gbkfit.observation import GroupPlan, ObservationGroup
+from gbkfit.params import ParamDesc, ParamValues, Solution, Solve
 from ._block import Block
+from ._blocks import make_blocks
 from ._comparisons import comparison_of
-from ._orbit_blocks import orbit_blocks
-from ._scale_blocks import scale_blocks
 from .likelihoods import Likelihoods
 
 
@@ -29,13 +25,6 @@ __all__ = [
     'Objective',
     'ObjectiveEvaluation'
 ]
-
-
-# The most threads of BLAS in the solves of the weights of orbits (see
-# Objective._solve_orbits): more lose to their overheads (an AICp solve
-# of 20000 weights on 1, 4, 8 and 22 threads of a 16-core laptop: 0.84,
-# 0.48, 0.52 and 2.1 s for 305 rows; 29, 12.4, 12.8 and 18.7 s for 2495)
-_ORBIT_BLAS_THREADS = 4
 
 
 class Merits(NamedTuple):
@@ -213,23 +202,13 @@ class Objective:
             i: comparison_of(observations[i], likelihood, drivers[i])
             for i, likelihood in likelihoods.items()}
         self._solves = dict(solves or {})
-        # The blocks of each kind, each of the solves left by the others
-        self._orbit_blocks = orbit_blocks(
+        # The blocks solved before the models, and the flux scales, solved
+        # after them (see make_blocks)
+        self._basis_blocks, self._scales = make_blocks(
             group_plan, self._comparisons, self._solves)
-        self._scale_blocks = scale_blocks(
-            group, self._comparisons,
-            _unclaimed(self._solves, self._orbit_blocks))
-        # The observations with solved scales, by index
-        self._scaled_observations = sorted(
-            {block.observation() for block in self._scale_blocks})
-        self._amplitude_blocks = amplitude_blocks(
-            group, self._comparisons, group_plan.observation_drivers(),
-            _unclaimed(
-                self._solves, (*self._orbit_blocks, *self._scale_blocks)),
-            self._scaled_observations)
         # Every block, in the order of their values (see evaluate)
         self._blocks: tuple[Block, ...] = (
-            *self._scale_blocks, *self._amplitude_blocks, *self._orbit_blocks)
+            *self._scales.blocks(), *self._basis_blocks)
         self._reset_memory()
 
     def _reset_memory(self) -> None:
@@ -241,12 +220,9 @@ class Objective:
             comparison_.close()
         for block in self._blocks:
             block.close()
-        # The solution of each block of the last evaluation, and the scales
-        # of the observations with solved ones, on the host (h) and the
-        # device (d), by index
+        self._scales.close()
+        # The solution of each block of the last evaluation
         self._solutions: dict[Block, Solution] = {}
-        self._h_scales: dict[int, np.ndarray] = {}
-        self._d_scales: dict[int, DeviceArray] = {}
         # The memory is allocated on the first evaluation (see prepare)
         self._prepared = False
 
@@ -345,16 +321,7 @@ class Objective:
             return
         for comparison_ in self._comparisons.values():
             comparison_.prepare()
-        for i in self._scaled_observations:
-            observation = self._group.observations()[i]
-            _, scale = observation.flux_scale()
-            shape = tuple(
-                1 if scale.axis in (None, k) else n
-                for k, n in enumerate(observation.dataset().shape()))
-            driver = self._group_plan.observation_drivers()[i]
-            (self._h_scales[i],
-             self._d_scales[i]) = driver.mem_alloc_s(
-                shape, observation.dtype())
+        self._scales.prepare()
         self._prepared = True
 
     def chi2(
@@ -800,98 +767,23 @@ class Objective:
     ) -> None:
         """
         Evaluate the models, the solved values and the residuals, under the
-        lock of the plan of the models (see GroupPlan.lock): the amplitudes
-        of the light and the weights of orbits from the pieces of the
-        models, the models at their values (with solved scales at 1), and
-        the scales from those models.
+        lock of the plan of the models (see GroupPlan.lock): the blocks
+        solved before the models (see BasisBlock), each at the values of
+        those before it, the models at their values (with solved scales
+        at 1), and the scales from those models (see FluxScales).
         """
         self.prepare()
         group_plan = self._group_plan
         solutions: dict[Block, Solution] = {}
         with group_plan.lock():
-            values = self._unscaled(params)
-            for block in self._amplitude_blocks:
-                pieces = group_plan.amplitude_pieces(
-                    values, block.amplitudes(), block.observations())
-                solutions[block] = block.solve(pieces, values)
-                values = with_elements(
-                    values, block.amplitudes(), solutions[block].values)
-            if self._orbit_blocks:
-                with group_plan.timers().measure('objective_orbits'):
-                    values = self._solve_orbits(values, solutions)
+            values = self._scales.neutral(params)
+            for block in self._basis_blocks:
+                solutions[block] = solution = block.solve(values)
+                values = block.solved(values, solution)
             models = group_plan.model_d(values, out_extra, self._observed)
             with group_plan.timers().measure('objective_residual_eval'):
-                scales = self._solve_scales(models, values, solutions)
+                scaled, scales = self._scales.solve(models, values)
+                solutions |= scaled
                 for i, comparison_ in self._comparisons.items():
                     comparison_.evaluate(models[i], values, scales.get(i, {}))
         self._solutions = solutions
-
-    def _solve_orbits(
-            self,
-            params: ParamValues,
-            solutions: dict[Block, Solution]
-    ) -> ParamValues:
-        """
-        Solve the weights of the orbits of each recording of the plan (see
-        OrbitBlock), with BLAS on at most _ORBIT_BLAS_THREADS threads, into
-        the solutions, and return the values of the parameters with their
-        solved values.
-        """
-        with threadutils.blas_limit(_ORBIT_BLAS_THREADS):
-            series = self._group_plan.orbit_series(params)
-            for block, series_j in zip(self._orbit_blocks, series):
-                solution = block.solve(series_j, params)
-                solutions[block] = solution
-                params = params | {
-                    block.recording().weights(): solution.values}
-        return params
-
-    def _unscaled(self, params: ParamValues) -> ParamValues:
-        """
-        Return the values of the parameters with the solved elements of
-        flux scales at 1 (copies of those of their parameters).
-        """
-        values = params
-        for block in self._scale_blocks:
-            values = block.neutral(values)
-        return values
-
-    def _solve_scales(
-            self,
-            models: Sequence[ModelData],
-            params: ParamValues,
-            solutions: dict[Block, Solution]
-    ) -> dict[int, dict[str, DeviceArray]]:
-        """
-        Solve the elements of the flux scales from the models (see
-        ScaleBlock) into the solutions, and return the scales of the data
-        items of each observation with solved scales, by index, on its
-        device, by name.
-        """
-        scales: dict[int, dict[str, DeviceArray]] = {}
-        for i in self._scaled_observations:
-            self._h_scales[i][...] = 1
-        for block in self._scale_blocks:
-            i = block.observation()
-            solution = block.solve(models[i], params)
-            solutions[block] = solution
-            block.place(solution.values, self._h_scales[i])
-        for i in self._scaled_observations:
-            observation = self._group.observations()[i]
-            self._group_plan.observation_drivers()[i].mem_copy_h2d(
-                self._h_scales[i], self._d_scales[i])
-            _, scale = observation.flux_scale()
-            scales[i] = dict.fromkeys(scale.items, self._d_scales[i])
-        return scales
-
-
-def _unclaimed(
-        solves: Mapping[str, Solve], blocks: Iterable[Block]
-) -> dict[str, Solve]:
-    """
-    Return the solves of the solved elements that none of the blocks
-    solves, by element name.
-    """
-    claimed = {element for block in blocks for element in block.elements()}
-    return {name: solve for name, solve in solves.items()
-            if name not in claimed}

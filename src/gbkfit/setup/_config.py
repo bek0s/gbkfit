@@ -7,19 +7,18 @@ description without devices (describe) and setting up (load).
 import dataclasses
 import logging
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Annotated, Any, NamedTuple
 
 import astropy.units
-import numpy as np
 import ruamel.yaml
 from annotated_types import Ge
-from ruamel.yaml.scalarbool import ScalarBoolean
 
 from gbkfit.config import (
-    FORMAT_VERSION, ConfigError, ConfigProblem, Family, collect_problems,
-    config_path, families, from_config, name_problem, paths_relative_to,
-    report_unknown, strict_mode, type_problem, warn)
+    FORMAT_VERSION, ConfigError, ConfigLeaf, ConfigProblem, Family,
+    collect_problems, config_leaves, config_path, families, from_config,
+    name_problem, paths_relative_to, plain_values, report_unknown,
+    strict_mode, type_problem, warn)
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.cosmology import Cosmology, cosmology_parser
 import gbkfit.model
@@ -33,18 +32,21 @@ from gbkfit.parallel import Workers, workers_parser
 from gbkfit.params import (
     ParamDesc, ParamSpace, ParamSpaceConfig, load_pdescs_dict,
     param_space_parser)
-from gbkfit.utils import iterutils, numutils
+from gbkfit.utils import iterutils
 from ._setup import Setup
 
 
 __all__ = [
     'ConfigFile',
     'Description',
+    'GalaxyDescription',
     'catalogue',
     'describe',
+    'describe_galaxy',
     'load',
     'read_config',
-    'schema'
+    'schema',
+    'setup_leaves'
 ]
 
 
@@ -144,6 +146,23 @@ def catalogue() -> dict[str, Family]:
     """
     # (this module imports the whole library, and so every family)
     return families()
+
+
+def setup_leaves(config: Mapping[str, Any]) -> Iterator[ConfigLeaf]:
+    """
+    Yield the leaves of a configuration (as plain values) that name files
+    or other parts of it (see gbkfit.config.config_leaves), by the types
+    of its sections, each with its path from the configuration (its
+    section first; e.g. ('observations', 0, 'dataset', 'data')). Unknown
+    sections have none.
+    """
+    for name, value in config.items():
+        if (section := _SECTIONS.get(name)) is None:
+            continue
+        type_ = section.type | list[section.type] if section.listed \
+            else section.type
+        for leaf in config_leaves(value, type_):
+            yield leaf._replace(path=(name, *leaf.path))
 
 
 def schema() -> dict[str, Any]:
@@ -370,6 +389,54 @@ def describe(
         sections.group, sections.likelihoods, sections.params,
         sections.fitter, {} if file is None else file.sources,
         None if file is None else file.root)
+
+
+@dataclasses.dataclass(frozen=True)
+class GalaxyDescription:
+    """
+    The configuration of a galaxy alone, described without devices or
+    observations (see describe_galaxy).
+
+    Attributes
+    ----------
+    problems : tuple of ConfigProblem
+        Its warnings and its unknown names, then its error, if any, each
+        with its path in the configuration of the galaxy.
+    galaxy : Galaxy or None
+        The galaxy, if it has no error: its parameters (see Galaxy.pdescs)
+        and the options that make them (see Galaxy.param_owners).
+    """
+    problems: tuple[ConfigProblem, ...]
+    galaxy: 'gbkfit.model.Galaxy | None'
+
+
+def describe_galaxy(
+        config: Mapping[str, Any], root: str | None = None
+) -> GalaxyDescription:
+    """
+    Describe the configuration of a galaxy alone, without devices or
+    observations: load it, with every rule of the galaxy checked (those of
+    what observations see of it are theirs), and collect its problems,
+    past its unknown names (see collect_problems).
+
+    Parameters
+    ----------
+    config : Mapping
+        The configuration of the galaxy, of the current format.
+    root : str, optional
+        The directory that its relative paths are relative to; the current
+        directory by default.
+
+    Returns
+    -------
+    GalaxyDescription
+        The galaxy, if it could be loaded, and its problems.
+    """
+    galaxy = None
+    with strict_mode(False), collect_problems() as problems, \
+            paths_relative_to(root or os.getcwd()):
+        galaxy = gbkfit.model.galaxy_parser.load(dict(config))
+    return GalaxyDescription(tuple(problems), galaxy)
 
 
 def load(
@@ -641,32 +708,7 @@ def _prepare_config(
                 raise ConfigError(
                     f"section '{s}' must be a dictionary or a list")
             config[s] = iterutils.listify(config[s])
-    return _plain(config)
-
-
-def _plain(value: Any) -> Any:
-    """
-    Return a value of a configuration as plain values, in containers of
-    its own: mappings as dicts, lists and tuples as lists, numpy arrays
-    and scalars as lists and values of Python (see nativify), and other
-    numbers, bools and strings (e.g. those of ruamel.yaml, which keep
-    their style) as those of Python; the others as they are (e.g. a
-    Quantity, which some options take).
-    """
-    if isinstance(value, Mapping):
-        return {_plain(k): _plain(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    # (not the subclasses of arrays, e.g. Quantity)
-    if isinstance(value, np.generic) or type(value) is np.ndarray:
-        return numutils.nativify(value)
-    # (the bools of ruamel.yaml with an anchor are ints)
-    if isinstance(value, (bool, ScalarBoolean)):
-        return bool(value)
-    for type_ in (int, float, str):
-        if isinstance(value, type_):
-            return type_(value)
-    return value
+    return plain_values(config)
 
 
 def _merge_pdescs(
@@ -826,7 +868,7 @@ def _load_placement[T](
     stands for them, e.g. their configurations, to check the names only;
     see describe), as Setup takes it: the driver of those that name none,
     and the drivers of those that name one, by label (see
-    ObservationGroup.drivers, which places the others).
+    place_drivers, which places the others).
 
     The option driver of a galaxy or an observation is not a driver but
     the name of one of the drivers of the configuration, which declares
@@ -835,7 +877,7 @@ def _load_placement[T](
     are none. A galaxy without mass can leave it out whatever the
     drivers: it then has the driver of the observations that see it, if
     they share one, and else that of those that name none (see
-    ObservationGroup.drivers).
+    place_drivers).
 
     Raises
     ------

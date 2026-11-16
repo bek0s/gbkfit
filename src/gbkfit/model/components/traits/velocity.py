@@ -98,7 +98,7 @@ class PressureSupport(TypedSerializable, abc.ABC):
     the Jeans equation of its velocity ellipsoid: v^2 = v_c^2 + (R / rho)
     d(rho sigma_R^2)/dR + sigma_R^2 - sigma_phi^2. The dispersion is that
     of its dispersion traits, with that of its vertical equilibrium in
-    quadrature, if any (see DPTraitEquilibrium); the azimuthal means are
+    quadrature, if any (see DispersionEquilibrium); the azimuthal means are
     those of mass.SurfaceComponent, and the derivative is by the
     second-order three-point formula on the rings; NaN without density
     (see _profiles.pressure_support).

@@ -15,7 +15,8 @@ from gbkfit.observation.orbits import OrbitRecording, OrbitSeries
 from gbkfit.params import (
     ParamValues, ParamView, Solution, Solve, StageCache, element_names,
     solve_together_rows)
-from ._block import Block
+from gbkfit.utils import threadutils
+from ._block import BasisBlock
 from ._comparisons import Comparison
 
 
@@ -25,7 +26,14 @@ __all__ = [
 ]
 
 
-class OrbitBlock(Block):
+# The most threads of BLAS in the solves of the weights of orbits (see
+# OrbitBlock.solve): more lose to their overheads (an AICp solve of 20000
+# weights on 1, 4, 8 and 22 threads of a 16-core laptop: 0.84, 0.48, 0.52
+# and 2.1 s for 305 rows; 29, 12.4, 12.8 and 18.7 s for 2495)
+_BLAS_THREADS = 4
+
+
+class OrbitBlock(BasisBlock):
     """
     The weights of the orbits of a recording of a group plan (see
     OrbitRecording), solved together to fit the moments of the bins of
@@ -91,9 +99,10 @@ class OrbitBlock(Block):
                 observation.dataset() for observation in observations))
         self._elements = tuple(elements)
         self._solve = solve
+        self._group_plan = group_plan
         # The cache of its solutions: of the parameters of the likelihoods
         # of its observations, taking the orbits of its recording
-        k = group_plan.orbit_recordings().index(recording)
+        self._index = k = group_plan.orbit_recordings().index(recording)
         self._cache: StageCache[Solution] = StageCache(
             (name for comparison in self._comparisons
              for name in comparison.likelihood().pdescs()),
@@ -111,18 +120,28 @@ class OrbitBlock(Block):
         """Return what the log-likelihood takes of their values (see Solve)."""
         return self._solve.likelihood()
 
-    def solve(self, series: OrbitSeries, params: ParamValues) -> Solution:
+    def solve(self, params: ParamValues) -> Solution:
         """
         Solve the weights at the values of the parameters, of the orbits
         of its recording in the series of the bins (those that the plan
-        gives at these values, see GroupPlan.orbit_series), and return
-        them, with the residuals of the constraints of the light before
-        those of their prior: those of its last solve if the parameters of
-        the likelihoods of its observations and the recording are the same
+        gives at these values, see GroupPlan.orbit_series), with BLAS on
+        at most _BLAS_THREADS threads, and return them, with the
+        residuals of the constraints of the light before those of their
+        prior: those of its last solve if the parameters of the
+        likelihoods of its observations and the recording are the same
         (see the class).
         """
-        return self._cache.evaluate(
-            params, functools.partial(self._solved, series))
+        plan = self._group_plan
+        with plan.timers().measure('objective_orbits'), \
+                threadutils.blas_limit(_BLAS_THREADS):
+            series = plan.orbit_series(params)[self._index]
+            return self._cache.evaluate(
+                params, functools.partial(self._solved, series))
+
+    def solved(
+            self, params: ParamValues, solution: Solution
+    ) -> ParamValues:
+        return params | {self._recording.weights(): solution.values}
 
     def _solved(self, series: OrbitSeries, params: ParamView) -> Solution:
         """

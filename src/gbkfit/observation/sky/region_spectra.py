@@ -13,7 +13,7 @@ from gbkfit.dataset import Data, Dataset, DatasetRegionSpectra, Regions
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, SpectraData, SpectralAxis
 from gbkfit.instrument import Instrument
-from gbkfit.model import Band, DataUnit, LightUnit, LineEmission
+from gbkfit.model import Band, DataUnit, LightUnit
 from ..depth import Depth
 from ..foreground import Foreground
 from ..plan import FluxScale, ModelData, ModelItem
@@ -75,7 +75,7 @@ class ObservationRegionSpectra(ObservationRegions):
 
     dataset_class = DatasetRegionSpectra
 
-    emission = LineEmission
+    spectral_view = True
     orbit_stars = None
 
     # The axes of the cube of the model: x, y and the spectral axis
@@ -133,6 +133,7 @@ class ObservationRegionSpectra(ObservationRegions):
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
+            continuum: bool = False,
             band: str | Band | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
@@ -157,9 +158,9 @@ class ObservationRegionSpectra(ObservationRegions):
                 f"channels; the spectral axis has "
                 f"{grid.spectral().size[0]}")
         super().__init__(
-            grid, foreground, instrument, galaxies, components, lines, band,
-            pixel_weights, flux_scale, offsets, dataset, oversampling, depth,
-            dtype, fft_dtype, name, unit)
+            grid, foreground, instrument, galaxies, components, lines,
+            continuum, band, pixel_weights, flux_scale, offsets, dataset,
+            oversampling, depth, dtype, fft_dtype, name, unit)
 
     def spectral_grid(self) -> Grid:
         """Return the grid of the spectral axis (one axis)."""
@@ -182,10 +183,10 @@ class ObservationRegionSpectra(ObservationRegions):
     def light_items(self) -> tuple[str, ...]:
         return ('spectra',)
 
-    def flux_scales(self) -> dict[str, FluxScale]:
+    def flux_scale_kinds(self) -> dict[str, FluxScale]:
         # (each spectrum runs along the first axis, of each region)
         nregions = self._regions.nregions()
-        return super().flux_scales() \
+        return super().flux_scale_kinds() \
             | dict(per_spectrum=FluxScale(('spectra',), 0, nregions))
 
     def linear_in_light(self) -> bool:

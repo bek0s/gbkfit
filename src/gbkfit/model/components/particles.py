@@ -21,9 +21,8 @@ from .base import (
     NativeGrid, SceneTarget)
 from .geometries import geometry_pdesc
 from .lines import LinePlacement
-from .points import band_light, line_light
 from .roles import (
-    STARS, Emission, LineEmission, emission_parser)
+    Emission, View, emission_parser)
 
 
 __all__ = [
@@ -446,16 +445,10 @@ class Particles(Component):
         # from_file and dump)
         self._file: str | None = None
         self._particles = _columns(particles)
-        self._lines = None
-        self._bands = None
         names = ('xpos', 'ypos', 'posa', 'incl')
-        if isinstance(emission, LineEmission):
-            self._lines = emission.lines()
+        if emission.needs_velocities():
             names += ('vsys',)
-            light = self._lines
-        else:
-            self._bands = emission.bands()
-            light = self._bands
+        light = emission.light()
         pdescs = {
             name: geometry_pdesc(name) for name in names}
         if repeated := sorted(set(light.pdescs()) & set(pdescs)):
@@ -468,11 +461,15 @@ class Particles(Component):
         """Return the file of its table, if made from a file."""
         return self._file
 
-    def thick(self, seen_by: 'type[Emission]') -> bool:
+    def needs_depth(self, view: View) -> bool:
         return False
 
+    def moves(self) -> bool:
+        # (particles of lines place their velocities in channels)
+        return self.emission().needs_velocities()
+
     def frame_params(self) -> FrameParams:
-        vsys = 'vsys' if self._lines is not None else None
+        vsys = 'vsys' if self.emission().needs_velocities() else None
         return FrameParams('xpos', 'ypos', vsys, 'posa', 'incl')
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
@@ -483,13 +480,6 @@ class Particles(Component):
             self._particles['x'] ** 2 + self._particles['y'] ** 2
             + self._particles['z'] ** 2)))
 
-    def check_lines(self, lines: tuple[str, ...] | None) -> None:
-        if lines is not None and STARS in lines:
-            raise ValueError(
-                "a spectral cube does not see the stars of particles: they "
-                "have no velocities to place in channels (particles of "
-                "lines have theirs)")
-
     def plan(
             self,
             target: SceneTarget,
@@ -497,15 +487,10 @@ class Particles(Component):
             opacity_ratios: np.ndarray | None,
             redshift: float
     ) -> ParticlesPlan:
-        driver, spectral, dtype = target.driver, target.spectral, target.dtype
-        lines, band, data_unit = target.lines, target.band, target.data_unit
         # (it always emits: it has no opacity, so that a plan of it that
         # does not emit, which would take no unit of the data, is not made)
-        unit = self.emission().unit()
-        if self._lines is None:
-            return ParticlesPlan(
-                driver, dtype, self._particles, opacity_ratios,
-                band_light(self._bands, unit, band, data_unit, redshift))
+        setup = self.emission().setup(
+            target.view, target.spectral, target.data_unit, redshift)
         return ParticlesPlan(
-            driver, dtype, self._particles, opacity_ratios, *line_light(
-                spectral, self._lines, unit, lines, data_unit, redshift))
+            target.driver, target.dtype, self._particles, opacity_ratios,
+            setup.fluxes, setup.lines)

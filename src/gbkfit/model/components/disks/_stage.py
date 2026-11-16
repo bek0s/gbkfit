@@ -23,7 +23,7 @@ from ...mass.units import G
 from .._images import ImageMaps
 from .._units import mass_per_unit
 from ..base import (
-    ComponentLinks, ComponentStage, ComponentState, GalaxyMass)
+    ComponentLinks, ComponentStage, ComponentState, Frame, GalaxyMass)
 from ..roles import Emission
 from ._nodal import NodalDisk, DiskPlan
 from ._profiles import (
@@ -151,7 +151,7 @@ class DiskStage(ComponentStage):
     where its traits ask for it (the velocity height trait 'mass', see
     NodalDisk.rotation_factor_params); the dispersion of its vertical
     equilibrium at its subnodes, if it has one (see
-    traits.DPTraitEquilibrium): in the rotation of its traits
+    traits.DispersionEquilibrium): in the rotation of its traits
     ('rotation'), in the vertical force of the mass ('galaxy'), or in the
     surface density of its fluid ('sheet'); its pressure support at its
     subnodes, without the velocity trait 'mass' (see
@@ -179,8 +179,9 @@ class DiskStage(ComponentStage):
         parameters of the galaxy, which its image traits need (see
         ImageMaps).
     links : ComponentLinks
-        Its links to the mass of its galaxy: whether the mass follows its
-        density, and its fluid (see MassLinks).
+        Its links to the mass of its galaxy: the mass components that
+        follow its density, which give its fluid (see
+        NodalDisk.galaxy_fluid).
     mass_per_unit : float, optional
         The mass of a unit of its density (see mass_per_unit), if it has a
         unit.
@@ -203,7 +204,7 @@ class DiskStage(ComponentStage):
         self._disk = disk
         self._label = label
         self._followed = followed = links.followed
-        self._fluid = links.fluid
+        self._fluid = disk.galaxy_fluid(links.followers)
         self._mass_per_unit = mass_per_unit
         self._images = None if not disk.image_params() \
             else ImageMaps(disk, label, sky_origin)
@@ -268,26 +269,27 @@ class DiskStage(ComponentStage):
         _rotation_factors); the dispersion of its equilibrium at its
         subnodes (km/s); the pressure support that corrects its tangential
         velocity traits at its subnodes ((km/s)^2; 0 where it is not
-        finite and the disk has no light); the tables of its density
-        waves; and the face-on light of its image traits. With extra outputs: for each parameter
-        of its circular velocity, '{parameter}_rotation', a table of its
-        radii, in the plane of the disk at its midplane ('radius', arcsec;
-        'radius_kpc'), the Newtonian circular velocity of each component
-        of the mass ('vcirc_{name}', km/s; signed: negative where the
-        component pulls outwards) and of all ('vnewton'), the circular
-        velocity of the mass in the gravity of the galaxy ('vcirc'; that of
-        all with Newtonian gravity, see Gravity), and with pressure
-        support, its term ('pressure', (km/s)^2), and the values given
-        ('vrot', km/s); with an equilibrium, 'equilibrium', a table of its
-        subnodes ('radius', arcsec), its rms height there ('height',
-        arcsec), what its equilibrium takes there: the circular velocity
-        ('vcirc', km/s; 'rotation') or the surface density
-        ('surface_density', Msun/kpc^2; 'sheet'; none for 'galaxy'), and
-        the dispersion of its equilibrium ('sigma', km/s); with the
-        pressure support of its tangential traits, 'pressure', a table of
-        its subnodes ('radius', arcsec), the rotation of the traits
-        ('vcirc', km/s), the pressure ('pressure', (km/s)^2) and the
-        rotation corrected for it ('vrot', km/s); and a warning if it has image traits and is near edge-on (see
+        finite and the disk has no light); the tables of its density waves;
+        and the face-on light of its image traits. With extra outputs: for
+        each parameter of its circular velocity, '{parameter}_rotation', a
+        table of its radii, in the plane of the disk at its midplane
+        ('radius', arcsec; 'radius_kpc'), the Newtonian circular velocity
+        of each component of the mass ('vcirc_{name}', km/s; signed:
+        negative where the component pulls outwards) and of all
+        ('vnewton'), the circular velocity of the mass in the gravity of
+        the galaxy ('vcirc'; that of all with Newtonian gravity, see
+        Gravity), and with pressure support, its term ('pressure',
+        (km/s)^2), and the values given ('vrot', km/s); with an
+        equilibrium, 'equilibrium', a table of its subnodes ('radius',
+        arcsec), its rms height there ('height', arcsec), what its
+        equilibrium takes there: the circular velocity ('vcirc', km/s;
+        'rotation') or the surface density ('surface_density', Msun/kpc^2;
+        'sheet'; none for 'galaxy'), and the dispersion of its equilibrium
+        ('sigma', km/s); with the pressure support of its tangential
+        traits, 'pressure', a table of its subnodes ('radius', arcsec), the
+        rotation of the traits ('vcirc', km/s), the pressure ('pressure',
+        (km/s)^2) and the rotation corrected for it ('vrot', km/s); and a
+        warning if it has image traits and is near edge-on (see
         ImageMaps.warn_inclination).
         """
         disk = self._disk
@@ -326,12 +328,11 @@ class DiskStage(ComponentStage):
                 state, waves=density_waves(disk, self._plan, values, state))
         return state
 
-    def rings(self, values: ParamValues) -> list[tuple[float, ...]]:
+    def frames(self, values: ParamValues) -> list[Frame]:
         """
-        Return the rings of its disk that the gravity takes as concentric
-        and flat, if the mass follows it, moves it or holds it up: the
-        radius, the centre and the plane of each (radius, xpos, ypos,
-        posa, incl; arcsec and degrees); none otherwise.
+        Return where the gravity takes each ring of its disk to be (see
+        Frame), if the mass follows it, moves it or holds it up; none
+        otherwise.
         """
         disk = self._disk
         if not (self._followed or disk.circular_velocity_params()
@@ -342,7 +343,7 @@ class DiskStage(ComponentStage):
         geometry = np.broadcast_arrays(radii, *(
             np.asarray(values[name], dtype=float)
             for name in (frame.x, frame.y, frame.posa, frame.incl)))
-        return list(zip(*geometry))
+        return [Frame(*map(float, ring)) for ring in zip(*geometry)]
 
     def _mass_rotation(
             self,
@@ -515,12 +516,12 @@ class DiskStage(ComponentStage):
     ) -> np.ndarray:
         """
         Return the dispersion of the vertical equilibrium (km/s) of its
-        disk at its subnodes (see traits.DPTraitEquilibrium), from the
+        disk at its subnodes (see traits.DispersionEquilibrium), from the
         values of its parameters and the mass of the galaxy (None without
         mass), by its gravity: 'rotation', the squared rotation of its
         tangential traits at the subnodes; 'galaxy', the vertical force
         of the mass; 'sheet', the surface density of its fluid (see
-        MassModel.fluid). With extra outputs, its table (see state).
+        NodalDisk.galaxy_fluid). With extra outputs, its table (see state).
         """
         disk = self._disk
         gravity = disk.equilibrium().gravity()
@@ -760,7 +761,7 @@ def _rotation_dispersion(
 ) -> np.ndarray:
     """
     Return the dispersion (km/s) of the equilibrium 'rotation' (see
-    traits.DPTraitEquilibrium) at the radii (arcsec), where the disk has
+    traits.DispersionEquilibrium) at the radii (arcsec), where the disk has
     light or not (see _check_solved), of the given rms heights (arcsec)
     and squared circular velocities ((km/s)^2): h Omega, Omega^2 = vcirc2
     / R^2; at the centre, where it is 0 / 0, Omega at the next radius; 0
@@ -791,7 +792,7 @@ def _galaxy_dispersion(
 ) -> np.ndarray:
     """
     Return the dispersion (km/s) of the equilibrium 'galaxy' (see
-    traits.DPTraitEquilibrium) of a disk at its subnodes (radii, arcsec), in
+    traits.DispersionEquilibrium) of a disk at its subnodes (radii, arcsec), in
     the vertical force of the mass of its galaxy (see jeans_dispersions);
     at the centre, the value at the next subnode.
     """
@@ -816,7 +817,7 @@ def _sheet_dispersion(
 ) -> np.ndarray:
     """
     Return the dispersion (km/s) of the equilibrium 'sheet' (see
-    traits.DPTraitEquilibrium) at the radii (arcsec), where the
+    traits.DispersionEquilibrium) at the radii (arcsec), where the
     disk has light or not (see _check_solved), of the given rms heights
     (kpc) and surface densities (Msun/kpc^2): sqrt(2 sqrt(3) G Sigma h);
     0 where it has no solution and no light.

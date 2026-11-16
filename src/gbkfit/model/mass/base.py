@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 import numpy as np
 import numpy.typing as npt
 
+from .._capabilities import Capability, Need
 from gbkfit.config import TypedSerializable, check_name, check_options
 from gbkfit.params import ParamDesc, ParamValues
 from .units import G
@@ -250,15 +251,30 @@ class MassComponent(TypedSerializable, abc.ABC):
         """
         return ()
 
-    def needs_distance(self) -> str | None:
+    def followed_layer(self) -> str | None:
         """
-        Return why it needs the distance of its galaxy, the length of an
-        arcsec in it, if it does: here, if it follows the densities of
-        components (of their radii in arcsec).
+        Return the name of the component of its galaxy whose layer (its
+        vertical structure) it follows, if any; none here.
+        """
+        return None
+
+    def needs(self) -> tuple[Need, ...]:
+        """
+        Return what it needs from its galaxy (see Need), which the galaxy
+        checks when it is made: here, its distance (the length of an arcsec
+        in it) if it follows the densities of components (of their radii
+        in arcsec).
         """
         if followed := self.followed_components():
-            return f"follows the densities of the components {list(followed)}"
-        return None
+            return (self._distance_need(
+                f"follows the densities of the components {list(followed)}"),)
+        return ()
+
+    def _distance_need(self, why: str) -> Need:
+        """Return the need of the distance of its galaxy, of why."""
+        return Need(Capability.DISTANCE, (
+            f"the mass component {self.name()!r} {why}, and so takes the "
+            f"length of an arcsec in its galaxy (its distance)"))
 
     @classmethod
     def followed_kind(cls) -> type[ComponentDensity] | None:
@@ -493,15 +509,6 @@ class MassComponent(TypedSerializable, abc.ABC):
         (e.g. a halo of the contraction cautun20), which the cosmology of
         its galaxy must give (see MassModel.check_cosmology); here, it
         does not.
-        """
-        return False
-
-    def takes_shares(self) -> bool:
-        """
-        Check whether it takes the shares of the components in the squared
-        circular velocity of the mass (e.g. a halo given by its dark
-        fraction, see Halo), which the gravity of its galaxy must give
-        (see Gravity.gives); here, it does not.
         """
         return False
 

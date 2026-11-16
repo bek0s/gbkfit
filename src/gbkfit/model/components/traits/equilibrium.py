@@ -1,7 +1,8 @@
 """
-The traits of the vertical balance of a disk that its galaxy derives: the
-dispersion that holds up its thickness (DPTraitEquilibrium), or the
-thickness that its dispersion holds up (RHTraitEquilibrium).
+The vertical balance of a disk that its galaxy derives: the dispersion
+that holds up its thickness (DispersionEquilibrium, an option of a thick
+disk), or the thickness that its dispersion holds up
+(RHTraitEquilibrium, a density height trait).
 """
 
 import dataclasses
@@ -11,19 +12,18 @@ import numpy as np
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
-from gbkfit.config import Choices, Unit, check_options
+from gbkfit.config import Choices, Serializable, Unit, check_options
 from gbkfit.params.pdescs import ParamDesc, ParamVectorDesc
-from .base import DPTrait, HeightInput, RHTrait
+from .base import HeightInput, RHTrait
 from .heights import (
     RHT_TABLE_NHEIGHTS, RHT_UID_TABLE, RHTraitGauss, RHTraitSech2)
-from .options import (
-    DispersionDirection, Nodewise, Sampling, TraitOption, Zmax)
+from .options import Nodewise, Sampling, TraitOption, Zmax
 
 
 __all__ = [
     'BALANCE_GRAVITIES',
     'BalanceGravity',
-    'DPTraitEquilibrium',
+    'DispersionEquilibrium',
     'RHTraitEquilibrium'
 ]
 
@@ -66,16 +66,17 @@ class BalanceGravity(TraitOption):
         return dict(gravity=self.name)
 
 
-class DPTraitEquilibrium(DPTrait):
+class DispersionEquilibrium(Serializable):
     """
     The dispersion that holds a thick disk up against a gravity (its
     option gravity, see BalanceGravity), at its thickness (that of its
     density height traits), which its galaxy derives at each evaluation:
-    sigma_eq(R) at the subnodes of the disk, linear between them. It adds
-    to the dispersion of the other dispersion traits in quadrature, sigma
-    = hypot(|their sum|, sigma_eq), at every height (isothermal in z: its
-    dispersion height trait is 'one'), as an independent source of random
-    motion; the fitted traits add up linearly. By gravity:
+    sigma_eq(R) at the subnodes of the disk, linear between them; the
+    option equilibrium of a thick disk (see ThickDisk). It adds to the
+    dispersion of the dispersion traits of the disk in quadrature, sigma
+    = hypot(|their sum|, sigma_eq), at every height (isothermal in z), as
+    an independent source of random motion; the dispersion traits add up
+    linearly. By gravity:
     - 'galaxy': sigma_eq^2 = int_0^inf z rho(z) (-F_z(R, z)) dz /
       int_0^inf rho(z) dz, the dispersion of the column weighted by its
       density (the vertical virial theorem, Binney & Tremaine 2008, eq.
@@ -86,14 +87,11 @@ class DPTraitEquilibrium(DPTrait):
       Sigma of its fluid and the rms height h: exact for the isothermal
       sheet, sech^2(z / z0) (<z^2> = pi^2 z0^2 / 12).
     - 'rotation': sigma_eq = h v / R, of the rms height h and the rotation
-      v of the fitted tangential traits (the vertical virial theorem in a
-      spherical gravity, for h << R; the thick disk of GalPaK3D).
+      v of the tangential velocity traits (the vertical virial theorem in
+      a spherical gravity, for h << R; the thick disk of GalPaK3D).
     At the centre, where v / R and F_z / z are 0 / 0, the value at the
     next subnode; NaN where there is no solution (e.g. a negative Sigma).
-    It has no parameters and no height trait (the dispersion height
-    traits pair with the other dispersion traits), and comes last in the
-    dispersion traits of its disk (at most one). It is a trait of thick
-    disks only.
+    It has no parameters.
 
     Parameters
     ----------
@@ -103,8 +101,6 @@ class DPTraitEquilibrium(DPTrait):
         The direction of its dispersion: 'iso' (the default), every
         direction, or 'ver', z only (the dispersion that holds the disk
         up).
-    name : str, optional
-        Its name (see Trait); it has no parameters to prefix.
 
     Raises
     ------
@@ -112,40 +108,31 @@ class DPTraitEquilibrium(DPTrait):
         If an option is not valid.
     """
 
-    config_titles = dict(gravity='Gravity')
+    config_titles = dict(gravity='Gravity', direction='Direction')
     config_start = dict(gravity='galaxy')
 
-    @staticmethod
-    def type() -> str:
-        return 'equilibrium'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Vertical equilibrium'
-
-    @staticmethod
-    def uid() -> int:
-        raise TypeError(
-            "the vertical equilibrium is not a trait of the kernels: its "
-            "galaxy derives its dispersion, which they take apart")
+    def dump(self) -> dict[str, Any]:
+        info: dict[str, Any] = dict(gravity=self._gravity)
+        if self._direction != 'iso':
+            info['direction'] = self._direction
+        return info
 
     def __init__(
             self,
             gravity: BalanceGravityChoice,
-            direction: EquilibriumDirectionChoice = 'iso',
-            name: str | None = None
+            direction: EquilibriumDirectionChoice = 'iso'
     ):
-        check_options(DPTraitEquilibrium.__init__, locals())
-        super().__init__(
-            BalanceGravity(gravity), DispersionDirection(direction),
-            name=name)
+        check_options(DispersionEquilibrium.__init__, locals())
+        self._gravity = gravity
+        self._direction = direction
 
     def gravity(self) -> str:
         """Return the gravity that it balances (see BalanceGravity)."""
-        return self._option(BalanceGravity).name
+        return self._gravity
 
-    def axisymmetric(self) -> bool:
-        return True
+    def direction(self) -> str:
+        """Return the direction of its dispersion: 'iso' or 'ver'."""
+        return self._direction
 
 
 class RHTraitEquilibrium(RHTrait):
@@ -172,7 +159,7 @@ class RHTraitEquilibrium(RHTrait):
     At the centre, where v / R is 0 / 0, Omega at the next subnode. It
     has no parameters. It is the one density height trait of its disk,
     which every density polar trait shares, and its disk derives no
-    dispersion besides (see DPTraitEquilibrium). A thick disk draws it,
+    dispersion besides (see DispersionEquilibrium). A thick disk draws it,
     within zmax of its midplane; a thin disk does not ('sheet' and
     'rotation' alone), and its pressure support takes the density at its
     midplane, Sigma / (2 z0) or Sigma / (sqrt(2 pi) h) (see

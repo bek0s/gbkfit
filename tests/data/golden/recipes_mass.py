@@ -137,9 +137,8 @@ _MASS_ROTATION_PRESSURE = dict(
 _C2_GAS = _thick(
     _disk(
         'gas', vptraits=dict(type='mass'),
-        dptraits=[
-            dict(type='uniform'),
-            dict(type='equilibrium', gravity='galaxy')],
+        dptraits=[dict(type='uniform')],
+        equilibrium=dict(gravity='galaxy'),
         pressure_support=dict(type='jeans')),
     vhtraits=dict(type='mass', zmax=6))
 

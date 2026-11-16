@@ -6,9 +6,9 @@ be asked before (see galaxy_gives).
 """
 
 from collections.abc import Collection, Iterable, Sequence
-from typing import NamedTuple
 
-from ..gravity import Capability, Gravity
+from .._capabilities import Capability, Need
+from ..gravity import Gravity
 from ..mass import MassModel
 
 
@@ -21,50 +21,24 @@ __all__ = [
 ]
 
 
-class Need(NamedTuple):
-    """
-    Something that a component needs from its galaxy (see
-    Component.needs): a capability, what needs it, and the mass
-    components whose densities it takes, if any.
-
-    Attributes
-    ----------
-    capability : Capability
-        The capability.
-    what : str
-        Of the mass alone, the message of the error without it (e.g. "the
-        'mass' velocity traits of the component 'gas' need the mass of
-        their galaxy"); else, what takes the capability (e.g. "the jeans
-        equilibrium of the component 'gas' takes the vertical force of the
-        gravity of its galaxy").
-    densities : tuple of str
-        The names of the mass components whose densities it takes (e.g.
-        the pressure support of a disk; see density_needs).
-    surface : bool
-        Whether it takes their surface densities, not their densities.
-    """
-    capability: Capability
-    what: str
-    densities: tuple[str, ...] = ()
-    surface: bool = False
-
-
 def density_needs(
         names: Sequence[str],
         surface: bool,
-        what: str
+        what: str,
+        fluid: bool = False
 ) -> list[Need]:
     """
     Return the needs of the densities of mass components (by name), or of
     their surface densities as self-gravitating sheets in Newtonian
     gravity (none: the surface densities of the sheets only, e.g. of the
     disk itself), of what takes them (e.g. "the hydrostatic pressure
-    support of the component 'gas'").
+    support of the component 'gas'"), and whether they are its fluid (see
+    Need).
     """
     kind = 'surface density' if surface else 'density'
     needs = [Need(
-        Capability.MASS, f"{what} takes the {kind}", tuple(names), surface)] \
-        if names else []
+        Capability.MASS, f"{what} takes the {kind}", tuple(names), surface,
+        fluid)] if names else []
     if surface:
         needs.append(Need(
             Capability.SHEETS,
@@ -116,6 +90,8 @@ def check_needs(
             if need.capability is Capability.MASS and not need.densities:
                 raise ValueError(need.what)
             continue
+        if need.fluid:
+            mass_model.check_fluid(need.densities, f"{need.what} of its fluid")
         if unknown := [name for name in need.densities if name not in names]:
             raise ValueError(
                 f"{need.what} of the mass components {unknown}, which its "

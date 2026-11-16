@@ -14,14 +14,14 @@ from gbkfit.params import (
     ParamDesc, ParamValues)
 from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import (
-    NodalTraits, TraitParams, evaluate_native_traits, fill_param_values,
-    native_traits, subring_radii)
-from ..base import ComponentState, FrameParams, NativeGrid
+    NodalComponent, TraitParams, evaluate_native_traits, fill_param_values,
+    native_traits)
+from ..base import ComponentState, NativeGrid
 from .._needs import Need, density_needs
 from ...gravity import Capability
 from ..geometries import GEOMETRY_PARAMS, geometry_pdesc
 from ..traits import (
-    DPTraitEquilibrium, PressureSupport, RHTraitEquilibrium, Trait)
+    DispersionEquilibrium, PressureSupport, RHTraitEquilibrium, Trait)
 
 if TYPE_CHECKING:
     from ._stage import DiskState
@@ -40,7 +40,7 @@ def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
     return {key: geometry_pdesc(key, nnodes if nw else None)}
 
 
-class NodalDisk(abc.ABC):
+class NodalDisk(NodalComponent):
 
     def __init__(
             self,
@@ -53,21 +53,17 @@ class NodalDisk(abc.ABC):
             prefixes: dict[str, str | Sequence[str]],
             density_units: dict[str, astropy.units.UnitBase | None],
             opacity_lines: Sequence[int] = (),
-            equilibrium: DPTraitEquilibrium | None = None,
+            equilibrium: DispersionEquilibrium | None = None,
             height: RHTraitEquilibrium | None = None,
             pressure_support: PressureSupport | None = None,
             fluid: tuple[str, ...] = ()
     ):
         """
-        traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
-        can leave kinds out (no traits). prefixes has the prefix of the
-        parameters of each trait of the kinds that are not named after
-        their kind (e.g. 'op_halpha_' of 'opt'; see NodalTraits).
-        density_units has the unit of the density of the density polar
-        traits of each kind, if known (see NodalTraits). opacity_lines has
+        traits_, prefixes (e.g. 'op_halpha_' of 'opt') and density_units
+        are as those of NodalComponent. opacity_lines has
         the line of each trait of line opacity ('opt'): its index among
         the lines of the emission. equilibrium is its vertical
-        equilibrium, if any (see traits.DPTraitEquilibrium; not in
+        equilibrium, if any (see traits.DispersionEquilibrium; not in
         traits_, as the kernels do not evaluate it), height the vertical
         equilibrium of its thickness, if any (see
         traits.RHTraitEquilibrium: that of its density height traits, if
@@ -76,18 +72,11 @@ class NodalDisk(abc.ABC):
         pressure, if at all, and fluid the names of the mass disks whose
         densities they take, if given (see Disk).
         """
-
-        subrnodes = subring_radii(rnodes, rstep)
-
+        super().__init__(
+            TRAIT_KINDS, rnodes, rstep, interp, traits_, prefixes,
+            density_units)
         self._loose = loose
         self._tilted = tilted
-        self._rnodes = rnodes
-        self._rstep = rstep
-        self._subrnodes = subrnodes
-        self._interp = interp
-        self._traits = NodalTraits(
-            TRAIT_KINDS, traits_, prefixes, density_units, rnodes,
-            subrnodes, interp)
         self._opacity_lines = tuple(opacity_lines)
         self._equilibrium = equilibrium
         self._height = height
@@ -118,20 +107,20 @@ class NodalDisk(abc.ABC):
     def tilted(self) -> bool:
         return self._tilted
 
-    def rnodes(self) -> tuple[float, ...]:
-        return self._rnodes
+    def geometry_pdescs(self) -> dict[str, dict[str, ParamDesc]]:
+        """
+        Return the descriptions of the parameters of its geometry, by name
+        (see NodalComponent.geometry_pdescs): of each, those of its value
+        or of its values at the nodes (see geometry_nodewise).
+        """
+        return self._geometry_pdescs
 
-    def rstep(self) -> float:
-        return self._rstep
-
-    def subrnodes(self) -> tuple[float, ...]:
-        return self._subrnodes
-
-    def interp(self) -> type[Interpolator]:
-        return self._interp
-
-    def traits(self, kind: str) -> tuple[Trait, ...]:
-        return self._traits.traits(kind)
+    def geometry_nodewise(self) -> dict[str, bool]:
+        """
+        Return whether each parameter of its geometry is node-wise (of a
+        disk that is loose or tilts), by name.
+        """
+        return dict(self._geometry_isnw)
 
     def opacity_lines(self) -> tuple[int, ...]:
         """
@@ -140,10 +129,10 @@ class NodalDisk(abc.ABC):
         """
         return self._opacity_lines
 
-    def equilibrium(self) -> DPTraitEquilibrium | None:
+    def equilibrium(self) -> DispersionEquilibrium | None:
         """
         Return its vertical equilibrium, if any (see
-        traits.DPTraitEquilibrium): its galaxy gives its plans the
+        traits.DispersionEquilibrium): its galaxy gives its plans the
         dispersion of the equilibrium at its subnodes (see DiskState).
         """
         return self._equilibrium
@@ -187,23 +176,21 @@ class NodalDisk(abc.ABC):
         """
         return self._fluid
 
-    def trait_owners(self) -> dict[str, tuple[str | int, ...]]:
+    def galaxy_fluid(self, followers: tuple[str, ...]) -> tuple[str, ...]:
         """
-        Return the option of each parameter of its traits (see
-        NodalTraits.owners), by name.
+        Return the names of the mass disks of its fluid in its galaxy,
+        where the mass components of the given names follow it (see
+        ComponentLinks): those that it names, or else, of its equilibrium
+        'sheet', those that follow it (mass disks, which alone follow
+        disks); none otherwise.
         """
-        return self._traits.owners()
+        if self._fluid or self.balance_gravity() != 'sheet':
+            return self._fluid
+        return followers
 
     def trait_params(self, kind: str) -> TraitParams:
         """Return the parameters of the traits of one kind (TraitParams)."""
         return self._traits.params(kind)
-
-    def shared(self, kind: str) -> bool:
-        """
-        Check whether the traits of one kind are one height trait that the
-        polar traits share (see NodalTraits.shared).
-        """
-        return self._traits.shared(kind)
 
     def orientation(
             self, params: ParamValues, R: np.ndarray, which: str
@@ -221,17 +208,6 @@ class NodalDisk(abc.ABC):
         subrnodes = self.subrnodes()
         at_subnodes = self._interp(self._rnodes, values)(subrnodes)
         return np.interp(R, subrnodes, at_subnodes)
-
-    def trait_values(
-            self, kind: str, params: ParamValues
-    ) -> tuple[dict[str, np.ndarray], ...]:
-        """
-        Return the values of the parameters of each trait of one kind, by
-        their names in the trait, from the values of the parameters of the
-        disk: the node-wise ones at the subnodes, as the disk evaluates
-        them.
-        """
-        return self._traits.values(kind, params)
 
     def trait_inputs(self, state: 'DiskState | None') -> ParamValues:
         """
@@ -256,11 +232,6 @@ class NodalDisk(abc.ABC):
                 for name in params.wave}
         return missing if state is None else missing | state.inputs()
 
-    def frame_params(self) -> FrameParams:
-        """Return its parameters that place it in a frame."""
-        vsys = 'vsys' if 'vsys' in self._geometry_pdescs else None
-        return FrameParams('xpos', 'ypos', vsys, 'posa', 'incl')
-
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
 
@@ -284,19 +255,20 @@ class NodalDisk(abc.ABC):
             or self.balance_gravity() not in (None, 'rotation')
 
     def needs(
-            self, name: str | None, fluid: tuple[str, ...]
+            self, name: str | None, followers: tuple[str, ...]
     ) -> tuple[Need, ...]:
         """
         Return what it needs from its galaxy (see Need), as the disk of the
-        component of the given name and fluid in its galaxy (see
-        ComponentLinks): the mass, for its velocity traits 'mass', the
-        fluid that it names and its vertical equilibrium (but 'rotation',
-        which takes the rotation of its traits); the forces of the mass, for its rotation at each
-        height (see rotation_factor_params) and the equilibrium 'galaxy';
-        and the densities of the fluid that it names, for its pressure
-        support, and the surface densities of its fluid in its galaxy
-        (those that it names, or the mass disks that follow it), for the
-        equilibrium 'sheet'.
+        component of the given name, which the mass components of the given
+        names follow (see galaxy_fluid): the mass, for its velocity traits
+        'mass', the fluid that it names and its vertical equilibrium (but
+        'rotation', which takes the rotation of its traits); the forces of
+        the mass, for its rotation at each height (see
+        rotation_factor_params) and the equilibrium 'galaxy'; and the
+        densities of the fluid that it names, for its pressure support, and
+        the surface densities of its fluid in its galaxy (those that it
+        names, or the mass disks that follow it), for the equilibrium
+        'sheet'.
         """
         label = repr(name)
         needs: list[Need] = []
@@ -319,7 +291,7 @@ class NodalDisk(abc.ABC):
             needs.append(Need(
                 Capability.MASS,
                 f"the {support.type()} pressure support of the component "
-                f"{label} takes the {kind}", self._fluid, surface))
+                f"{label} takes the {kind}", self._fluid, surface, True))
         if self.rotation_factor_params():
             needs.append(Need(
                 Capability.FORCES,
@@ -338,7 +310,8 @@ class NodalDisk(abc.ABC):
                 f"{what} takes the vertical force of the gravity of its "
                 f"galaxy"))
         else:
-            needs += density_needs(fluid, True, what)
+            needs += density_needs(
+                self.galaxy_fluid(followers), True, what, True)
         return tuple(needs)
 
     def pressure_supported_params(self) -> dict[str, PressureSupport]:
@@ -427,10 +400,11 @@ class DiskPlan(NativePlan):
         # each subnode for node-wise geometric parameters, and the values
         # of all the traits of each kind
         nsubrnodes = len(disk.subrnodes())
+        nodewise = disk.geometry_nodewise()
         sizes = {
-            name: nsubrnodes if disk._geometry_isnw[name] else 1
-            for name in disk._geometry_pdescs}
-        sizes |= disk._traits.sizes()
+            name: nsubrnodes if nodewise[name] else 1
+            for name in disk.geometry_pdescs()}
+        sizes |= disk.nodal_traits().sizes()
         # The offset, scale and flux of each emission line
         sizes['lines'] = 3 * nlines
         # The dispersion of the vertical equilibrium at each subnode
@@ -458,9 +432,9 @@ class DiskPlan(NativePlan):
             tilted=disk.tilted(),
             rnodes=to_device(disk.subrnodes(), dtype),
             **{name: buffer.device(name)
-               if name in disk._geometry_pdescs else None
+               if name in disk.geometry_pdescs() else None
                for name in GEOMETRY_PARAMS},
-            **native_traits(driver, dtype, disk._traits, buffer),
+            **native_traits(driver, dtype, disk.nodal_traits(), buffer),
             opt_rows=to_device(opacity_rows, np.int32)
             if disk.traits('opt') else None,
             posa_incl_sincos=buffer.device('posa_incl_sincos'),
@@ -613,13 +587,14 @@ class DiskPlan(NativePlan):
         disk = self._disk
         buffer = self._buffer
         params = dict(params)
-        for name, pdescs in disk._geometry_pdescs.items():
-            sampling = 'rings' if disk._geometry_isnw[name] else None
+        nodewise = disk.geometry_nodewise()
+        for name, pdescs in disk.geometry_pdescs().items():
+            sampling = 'rings' if nodewise[name] else None
             fill_param_values(
                 buffer.host(name), params, pdescs,
                 dict.fromkeys(pdescs, sampling), disk.rnodes(),
                 disk.subrnodes(), disk.interp())
-        disk._traits.fill(buffer, params)
+        disk.nodal_traits().fill(buffer, params)
         if lines is not None:
             self._lines_h[:] = lines
         posa, incl = (

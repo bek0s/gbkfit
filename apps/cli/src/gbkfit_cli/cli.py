@@ -7,7 +7,7 @@ import argparse
 import logging
 import re
 from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from gbkfit.tasks import exit_on_user_errors, log_to_console, run
 
@@ -180,6 +180,17 @@ def _output_parser(
     return parser
 
 
+class _Parents(NamedTuple):
+    """
+    The arguments that the tasks share (see _make_parser): of every task
+    (common), of the output of a task (output), of its results (results:
+    those of eval and fit, never overwritten by default), and of a
+    configuration (config).
+    """
+    common: argparse.ArgumentParser
+    output: argparse.ArgumentParser
+    results: argparse.ArgumentParser
+    config: argparse.ArgumentParser
 def _make_parser() -> argparse.ArgumentParser:
     """Return the parser of the command line."""
     from gbkfit import __version__ as version
@@ -188,10 +199,6 @@ def _make_parser() -> argparse.ArgumentParser:
     parser.add_argument('-v', '--version', action='version', version=version)
     parsers_task = parser.add_subparsers(dest='task')
     parsers_task.required = True
-
-    #
-    # Define common arguments across all tasks
-    #
 
     parser_common = argparse.ArgumentParser(add_help=False)
     parser_common.add_argument(
@@ -210,12 +217,21 @@ def _make_parser() -> argparse.ArgumentParser:
         help="ignore unknown configuration options, sections and "
              "parameters with a warning, instead of failing")
 
-    #
-    # Create parser for eval task
-    #
+    parents = _Parents(
+        parser_common, parser_common_output, parser_results_output,
+        parser_common_config)
+    for add in (_add_eval, _add_prep, _add_fit, _add_plot, _add_migrate):
+        add(parsers_task, parents)
+    return parser
 
+
+def _add_eval(
+        parsers_task: 'argparse._SubParsersAction',
+        parents: _Parents
+) -> None:
+    """Add the parser of the task eval: evaluate a model."""
     parser_eval = parsers_task.add_parser('eval', parents=[
-        parser_common_config, parser_results_output, parser_common],
+        parents.config, parents.results, parents.common],
         help="evaluate model")
     parser_eval.add_argument(
         'mode', type=str, choices=['model', 'objective', 'mock'],
@@ -231,10 +247,12 @@ def _make_parser() -> argparse.ArgumentParser:
         help="perform the evaluation ITERS times "
              "and provide performance evaluation statistics")
 
-    #
-    # Create parser for prep task
-    #
 
+def _add_prep(
+        parsers_task: 'argparse._SubParsersAction',
+        parents: _Parents
+) -> None:
+    """Add the parser of the task prep: prepare data for fitting."""
     _DATA_D_HELP = (
         "input data (measurements); the HDU of a FITS file in brackets, "
         "e.g. cube.fits[DATA]")
@@ -417,28 +435,28 @@ def _make_parser() -> argparse.ArgumentParser:
         parser_prep_input_1,
         parser_prep_roi_spat_2d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_dtype, parser_prep_minify, parser_common_output,
-        parser_common],
+        parser_prep_dtype, parser_prep_minify, parents.output,
+        parents.common],
         help="brightness on a grid of pixels (an image)")
     parsers_prep.add_parser('slit_spectra', parents=[
         parser_prep_input_1, parser_prep_rest,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_dtype, parser_prep_minify, parser_common_output,
-        parser_common],
+        parser_prep_dtype, parser_prep_minify, parents.output,
+        parents.common],
         help="spectra along a long slit")
     parsers_prep.add_parser('pixel_moments', parents=[
         parser_prep_orders,
         parser_prep_input_n,
         parser_prep_roi_spat_2d,
         parser_prep_clip_n, parser_prep_ccl, parser_prep_nanpad,
-        parser_prep_dtype, parser_prep_minify, parser_common_output,
-        parser_common],
+        parser_prep_dtype, parser_prep_minify, parents.output,
+        parents.common],
         help="moments on a grid of pixels (moment maps)")
     parser_prep_region_moments = parsers_prep.add_parser(
         'region_moments', parents=[
             parser_prep_orders, parser_prep_input_n,
-            parser_prep_dtype, parser_common_output, parser_common],
+            parser_prep_dtype, parents.output, parents.common],
         help="moments in regions: binned moment maps, whose pixels hold "
              "the value of their bin, to one value per bin")
     parser_prep_region_moments.add_argument(
@@ -451,7 +469,7 @@ def _make_parser() -> argparse.ArgumentParser:
     parser_prep_region_spectra = parsers_prep.add_parser(
         'region_spectra', parents=[
             parser_prep_input_1, parser_prep_rest, parser_prep_roi_spec_1d,
-            parser_prep_dtype, parser_common_output, parser_common],
+            parser_prep_dtype, parents.output, parents.common],
         help="spectra in regions: the sums of the spectra of the bins of a "
              "cube")
     parser_prep_region_spectra.add_argument(
@@ -467,8 +485,8 @@ def _make_parser() -> argparse.ArgumentParser:
             parser_prep_input_1, parser_prep_rest,
             parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
             parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
-            parser_prep_dtype, parser_prep_minify, parser_common_output,
-            parser_common],
+            parser_prep_dtype, parser_prep_minify, parents.output,
+            parents.common],
         help="spectra on a grid of pixels (a spectral cube)")
     parser_prep_pixel_spectra.add_argument(
         '--noise-error', action='store_true',
@@ -477,7 +495,7 @@ def _make_parser() -> argparse.ArgumentParser:
              "of mean 0, e.g. without continuum; faint emission over much "
              "of a channel makes it too low)")
     parser_prep_gauss_hermite_moments = parsers_prep.add_parser(
-        'gauss_hermite_moments', parents=[parser_common_output, parser_common],
+        'gauss_hermite_moments', parents=[parents.output, parents.common],
         help="the mean and the dispersion of the Gauss-Hermite series of a "
              "table of stellar kinematics (e.g. of pPXF), for Jeans models")
     parser_prep_gauss_hermite_moments.add_argument(
@@ -494,24 +512,24 @@ def _make_parser() -> argparse.ArgumentParser:
         '--format', type=str,
         help="the format of the table, if astropy cannot tell it")
     parser_prep_psf_muse = parsers_prep.add_parser(
-        'psf_muse', parents=[parser_common_output, parser_common],
+        'psf_muse', parents=[parents.output, parents.common],
         help="the PSF of a MUSE cube (from its header), as a table")
     parser_prep_psf_muse.add_argument('cube', type=str, help="the cube")
     parsers_prep.add_parser(
-        'lsf_muse', parents=[parser_common_output, parser_common],
+        'lsf_muse', parents=[parents.output, parents.common],
         help="the LSF of MUSE (Bacon et al. 2017), as a table")
     parser_prep_psf_kmos3d = parsers_prep.add_parser(
-        'psf_kmos3d', parents=[parser_common_output, parser_common],
+        'psf_kmos3d', parents=[parents.output, parents.common],
         help="the PSF of a KMOS3D cube (the Moffat of its header), as a "
              "configuration")
     parser_prep_psf_kmos3d.add_argument('cube', type=str, help="the cube")
     parser_prep_lsf_kmos3d = parsers_prep.add_parser(
-        'lsf_kmos3d', parents=[parser_common_output, parser_common],
+        'lsf_kmos3d', parents=[parents.output, parents.common],
         help="the LSF of a KMOS3D cube (of the resolving power of its "
              "header), as a table")
     parser_prep_lsf_kmos3d.add_argument('cube', type=str, help="the cube")
     parser_prep_resolving_power = parsers_prep.add_parser(
-        'lsf_resolving_power', parents=[parser_common_output, parser_common],
+        'lsf_resolving_power', parents=[parents.output, parents.common],
         help="the LSF of a table of resolving powers (e.g. of R against "
              "wavelength), as a table of its FWHM")
     parser_prep_resolving_power.add_argument(
@@ -530,16 +548,18 @@ def _make_parser() -> argparse.ArgumentParser:
         '--format', type=str,
         help="the format of the table, if astropy cannot tell it")
     parser_prep_beams = parsers_prep.add_parser(
-        'psf_casa_beams', parents=[parser_common_output, parser_common],
+        'psf_casa_beams', parents=[parents.output, parents.common],
         help="the beams of the channels of a CASA cube, as a table")
     parser_prep_beams.add_argument('cube', type=str, help="the cube")
 
-    #
-    # Create parser for fit task
-    #
 
+def _add_fit(
+        parsers_task: 'argparse._SubParsersAction',
+        parents: _Parents
+) -> None:
+    """Add the parser of the task fit: fit a model to data."""
     parser_fit = parsers_task.add_parser('fit', parents=[
-        parser_common_config, parser_results_output, parser_common],
+        parents.config, parents.results, parents.common],
         help="fit model to data")
     parser_fit.add_argument(
         'config', type=str, nargs='?',
@@ -559,13 +579,15 @@ def _make_parser() -> argparse.ArgumentParser:
         help="do not log the evaluations of the fit (logs/evaluations.bin), "
              "which it resumes from")
 
-    #
-    # Create parser for plot task
-    #
 
+def _add_plot(
+        parsers_task: 'argparse._SubParsersAction',
+        parents: _Parents
+) -> None:
+    """Add the parser of the task plot: plot the results of a fit."""
     parser_plot = parsers_task.add_parser('plot', parents=[
         _output_parser('overwrite', None, 'the folder plots of the run'),
-        parser_common],
+        parents.common],
         help="plot fitting results")
     parser_plot.add_argument(
         'result_dir', type=str,
@@ -600,12 +622,17 @@ def _make_parser() -> argparse.ArgumentParser:
         help="the elements of the posterior plots (by default, the free "
              "ones)")
 
-    #
-    # Create parser for migrate task
-    #
 
+def _add_migrate(
+        parsers_task: 'argparse._SubParsersAction',
+        parents: _Parents
+) -> None:
+    """
+    Add the parser of the task migrate: rewrite configurations in the
+    current format.
+    """
     parser_migrate = parsers_task.add_parser('migrate', parents=[
-        parser_common],
+        parents.common],
         help="rewrite configurations in the current format")
     parser_migrate.add_argument(
         'path', type=str,
@@ -620,12 +647,6 @@ def _make_parser() -> argparse.ArgumentParser:
         help="the version of the format of a configuration file without "
              "the section 'version': 1, before 2026-10-25; 2, before "
              "2026-10-28")
-
-    #
-    # Parse arguments and run the appropriate task
-    #
-
-    return parser
 
 
 def _run_eval(args: argparse.Namespace) -> None:

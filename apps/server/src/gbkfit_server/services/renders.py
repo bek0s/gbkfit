@@ -23,6 +23,7 @@ import astropy.constants
 import astropy.units
 import numpy as np
 
+import gbkfit.model
 import gbkfit.project
 import gbkfit.setup
 import gbkfit.units
@@ -30,8 +31,7 @@ from gbkfit.config import ConfigError, error_message, paths_relative_to
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.grid import doppler
 from gbkfit.model import (
-    BandEmission, Extras, Galaxy, GalaxyFunctions, LineEmission,
-    galaxy_parser)
+    Component, Extras, Galaxy, GalaxyFunctions, galaxy_parser)
 from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.params import ParamSpace
 
@@ -52,11 +52,10 @@ __all__ = [
 
 
 # How a galaxy is seen: at the orientation of its parameters, or with every
-# component turned face-on or edge-on (its posa and incl replaced; the
-# major axis of an edge-on one along x)
+# component turned face-on or edge-on (its posa and incl replaced by these
+# pairs; the major axis of an edge-on one along x)
 View = Literal['sky', 'face-on', 'edge-on']
-_ORIENTATIONS = {
-    'face-on': dict(posa=0, incl=0), 'edge-on': dict(posa=90, incl=90)}
+_ORIENTATIONS = {'face-on': (0, 0), 'edge-on': (90, 90)}
 
 # The directions of the speeds of the disks (see GalaxyFunctions; the
 # planar traits, along none, are left out) and of their dispersions
@@ -426,9 +425,7 @@ class Renders:
         tell('setting up')
         galaxy, _, step = self._load(project, options, view, size)
         try:
-            seen = [
-                c for c in galaxy.components()
-                if isinstance(c.emission(), LineEmission)]
+            seen = _seen(galaxy, gbkfit.model.View(spectral=True))
             if not seen:
                 raise Invalid(
                     "the galaxy has no component that emits lines: a cube "
@@ -617,6 +614,16 @@ def _radius(galaxy: Galaxy) -> float:
     return radius if radius > 0 else _FIELD
 
 
+def _seen(galaxy: Galaxy, view: gbkfit.model.View) -> list[Component]:
+    """
+    Return the components of a galaxy whose light an observation of the
+    given view sees (see Emission.seen_in).
+    """
+    return [
+        c for c in galaxy.components() if c.emission() is not None
+        and c.emission().seen_in(view, c.moves())]
+
+
 def _observations(
         galaxy: Galaxy, size: int, step: float,
         spectral: dict[str, Any] | None = None
@@ -630,19 +637,19 @@ def _observations(
     bands; each evaluated along the line of sight as what it sees needs
     (see Scene.evaluation of gbkfit.model).
     """
-    components = galaxy.components()
     infos = []
-    for kind, info in (
-            (LineEmission, dict(
+    for view, info in (
+            (gbkfit.model.View(spectral=True), dict(
                 type='pixel_spectra',
                 spectral=(spectral or dict(size=2, step=100))
                 | dict(convention='relativistic'))),
-            (BandEmission, dict(type='pixel_brightness'))):
-        seen = [c for c in components if isinstance(c.emission(), kind)]
+            (gbkfit.model.View(spectral=False),
+             dict(type='pixel_brightness'))):
+        seen = _seen(galaxy, view)
         if not seen:
             continue
         # (the convention then that of the rest)
-        if kind is LineEmission and (rest := _rest(seen)) is not None:
+        if view.spectral and (rest := _rest(seen)) is not None:
             info = info | dict(spectral={
                 key: value for key, value in info['spectral'].items()
                 if key != 'convention'} | dict(rest=rest))
@@ -763,21 +770,25 @@ def _values(
 ) -> dict[str, Any]:
     """
     Return the values of the parameters of a group (or of a galaxy alone):
-    those of the given properties (numbers or lists of them), and the
-    defaults of the others.
+    those of the given properties (numbers or lists of them, of keys that
+    can select elements, e.g. disk_posa[0:4], and ties), and the defaults
+    of the parameters that no key names.
 
     Raises
     ------
     ConfigError
-        If a property is not a value of a parameter of the group.
+        If a property is not of a parameter of the group, or the
+        properties are not valid (see ParamSpace).
     """
     pdescs = group.pdescs()
-    given = {name: value for name, value in properties.items()}
-    if unknown := sorted(set(given) - set(pdescs)):
+    # (the parameter of each key: its name, without the elements it
+    # selects)
+    named = {key.split('[', 1)[0].strip() for key in properties}
+    if unknown := sorted(named - set(pdescs)):
         raise ConfigError(f"unknown parameters: {unknown}")
-    filled = {
-        name: given.get(name, _default(desc))
-        for name, desc in pdescs.items()}
+    filled = dict(properties) | {
+        name: _default(desc) for name, desc in pdescs.items()
+        if name not in named}
     space = ParamSpace.from_properties(pdescs, filled)
     return dict(space.evaluate())
 
@@ -798,10 +809,9 @@ def _oriented(galaxy: Galaxy, values: dict[str, Any], view: View) -> dict:
         return values
     values = dict(values)
     for index in range(len(galaxy.components())):
-        names = galaxy.component_param_names(index)
-        for param, value in _ORIENTATIONS[view].items():
-            if param in names:
-                name = names[param]
+        frame = galaxy.component_frame_params(index)
+        for name, value in zip((frame.posa, frame.incl), _ORIENTATIONS[view]):
+            if name is not None:
                 values[name] = np.full_like(
                     np.asarray(values[name], dtype=float), value)
     return values

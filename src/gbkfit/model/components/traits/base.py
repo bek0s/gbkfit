@@ -449,7 +449,7 @@ class VPTrait(PTrait, abc.ABC):
         Check whether its speed is the same at every azimuth (at each
         radius): then the azimuthal means of it that the vertical
         equilibrium of its disk takes are its value at one azimuth (see
-        DPTraitEquilibrium); here, a speed of the radius only.
+        DispersionEquilibrium); here, a speed of the radius only.
         """
         return True
 

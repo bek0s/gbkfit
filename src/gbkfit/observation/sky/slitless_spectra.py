@@ -24,7 +24,7 @@ from gbkfit.grid import (
     vacuum_wavelength)
 from gbkfit.instrument import (
     Instrument, SlitMask, Trace, slit_mask_parser, trace_parser)
-from gbkfit.model import Band, DataUnit, LightUnit, LineEmission
+from gbkfit.model import Band, DataUnit, LightUnit
 from gbkfit.utils import iterutils
 from ..depth import Depth
 from ..foreground import Foreground
@@ -419,7 +419,7 @@ class ObservationSlitlessSpectra(ObservationSky):
 
     dataset_class = DatasetSlitlessSpectra
 
-    emission = LineEmission
+    spectral_view = True
     orbit_stars = None
 
     # The image has no spectral axis: wavelength and position share the
@@ -478,6 +478,7 @@ class ObservationSlitlessSpectra(ObservationSky):
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
+            continuum: bool = False,
             band: str | Band | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
@@ -513,8 +514,9 @@ class ObservationSlitlessSpectra(ObservationSky):
         self._resampled = resampled
         super().__init__(
             self._make_grid(**grid), foreground, instrument, galaxies,
-            components, lines, band, pixel_weights, flux_scale, offsets,
-            dataset, oversampling, depth, dtype, fft_dtype, name, unit)
+            components, lines, continuum, band, pixel_weights, flux_scale,
+            offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
+            unit)
 
     def spectral(self) -> SpectralAxis:
         """Return the spectral axis of the model."""
@@ -546,7 +548,7 @@ class ObservationSlitlessSpectra(ObservationSky):
     def light_items(self) -> tuple[str, ...]:
         return ('spectra',)
 
-    def flux_scales(self) -> dict[str, FluxScale]:
+    def flux_scale_kinds(self) -> dict[str, FluxScale]:
         # (each line of the image along the dispersion, that over which the
         # trace moves the most across the channels at the centre of the
         # image: x, the last axis of the image, or y)
@@ -556,7 +558,7 @@ class ObservationSlitlessSpectra(ObservationSky):
         axis = 1 if abs(dx[1] - dx[0]) >= abs(dy[1] - dy[0]) else 0
         # (the image is of the shape (y, x): a line along x at each y)
         nrows = self.size()[1] if axis == 1 else self.size()[0]
-        return super().flux_scales() \
+        return super().flux_scale_kinds() \
             | dict(per_row=FluxScale(('spectra',), axis, nrows))
 
     def make_dataset(

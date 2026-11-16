@@ -20,13 +20,11 @@ from gbkfit.driver import Driver
 from gbkfit.grid import doppler
 from gbkfit.params import ParamValues
 from ._galaxy_stage import GalaxyStage, GalaxyState
-from ._profiles import (
-    ComponentProfiles, checked_radii, profile_families, profile_radius_range,
-    profiles_of)
 from .components.base import GalaxyMass
 from .components.base import ComponentState
 
 if TYPE_CHECKING:
+    from .components._profiles import ComponentProfiles
     from .galaxy import Galaxy
 
 
@@ -164,10 +162,13 @@ class GalaxyFunctions:
         self._redshift = galaxy.redshift()
         self._stage = GalaxyStage(galaxy, driver, sky_origin, cosmology)
         self._suffixes = _profile_suffixes(galaxy)
+        self._families = {
+            i: tuple(components[i].profile_families())
+            for i in self._suffixes}
         # (the components of the suffixes have profiles)
         self._profiles = {
             i: typing.cast(
-                ComponentProfiles, profiles_of(components[i], driver))
+                'ComponentProfiles', components[i].profiles(driver))
             for i in self._suffixes}
         self._names = function_names(galaxy)
 
@@ -281,7 +282,7 @@ class GalaxyFunctions:
             dispersion=self._dispersion, density=self._density,
             orientation=self._orientation)
         for i, suffix in self._suffixes.items():
-            for family in self._profiles[i].families():
+            for family in self._families[i]:
                 functions[f'{family}{suffix}'] = functools.partial(
                     methods[family], i, params, state_of)
         return functions
@@ -417,7 +418,7 @@ def function_names(galaxy: 'Galaxy') -> tuple[str, ...]:
     for index, suffix in _profile_suffixes(galaxy).items():
         names += [
             f'{family}{suffix}'
-            for family in profile_families(galaxy.components()[index])]
+            for family in galaxy.components()[index].profile_families()]
     return tuple(names)
 
 
@@ -427,14 +428,14 @@ def function_radius_range(
     """
     Return the range of the radii (arcsec) of the function of a profile of
     a component of the name (e.g. rotation_gas) of a galaxy, without
-    planning it (see profile_radius_range); None for its other functions,
-    of any radius.
+    planning it (see Component.profile_families); None for its other
+    functions, of any radius.
     """
     for index, suffix in _profile_suffixes(galaxy).items():
-        component = galaxy.components()[index]
-        for family in profile_families(component):
+        families = galaxy.components()[index].profile_families()
+        for family, radii in families.items():
             if name == f'{family}{suffix}':
-                return profile_radius_range(component, family)
+                return radii
     return None
 
 
@@ -549,10 +550,27 @@ def _density_slope(
 def _profile_suffixes(galaxy: 'Galaxy') -> dict[int, str]:
     """
     Return the components of a galaxy with profiles (see
-    profile_families), by their index: the suffixes of their functions
-    (see GalaxyFunctions).
+    Component.profile_families), by their index: the suffixes of their
+    functions (see GalaxyFunctions).
     """
     return {
         i: '' if cmp.name() is None else f'_{cmp.name()}'
         for i, cmp in enumerate(galaxy.components())
-        if profile_families(cmp)}
+        if cmp.profile_families()}
+
+
+def checked_radii(name: str, R: npt.ArrayLike) -> np.ndarray:
+    """
+    Return the radii R (arcsec) of the profile function of the given name,
+    as an array of floats.
+
+    Raises
+    ------
+    ValueError
+        If a radius is negative.
+    """
+    radii = np.asarray(R, dtype=float)
+    if np.any(radii < 0):
+        raise ValueError(
+            f"{name}: the radii must not be negative; they are {radii}")
+    return radii

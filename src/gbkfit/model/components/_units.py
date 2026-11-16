@@ -11,7 +11,7 @@ opacity (see OpacityScales).
 """
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, NamedTuple, TypeGuard
+from typing import TYPE_CHECKING, NamedTuple
 
 import astropy.constants as const
 import astropy.units as u
@@ -23,7 +23,7 @@ from .lines import Band, LinePlacement
 
 if TYPE_CHECKING:
     from .base import Component
-    from .roles import Emission, LineEmission
+    from .roles import Emission
 
 
 __all__ = [
@@ -145,16 +145,14 @@ def check_line_units_agree(components: Sequence['Component']) -> None:
     (its further lines are ratios); unnamed lines can be different lines,
     and are not compared.
     """
-    # (imported here: roles imports this module)
-    from .roles import LineEmission
     seen = {}
     for i, component in enumerate(components):
         emission = component.emission()
-        if not isinstance(emission, LineEmission) or emission.unit() is None:
+        if emission is None or emission.unit() is None:
             continue
         unit = emission.unit()
         label = component.name() or f'component{i}'
-        for line in emission.lines().names():
+        for line in emission.line_names():
             if line in seen and seen[line][0] != unit:
                 first, other = (
                     gbkfit.units.format_unit(x) for x in (seen[line][0], unit))
@@ -235,12 +233,9 @@ def line_opacity_unit(emission: 'Emission | None') -> u.UnitBase | None:
     return 1 / u.K
 
 
-def _emits_hi(emission: 'Emission') -> TypeGuard['LineEmission']:
+def _emits_hi(emission: 'Emission') -> bool:
     """Check whether an emission is of HI: its first line is hi21."""
-    # (imported here: roles imports this module)
-    from .roles import LineEmission
-    return isinstance(emission, LineEmission) \
-        and emission.lines().names()[:1] == (HI_LINE,)
+    return emission.line_names()[:1] == (HI_LINE,)
 
 
 class DataUnit(NamedTuple):

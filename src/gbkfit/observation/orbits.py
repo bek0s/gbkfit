@@ -41,10 +41,6 @@ _log = logging.getLogger(__name__)
 _ENERGY_DRIFT = 1e-3
 
 
-# The parameters of the frame of a spheroid whose orbits are recorded
-# (see OrbitRecording.reads)
-_FRAME_PARAMS = ('xpos', 'ypos', 'vsys', 'posa', 'incl')
-
 # The relative error of the light of the spheroid in the bins and in the
 # cells, which the orbits must hold (the constraints)
 _LIGHT_ERROR = 0.01
@@ -163,12 +159,16 @@ class OrbitRecording:
         self._component = component
         self._spheroid = spheroid
         # (the names of the parameters of the spheroid that its records
-        # read, its frame and its light, by its own names)
+        # read, its frame and its light, by its own names: an orbit
+        # spheroid moves, and has a centre, a systemic velocity and an
+        # axis)
+        names = galaxy_.component_param_names(component, mapping)
+        self._frame = frame = spheroid.frame_params()
         self._names = {
-            param: mapping[galaxy_.component_param_names(component)[param]]
-            for param in _FRAME_PARAMS + spheroid.light_params()}
-        self._weights = mapping[
-            galaxy_.component_param_names(component)[spheroid.orbit_weights()]]
+            param: names[param]
+            for param in (*frame, *spheroid.light_params())
+            if param is not None}
+        self._weights = names[spheroid.orbit_weights()]
         self._observations = tuple(observations)
         self._galaxy_driver = galaxy_driver
         self._observation_drivers = tuple(observation_drivers)
@@ -267,28 +267,26 @@ class OrbitRecording:
                 f"the spheroid {self._spheroid.name()!r} has no orbits in "
                 f"the state of its galaxy")
         values = {param: params[name] for param, name in self._names.items()}
+        frame = self._frame
         shifts = [
             self._group.frame_shifts(i, params) for i in self._observations]
         if self._integrator is None:
-            # (in float64 whatever the dtype of the observations: chaotic
-            # orbits turn float32 rounding into noise of the chi-square)
-            self._integrator = OrbitIntegrator(
-                self._galaxy_driver, np.float64, len(state.starts),
-                tolerance=state.tolerance, max_steps=state.max_steps(),
-                nsamples=state.samples, nphi=state.copies, twins=True,
-                cells=state.cell_light.shape, sky=self._grids,
+            self._integrator = state.integrator(
+                self._galaxy_driver, cells=True, sky=self._grids,
                 order=self._order)
 
         # The orbits, in the series of the data of the bins, of the centre
         # and the systemic velocity of the spheroid in the frame of each
         centres = np.array([
-            (values['xpos'] + x, values['ypos'] + y) for x, y, _ in shifts])
+            (values[frame.x] + x, values[frame.y] + y)
+            for x, y, _ in shifts])
         series = tuple(np.concatenate(columns) for columns in zip(*(
-            data.series(values['vsys'] + v)
+            data.series(values[frame.vsys] + v)
             for data, (_, _, v) in zip(self._data, shifts))))
         records = self._integrator.integrate(
             state.potential, state.starts, state.turns,
-            (values['posa'], values['incl']), state.cell_edges, centres,
+            (values[frame.posa], values[frame.incl]), state.cell_edges,
+            centres,
             series)
         if not self._cut_warned \
                 and (cut := int(np.sum(records.steps >= state.max_steps()))):

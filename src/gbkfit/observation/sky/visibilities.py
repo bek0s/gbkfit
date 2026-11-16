@@ -17,7 +17,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
 from gbkfit.instrument import Instrument
 from gbkfit.model import (
-    Band, DataUnit, Extras, GalaxyState, LightUnit, LineEmission)
+    Band, DataUnit, Extras, GalaxyState, LightUnit)
 from gbkfit.params import ParamValues
 from ..depth import Depth
 from ..foreground import Foreground
@@ -149,7 +149,7 @@ class ObservationVisibilities(ObservationSky):
 
     dataset_class = DatasetVisibilities
 
-    emission = LineEmission
+    spectral_view = True
     orbit_stars = None
 
     # The axes of the cube of the model: x, y and the spectral axis
@@ -218,6 +218,7 @@ class ObservationVisibilities(ObservationSky):
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
+            continuum: bool = False,
             band: str | Band | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
@@ -265,9 +266,9 @@ class ObservationVisibilities(ObservationSky):
         self._transform = transform
         self._eps = eps
         super().__init__(
-            grid, foreground, instrument, galaxies, components, lines, band,
-            pixel_weights, flux_scale, offsets, dataset, oversampling, depth,
-            dtype, fft_dtype, name, unit)
+            grid, foreground, instrument, galaxies, components, lines,
+            continuum, band, pixel_weights, flux_scale, offsets, dataset,
+            oversampling, depth, dtype, fft_dtype, name, unit)
 
     def fov(self) -> tuple[float, float]:
         """Return the field of the cube on the sky (arcsec)."""

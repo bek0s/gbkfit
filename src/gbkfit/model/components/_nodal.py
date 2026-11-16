@@ -7,6 +7,7 @@ _native.ParamBuffer) and in the native kernels (native_traits); and
 their radial nodes (parse_component_rnode_args).
 """
 
+import abc
 import typing
 from collections.abc import Callable, Mapping, Sequence
 import dataclasses
@@ -23,6 +24,7 @@ from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
 from gbkfit.utils import iterutils
 from .nodes import Nodes
 from ._native import ParamBuffer
+from .base import FrameParams
 from .traits import (
     DPT_DIRECTION_DEFAULT, DPTrait, GalaxyInput, HTrait, HeightInput,
     ImageInput, RPTrait, RotationFactorsInput, RotationInput,
@@ -639,3 +641,110 @@ def evaluate_native_traits(
         **{name: to_device(values) for name, values in points.items()},
         **options)
     return np.asarray(driver.mem_copy_d2h(out)).reshape((ntraits,) + shape)
+
+
+class NodalComponent(abc.ABC):
+    """
+    A component of traits on radial nodes (a disk or a cone; see
+    NodalTraits): its nodes, the subnodes it is evaluated on (see
+    subring_radii), how its node-wise parameters are interpolated between
+    its nodes, its traits, and its parameters, those of its geometry (see
+    geometry_pdescs) and of its traits.
+
+    kinds are the kinds of traits it can have (e.g. 'rpt'), and traits_
+    has its traits of each kind, which can leave kinds out (no traits);
+    prefixes has the prefix of the parameters
+    of each trait of the kinds that are not named after their kind;
+    density_units has the unit of the density of the density polar
+    traits of each kind, if known (see NodalTraits).
+    """
+
+    def __init__(
+            self,
+            kinds: Sequence[str],
+            rnodes: Sequence[float],
+            rstep: float,
+            interp: type[Interpolator],
+            traits_: Mapping[str, Sequence[Trait]],
+            prefixes: Mapping[str, str | Sequence[str]],
+            density_units: Mapping[str, astropy.units.UnitBase | None]
+    ):
+        self._rnodes = rnodes
+        self._rstep = rstep
+        self._subrnodes = subring_radii(rnodes, rstep)
+        self._interp = interp
+        self._traits = NodalTraits(
+            kinds, dict(traits_), dict(prefixes), dict(density_units),
+            rnodes, self._subrnodes, interp)
+
+    def rnodes(self) -> tuple[float, ...]:
+        """Return its radial nodes (arcsec)."""
+        return self._rnodes
+
+    def rstep(self) -> float:
+        """Return the most width of the rings between its subnodes."""
+        return self._rstep
+
+    def subrnodes(self) -> tuple[float, ...]:
+        """Return the radii it is evaluated on (see subring_radii)."""
+        return self._subrnodes
+
+    def interp(self) -> type[Interpolator]:
+        """
+        Return how its node-wise parameters are interpolated between its
+        nodes.
+        """
+        return self._interp
+
+    def traits(self, kind: str) -> tuple[Trait, ...]:
+        """Return its traits of one kind."""
+        return self._traits.traits(kind)
+
+    def nodal_traits(self) -> NodalTraits:
+        """
+        Return its traits as its plans write them (see NodalTraits.fill and
+        native_traits).
+        """
+        return self._traits
+
+    def trait_owners(self) -> dict[str, tuple[str | int, ...]]:
+        """
+        Return the option of each parameter of its traits (see
+        NodalTraits.owners), by name.
+        """
+        return self._traits.owners()
+
+    def trait_values(
+            self, kind: str, params: ParamValues
+    ) -> tuple[dict[str, np.ndarray], ...]:
+        """
+        Return the values of the parameters of each trait of one kind, by
+        their names in the trait, from the values of its parameters: the
+        node-wise ones at the subnodes, as it is evaluated.
+        """
+        return self._traits.values(kind, params)
+
+    def shared(self, kind: str) -> bool:
+        """
+        Check whether the traits of one kind are one height trait that the
+        polar traits share (see NodalTraits.shared).
+        """
+        return self._traits.shared(kind)
+
+    @abc.abstractmethod
+    def geometry_pdescs(self) -> Mapping[str, Any]:
+        """
+        Return the descriptions of the parameters of its geometry, by
+        name: its centre (xpos, ypos), its orientation (posa, incl), and
+        with velocity traits, its systemic velocity (vsys); its own besides
+        (e.g. the wall of a cone).
+        """
+
+    @abc.abstractmethod
+    def pdescs(self) -> dict[str, ParamDesc]:
+        """Return its parameters: those of its geometry and of its traits."""
+
+    def frame_params(self) -> FrameParams:
+        """Return its parameters that place it in a frame."""
+        vsys = 'vsys' if 'vsys' in self.geometry_pdescs() else None
+        return FrameParams('xpos', 'ypos', vsys, 'posa', 'incl')

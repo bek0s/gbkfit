@@ -134,6 +134,9 @@ class MassDisk(MassComponent):
     def followed_components(self) -> tuple[str, ...]:
         return self._followed
 
+    def followed_layer(self) -> str | None:
+        return self._vertical.followed_component()
+
     @classmethod
     def followed_kind(cls) -> 'type[DiskDensity]':
         return DiskDensity
@@ -367,8 +370,7 @@ class TracedDisk(MassDisk):
     ):
         check_options(TracedDisk.__init__, locals())
         check_name(component)
-        if isinstance(vertical, VerticalComponent) \
-                and vertical.component() == component:
+        if vertical is not None and vertical.followed_component() == component:
             raise ValueError(
                 f"a traced disk is in the layer of its component "
                 f"{component!r} unless another vertical structure is "

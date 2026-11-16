@@ -10,7 +10,6 @@ need it check when the galaxy is made.
 """
 
 import abc
-import enum
 from collections.abc import Callable, Collection, Sequence
 from typing import Annotated, Any, Literal, TypeAlias
 
@@ -24,6 +23,7 @@ from gbkfit.config import (
     Choices, TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
+from .._capabilities import Capability
 from ..mass import MassContext, MassModel, forces_in_plane
 from ..mass.units import G
 from ._field_grid import FieldGradient
@@ -88,32 +88,6 @@ _FR_RMAX_COMPTON = 10.0
 _FR_RMAX_MIN = 1000.0
 
 
-class Capability(enum.Enum):
-    """
-    What a galaxy gives the components that need it (see Component.needs):
-    its mass, its distance, and what its gravity gives of its mass (see
-    Gravity.gives).
-    """
-
-    # The mass (e.g. the circular velocity in its gravity)
-    MASS = 'mass'
-    # The distance: the length of an arcsec in the galaxy, where its
-    # angles (e.g. the radii of its components) meet the kpc of its mass
-    DISTANCE = 'distance'
-    # The forces of the mass anywhere (off the plane too), those of a field
-    # (they have no curl)
-    FORCES = 'forces'
-    # Forces that are the gradient of a potential, in which orbits keep
-    # their energy
-    POTENTIAL = 'potential'
-    # The vertical structure of self-gravitating isothermal sheets of
-    # Newtonian gravity (h ~ sigma^2 / (G Sigma))
-    SHEETS = 'sheets'
-    # The shares of the components in the squared circular velocity (they
-    # add up to that of the mass)
-    SHARES = 'shares'
-
-
 class GravityField(abc.ABC):
     """
     The gravity of the mass of a galaxy in one evaluation, in kpc (see
@@ -158,12 +132,12 @@ class Gravity(TypedSerializable, abc.ABC):
 
     - the forces anywhere (off the plane too; Capability.FORCES), which
       the vertical equilibrium 'galaxy' and the rotation at each height
-      take (see traits.DPTraitEquilibrium and traits.VHTraitMass)
+      take (see traits.DispersionEquilibrium and traits.VHTraitMass)
     - forces that are the gradient of a potential (POTENTIAL), in which
       orbits keep their energy, as the orbits of Schwarzschild models take
     - the vertical structure of self-gravitating isothermal sheets
       (SHEETS), which the vertical equilibrium 'sheet' takes (see
-      traits.DPTraitEquilibrium and traits.RHTraitEquilibrium)
+      traits.DispersionEquilibrium and traits.RHTraitEquilibrium)
     - the shares of the components in the squared circular velocity
       (SHARES), which the dark fraction of a halo takes (see
       mass.Halo)

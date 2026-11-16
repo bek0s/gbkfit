@@ -9,6 +9,7 @@ shape, whose type says how its stars move: as traits give, or not at all
 import abc
 import functools
 import math
+import typing
 from collections.abc import Callable, Sequence
 from typing import Annotated, Any, TypeAlias
 
@@ -36,7 +37,7 @@ from .._common import Interp, RNodes, RStep, dump_name
 from .._needs import Need
 from .._native import (
     NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
-    evaluate_native, make_bands)
+    evaluate_native, light_pdescs)
 from .._nodal import evaluate_native_traits
 from .._units import mass_per_unit
 from ..base import (
@@ -46,8 +47,11 @@ from ..geometries import geometry_pdesc
 from ..nodes import Nodes
 from ..parts import kinematic_traits
 from ..roles import (
-    STARS, BandEmission, Emission, LineEmission, emission_parser)
+    BandEmission, Emission, View, emission_parser)
 from ._jeans import JeansKinematics
+from ._profiles import (
+    JeansSpheroidProfiles, SpheroidProfiles, TraitSpheroidProfiles,
+    spheroid_families)
 from ._kinematics import (
     TRAIT_KINDS, SpheroidKinematics, SpheroidLight, SpheroidMotion,
     SpheroidTraitsKinematics, TraitsMotion)
@@ -505,9 +509,9 @@ class Spheroid(Component, abc.ABC):
     own axis ratios, see LightMGE), and its kinematics, if any (see
     SpheroidKinematics; with a systemic velocity vsys). Its axis is the
     spin axis of a disk of its posa and incl; a sphere without kinematics
-    has none (no posa or incl). It emits in bands, seen by images, or as
-    stars (see StarsEmission), seen by images and by the spectral cubes
-    that ask for them, with kinematics.
+    has none (no posa or incl). It emits in bands, seen by images, and
+    with kinematics, by the spectral observations of the continuum (see
+    View: the velocities of its stars).
 
     On a grid without a depth axis (e.g. the line of sight flat), it is
     its projection on the sky, exactly, to any radius; its kinematics need
@@ -551,7 +555,7 @@ class Spheroid(Component, abc.ABC):
     config_titles = dict(
         profile='Profile', shape='Shape', rmax='Largest radius')
     config_start = dict(
-        profile=dict(type='sersic'), rmax=10, emission=dict(type='stars'))
+        profile=dict(type='sersic'), rmax=10, emission=dict(type='band'))
 
     parts = (
         ComponentPart('profile'), ComponentPart('shape'),
@@ -616,8 +620,7 @@ class Spheroid(Component, abc.ABC):
         own = self._geometry_pdescs | light \
             | (shape.pdescs() if shape is not None else {}) \
             | (self._motion.pdescs() if self._motion is not None else {})
-        self._bands = make_bands(own, emission)
-        self._pdescs = own | self._bands.pdescs()
+        self._pdescs = own | light_pdescs(own, emission)
 
     def profile(self) -> LightProfile:
         """Return its light profile."""
@@ -699,23 +702,29 @@ class Spheroid(Component, abc.ABC):
                       f"light")
         return dict.fromkeys(self._profile.amplitudes(), reason)
 
+    def profile_families(self) -> dict[str, tuple[float, float]]:
+        return spheroid_families(self, False)
+
+    def profiles(self, driver: Driver) -> SpheroidProfiles:
+        return SpheroidProfiles(self)
+
     def orbit_weights(self) -> str | None:
         return None if self._motion is None \
             else self._motion.orbit_weights()
 
-    def thick(self, seen_by: 'type[Emission]') -> bool:
-        # (an image is its projection; in a spectral cube, its velocities
+    def needs_depth(self, view: View) -> bool:
+        # (an image is its projection; in a spectral view, its velocities
         # change along the line of sight)
-        return issubclass(seen_by, LineEmission)
+        return view.spectral
+
+    def moves(self) -> bool:
+        return self._kinematics is not None
 
     def frame_params(self) -> FrameParams:
         names = [
             name if name in self._geometry_pdescs else None
             for name in ('vsys', 'posa', 'incl')]
         return FrameParams('xpos', 'ypos', *names)
-
-    def uses_mass(self) -> bool:
-        return self._kinematics is not None and self._kinematics.uses_mass()
 
     def needs(
             self, links: ComponentLinks = ComponentLinks()
@@ -761,16 +770,9 @@ class Spheroid(Component, abc.ABC):
     ) -> SpheroidStage | None:
         # (it has a part when the mass follows it, or for its kinematics in
         # the gravity)
-        if not links.followed and not self.uses_mass():
+        if not links.followed and not self.needs(links):
             return None
         return SpheroidStage(self, mass_per_unit(self.emission()))
-
-    def check_lines(self, lines: tuple[str, ...] | None) -> None:
-        if lines is not None and STARS in lines and self._kinematics is None:
-            raise ValueError(
-                "a spectral cube sees the stars of a spheroid with "
-                "kinematics only (e.g. type: jeans_spheroid, or a spheroid "
-                "with vptraits and dptraits)")
 
     def plan(
             self,
@@ -780,10 +782,9 @@ class Spheroid(Component, abc.ABC):
             redshift: float
     ) -> NativeComponentPlan:
         driver, spectral, dtype = target.driver, target.spectral, target.dtype
-        lines, band, data_unit = target.lines, target.band, target.data_unit
         emission = emission_setup(
-            None, self._bands, self.emission().unit(), spectral, lines,
-            band, emits, data_unit, redshift, ())
+            self.emission(), target.view, spectral, emits,
+            target.data_unit, redshift)
         return NativeComponentPlan(
             driver, SpheroidPlan(self, driver, emission.nlines, dtype),
             emission, opacity_ratios)
@@ -873,6 +874,25 @@ class TraitSpheroid(Spheroid):
                 "spheroid: give it vptraits and dptraits")
         super().__init__(profile, rmax, emission, shape, kinematics, name)
 
+    def profile_families(self) -> dict[str, tuple[float, float]]:
+        return spheroid_families(self, self._moving_traits() is not None)
+
+    def profiles(self, driver: Driver) -> SpheroidProfiles:
+        if (motion := self._moving_traits()) is None:
+            return super().profiles(driver)
+        return TraitSpheroidProfiles(
+            self, motion, SpheroidPlan(self, driver, 0, np.float64))
+
+    def _moving_traits(self) -> TraitsMotion | None:
+        """
+        Return the motion of its traits, if they move it (it has velocity
+        or dispersion traits).
+        """
+        motion = typing.cast('TraitsMotion | None', self.motion())
+        moves = motion is not None \
+            and bool(motion.traits('vpt') or motion.traits('dpt'))
+        return motion if moves else None
+
 
 class JeansSpheroid(Spheroid):
     """
@@ -911,6 +931,12 @@ class JeansSpheroid(Spheroid):
         check_options(JeansSpheroid.__init__, locals())
         super().__init__(
             profile, rmax, emission, shape, JeansKinematics(), name)
+
+    def profile_families(self) -> dict[str, tuple[float, float]]:
+        return spheroid_families(self, True)
+
+    def profiles(self, driver: Driver) -> SpheroidProfiles:
+        return JeansSpheroidProfiles(self)
 
 
 class OrbitSpheroid(Spheroid):
