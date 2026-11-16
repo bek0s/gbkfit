@@ -2,9 +2,9 @@
 Tests for the spheroids (Spheroid): their light in images against the
 exact projections of their profiles, the mean density near the centre
 of a cusp, and their options; the mass that follows their light
-(mass.TracedSpheroid); their Jeans kinematics (JeansKinematics),
-against exact and independent solutions, and in spectral cubes of stars;
-and the kinematics of their traits (SpheroidTraitsKinematics).
+(mass.TracedSpheroid); their Jeans kinematics (JeansMotion), against
+exact and independent solutions, and in spectral cubes of stars; and the
+kinematics of their traits (TraitsMotion).
 """
 
 import functools
@@ -289,8 +289,8 @@ def test_a_spheroid_round_trips():
 
 
 @pytest.mark.parametrize('options, message', [
-    (dict(rmax=0), "rmax must be"),
-    (dict(rmax=float('inf')), "rmax must be"),
+    (dict(rmax=0), "'rmax' must be finite and greater than 0"),
+    (dict(rmax=float('inf')), "'rmax' must be finite and greater than 0"),
     (dict(emission=dict(type='lines')), "emits in bands"),
     (dict(profile=dict(type='mge', ngauss=2),
           shape=dict(type='flattened')), "takes no shape"),
@@ -305,7 +305,7 @@ def test_a_spheroid_round_trips():
 def test_invalid_spheroids_are_refused(options, message):
     info = dict(profile=dict(type='sersic'), rmax=10, emission=BAND) \
         | options
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises((ConfigError, ValueError), match=message):
         TraitSpheroid.load(info)
 
 

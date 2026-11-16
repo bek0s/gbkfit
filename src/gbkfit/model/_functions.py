@@ -125,7 +125,7 @@ class GalaxyFunctions:
     spheroid has its density, its orientation unless it is a sphere
     without kinematics, and those of its motion if its kinematics are of
     traits (of them) or of the Jeans equations (of its tables: it
-    rotates, and has no other speed; see JeansKinematics); its orbits
+    rotates, and has no other speed; see JeansSpheroid); its orbits
     give its views, not its profiles.
 
     The functions take numbers or arrays of radii, and return arrays of

@@ -18,7 +18,7 @@ from .._profiles import (
     trait_speed)
 from ..base import ComponentState
 from ._jeans import JeansTables, midplane
-from ._kinematics import TraitsMotion
+from ._motion import TraitsMotion
 
 if TYPE_CHECKING:
     from .spheroid import Spheroid

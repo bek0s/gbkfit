@@ -8,8 +8,6 @@ shape, whose type says how its stars move: as traits give, or not at all
 
 import abc
 import functools
-import math
-import typing
 from collections.abc import Callable, Sequence
 from typing import Annotated, Any, TypeAlias
 
@@ -44,18 +42,16 @@ from ..base import (
     Component, ComponentLinks, ComponentPart, ComponentState, FieldsLayout,
     FrameParams, NativeGrid, SceneTarget)
 from ..geometries import geometry_pdesc
-from ..nodes import Nodes
+from ..nodes import Nodes, as_nodes
 from ..parts import kinematic_traits
 from ..roles import (
     BandEmission, Emission, View, emission_parser)
-from ._jeans import JeansKinematics
+from ._jeans import JeansMotion
+from ._motion import TRAIT_KINDS, SpheroidLight, SpheroidMotion, TraitsMotion
 from ._profiles import (
     JeansSpheroidProfiles, SpheroidProfiles, TraitSpheroidProfiles,
     spheroid_families)
-from ._kinematics import (
-    TRAIT_KINDS, SpheroidKinematics, SpheroidLight, SpheroidMotion,
-    SpheroidTraitsKinematics, TraitsMotion)
-from ._schwarzschild import SchwarzschildKinematics
+from ._schwarzschild import SchwarzschildMotion
 from ._stage import SpheroidStage
 
 
@@ -72,7 +68,7 @@ __all__ = [
 
 
 # The largest radius of a spheroid
-RMax: TypeAlias = Annotated[float, Unit('arcsec')]
+RMax: TypeAlias = Annotated[FiniteFloat, Gt(0), Unit('arcsec')]
 
 
 class LightProfile(TypedSerializable, abc.ABC):
@@ -506,12 +502,30 @@ class Spheroid(Component, abc.ABC):
     profile laid out in a shape, whose stars move as its type says (see
     TraitSpheroid, JeansSpheroid and OrbitSpheroid). It is the density of
     its light profile, laid out in its shape (unless the profile has its
-    own axis ratios, see LightMGE), and its kinematics, if any (see
-    SpheroidKinematics; with a systemic velocity vsys). Its axis is the
-    spin axis of a disk of its posa and incl; a sphere without kinematics
-    has none (no posa or incl). It emits in bands, seen by images, and
-    with kinematics, by the spectral observations of the continuum (see
-    View: the velocities of its stars).
+    own axis ratios, see LightMGE), and the motion of its stars, if they
+    move (its kinematics, see SpheroidMotion; with a systemic velocity
+    vsys). Its axis is the spin axis of a disk of its posa and incl; a
+    sphere without kinematics has none (no posa or incl). It emits in
+    bands, seen by images, and with kinematics, by the spectral
+    observations of the continuum (see View: the velocities of its
+    stars).
+
+    The stars of a spheroid of traits or of the Jeans equations move, at
+    each point, with a Gaussian distribution of velocities, of a mean and
+    a dispersion on the line of sight, in the frame of a thick disk whose
+    spin axis is the axis of the spheroid: the systemic velocity vsys and
+    a rotation around the axis, and the velocity ellipsoid of the
+    dispersions along the radial, tangential and vertical directions of
+    the cylinder. The mean and the dispersion of the velocities of a line
+    of sight (or of a bin) are then those of its stars, but not the shape
+    of their distribution, which a Gaussian at each point does not give:
+    its h3, h4 and the sigma of a Gauss-Hermite series fitted to it (e.g.
+    by pPXF) are not those of the stars (a sigma 5% low, in a test of an
+    isotropic Hernquist sphere). Fit their mean and dispersion:
+    observations of moments of the method 'moments', with the data of
+    pPXF converted (see gbkfit.moments.gauss_hermite_moments). The orbits
+    of an OrbitSpheroid give the shape of the distribution as well (see
+    SchwarzschildMotion).
 
     On a grid without a depth axis (e.g. the line of sight flat), it is
     its projection on the sky, exactly, to any radius; its kinematics need
@@ -547,9 +561,9 @@ class Spheroid(Component, abc.ABC):
     Raises
     ------
     ValueError
-        If rmax is not positive, the emission is not in bands, the profile
-        has its own axis ratios and a shape is given, or its stars cannot
-        move in it (see SpheroidKinematics.motion).
+        If rmax is not a finite number greater than zero, the emission is
+        not in bands, or the profile has its own axis ratios and a shape
+        is given.
     """
 
     config_titles = dict(
@@ -567,13 +581,16 @@ class Spheroid(Component, abc.ABC):
             rmax=self._rmax)
         if self._profile.takes_shape():
             info.update(shape=spheroid_shape_parser.dump(self._shape))
-        if self._kinematics is not None:
-            # (the options of its kinematics are its own)
-            info.update({
-                key: value for key, value in self._kinematics.dump().items()
-                if key != 'type'})
+        info.update(self._motion_options())
         info.update(emission=emission_parser.dump(self.emission()))
         return info
+
+    def _motion_options(self) -> dict[str, Any]:
+        """
+        Return the options of how its stars move, those of its type, for
+        its configuration (see dump); none by default.
+        """
+        return {}
 
     def __init__(
             self,
@@ -581,18 +598,17 @@ class Spheroid(Component, abc.ABC):
             rmax: RMax,
             emission: Emission,
             shape: SpheroidShape | None,
-            kinematics: SpheroidKinematics | None,
+            motion: SpheroidMotion | None,
             name: str | None
     ):
-        # (the options are checked by the constructor of the subclass)
+        """
+        motion is how its stars move, if they do, of its rmax: that of its
+        type, which the constructor of the subclass makes, once it has
+        checked the options (rmax among them).
+        """
         if not isinstance(emission, BandEmission):
             raise ValueError(
                 "a spheroid emits in bands (emission type: band)")
-        if isinstance(rmax, bool) or not isinstance(rmax, (int, float)) \
-                or not (math.isfinite(rmax) and rmax > 0):
-            raise ValueError(
-                f"rmax must be a finite number greater than zero; it is "
-                f"{rmax!r}")
         if not profile.takes_shape() and shape is not None:
             raise ValueError(
                 f"the light profile '{profile.type()}' has the axis ratios "
@@ -603,16 +619,14 @@ class Spheroid(Component, abc.ABC):
         self._profile = profile
         self._rmax = float(rmax)
         self._shape = shape
-        self._kinematics = kinematics
-        self._motion = kinematics.motion(self._rmax) \
-            if kinematics is not None else None
-        axis = kinematics is not None \
+        self._motion = motion
+        axis = motion is not None \
             or not (shape is not None and shape.spherical())
         self._geometry_pdescs = {
             name: pdesc for name, pdesc in GEOMETRY_PDESCS.items()
             if name in ('xpos', 'ypos')
             or (name in ('posa', 'incl') and axis)
-            or (name == 'vsys' and kinematics is not None)}
+            or (name == 'vsys' and motion is not None)}
         # (the amplitudes of the profile in the unit of its light)
         light = pdescs_with_units(
             profile.pdescs(),
@@ -630,12 +644,8 @@ class Spheroid(Component, abc.ABC):
         """Return its shape; none for a profile with its axis ratios."""
         return self._shape
 
-    def kinematics(self) -> SpheroidKinematics | None:
-        """Return its kinematics, if any."""
-        return self._kinematics
-
     def motion(self) -> SpheroidMotion | None:
-        """Return the motion of its kinematics, if any."""
+        """Return how its stars move (its kinematics), if they do."""
         return self._motion
 
     def rmax(self) -> float:
@@ -661,8 +671,8 @@ class Spheroid(Component, abc.ABC):
 
     def light(self, params: ParamValues) -> SpheroidLight:
         """
-        Return its light at the values of its parameters, as its kinematics
-        take it (see _jeans.light): the terms of its profile, their
+        Return its light at the values of its parameters, as its motion
+        takes it (see _jeans.light): the terms of its profile, their
         function and its table.
         """
         profile = self._profile
@@ -694,12 +704,11 @@ class Spheroid(Component, abc.ABC):
         return density
 
     def light_amplitudes(self) -> dict[str, str | None]:
-        # (the amplitudes of the terms of its profile; its kinematics can
-        # take its light, e.g. the density of the Jeans equations)
+        # (the amplitudes of the terms of its profile; its motion can take
+        # its light, e.g. the density of the Jeans equations)
         reason = None
         if self._motion is not None and self._motion.takes_light():
-            reason = (f"its {self._kinematics.type()} kinematics take its "
-                      f"light")
+            reason = f"its {self._motion.kind()} kinematics take its light"
         return dict.fromkeys(self._profile.amplitudes(), reason)
 
     def profile_families(self) -> dict[str, tuple[float, float]]:
@@ -718,7 +727,7 @@ class Spheroid(Component, abc.ABC):
         return view.spectral
 
     def moves(self) -> bool:
-        return self._kinematics is not None
+        return self._motion is not None
 
     def frame_params(self) -> FrameParams:
         names = [
@@ -729,26 +738,24 @@ class Spheroid(Component, abc.ABC):
     def needs(
             self, links: ComponentLinks = ComponentLinks()
     ) -> tuple[Need, ...]:
-        if self._kinematics is None:
+        if self._motion is None:
             return ()
-        return self._kinematics.needs(
-            f"the {self._kinematics.type()} kinematics of the spheroid "
+        return self._motion.needs(
+            f"the {self._motion.kind()} kinematics of the spheroid "
             f"{self.name()!r}")
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
 
     def param_owners(self) -> dict[str, tuple[str | int, ...]]:
-        # Its profile, its shape, and its kinematics: the traits of those of
-        # traits, as those of a disk; the others as a whole
+        # Its profile and its shape; those of its motion are its own (see
+        # TraitSpheroid)
         owners = super().param_owners()
         parts = [(('profile',), self._profile.pdescs())]
         if self._shape is not None:
             parts.append((('shape',), self._shape.pdescs()))
         for option, pdescs in parts:
             owners.update(dict.fromkeys(pdescs, option))
-        if isinstance(self._motion, TraitsMotion):
-            owners.update(self._motion.trait_owners())
         return owners
 
     def bounding_radius(self) -> float:
@@ -795,9 +802,9 @@ class TraitSpheroid(Spheroid):
     A spheroid whose stars move as traits give, or do not move (without
     traits; e.g. a bulge seen only by images). Its traits are those of a
     thick disk whose spin axis is the axis of the spheroid (see
-    SpheroidTraitsKinematics), on radial nodes of the distance from the
-    axis. Its stars take neither the mass of their galaxy nor its
-    gravity. See Spheroid for the options it shares.
+    TraitsMotion), on radial nodes of the distance from the axis. Its
+    stars take neither the mass of their galaxy nor its gravity. See
+    Spheroid for the options it shares.
 
     Parameters
     ----------
@@ -816,8 +823,9 @@ class TraitSpheroid(Spheroid):
         The radii of the nodes of its traits (arcsec), from 0; by default
         0 and its rmax. Given ones go to rmax at least.
     rstep : float, optional
-        The width of the rings its traits are evaluated on (see
-        SpheroidTraitsKinematics).
+        The width of the rings its traits are evaluated on, at most half
+        the smallest separation of its radii; by default that, or 1 if
+        less.
     interp : str, optional
         How the node-wise parameters of its traits are interpolated
         between its radii: 'linear', 'akima' or 'pchip'.
@@ -825,8 +833,10 @@ class TraitSpheroid(Spheroid):
     Raises
     ------
     ValueError
-        As Spheroid, or if the traits or nodes are not valid, or nodes are
-        given without traits.
+        As Spheroid, or if the traits are not valid (see
+        parts.KinematicTraits) or a spheroid does not take one of them
+        (see SPHEROID_TRAITS), the nodes are not valid or stop short of
+        rmax, or nodes are given without traits.
     """
 
     config_titles = dict(rnodes='Nodes')
@@ -863,16 +873,41 @@ class TraitSpheroid(Spheroid):
             name: str | None = None
     ):
         check_options(TraitSpheroid.__init__, locals())
-        kinematics = None
-        if kinematic_traits(vptraits, dptraits, vhtraits, dhtraits) \
-                is not None:
-            kinematics = SpheroidTraitsKinematics(
-                vptraits, dptraits, vhtraits, dhtraits, rnodes, rstep, interp)
+        kinematics = kinematic_traits(vptraits, dptraits, vhtraits, dhtraits)
+        # (the nodes in the form they were given in, for its configuration)
+        nodes = None if rnodes is None else as_nodes(rnodes)
+        motion = None
+        if kinematics is not None:
+            motion = TraitsMotion(
+                kinematics, float(rmax), nodes, rstep, interp)
         elif rnodes is not None or rstep is not None or interp != 'linear':
             raise ValueError(
                 "rnodes, rstep and interp are the nodes of the traits of a "
                 "spheroid: give it vptraits and dptraits")
-        super().__init__(profile, rmax, emission, shape, kinematics, name)
+        super().__init__(profile, rmax, emission, shape, motion, name)
+        self._kinematics = kinematics
+        self._traits_motion = motion
+        self._rnodes = nodes
+        self._rstep = rstep
+        self._interp = interp
+
+    def _motion_options(self) -> dict[str, Any]:
+        if self._kinematics is None:
+            return {}
+        info = self._kinematics.dump()
+        if self._rnodes is not None:
+            info.update(rnodes=self._rnodes.dump())
+        if self._rstep is not None:
+            info.update(rstep=self._rstep)
+        info.update(interp=self._interp)
+        return info
+
+    def param_owners(self) -> dict[str, tuple[str | int, ...]]:
+        # (those of its traits, as those of a disk)
+        owners = super().param_owners()
+        if self._traits_motion is not None:
+            owners.update(self._traits_motion.trait_owners())
+        return owners
 
     def profile_families(self) -> dict[str, tuple[float, float]]:
         return spheroid_families(self, self._moving_traits() is not None)
@@ -881,14 +916,14 @@ class TraitSpheroid(Spheroid):
         if (motion := self._moving_traits()) is None:
             return super().profiles(driver)
         return TraitSpheroidProfiles(
-            self, motion, SpheroidPlan(self, driver, 0, np.float64))
+            self, motion, TraitSpheroidPlan(self, motion, driver, np.float64))
 
     def _moving_traits(self) -> TraitsMotion | None:
         """
         Return the motion of its traits, if they move it (it has velocity
         or dispersion traits).
         """
-        motion = typing.cast('TraitsMotion | None', self.motion())
+        motion = self._traits_motion
         moves = motion is not None \
             and bool(motion.traits('vpt') or motion.traits('dpt'))
         return motion if moves else None
@@ -897,7 +932,7 @@ class TraitSpheroid(Spheroid):
 class JeansSpheroid(Spheroid):
     """
     A spheroid whose stars are in a steady state in the gravity of its
-    galaxy, by the Jeans equations (see JeansKinematics), of the
+    galaxy, by the Jeans equations (see JeansMotion), of the
     parameters beta_z (the anisotropy) and kappa (the rotation). See
     Spheroid for the options.
 
@@ -930,7 +965,7 @@ class JeansSpheroid(Spheroid):
     ):
         check_options(JeansSpheroid.__init__, locals())
         super().__init__(
-            profile, rmax, emission, shape, JeansKinematics(), name)
+            profile, rmax, emission, shape, JeansMotion(float(rmax)), name)
 
     def profile_families(self) -> dict[str, tuple[float, float]]:
         return spheroid_families(self, True)
@@ -943,7 +978,7 @@ class OrbitSpheroid(Spheroid):
     """
     A spheroid whose stars are in a steady state in the gravity of its
     galaxy, as a superposition of orbits (Schwarzschild 1979; see
-    SchwarzschildKinematics), whose weights (the parameter 'weights') an
+    SchwarzschildMotion), whose weights (the parameter 'weights') an
     objective solves. See Spheroid for the options it shares.
 
     Parameters
@@ -987,9 +1022,15 @@ class OrbitSpheroid(Spheroid):
             name: str | None = None
     ):
         check_options(OrbitSpheroid.__init__, locals())
-        super().__init__(
-            profile, rmax, emission, shape,
-            SchwarzschildKinematics(norbits, turns, seed), name)
+        motion = SchwarzschildMotion(norbits, float(turns), seed, float(rmax))
+        super().__init__(profile, rmax, emission, shape, motion, name)
+        self._orbits = motion
+
+    def _motion_options(self) -> dict[str, Any]:
+        orbits = self._orbits
+        return dict(
+            norbits=orbits.norbits(), turns=orbits.turns(),
+            seed=orbits.seed())
 
 
 class SpheroidPlan(NativePlan):
@@ -1052,7 +1093,7 @@ class SpheroidPlan(NativePlan):
         # 0, see NativeGrid)
         projected = grid['spat_step'][2] == 0
         self._write_params(params, projected, lines, state)
-        moves = self._spheroid.kinematics() is not None
+        moves = self._spheroid.moves()
         evaluate_native(
             lambda kwargs: self._backend.smspheroid_evaluate(
                 self._native_spheroid, projected=projected, **kwargs),
@@ -1063,73 +1104,6 @@ class SpheroidPlan(NativePlan):
     def fields_layout(self) -> FieldsLayout:
         # (a spheroid fills the voxels with j, v and s)
         return FieldsLayout(layer=False, nslots=3)
-
-    def evaluate_polar_traits(
-            self,
-            params: ParamValues,
-            kind: str,
-            r: npt.ArrayLike,
-            theta: npt.ArrayLike
-    ) -> np.ndarray:
-        """
-        Evaluate each polar trait of one kind ('vpt' or 'dpt') of the
-        kinematics of the spheroid, of traits (see TraitsMotion), at
-        points of its midplane, as it is evaluated: r the distance
-        (arcsec) from its axis, and theta the azimuth (degrees); the
-        velocity traits give their speeds, each along its direction. A row
-        for each trait, of the shape of the points (see
-        profiles.TraitsPlan).
-        """
-        r, theta = np.broadcast_arrays(r, theta)
-        return self._evaluate_traits(
-            self._backend.spheroid_ptraits_evaluate, params, kind,
-            dict(r=r, theta=theta))
-
-    def evaluate_height_traits(
-            self,
-            params: ParamValues,
-            kind: str,
-            r: npt.ArrayLike,
-            z: npt.ArrayLike
-    ) -> np.ndarray:
-        """
-        Evaluate each height trait of one kind ('vht' or 'dht') of the
-        kinematics of the spheroid, of traits, at its points of the
-        distance r from its axis and the height z along it (arcsec), as it
-        is evaluated. A row for each trait, of the shape of the points.
-        """
-        r, z = np.broadcast_arrays(r, z)
-        return self._evaluate_traits(
-            self._backend.spheroid_htraits_evaluate, params, kind,
-            dict(r=r, z=z))
-
-    def _evaluate_traits(
-            self,
-            function: Callable[..., None],
-            params: ParamValues,
-            kind: str,
-            points: dict[str, np.ndarray]
-    ) -> np.ndarray:
-        """
-        Evaluate the traits of one kind with a native function of traits
-        at points (see _nodal.evaluate_native_traits), of the values of
-        the parameters of the spheroid.
-
-        Raises
-        ------
-        ValueError
-            If its kinematics are not of traits.
-        """
-        motion = self._spheroid.motion()
-        if not isinstance(motion, TraitsMotion):
-            raise ValueError(
-                "only a spheroid of the kinematics of traits has traits")
-        # (an unknown kind has no rows: the native function says so)
-        ntraits = len(motion.traits(kind)) if kind in TRAIT_KINDS else 0
-        self._write_params(params, False, None, None)
-        return evaluate_native_traits(
-            self._driver, self._dtype, function, self._native_spheroid,
-            ntraits, points, kind=kind)
 
     def _write_params(
             self,
@@ -1164,3 +1138,77 @@ class SpheroidPlan(NativePlan):
         if (motion := spheroid.motion()) is not None:
             motion.write(buffer, params, state)
         buffer.copy_to_device()
+
+
+class TraitSpheroidPlan(SpheroidPlan):
+    """
+    The evaluation of a TraitSpheroid whose stars move as its traits give
+    (see TraitsMotion), on a driver and dtype, which also evaluates its
+    traits at points, as it is evaluated (see profiles.TraitsPlan), but
+    adds no lines to spectral cubes.
+    """
+
+    def __init__(
+            self, spheroid: TraitSpheroid, motion: TraitsMotion,
+            driver: Driver, dtype: np.dtype
+    ):
+        super().__init__(spheroid, driver, 0, dtype)
+        self._motion = motion
+
+    def evaluate_polar_traits(
+            self,
+            params: ParamValues,
+            kind: str,
+            r: npt.ArrayLike,
+            theta: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Evaluate each polar trait of one kind ('vpt' or 'dpt') of the
+        spheroid at points of its midplane, as it is evaluated: r the
+        distance (arcsec) from its axis, and theta the azimuth (degrees);
+        the velocity traits give their speeds, each along its direction. A
+        row for each trait, of the shape of the points (see
+        profiles.TraitsPlan).
+        """
+        r, theta = np.broadcast_arrays(r, theta)
+        return self._evaluate_traits(
+            self._backend.spheroid_ptraits_evaluate, params, kind,
+            dict(r=r, theta=theta))
+
+    def evaluate_height_traits(
+            self,
+            params: ParamValues,
+            kind: str,
+            r: npt.ArrayLike,
+            z: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Evaluate each height trait of one kind ('vht' or 'dht') of the
+        spheroid at its points of the distance r from its axis and the
+        height z along it (arcsec), as it is evaluated. A row for each
+        trait, of the shape of the points.
+        """
+        r, z = np.broadcast_arrays(r, z)
+        return self._evaluate_traits(
+            self._backend.spheroid_htraits_evaluate, params, kind,
+            dict(r=r, z=z))
+
+    def _evaluate_traits(
+            self,
+            function: Callable[..., None],
+            params: ParamValues,
+            kind: str,
+            points: dict[str, np.ndarray]
+    ) -> np.ndarray:
+        """
+        Evaluate the traits of one kind with a native function of traits
+        at points (see _nodal.evaluate_native_traits), of the values of
+        the parameters of the spheroid.
+        """
+        # (an unknown kind has no rows: the native function says so)
+        ntraits = len(self._motion.traits(kind)) \
+            if kind in TRAIT_KINDS else 0
+        self._write_params(params, False, None, None)
+        return evaluate_native_traits(
+            self._driver, self._dtype, function, self._native_spheroid,
+            ntraits, points, kind=kind)

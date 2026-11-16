@@ -65,7 +65,7 @@ class ObservationRegionMoments(ObservationRegions):
     of pPXF are c ln(1 + z), the convention 'log' (without a rest: the
     light of stars has none). Models that predict the mean and the
     dispersion of the stars, but not the shape of their distribution
-    (e.g. Jeans kinematics, see model.SpheroidKinematics), are fitted to
+    (e.g. Jeans kinematics, see model.Spheroid), are fitted to
     the mean and the dispersion of the series of pPXF (see
     gbkfit.moments.gauss_hermite_moments), of the method 'moments'
     (orders 1 and 2); models of its shape, to its V, sigma, h3 and h4,

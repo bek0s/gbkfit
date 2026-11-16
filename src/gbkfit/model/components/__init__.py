@@ -14,18 +14,17 @@ from ._nodal import TraitTable
 from .cones import Cone
 from .disks import Clouds, Disk, LineOpacity, ThickDisk, ThinDisk
 from .spheroids import (
-    JeansKinematics, JeansSpheroid, LightMGE, LightSersic, OrbitSpheroid,
-    SchwarzschildKinematics, Spheroid, SpheroidKinematics,
-    SpheroidTraitsKinematics, TraitSpheroid)
+    JeansSpheroid, LightMGE, LightSersic, OrbitSpheroid, Spheroid,
+    TraitSpheroid)
 
 from .cones._build import CONE_TRAITS as _CONE_TRAITS
 from .disks._build import (
     THICK_DISK_TRAITS as _THICK_DISK_TRAITS,
     THIN_DISK_TRAITS as _THIN_DISK_TRAITS)
-from .spheroids._kinematics import SPHEROID_TRAITS as _SPHEROID_TRAITS
+from .spheroids._motion import SPHEROID_TRAITS as _SPHEROID_TRAITS
 
 # The traits that each type of component takes, by its type (see
-# TraitTable; of a spheroid, those of its kinematics of traits)
+# TraitTable; of a spheroid, those of its motion of traits)
 TRAIT_TABLES: dict[str, TraitTable] = dict(
     thin_disk=_THIN_DISK_TRAITS, thick_disk=_THICK_DISK_TRAITS,
     cone=_CONE_TRAITS, spheroid=_SPHEROID_TRAITS)

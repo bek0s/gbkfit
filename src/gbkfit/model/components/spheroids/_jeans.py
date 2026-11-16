@@ -1,11 +1,11 @@
 """
-The Jeans kinematics of a spheroid (JeansKinematics): its stars in a
+The Jeans kinematics of a spheroid (JeansMotion): its stars in a
 steady state in the gravity of its galaxy, their mean velocity and
 dispersions from the Jeans equations of a velocity ellipsoid aligned with
 the cylinder (JAM_cyl, Cappellari 2008), tabled on (R, |z|) in each
-evaluation (JeansTables, see jeans_tables) from what the light and the
-gravity alone set of them (JeansForces, see jeans_forces), the state of
-their motion (JeansMotion).
+evaluation (JeansTables, see jeans_tables), the state of their motion,
+from what the light and the gravity alone set of them (JeansForces, see
+jeans_forces).
 """
 
 import dataclasses
@@ -18,16 +18,16 @@ import scipy.interpolate
 from gbkfit.driver import Driver
 from gbkfit.params import (
     ModelEvaluationError, ParamDesc, ParamScalarDesc, ParamValues)
-from ...gravity import GravityField
+from ...gravity import Capability, GravityField
 from .._native import ParamBuffer
+from .._needs import Need
 from ..base import GalaxyMass
 from ..base import ComponentState
-from ._kinematics import SpheroidKinematics, SpheroidLight, SpheroidMotion
+from ._motion import SpheroidLight, SpheroidMotion
 
 
 __all__ = [
     'JeansForces',
-    'JeansKinematics',
     'JeansMotion',
     'JeansTables',
     'jeans_forces',
@@ -45,62 +45,6 @@ _TABLE_SPAN = 1e4
 _TAIL_SIZE = 32
 _TAIL_SPAN = 100.0
 _SUBSTEPS = 4
-
-
-class JeansKinematics(SpheroidKinematics):
-    """
-    The stars of a spheroid in a steady state in the gravity of its
-    galaxy, by the Jeans equations (JAM_cyl, Cappellari 2008). Their
-    velocity ellipsoid is aligned with the cylinder: at each (R, z), from
-    the forces F_R and F_z of all the mass of the galaxy and the density
-    nu of the light of the spheroid (its whole profile),
-
-        nu sigma_z^2 = int_z^inf nu (-F_z) dz'
-        nu <v_phi^2> = b [R d(nu sigma_z^2)/dR + nu sigma_z^2] + R nu (-F_R)
-        sigma_R^2 = b sigma_z^2,  b = 1 / (1 - beta_z)
-        <v_phi> = kappa (<v_phi^2> - sigma_R^2)^(1/2)
-        sigma_phi^2 = <v_phi^2> - <v_phi>^2
-
-    of the anisotropy beta_z = 1 - sigma_z^2 / sigma_R^2 and the rotation
-    kappa (0: none; 1: that of an isotropic rotator where beta_z = 0; of
-    the other sign: counter-rotation), two parameters. Where <v_phi^2> is
-    below sigma_R^2 the stars cannot rotate so: <v_phi> is 0 there (as
-    JamPy), and sigma_phi^2 = <v_phi^2>. Where kappa (above 1) asks for
-    a rotation above <v_phi^2>^(1/2), it is that, and sigma_phi is 0 (a
-    cold rotation). No model (a ModelEvaluationError) where <v_phi^2> is
-    negative and there is light; 0 where there is none (beyond the
-    floats, or below the float32 round-off of the brightest point). Each point of the spheroid moves with a Gaussian distribution
-    of velocities of that mean and those dispersions (the velocity
-    ellipsoid seen along the line of sight): the Jeans equations give the
-    mean and the dispersion of the stars, not the shape of their
-    distribution, so fit those (see SpheroidKinematics).
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'jeans'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Jeans equations'
-
-    def pdescs(self) -> dict[str, ParamDesc]:
-        return dict(
-            beta_z=ParamScalarDesc(
-                title='Anisotropy',
-                desc="the anisotropy, 1 - sigma_z^2 / sigma_R^2",
-                max=1, unit='', default=0),
-            kappa=ParamScalarDesc(
-                title='Rotation factor',
-                desc="the rotation, the share of <v_phi^2> - sigma_R^2 "
-                     "whose square root is the mean rotation",
-                unit='', default=1))
-
-    def uses_mass(self) -> bool:
-        return True
-
-    def motion(self, rmax: float) -> 'JeansMotion':
-        return JeansMotion(self, rmax)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -251,7 +195,7 @@ def jeans_forces(
 ) -> JeansForces:
     """
     Return the groundwork of the Jeans tables of a spheroid (see
-    JeansForces and JeansKinematics): of the light of its profile (the
+    JeansForces and JeansMotion): of the light of its profile (the
     arguments of light but R and z: terms, function, table), its rmax
     (arcsec), which bounds the tables, in the gravity of its galaxy
     (field), in a galaxy of the given length of an arcsec (kpc).
@@ -315,7 +259,7 @@ def jeans_tables(
         kinematics_params: ParamValues, forces: JeansForces
 ) -> JeansTables:
     """
-    Return the Jeans tables of a spheroid (see JeansKinematics): of the
+    Return the Jeans tables of a spheroid (see JeansMotion): of the
     values of its parameters beta_z and kappa, and their groundwork (see
     jeans_forces).
     """
@@ -386,24 +330,69 @@ def jeans_tables(
 
 class JeansMotion(SpheroidMotion):
     """
-    The motion of the stars of a spheroid of JeansKinematics, of the given
-    rmax: its tables in each evaluation (its state, see jeans_tables), in
-    the groups 'jeans' (the four planes of the tables) and 'jeans_range'
-    of the buffer.
+    The stars of a spheroid in a steady state in the gravity of its
+    galaxy, by the Jeans equations (JAM_cyl, Cappellari 2008). Their
+    velocity ellipsoid is aligned with the cylinder: at each (R, z), from
+    the forces F_R and F_z of all the mass of the galaxy and the density
+    nu of the light of the spheroid (its whole profile),
+
+        nu sigma_z^2 = int_z^inf nu (-F_z) dz'
+        nu <v_phi^2> = b [R d(nu sigma_z^2)/dR + nu sigma_z^2] + R nu (-F_R)
+        sigma_R^2 = b sigma_z^2,  b = 1 / (1 - beta_z)
+        <v_phi> = kappa (<v_phi^2> - sigma_R^2)^(1/2)
+        sigma_phi^2 = <v_phi^2> - <v_phi>^2
+
+    of the anisotropy beta_z = 1 - sigma_z^2 / sigma_R^2 and the rotation
+    kappa (0: none; 1: that of an isotropic rotator where beta_z = 0; of
+    the other sign: counter-rotation), two parameters. Where <v_phi^2> is
+    below sigma_R^2 the stars cannot rotate so: <v_phi> is 0 there (as
+    JamPy), and sigma_phi^2 = <v_phi^2>. Where kappa (above 1) asks for
+    a rotation above <v_phi^2>^(1/2), it is that, and sigma_phi is 0 (a
+    cold rotation). No model (a ModelEvaluationError) where <v_phi^2> is
+    negative and there is light; 0 where there is none (beyond the
+    floats, or below the float32 round-off of the brightest point). Each
+    point of the spheroid moves with a Gaussian distribution of
+    velocities of that mean and those dispersions (the velocity ellipsoid
+    seen along the line of sight): the Jeans equations give the mean and
+    the dispersion of the stars, not the shape of their distribution, so
+    fit those (see Spheroid).
+
+    It is that of a spheroid of the given rmax (arcsec, which bounds
+    its tables): its tables in each evaluation (its state, see
+    jeans_tables), in the groups 'jeans' (the four planes of the
+    tables) and 'jeans_range' of the buffer.
     """
 
-    def __init__(self, kinematics: JeansKinematics, rmax: float):
-        self._kinematics = kinematics
+    @staticmethod
+    def kind() -> str:
+        return 'jeans'
+
+    def __init__(self, rmax: float):
         self._rmax = rmax
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        return self._kinematics.pdescs()
+        return dict(
+            beta_z=ParamScalarDesc(
+                title='Anisotropy',
+                desc="the anisotropy, 1 - sigma_z^2 / sigma_R^2",
+                max=1, unit='', default=0),
+            kappa=ParamScalarDesc(
+                title='Rotation factor',
+                desc="the rotation, the share of <v_phi^2> - sigma_R^2 "
+                     "whose square root is the mean rotation",
+                unit='', default=1))
+
+    def needs(self, label: str) -> tuple[Need, ...]:
+        return (
+            Need(Capability.MASS, f"{label} need the mass of its galaxy"),
+            Need(Capability.FORCES,
+                 f"{label} take the forces of its gravity off its plane"))
 
     def takes_light(self) -> bool:
         return True
 
     def state_params(self) -> tuple[str, ...]:
-        return tuple(self._kinematics.pdescs())
+        return tuple(self.pdescs())
 
     def groundwork(
             self, light: SpheroidLight, mass: GalaxyMass | None

@@ -1,5 +1,5 @@
 """
-The Schwarzschild kinematics of a spheroid (SchwarzschildKinematics): its
+The Schwarzschild kinematics of a spheroid (SchwarzschildMotion): its
 stars on a library of orbits in the gravity of its galaxy, whose weights
 are solved to fit the data (by an objective, see objective.Objective);
 the state of their motion in each evaluation (OrbitLibraryState, see
@@ -9,15 +9,12 @@ the share of each in the light, and the light the orbits must hold.
 
 import dataclasses
 from collections.abc import Callable, Sequence
-from typing import Annotated, Any
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import scipy.integrate
-from annotated_types import Ge, Gt
-from pydantic import FiniteFloat
 
-from gbkfit.config import check_options
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc, ParamValues, ParamVectorDesc
 from .._native import ParamBuffer
@@ -26,14 +23,13 @@ from ...gravity import Capability
 from ..base import GalaxyMass
 from ..base import ComponentState
 from ._jeans import light
-from ._kinematics import SpheroidKinematics, SpheroidLight, SpheroidMotion
+from ._motion import SpheroidLight, SpheroidMotion
 from ._orbits import (
     OrbitIntegrator, PotentialTable, SkyGrid, potential_table)
 
 
 __all__ = [
     'OrbitLibraryState',
-    'SchwarzschildKinematics',
     'SchwarzschildMotion',
     'orbit_library'
 ]
@@ -74,102 +70,6 @@ _COPIES = 4
 _STEPS_PER_TURN = 10 ** 5
 
 
-class SchwarzschildKinematics(SpheroidKinematics):
-    """
-    The stars of a spheroid in a steady state in the gravity of its galaxy,
-    as a superposition of orbits (Schwarzschild 1979). It is a library of
-    norbits orbits, started where its light is (each with a share of it,
-    see orbit_library), each integrated for turns periods of the circular
-    orbit of its energy, and recorded with its twin reversed in time
-    (which turns the other way). The weights of the orbits fit the data:
-    the parameter 'weights' holds the factor of the share of the light of
-    each (2 norbits elements: orbit k at 2k, its twin at 2k + 1), which an
-    objective solves (see objective.Objective), e.g. of a solve {type:
-    gauss, mean: 1, sigma: 1, min: 0, likelihood: profiled}: the
-    prior of the factors (mean 1) regularises the weights towards the
-    shares of the light (the smaller sigma, the stronger).
-
-    The gravity must be the gradient of a potential (Newtonian), in which
-    the orbits keep their energy. The observations of its stars are the
-    bins of region_moments of the method gauss_hermite (their V, sigma,
-    h3, h4 ...), which model the orbits in the series of their data (see
-    observation.orbits.OrbitRecording).
-
-    Parameters
-    ----------
-    norbits : int, optional
-        The number of the orbits (each with its twin).
-    turns : float, optional
-        How long each orbit is integrated, in periods of the circular
-        orbit of its energy.
-    seed : int, optional
-        The seed of the random numbers of the starts (the same starts in
-        every evaluation, so that the orbits change smoothly with the
-        gravity).
-
-    Raises
-    ------
-    ValueError
-        If norbits is not a positive integer, turns not a positive number,
-        or seed not a non-negative integer.
-    """
-
-    @staticmethod
-    def type() -> str:
-        return 'schwarzschild'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Schwarzschild orbits'
-
-    def dump(self) -> dict[str, Any]:
-        return super().dump() | dict(
-            norbits=self._norbits, turns=self._turns, seed=self._seed)
-
-    def __init__(
-            self,
-            norbits: Annotated[int, Gt(0)] = 3000,
-            turns: Annotated[FiniteFloat, Gt(0)] = 100,
-            seed: Annotated[int, Ge(0)] = 0
-    ):
-        check_options(SchwarzschildKinematics.__init__, locals())
-        self._norbits = norbits
-        self._turns = float(turns)
-        self._seed = seed
-
-    def norbits(self) -> int:
-        """Return the number of the orbits (each with its twin)."""
-        return self._norbits
-
-    def turns(self) -> float:
-        """Return how long each orbit is integrated (see the class)."""
-        return self._turns
-
-    def seed(self) -> int:
-        """Return the seed of the random numbers of the starts."""
-        return self._seed
-
-    def pdescs(self) -> dict[str, ParamDesc]:
-        return dict(weights=ParamVectorDesc(
-            2 * self._norbits, title='Orbit weights',
-            desc="the factor of the share of the light of each orbit "
-                 "(orbit k at 2k, its twin at 2k + 1), solved",
-            min=0, unit='', default=1))
-
-    def uses_mass(self) -> bool:
-        return True
-
-    def needs(self, label: str) -> tuple[Need, ...]:
-        return (
-            Need(Capability.MASS, f"{label} need the mass of its galaxy"),
-            Need(Capability.POTENTIAL,
-                 f"the orbits of {label} take forces that are the gradient "
-                 f"of a potential"))
-
-    def motion(self, rmax: float) -> 'SchwarzschildMotion':
-        return SchwarzschildMotion(self, rmax)
-
-
 @dataclasses.dataclass(frozen=True)
 class OrbitLibraryState(ComponentState):
     """
@@ -181,7 +81,7 @@ class OrbitLibraryState(ComponentState):
     has the same), the edges of the cells of the spheroid (radii, arcsec,
     and angles from the plane, radians) and the light in each cell (of
     both sides of the plane; an array of shape (ncell_r, ncell_b)), how
-    long the orbits are integrated (see SchwarzschildKinematics), the kpc
+    long the orbits are integrated (see SchwarzschildMotion), the kpc
     of an arcsec at the galaxy, and how (see OrbitIntegrator): the
     tolerance of the steps, the records of each orbit in time and its
     turned copies on the sky.
@@ -232,7 +132,7 @@ class OrbitLibraryState(ComponentState):
         """
         Return the light of each orbit and of its twin (2k and 2k + 1), of
         the factors of their shares of the light (their weights, see
-        SchwarzschildKinematics): the light of the cells times its share
+        SchwarzschildMotion): the light of the cells times its share
         times its factor, half of it each.
         """
         return np.repeat(self.cell_light.sum() * self.shares / 2, 2) \
@@ -240,16 +140,19 @@ class OrbitLibraryState(ComponentState):
 
 
 def orbit_library(
-        kinematics: SchwarzschildKinematics,
         light_terms: SpheroidLight,
         rmax: float,
-        mass: GalaxyMass
+        mass: GalaxyMass,
+        norbits: int,
+        turns: float,
+        seed: int
 ) -> OrbitLibraryState:
     """
     Return the orbits of the stars of a spheroid of Schwarzschild
     kinematics in one evaluation (see OrbitLibraryState), of the light of
     the spheroid (see Spheroid.light) and its rmax (arcsec), in the
-    gravity of its galaxy.
+    gravity of its galaxy: norbits orbits, integrated for turns periods,
+    of the starts of the seed (see SchwarzschildMotion).
 
     The potential is tabled from rmax times 1e-6 to 1e4. The orbits start
     at radii stratified evenly in ln r between those of the spheres that
@@ -264,8 +167,7 @@ def orbit_library(
     count); their light is their integral, by Gauss-Legendre quadrature in
     ln r and sin(b).
     """
-    rng = np.random.default_rng(kinematics.seed())
-    count = kinematics.norbits()
+    rng = np.random.default_rng(seed)
     table = potential_table(
         mass.field, mass.context.kpc_per_arcsec,
         (rmax * _TABLE_SPAN[0], rmax * _TABLE_SPAN[1]),
@@ -275,10 +177,10 @@ def orbit_library(
     lnr_light = _light_radii(nodes, nu)
     first, last = lnr_light(_START_LIGHT)
     lnr = first + (last - first) * (
-        np.arange(count) + rng.random(count)) / count
-    directions = rng.normal(size=(count, 3))
+        np.arange(norbits) + rng.random(norbits)) / norbits
+    directions = rng.normal(size=(norbits, 3))
     directions /= np.linalg.norm(directions, axis=1)[:, None]
-    normals = rng.normal(size=(count, 3))
+    normals = rng.normal(size=(norbits, 3))
     r = np.exp(lnr)
     positions = r[:, None] * directions
     density = light(
@@ -296,7 +198,7 @@ def orbit_library(
     return OrbitLibraryState(
         table, np.hstack((positions, velocities)), shares / shares.sum(),
         cell_edges, _cell_light(light_terms, *cell_edges),
-        kinematics.turns(), mass.context.kpc_per_arcsec)
+        turns, mass.context.kpc_per_arcsec)
 
 
 def _angle_weights(table: PotentialTable) -> np.ndarray:
@@ -393,20 +295,82 @@ def _cell_light(
 
 class SchwarzschildMotion(SpheroidMotion):
     """
-    The motion of the stars of a spheroid of SchwarzschildKinematics, of
-    the given rmax: its orbits in each evaluation (its state, and the
-    groundwork of it, see orbit_library), which its weights do not change
-    (its state reads none of its parameters). It gives the native
-    spheroid no kinematics: the observations of its stars record its
-    orbits (see SchwarzschildKinematics).
+    The stars of a spheroid in a steady state in the gravity of its galaxy,
+    as a superposition of orbits (Schwarzschild 1979). It is a library of
+    norbits orbits, started where its light is (each with a share of it,
+    see orbit_library), each integrated for turns periods of the circular
+    orbit of its energy, and recorded with its twin reversed in time
+    (which turns the other way). The weights of the orbits fit the data:
+    the parameter 'weights' holds the factor of the share of the light of
+    each (2 norbits elements: orbit k at 2k, its twin at 2k + 1), which an
+    objective solves (see objective.Objective), e.g. of a solve {type:
+    gauss, mean: 1, sigma: 1, min: 0, likelihood: profiled}: the
+    prior of the factors (mean 1) regularises the weights towards the
+    shares of the light (the smaller sigma, the stronger).
+
+    The gravity must be the gradient of a potential (Newtonian), in which
+    the orbits keep their energy. The observations of its stars are the
+    bins of region_moments of the method gauss_hermite (their V, sigma,
+    h3, h4 ...), which model the orbits in the series of their data (see
+    observation.orbits.OrbitRecording).
+
+    It is that of a spheroid of the given rmax (arcsec, which bounds the
+    table of the potential): its orbits in each evaluation (its state,
+    and the groundwork of it, see orbit_library), which its weights do
+    not change (its state reads none of its parameters). It gives the
+    native spheroid no kinematics: the observations of its stars record
+    its orbits.
+
+    Parameters
+    ----------
+    norbits : int
+        The number of the orbits (each with its twin).
+    turns : float
+        How long each orbit is integrated, in periods of the circular
+        orbit of its energy.
+    seed : int
+        The seed of the random numbers of the starts (the same starts in
+        every evaluation, so that the orbits change smoothly with the
+        gravity).
+    rmax : float
+        The rmax of the spheroid (arcsec, see Spheroid).
     """
 
-    def __init__(self, kinematics: SchwarzschildKinematics, rmax: float):
-        self._kinematics = kinematics
+    @staticmethod
+    def kind() -> str:
+        return 'schwarzschild'
+
+    def __init__(self, norbits: int, turns: float, seed: int, rmax: float):
+        self._norbits = norbits
+        self._turns = turns
+        self._seed = seed
         self._rmax = rmax
 
+    def norbits(self) -> int:
+        """Return the number of the orbits (each with its twin)."""
+        return self._norbits
+
+    def turns(self) -> float:
+        """Return how long each orbit is integrated (see the class)."""
+        return self._turns
+
+    def seed(self) -> int:
+        """Return the seed of the random numbers of the starts."""
+        return self._seed
+
     def pdescs(self) -> dict[str, ParamDesc]:
-        return self._kinematics.pdescs()
+        return dict(weights=ParamVectorDesc(
+            2 * self._norbits, title='Orbit weights',
+            desc="the factor of the share of the light of each orbit "
+                 "(orbit k at 2k, its twin at 2k + 1), solved",
+            min=0, unit='', default=1))
+
+    def needs(self, label: str) -> tuple[Need, ...]:
+        return (
+            Need(Capability.MASS, f"{label} need the mass of its galaxy"),
+            Need(Capability.POTENTIAL,
+                 f"the orbits of {label} take forces that are the gradient "
+                 f"of a potential"))
 
     def takes_light(self) -> bool:
         return True
@@ -421,7 +385,8 @@ class SchwarzschildMotion(SpheroidMotion):
             raise ValueError(
                 "the Schwarzschild kinematics of a spheroid need the mass of "
                 "its galaxy")
-        return orbit_library(self._kinematics, light, self._rmax, mass)
+        return orbit_library(
+            light, self._rmax, mass, self._norbits, self._turns, self._seed)
 
     def state(
             self, values: ParamValues, groundwork: object
