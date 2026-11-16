@@ -31,8 +31,8 @@ const ARROWS_ACROSS = 18;
 // cube of its size: fewer pixels. While it changes (e.g. a slider is
 // moved), fewer still; as it settles, sharp again.
 function renderSize(shown: number, deep: boolean, moving: boolean): number {
-  const full = Math.min(deep ? 160 : 384, Math.max(128, Math.round(shown / 2 / 32) * 32));
-  return moving ? Math.min(full, deep ? 96 : 192) : full;
+  const full = Math.min(deep ? 256 : 384, Math.max(128, Math.round(shown / 2 / 32) * 32));
+  return moving ? Math.min(full, deep ? 128 : 192) : full;
 }
 
 // Whether a galaxy has depth (see renderSize)

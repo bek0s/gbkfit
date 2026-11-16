@@ -12,6 +12,7 @@ observation, through its instrument; and its data, if it has them).
 """
 
 import dataclasses
+import functools
 import logging
 import math
 import os
@@ -22,12 +23,15 @@ from typing import Any, Literal
 import astropy.constants
 import astropy.units
 import numpy as np
+import numpy.typing as npt
+import scipy.ndimage
 
 import gbkfit.model
 import gbkfit.project
 import gbkfit.setup
 import gbkfit.units
 from gbkfit.config import ConfigError, error_message, paths_relative_to
+from gbkfit.driver import Driver
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.grid import doppler
 from gbkfit.model import (
@@ -40,6 +44,8 @@ from .views import Cube, CubeAxis
 from .workspace import Workspace
 
 
+_log = logging.getLogger(__name__)
+
 __all__ = [
     'GalaxyExtra',
     'GalaxyRender',
@@ -51,9 +57,10 @@ __all__ = [
 ]
 
 
-# How a galaxy is seen: at the orientation of its parameters, or with every
-# component turned face-on or edge-on (its posa and incl replaced by these
-# pairs; the major axis of an edge-on one along x)
+# How a galaxy is seen: at the orientation of its parameters, or turned as
+# a whole so that its reference plane is face-on or edge-on (the posa and
+# incl of that plane then; the major axis of an edge-on one along x; see
+# _oriented)
 View = Literal['sky', 'face-on', 'edge-on']
 _ORIENTATIONS = {'face-on': (0, 0), 'edge-on': (90, 90)}
 
@@ -130,10 +137,10 @@ class GalaxyRender:
 class GalaxyVolume:
     """
     The light of a galaxy in 3d, face-on (see Renders.volume): its values
-    (nz, ny, nx; the axis z along its axis of rotation, from below its
-    plane to above it), the size of its voxels across (step) and along z
-    (depth_step; arcsec), and the voxel of its plane along z (zero, 0-based;
-    fractional).
+    (nz, ny, nx; the axis z along the axis of its reference plane, from
+    below it to above it), the size of its voxels across (step) and along
+    z (depth_step; arcsec), and the voxel of that plane along z (zero,
+    0-based; fractional).
     """
     step: float
     depth_step: float
@@ -284,11 +291,12 @@ class Renders:
             progress: Callable[[str], None] | None = None
     ) -> GalaxyVolume:
         """
-        Render the light of a galaxy in 3d (as galaxy renders its maps),
-        face-on, so that z is along its axis of rotation: the brightness of
-        each of its components in each voxel of an ideal observation with
-        a depth axis (those in a plane, e.g. thin disks, in the voxels of
-        its plane); telling progress the stage it reaches, if given.
+        Render the light of a galaxy in 3d: the brightness of each of its
+        components in each voxel of the ideal observation that renders its
+        maps (see galaxy), turned as a whole so that its reference plane is
+        face-on, z along its axis (see _turn); those without a depth axis
+        (e.g. thin disks seen only in bands) face-on in the voxels of that
+        plane. Telling progress the stage it reaches, if given.
 
         Raises
         ------
@@ -297,25 +305,38 @@ class Renders:
             rendered.
         """
         tell = progress or _quiet
-        galaxy, _, extras, _, step = self._evaluate(
-            project, options, properties, 'face-on', size, tell)
+        galaxy, values, extras, _, step = self._evaluate(
+            project, options, properties, 'sky', size, tell)
         tell('gathering the volume')
-        cubes, planes = [], []
-        for extra in extras:
-            if extra.name != 'bdata' or 'component' not in extra.ids:
-                continue
-            data = np.asarray(extra.value.data, dtype=np.float32)
-            (cubes if data.ndim == 3 else planes).append((extra.value, data))
+        cubes = [
+            extra.value for extra in extras
+            if extra.name == 'bdata' and 'component' in extra.ids
+            and np.ndim(extra.value.data) == 3]
+        planes = [
+            extra.value for extra in extras
+            if extra.name == 'bdata' and 'component' in extra.ids
+            and np.ndim(extra.value.data) == 2]
         if cubes:
-            coords = cubes[0][0].coords
+            coords = cubes[0].coords
             depth_step, zero = float(coords.step[2]), float(coords.rpix[2])
-            values = sum(data for _, data in cubes)
+            light = _turned(
+                sum(np.asarray(cube.data, dtype=float) for cube in cubes),
+                coords, _turn(galaxy, values, 'face-on'),
+                _centre(galaxy, values))
         else:
             depth_step, zero = step, 0.0
-            values = np.zeros((1, size, size), dtype=np.float32)
-        for _, data in planes:
-            values[int(round(min(max(zero, 0), len(values) - 1)))] += data
-        return GalaxyVolume(step, depth_step, zero, values.astype(np.float32))
+            light = np.zeros((1, size, size))
+        if planes:
+            # (without a depth axis, e.g. thin disks seen only in bands:
+            # their light face-on, in the plane)
+            _, _, flat, _, _ = self._evaluate(
+                project, options, properties, 'face-on', size, tell)
+            plane = int(round(min(max(zero, 0), len(light) - 1)))
+            for extra in flat:
+                if extra.name == 'bdata' and 'component' in extra.ids \
+                        and np.ndim(extra.value.data) == 2:
+                    light[plane] += np.asarray(extra.value.data)
+        return GalaxyVolume(step, depth_step, zero, light.astype(np.float32))
 
     def extra(
             self,
@@ -387,7 +408,7 @@ class Renders:
                 raise _NoLight("the galaxy has no component that emits light")
             group = ObservationGroup([galaxy], observations)
             values = _values(group, properties)
-            plan = group.plan(DriverHost())
+            plan = group.plan(_driver())
             extras = Extras()
             tell('evaluating')
             plan.model_h(_oriented(galaxy, values, view), extras)
@@ -435,7 +456,7 @@ class Renders:
             values = _oriented(galaxy, _values(group, properties), view)
             extras = Extras()
             tell('evaluating the maps')
-            group.plan(DriverHost()).model_h(values, extras)
+            group.plan(_driver()).model_h(values, extras)
             axis = _cube_axis(galaxy.redshift(), seen)
             low, high = _observed_velocities(
                 _velocity_range(_maps(galaxy, extras)), axis)
@@ -448,7 +469,7 @@ class Renders:
             cube = _observations(galaxy, size, step, spectral)[0]
             group = ObservationGroup([galaxy], [cube])
             tell('evaluating the cube')
-            data = group.plan(DriverHost()).model_h(values)[0]
+            data = group.plan(_driver()).model_h(values)[0]
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
         cube_values = np.array(data['spectra'].data, dtype=np.float32)
@@ -495,7 +516,7 @@ class Renders:
                         resolved.config['observations'])
                 group = ObservationGroup([galaxy], seen)
                 values = _values(group, properties)
-                plan = group.plan(DriverHost())
+                plan = group.plan(_driver())
                 tell('evaluating')
                 outputs = gbkfit.setup.evaluation_outputs(
                     plan, None, values, True, False, False) \
@@ -561,6 +582,21 @@ class Renders:
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
         return galaxy, radius, 2 * _MARGIN * radius / size
+
+
+@functools.cache
+def _driver() -> Driver:
+    """
+    Return the driver of the renders of this process: the first GPU, if
+    there is one that CUDA can use (renders of thick components, cubes as
+    deep as they are wide, are many times faster there), or else the host.
+    """
+    try:
+        from gbkfit.driver.drivers.cuda import DriverCuda
+        return DriverCuda()
+    except Exception as e:  # (no CuPy, no GPU, or no CUDA module built)
+        _log.info(f"renders on the host: no GPU ({e})")
+        return DriverHost()
 
 
 def _quiet(stage: str) -> None:
@@ -801,19 +837,137 @@ def _default(desc: Any) -> Any:
 
 def _oriented(galaxy: Galaxy, values: dict[str, Any], view: View) -> dict:
     """
-    Return the values of a galaxy seen in a view: with the posa and incl
-    of each component replaced, face-on or edge-on (each element of a
-    node-wise one).
+    Return the values of a galaxy seen in a view: turned as a whole (see
+    _turn), every ring of every component with an orientation (a posa and
+    an incl) turned with it, so that warps and the angles between
+    components keep. The centres stay: its components share one (see
+    GalaxyStage).
     """
-    if view == 'sky':
+    turn = _turn(galaxy, values, view)
+    if turn is None:
         return values
     values = dict(values)
-    for index in range(len(galaxy.components())):
-        frame = galaxy.component_frame_params(index)
-        for name, value in zip((frame.posa, frame.incl), _ORIENTATIONS[view]):
-            if name is not None:
-                values[name] = np.full_like(
-                    np.asarray(values[name], dtype=float), value)
+    for names in dict.fromkeys(_orientations(galaxy)):
+        posa, incl = np.broadcast_arrays(*(
+            np.asarray(values[name], dtype=float) for name in names))
+        turned = _plane_angles(_plane_frames(posa, incl) @ turn.T)
+        values.update(zip(names, turned))
+    return values
+
+
+def _orientations(galaxy: Galaxy) -> list[tuple[str, str]]:
+    """
+    Return the names of the posa and the incl of each component of a
+    galaxy that has an orientation, in their order.
+    """
+    return [
+        (frame.posa, frame.incl) for frame in (
+            galaxy.component_frame_params(index)
+            for index in range(len(galaxy.components())))
+        if frame.posa is not None and frame.incl is not None]
+
+
+def _turn(
+        galaxy: Galaxy, values: Mapping[str, Any], view: View
+) -> np.ndarray | None:
+    """
+    Return the turn of the sky (a rotation, 3 by 3, of x, y and the line
+    of sight) that shows a galaxy in a view, at the values of its
+    parameters: that which takes its reference plane (the first ring of
+    its first component with an orientation) face-on or edge-on; None in
+    the view of the sky, or without an orientation.
+    """
+    oriented = _orientations(galaxy)
+    if view == 'sky' or not oriented:
+        return None
+    reference = _plane_frames(*(
+        np.ravel(np.asarray(values[name], dtype=float))[0]
+        for name in oriented[0]))
+    # (sky to plane: frame @ sky, so the frame of a plane turned is frame
+    # @ turn.T)
+    return _plane_frames(*_ORIENTATIONS[view]).T @ reference
+
+
+def _plane_frames(posa: npt.ArrayLike, incl: npt.ArrayLike) -> np.ndarray:
+    """
+    Return the rotations from the sky to the planes of the given position
+    angles and inclinations (degrees), as the kernels turn the sky
+    (gmodels.hpp, transform_posa and transform_incl): arrays of 3 by 3,
+    whose rows are the major axis of each plane (its line of nodes), its
+    minor axis and its normal, on the sky (x, y and the line of sight).
+    """
+    p, i = np.radians(posa), np.radians(incl)
+    zero = np.zeros_like(p)
+    return np.stack([
+        np.stack([-np.sin(p), np.cos(p), zero], axis=-1),
+        np.stack([-np.cos(i) * np.cos(p), -np.cos(i) * np.sin(p),
+                  np.sin(i)], axis=-1),
+        np.stack([np.sin(i) * np.cos(p), np.sin(i) * np.sin(p),
+                  np.cos(i)], axis=-1)], axis=-2)
+
+
+def _plane_angles(frames: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the position angles and inclinations (degrees) of planes of
+    the given rotations from the sky (see _plane_frames): those of their
+    normals, and the position angle of the major axis of a face-on one.
+    A rotation that also turns a plane within itself (a ring turned with
+    a galaxy, not its reference plane) keeps its plane, not that turn.
+    """
+    normal = frames[..., 2, :]
+    incl = np.degrees(np.arccos(np.clip(normal[..., 2], -1.0, 1.0)))
+    tilted = np.hypot(normal[..., 0], normal[..., 1]) > 1e-12
+    posa = np.degrees(np.where(
+        tilted, np.arctan2(normal[..., 1], normal[..., 0]),
+        np.arctan2(-frames[..., 0, 0], frames[..., 0, 1])))
+    return posa, incl
+
+
+def _centre(galaxy: Galaxy, values: Mapping[str, Any]) -> np.ndarray:
+    """
+    Return the centre of a galaxy on the sky (x, y, and 0 along the line of
+    sight; arcsec), about which it turns (see _turn): that of its first
+    component with an orientation (its components share one), or of its
+    first component.
+    """
+    frames = [
+        galaxy.component_frame_params(index)
+        for index in range(len(galaxy.components()))]
+    oriented = [frame for frame in frames if frame.posa is not None]
+    frame = (oriented or frames)[0]
+    return np.array([
+        float(np.ravel(np.asarray(values[name], dtype=float))[0])
+        for name in (frame.x, frame.y)] + [0.0])
+
+
+def _turned(
+        cube: np.ndarray,
+        coords: Any,
+        turn: np.ndarray | None,
+        centre: np.ndarray
+) -> np.ndarray:
+    """
+    Return a cube of the sky (z, y, x, of the coordinates of its grid;
+    the model measures each axis from its reference pixel) turned about a
+    centre by a turn of the sky (see _turn), on the same grid: each voxel
+    the trilinear interpolation of the cube where the turn takes it from;
+    0 beyond it. The cube itself without a turn.
+    """
+    if turn is None:
+        return cube
+    step = np.asarray(coords.step[:3], dtype=float)
+    rpix = np.asarray(coords.rpix[:3], dtype=float)
+    shape = cube.shape[::-1]
+    # (the positions of the voxels, x, y and z, from the centre)
+    axes = [(np.arange(n) - rpix[a]) * step[a] - centre[a]
+            for a, n in enumerate(shape)]
+    x, y, z = np.meshgrid(*axes, indexing='ij')
+    turned = np.stack((x, y, z), axis=-1) @ turn
+    source = [
+        (turned[..., a] + centre[a]) / step[a] + rpix[a] for a in range(3)]
+    values = scipy.ndimage.map_coordinates(
+        cube, [source[2].T, source[1].T, source[0].T], order=1,
+        mode='constant', cval=0.0, prefilter=False)
     return values
 
 

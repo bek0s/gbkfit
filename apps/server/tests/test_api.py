@@ -1114,6 +1114,23 @@ def test_a_galaxy_is_rendered_face_on_and_edge_on(client):
     assert np.all(edge_on['gas/light'] == 0)
 
 
+def test_a_warped_disk_keeps_its_warp_face_on_and_edge_on(client):
+    # The galaxy turns as a whole, by its inner ring: its outer rings,
+    # tilted from it, stay tilted (light edge-on, motion along the line of
+    # sight face-on), and its volume is that of the sky turned face-on
+    warped = copy.deepcopy(RENDERED)
+    warped['components'][0]['tilted'] = True
+    properties = dict(
+        gas_vpt_vt=200, gas_posa=[30, 30, 30, 40, 50, 60],
+        gas_incl=[60, 60, 60, 70, 80, 85])
+    _, edge_on = render(
+        client, warped, properties=properties, view='edge-on', size=64)
+    assert edge_on['gas/light'].max() > 0
+    _, face_on = render(
+        client, warped, properties=properties, view='face-on', size=64)
+    assert np.nanmax(np.abs(face_on['velocity'])) > 10
+
+
 def test_a_galaxy_is_observed_by_an_observation_of_its_project(client):
     galaxy = client.get('/api/v1/pieces/study/galaxies/disk.yaml').json()
     info = client.post('/api/v1/views/observed', json=dict(
@@ -1151,8 +1168,11 @@ def test_the_cube_of_a_galaxy_is_rendered_and_viewed(client):
     velocities = np.array(spectrum['spectral'])
     assert values[0] < 1e-3 * values.max() and values[-1] < 1e-3 * values.max()
     assert velocities[0] < -200 < 200 < velocities[-1]
+    # (each horn the brightest channel on its side of 0)
+    below, above = velocities < 0, velocities > 0
     np.testing.assert_allclose(
-        velocities[np.argmax(values)], -velocities[np.argmax(values[::-1])],
+        velocities[below][np.argmax(values[below])],
+        -velocities[above][np.argmax(values[above])],
         atol=2 * (velocities[1] - velocities[0]))
     # Its channels and moments, as those of a cube of a file
     response = client.get(
