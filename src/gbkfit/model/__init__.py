@@ -10,6 +10,7 @@ the datasets: observations (see gbkfit.observation) turn it into the
 data of a dataset.
 """
 
+from ._capabilities import Need
 from ._functions import GalaxyFunctions
 from ._galaxy_stage import GalaxyStage, GalaxyState
 from .distance import *

@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING
 from gbkfit.params import ParamValues
 from ...extras import Extras
 from ...mass import SpheroidDensity
+from ...mass.sky import SpheroidAxis
 from ..base import GalaxyMass
-from ..base import ComponentStage, ComponentState, Frame
+from ..base import ComponentStage, ComponentState, Frame, SkyPlacements
 
 if TYPE_CHECKING:
     from .spheroid import Spheroid
@@ -22,7 +23,8 @@ __all__ = [
 class SpheroidStage(ComponentStage):
     """
     The part of a spheroid in the stage of its galaxy (see GalaxyStage):
-    its density, which the mass of the galaxy follows (see
+    where it is (see Placed: its centre, and its axis, if it has one), its
+    density, which the mass of the galaxy follows (see
     mass.TracedSpheroid), of the given mass surface density of one unit
     of its light (Msun/kpc^2; see _units.mass_per_unit), if its emission
     has a unit; and its state, that of the motion of its kinematics, if
@@ -37,15 +39,40 @@ class SpheroidStage(ComponentStage):
         self._spheroid = spheroid
         self._mass_per_unit = mass_per_unit
 
+    def placement_params(self) -> tuple[str, ...]:
+        frame = self._spheroid.frame_params()
+        return tuple(
+            name for name in (frame.x, frame.y, frame.posa, frame.incl)
+            if name is not None)
+
     def frames(self, values: ParamValues) -> list[Frame]:
-        # (it has a stage only when the mass moves or follows it: its
-        # centre, and its axis, if it has one)
+        # (one part: its centre, and its axis, if it has one)
         frame = self._spheroid.frame_params()
         angles = [
             None if name is None else float(values[name])
             for name in (frame.posa, frame.incl)]
         return [Frame(
             0.0, float(values[frame.x]), float(values[frame.y]), *angles)]
+
+    def place(
+            self,
+            label: str,
+            values: ParamValues,
+            kpc_per_arcsec: float,
+            placement: SkyPlacements
+    ) -> None:
+        """
+        Add the centre (kpc) and the axis of its spheroid (of a sphere
+        none) to the placement of the mass of its galaxy (see
+        Placed.place).
+        """
+        frame = self._spheroid.frame_params()
+        angles = [
+            None if name is None else float(values[name])
+            for name in (frame.posa, frame.incl)]
+        placement.add_axis(label, SpheroidAxis(
+            float(values[frame.x]) * kpc_per_arcsec,
+            float(values[frame.y]) * kpc_per_arcsec, *angles))
 
     def light_params(self) -> tuple[str, ...]:
         return self._spheroid.light_params()

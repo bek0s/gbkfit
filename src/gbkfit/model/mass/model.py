@@ -18,6 +18,7 @@ from gbkfit.utils import iterutils
 from .base import MassComponent, MassContext
 from .disks import MassDisk, TracedDisk
 from .points import MassPoint
+from .sky import SkyMass, SkyPlacement, SkyProjected
 from .spheroids import Halo, MassSpheroid, TracedSpheroid
 from .tables import MassTable
 from .user import MassUser
@@ -386,6 +387,74 @@ class MassModel(Serializable):
         return sum(self._each(
             lambda component, own, ctx: component.potential(
                 R, z, own, ctx), params, context).values())
+
+    def projection_gaps(self) -> str | None:
+        """
+        Return why its mass cannot be laid out on the sky (see
+        sky_mass): the components that do not say where their mass is
+        (see sky.SkyProjected); None if it can.
+        """
+        if gaps := [component.name() for component in self._components
+                    if not isinstance(component, SkyProjected)]:
+            return (
+                f"the mass components {gaps} do not say where their mass is "
+                f"(tables give their circular velocity, and functions of the "
+                f"user their gravity, not their density): give them as "
+                f"disks, spheroids, halos or points")
+        return None
+
+    def takes_mass_plane(self) -> bool:
+        """
+        Check whether a component lays out its mass on the sky in the plane
+        of the mass of its galaxy (see sky.SkyProjected.takes_mass_plane),
+        which the galaxy must have.
+        """
+        return any(
+            isinstance(component, SkyProjected)
+            and component.takes_mass_plane() for component in self._components)
+
+    def sky_mass(
+            self,
+            params: ParamValues,
+            context: MassContext,
+            placement: SkyPlacement
+    ) -> SkyMass:
+        """
+        Return its mass laid out on the sky (see sky.SkyMass): the layers of
+        each component, of the values of its own parameters and its context
+        (with the components it responds to, see MassContext).
+
+        Parameters
+        ----------
+        params : ParamValues
+            The values of its parameters (and possibly others), by name.
+        context : MassContext
+            The context of the mass, of a galaxy with a distance.
+        placement : SkyPlacement
+            Where its galaxy places its mass.
+
+        Returns
+        -------
+        SkyMass
+            Its mass on the sky.
+
+        Raises
+        ------
+        ValueError
+            If the context has no distance, or a component cannot lay out
+            its mass on the sky (see projection_gaps).
+        ModelEvaluationError
+            If the values give no layers (see sky.SkyProjected).
+        """
+        if context.kpc_per_arcsec is None:
+            raise ValueError(
+                "the mass of a galaxy is laid out on the sky at its "
+                "distance, which it lacks")
+        if (gaps := self.projection_gaps()) is not None:
+            raise ValueError(gaps)
+        return SkyMass(context.kpc_per_arcsec, self._each(
+            lambda component, own, ctx: component.sky_layers(
+                own, ctx, placement), params, context))
 
     def _each(
             self,

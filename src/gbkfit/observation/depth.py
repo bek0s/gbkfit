@@ -22,10 +22,9 @@ from gbkfit.grid import Grid, VelocityConvention
 from gbkfit.lensing import (
     LensedPlane, LensedScene, SceneDrawing, SourceGrid, TracePlan)
 from gbkfit.model import (
-    MAX_SUBCHANNELS, AdditiveScenePlan, Scene, SceneEvaluation, ScenePlan,
-    TransferScenePlan, View)
+    MAX_SUBCHANNELS, AdditiveScenePlan, Reference, Scene, SceneEvaluation,
+    ScenePlan, TransferScenePlan, View)
 from gbkfit.model.components.base import DepthAxis
-from gbkfit.params import ParamValues
 from ._scene import SeenScenes
 
 
@@ -342,7 +341,7 @@ def plan_scenes(
         dtype: np.dtype,
         smoothing: float | None,
         footprint: Callable[[], np.ndarray],
-        reference: ParamValues | None
+        reference: Reference | None
 ) -> SceneDrawing:
     """
     Plan the evaluation of the scenes of an observation (see SeenScenes)
@@ -372,10 +371,10 @@ def plan_scenes(
         Return the pixels of the grid whose light can reach the data (a
         bool array of shape (ny, nx)), from which the rays through the
         lenses are traced; called with planes behind lenses only.
-    reference : ParamValues, optional
+    reference : Reference, optional
         The values of the parameters at which the grids of the planes
-        behind lenses are laid out (see ParamSpace.reference); required
-        with them.
+        behind lenses are laid out (see ParamSpace.reference), with the
+        masses of galaxies there; required with them.
 
     Returns
     -------

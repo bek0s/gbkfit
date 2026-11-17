@@ -12,6 +12,7 @@
 #include <gbkfit/dmodel/dmodels.hpp>
 #include <gbkfit/gmodel/gmodels.hpp>
 #include <gbkfit/gmodel/transfer.hpp>
+#include <gbkfit/lensing/layers.hpp>
 #include <gbkfit/objective/objective.hpp>
 #include <gbkfit/orbits/orbits.hpp>
 
@@ -214,6 +215,35 @@ dmodel_lens_composite(
     }
     }
     }
+}
+
+// The deflection over pi K of an elliptical layer (see
+// gbkfit::lens_elliptical_point) at npoints points (x, y), into alpha_x
+// and alpha_y
+template<typename T> void
+lens_elliptical_deflection(
+        int npoints, const T* x, const T* y,
+        const gbkfit::LensEllipse<T>& ellipse, T* alpha_x, T* alpha_y)
+{
+    // Parallelization: per point
+    #pragma omp parallel for schedule(dynamic, 256)
+    for (int i = 0; i < npoints; ++i)
+        gbkfit::lens_elliptical_point(
+                x[i], y[i], ellipse, alpha_x[i], alpha_y[i]);
+}
+
+// The deflection over 2 pi K of bands of rings (see
+// gbkfit::lens_band_point) at npoints points (x, y), into alpha_x and
+// alpha_y
+template<typename T> void
+lens_band_deflection(
+        int npoints, const T* x, const T* y,
+        const gbkfit::LensBands<T>& bands, T* alpha_x, T* alpha_y)
+{
+    // Parallelization: per point
+    #pragma omp parallel for schedule(dynamic, 64)
+    for (int i = 0; i < npoints; ++i)
+        gbkfit::lens_band_point(x[i], y[i], bands, alpha_x[i], alpha_y[i]);
 }
 
 template<typename T> void
@@ -620,6 +650,16 @@ struct Wrapper
     static void
     dmodel_regions_sum(auto... args) {
         kernels::dmodel_regions_sum<T>(args...);
+    }
+
+    static void
+    lens_elliptical_deflection(auto... args) {
+        kernels::lens_elliptical_deflection<T>(args...);
+    }
+
+    static void
+    lens_band_deflection(auto... args) {
+        kernels::lens_band_deflection<T>(args...);
     }
 
     // (the kernels of the fields of disks with line opacity and without, of

@@ -367,6 +367,11 @@ class ProfileNodewise(SpheroidProfile):
         """Return the radii (kpc) of its nodes."""
         return self._nodes
 
+    def linear_knots(self) -> np.ndarray:
+        # (its projected density is linear between its nodes: see
+        # sky.LinearBetweenKnots)
+        return self._nodes
+
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(log_sigma=ParamVectorDesc(
             len(self._nodes) - 1, title='Log projected density',

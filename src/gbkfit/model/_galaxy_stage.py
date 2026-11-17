@@ -1,9 +1,11 @@
 """
 The stage of a galaxy (GalaxyStage): what the galaxy computes once per
 evaluation, for all its observations: the mass of the galaxy, with the
-densities of the components it follows, and what each component takes
-from the galaxy (see ComponentStage); each of its parts again only when
-the parameters it reads, or the parts it takes, change.
+densities of the components it follows, its field in the gravity of the
+galaxy, its mass laid out on the sky for the lenses of its mass, and
+what each component takes from the galaxy (see ComponentStage); each of
+its parts again only when the parameters it reads, or the parts it
+takes, change.
 """
 
 import dataclasses
@@ -17,13 +19,17 @@ from gbkfit.cosmology import DEFAULT, Cosmology
 from gbkfit.driver import Driver
 from gbkfit.params import (
     ModelEvaluationError, ParamValues, ParamView, StageCache)
-from .components.base import GalaxyMass
+from ._capabilities import Capability
+from .components.base import GalaxyMass, Placed
 from .extras import Extras
 from .mass import MassContext
+from .mass.sky import (
+    RingPlacement, SkyPlacement, SpheroidAxis, plane_tilt)
 
 if TYPE_CHECKING:
     from .galaxy import Galaxy
     from .components.base import ComponentStage, ComponentState
+    from .mass.sky import SkyMass
 
 
 __all__ = [
@@ -77,12 +83,15 @@ class GalaxyEpoch:
 class GalaxyState:
     """
     A galaxy in one evaluation, for all its observations (see
-    GalaxyStage.evaluate): its mass (None without mass), and what it gives
+    GalaxyStage.evaluate): its mass (None without mass), what it gives
     each component that takes anything from it: its state, by the index
-    of the component (see ComponentStage.state).
+    of the component (see ComponentStage.state), and its mass laid out on
+    the sky, for the lenses of its mass (see SkyMass; None if its stage
+    does not lay it out).
     """
     mass: GalaxyMass | None
     states: dict[int, 'ComponentState']
+    sky: 'SkyMass | None' = None
 
 
 class _ComponentParts(NamedTuple):
@@ -108,27 +117,38 @@ class GalaxyStage:
        with what it makes of them (e.g. the light of image traits; see
        ComponentStage.values);
     3. the mass of the galaxy (see mass): its context, with the densities
-       of the components it follows (of their light), and its field in
-       the gravity of the galaxy;
-    4. what each component takes from the galaxy: the groundwork of its
+       of the components it follows (of their light);
+    4. its field, in the gravity of the galaxy (see Gravity.field);
+    5. with the sky part (for the lenses of its mass; see the parameter
+       sky_mass), its mass laid out on the sky (see SkyMass), placed by
+       the components that the mass moves, holds up or follows (see
+       Galaxy.placed and SkyPlacement);
+    6. what each component takes from the galaxy: the groundwork of its
        state (see ComponentStage.groundwork; e.g. the forces in the Jeans
        equations of a spheroid), and its state (see ComponentStage.state):
        e.g. the rotation of a disk in the gravity of the mass, or the
        dispersion of its vertical equilibrium.
 
     Each part reads the values of the parameters it declares alone: the
-    scale those of the distance, the mass those of the mass and the
-    gravity, and each part of a component those that its stage declares
-    (see ComponentStage); and it takes the parts before it that it uses.
-    An evaluation computes a part again only when the values it reads, or
-    the parts it takes, change (see StageCache and evaluate): e.g. a step
-    in the position angle of a spheroid of Jeans kinematics computes none
-    of them again, nor a step in the anisotropy of its stars the
-    groundwork of its state.
+    scale those of the distance, the mass those of the mass, the field
+    those of the gravity, the sky those that place the components where
+    the mass is (see Placed.placement_params), and each part of a
+    component those that its stage declares (see ComponentStage); and it
+    takes the parts before it that it uses (the sky takes the mass, not
+    its field). An evaluation computes a part again only when the values
+    it reads, or the parts it takes, change (see StageCache and evaluate):
+    e.g. a step in the position angle of a spheroid of Jeans kinematics
+    computes none of them again, a step in the anisotropy of its stars not
+    the groundwork of its state, and a step in a parameter of the gravity
+    neither the mass nor the sky. A sky computed again of the same layers
+    as the last (e.g. after a step in the rotation of a disk that the mass
+    follows, which builds the mass again) is the last, of its version
+    (see StageCache: same): what takes it is not evaluated again (e.g.
+    the observations whose light its lenses bend).
 
     The components that the mass moves, holds up and follows are at one
     centre, that of the mass: an evaluation where their centres differ
-    fails (see ComponentStage.frames). It takes their parts as in one
+    fails (see Placed.frames). It takes their parts as in one
     plane, whatever their orientations (their rotation is then projected
     with their own orientations); with extra outputs, a warning says
     where their planes tilt from that of the first enough to matter (see
@@ -151,13 +171,18 @@ class GalaxyStage:
         The cosmology of the galaxy, that of its setup: of its epoch, once
         (see GalaxyEpoch), and its distance; Planck18 by default (see
         gbkfit.cosmology.DEFAULT).
+    sky_mass : bool, optional
+        Whether it lays out the mass of the galaxy on the sky (the sky
+        part; for the lenses of its mass); not by default.
 
     Raises
     ------
     ValueError
         If a component cannot plan its part (e.g. it has an image trait,
         but there is no sky origin), or its mass takes the cosmic baryon
-        fraction, which the cosmology lacks.
+        fraction, which the cosmology lacks; or with the sky part, if the
+        galaxy cannot lay out its mass on the sky (see Galaxy.gives:
+        Capability.LENSING).
     """
 
     def __init__(
@@ -165,7 +190,8 @@ class GalaxyStage:
             galaxy: 'Galaxy',
             driver: Driver,
             sky_origin: tuple[float, float] | None = None,
-            cosmology: Cosmology | None = None
+            cosmology: Cosmology | None = None,
+            sky_mass: bool = False
     ):
         components = galaxy.components()
         mappings = [
@@ -192,9 +218,20 @@ class GalaxyStage:
             if stage is not None:
                 self._stages[i] = stage
                 self._labels[i] = label
-        # The components that the mass follows
+        # The components that the mass follows, and the parts of those
+        # where the mass is that say where they are, by index (see
+        # Galaxy.placed)
         self._followed = tuple(
             i for i in self._stages if components[i].name() in followed)
+        self._placed: dict[int, Placed] = {}
+        for i in galaxy.placed():
+            stage = self._stages.get(i)
+            if not isinstance(stage, Placed):
+                raise TypeError(
+                    f"the component {self._labels.get(i, i)!r} is where the "
+                    f"mass of its galaxy is, but its part in the stage does "
+                    f"not say where its parts are (see Placed)")
+            self._placed[i] = stage
         # The caches of its parts (see evaluate): of its scale and its
         # mass, if it has mass, and of each component that takes part, by
         # its index; they read the parameters of the galaxy
@@ -203,34 +240,51 @@ class GalaxyStage:
             for i, stage in self._stages.items()}
         self._scale_cache: StageCache[float] | None = None
         self._mass_cache: StageCache[GalaxyMass] | None = None
+        self._field_cache: StageCache[GalaxyMass] | None = None
         if galaxy.distance() is not None:
             self._scale_cache = StageCache(galaxy.distance().pdescs())
         if mass_model is not None:
             scale = () if self._scale_cache is None else (self._scale_cache,)
             self._mass_cache = StageCache(
-                (*mass_model.pdescs(), *galaxy.gravity().pdescs()),
+                mass_model.pdescs(),
                 (*scale, *(lights[i] for i in self._followed)))
-        mass = () if self._mass_cache is None else (self._mass_cache,)
+            self._field_cache = StageCache(
+                galaxy.gravity().pdescs(), (self._mass_cache,))
+        # (a sky of the same layers is not new, see the class)
+        self._sky_cache: StageCache[SkyMass] | None = None
+        if sky_mass:
+            if (gap := galaxy.gives()[Capability.LENSING]) is not None:
+                raise ValueError(
+                    f"the galaxy cannot lay out its mass on the sky: {gap}")
+            self._sky_cache = StageCache(
+                dict.fromkeys(
+                    mappings[i][p] for i, stage in self._placed.items()
+                    for p in stage.placement_params()),
+                (self._mass_cache,), _same_sky)
+        field = () if self._field_cache is None else (self._field_cache,)
         self._parts: dict[int, _ComponentParts] = {}
         for i, stage in self._stages.items():
-            groundwork = StageCache((), (lights[i], *mass))
+            groundwork = StageCache((), (lights[i], *field))
             state = StageCache(
                 (mappings[i][p] for p in stage.state_params()),
-                (lights[i], groundwork, *mass))
+                (lights[i], groundwork, *field))
             self._parts[i] = _ComponentParts(lights[i], groundwork, state)
 
     def caches(self) -> dict[str, StageCache[Any]]:
         """
-        Return the caches of its parts (see evaluate), by name: 'scale' and
-        'mass', if it has mass, and '{component}.light',
-        '{component}.groundwork' and '{component}.state' of each component
-        that takes part, by its name, or its position (e.g. 'component0').
+        Return the caches of its parts (see evaluate), by name: 'scale', if
+        it has a distance, 'mass' and 'field', if it has mass, 'sky', with
+        the sky part, and '{component}.light', '{component}.groundwork' and
+        '{component}.state' of each component that takes part, by its name,
+        or its position (e.g. 'component0').
         """
         caches: dict[str, StageCache[Any]] = {}
         if self._scale_cache is not None:
             caches |= dict(scale=self._scale_cache)
         if self._mass_cache is not None:
-            caches |= dict(mass=self._mass_cache)
+            caches |= dict(mass=self._mass_cache, field=self._field_cache)
+        if self._sky_cache is not None:
+            caches |= dict(sky=self._sky_cache)
         for i, parts in self._parts.items():
             caches |= {
                 f'{self._labels[i]}.{name}': cache
@@ -243,6 +297,21 @@ class GalaxyStage:
         (see evaluate), which takes part.
         """
         return self._parts[index].state
+
+    def sky_cache(self) -> StageCache['SkyMass']:
+        """
+        Return the cache of its sky part (see evaluate), which it has.
+
+        Raises
+        ------
+        ValueError
+            If it has no sky part (see the class: sky_mass).
+        """
+        if self._sky_cache is None:
+            raise ValueError(
+                "the stage of the galaxy does not lay out its mass on the "
+                "sky (see sky_mass)")
+        return self._sky_cache
 
     def evaluate(
             self,
@@ -278,19 +347,26 @@ class GalaxyStage:
         ------
         ModelEvaluationError
             If the components that the mass moves, holds up or follows have
-            different centres (see the class).
+            different centres (see the class), or with the sky part, the
+            mass cannot be laid out on the sky (see SkyProjected).
         """
         lights = {
             i: parts.light.evaluate(
                 params, functools.partial(self._light, index=i))
             for i, parts in self._parts.items()}
         mass = None
+        sky = None
         if self._mass_cache is not None:
             scale = None if self._scale_cache is None \
                 else self._scale_cache.evaluate(params, self._scale)
-            mass = self._mass_cache.evaluate(params, functools.partial(
+            built = self._mass_cache.evaluate(params, functools.partial(
                 self._mass, scale=scale, lights=lights))
+            mass = self._field_cache.evaluate(
+                params, functools.partial(self._field, mass=built))
             self._check_frames(params, out_extra is not None)
+            if self._sky_cache is not None:
+                sky = self._sky_cache.evaluate(params, functools.partial(
+                    self._sky, mass=built, lights=lights))
         states = {}
         for i, parts in self._parts.items():
             groundwork = parts.groundwork.evaluate(params, functools.partial(
@@ -304,7 +380,7 @@ class GalaxyStage:
                 groundwork=groundwork, mass=mass, out_extra=extra))
             if state is not None:
                 states[i] = state
-        return GalaxyState(mass, states)
+        return GalaxyState(mass, states, sky)
 
     def mass(self, params: ParamValues) -> GalaxyMass | None:
         """
@@ -322,7 +398,43 @@ class GalaxyStage:
             for i in self._followed}
         scale = None if self._scale_cache is None \
             else self._scale(self._scale_cache.view(params))
-        return self._mass(self._mass_cache.view(params), scale, lights)
+        built = self._mass(self._mass_cache.view(params), scale, lights)
+        return self._field(self._field_cache.view(params), built)
+
+    def sky_mass(self, params: ParamValues) -> 'SkyMass':
+        """
+        Return the mass of the galaxy laid out on the sky at the values of
+        its parameters (see Galaxy.pdescs), computed anew (apart from its
+        evaluations, see evaluate; e.g. at the reference values of the
+        parameters, see Reference).
+
+        Parameters
+        ----------
+        params : ParamValues
+            The values of the parameters of the galaxy.
+
+        Returns
+        -------
+        SkyMass
+            Its mass on the sky.
+
+        Raises
+        ------
+        ValueError
+            If it has no sky part (see the class: sky_mass).
+        ModelEvaluationError
+            If the components that place the mass have different centres,
+            or the mass cannot be laid out on the sky.
+        """
+        cache = self.sky_cache()
+        lights = {
+            i: self._light(self._parts[i].light.view(params), i)
+            for i in {*self._followed, *self._placed}}
+        scale = None if self._scale_cache is None \
+            else self._scale(self._scale_cache.view(params))
+        built = self._mass(self._mass_cache.view(params), scale, lights)
+        self._check_frames(params, False)
+        return self._sky(cache.view(params), built, lights)
 
     def kpc_per_arcsec(self, params: ParamValues) -> float | None:
         """
@@ -378,10 +490,10 @@ class GalaxyStage:
             lights: dict[int, ParamValues]
     ) -> GalaxyMass:
         """
-        Return the mass of the galaxy, of the values of the parameters of
-        its mass and its gravity, the length of an arcsec in it (kpc, see
-        _scale; None without a distance), and the light of each component
-        that it follows (see _light), by its index.
+        Return the mass of the galaxy as it is built, without its field (see
+        _field), of the values of the parameters of its mass, the length of
+        an arcsec in it (kpc, see _scale; None without a distance), and the
+        light of each component that it follows (see _light), by its index.
         """
         galaxy = self._galaxy
         components = galaxy.components()
@@ -406,9 +518,48 @@ class GalaxyStage:
                 components[i].name(): self._stages[i].density(
                     lights[i] | thicknesses[i], scale)
                 for i in self._followed})
-        return GalaxyMass(
-            mass_model, view, context,
-            galaxy.gravity().field(mass_model, view, context))
+        return GalaxyMass(mass_model, view, context, None)
+
+    def _field(self, view: ParamView, mass: GalaxyMass) -> GalaxyMass:
+        """
+        Return the mass of the galaxy with its field in the gravity of the
+        galaxy, of the values of the parameters of the gravity and the mass
+        as it is built (see _mass): with the values of the parameters of
+        both.
+        """
+        params = mass.params | view
+        return dataclasses.replace(
+            mass, params=params, field=self._galaxy.gravity().field(
+                mass.model, params, mass.context))
+
+    def _sky(
+            self,
+            view: ParamView,
+            mass: GalaxyMass,
+            lights: dict[int, ParamValues]
+    ) -> 'SkyMass':
+        """
+        Return the mass of the galaxy laid out on the sky (see SkyMass), of
+        the values of the parameters that place the components where the
+        mass is (see Placed.placement_params), the mass as it is built (see
+        _mass) and the light of each component that takes part (see
+        _light), by its index: each of them adds where it is to the
+        placement (see Placed.place and SkyPlacement), at the one centre of
+        the mass (that of the first, see _check_frames).
+        """
+        kpc_per_arcsec = mass.context.kpc_per_arcsec
+        placement = _SkyPlacements()
+        centre = None
+        for i, stage in self._placed.items():
+            # (all the values of the component: its light reads those of
+            # a disk, which its rings take, and those that place it)
+            values = lights[i] | self._own(view, i, stage.placement_params())
+            if centre is None:
+                first = stage.frames(values)[0]
+                centre = (first.x * kpc_per_arcsec, first.y * kpc_per_arcsec)
+            stage.place(self._labels[i], values, kpc_per_arcsec, placement)
+        return mass.model.sky_mass(
+            mass.params, mass.context, placement.placement(centre))
 
     def _groundwork(
             self,
@@ -444,12 +595,12 @@ class GalaxyStage:
         return stage.state(own | light, groundwork, mass, out_extra)
 
     def _own(
-            self, view: ParamView, index: int, names: tuple[str, ...]
+            self, view: ParamValues, index: int, names: tuple[str, ...]
     ) -> ParamView:
         """
         Return the values of the parameters of the given names of the
-        component of the given index (its own names), from a view of those
-        of the galaxy.
+        component of the given index (its own names), from those of the
+        galaxy (e.g. a view of them).
         """
         mapping = self._galaxy.component_param_names(index)
         return ParamView((name, view[mapping[name]]) for name in names)
@@ -457,23 +608,20 @@ class GalaxyStage:
     def _check_frames(self, params: ParamValues, warn: bool) -> None:
         """
         Check where the gravity takes the components that the mass moves,
-        holds up or follows (see ComponentStage.frames): at one centre,
-        that of the mass; and with warn, log a warning if their planes
-        tilt from that of the first part of the first by more than
-        _MAX_TILT.
+        holds up or follows (see Placed.frames): at one centre, that of
+        the mass; and with warn, log a warning if their planes tilt from
+        that of the first part of the first by more than _MAX_TILT.
 
         Raises
         ------
         ModelEvaluationError
             If their centres differ.
         """
-        components = self._galaxy.components()
         frames = [
             (self._labels[i], frame)
-            for i, stage in self._stages.items()
-            for frame in stage.frames({
-                p: params[self._galaxy.component_param_names(i)[p]]
-                for p in components[i].pdescs()})]
+            for i, stage in self._placed.items()
+            for frame in stage.frames(self._own(
+                params, i, stage.placement_params()))]
         # (a galaxy of mass alone has none)
         if not frames:
             return
@@ -494,10 +642,9 @@ class GalaxyStage:
         if not warn or not planes:
             return
         ref, first = planes[0]
-        normal0 = _normal(first.posa, first.incl)
         tilt, label, radius = max(
-            (np.degrees(np.arccos(min(1.0, abs(
-                _normal(f.posa, f.incl) @ normal0)))), label, f.radius)
+            (plane_tilt((first.posa, first.incl), (f.posa, f.incl)), label,
+             f.radius)
             for label, f in planes)
         if tilt > _MAX_TILT:
             where = f" at the radius {radius:g}" if radius else ""
@@ -507,13 +654,46 @@ class GalaxyStage:
                 f"{tilt:.0f} degrees from the plane of {ref}: its circular "
                 f"velocities can be off by 1% or more there")
 
-def _normal(posa: float, incl: float) -> np.ndarray:
+class _SkyPlacements:
     """
-    Return the normal of the plane of a ring of the given position angle
-    and inclination (degrees): a unit vector, whose angle to that of
-    another ring is the angle between their planes (or its supplement).
+    The placement of the mass of a galaxy on the sky as its components add
+    themselves to it (see SkyPlacements and Placed.place): the rings of
+    each disk and the axis of each spheroid, by name.
     """
-    posa, incl = np.radians(posa), np.radians(incl)
-    return np.array([
-        np.sin(incl) * np.cos(posa), np.sin(incl) * np.sin(posa),
-        np.cos(incl)])
+
+    def __init__(self):
+        self._disks: dict[str, RingPlacement] = {}
+        self._spheroids: dict[str, SpheroidAxis] = {}
+
+    def add_rings(self, name: str, rings: RingPlacement) -> None:
+        """Add the rings of a disk (see RingPlacement), by name."""
+        self._disks[name] = rings
+
+    def add_axis(self, name: str, axis: SpheroidAxis) -> None:
+        """Add the centre and axis of a spheroid, by name."""
+        self._spheroids[name] = axis
+
+    def placement(self, centre: tuple[float, float]) -> SkyPlacement:
+        """
+        Return the placement of the mass (see SkyPlacement) at its centre
+        (kpc), of the disks and the spheroids added.
+        """
+        return SkyPlacement(centre, self._disks, self._spheroids)
+
+
+def _same_sky(new: 'SkyMass', last: 'SkyMass') -> bool:
+    """
+    Check whether a mass on the sky is the last one (see StageCache: same):
+    of the same length of an arcsec, and part by part of layers of the
+    same unit shapes (see SkyLayer.same_shape) and the same scales.
+    """
+    if new.kpc_per_arcsec != last.kpc_per_arcsec \
+            or list(new.parts) != list(last.parts):
+        return False
+    for name, layers in new.parts.items():
+        others = last.parts[name]
+        if len(layers) != len(others) or not all(
+                layer.scale == other.scale and layer.same_shape(other)
+                for layer, other in zip(layers, others)):
+            return False
+    return True

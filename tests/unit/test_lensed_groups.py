@@ -1,8 +1,9 @@
 """
 Tests for groups of galaxies and observations with gravitational lenses
 (see ObservationGroup): the parameters of the lenses, the planes that
-each observation sees, the refusals of what cannot be lensed, and the
-section 'lenses' of configurations.
+each observation sees, the refusals of what cannot be lensed, the
+pieces that are the masses of galaxies (see LensGalaxyMass) and their
+checks, and the section 'lenses' of configurations.
 """
 
 import logging
@@ -12,7 +13,8 @@ import pytest
 
 import gbkfit
 from gbkfit.config import FORMAT_VERSION
-from gbkfit.lensing import Lens, LensShear, LensSIE
+from gbkfit.lensing import (
+    Lens, LensGalaxyMass, LensShear, LensSIE, lens_parser)
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
     DepthGroup, ObservationGroup, ObservationPixelBrightness,
@@ -229,3 +231,172 @@ def test_a_lens_of_a_configuration_without_redshift_is_refused_at_its_path():
     description = gbkfit.describe(config)
     [error] = [p for p in description.problems if p.severity == 'error']
     assert error.path[:2] == ['lenses', 0]
+
+
+# The galaxy whose mass is a lens: a gas disk that its mass moves (which
+# places its mass on the sky), an NFW halo, and a cosmological distance
+GAS = dict(
+    type='thin_disk', name='gas', loose=False, tilted=False,
+    rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+    vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
+    emission=dict(type='lines'))
+
+HALO = dict(type='halo', name='halo', profile=dict(type='nfw'))
+
+
+def deflector(redshift=0.3, **options):
+    """A galaxy of mass whose mass is that of a lens (see GAS and HALO)."""
+    return galaxy_parser.load(dict(
+        name='deflector', redshift=redshift, components=[GAS],
+        mass=[HALO], distance=dict(type='cosmological')) | options)
+
+
+def mass_lens(*pieces, redshift=0.3, galaxy='deflector'):
+    """
+    A lens of the mass of a galaxy, and other pieces (quoted for a source
+    at z = 2).
+    """
+    return Lens(
+        'lens', redshift, [LensGalaxyMass(galaxy), *pieces],
+        source_redshift=2.0 if pieces else None)
+
+
+def mass_group(galaxy=None, lens=None, observations=None):
+    """
+    A group of the deflector (or the given galaxy) in front of an arc at
+    z = 2, and an image of the arc alone.
+    """
+    return ObservationGroup(
+        [galaxy or deflector(), galaxy_parser.load(dict(
+            name='arc', redshift=2.0, components=[disk()]))],
+        observations or [image(['arc'], name='alma')],
+        [lens or mass_lens()])
+
+
+def test_pieces_are_named_after_their_types():
+    # [mass, shear] needs no names: the shear's parameters are 'shear_*'
+    lens = lens_parser.load(dict(
+        name='lens', redshift=0.3, source_redshift=2.0,
+        pieces=[dict(type='mass', galaxy='deflector'), dict(type='shear')]))
+    assert [piece.name() for piece in lens.pieces()] == ['mass', 'shear']
+    assert list(lens.pdescs()) == ['shear_gamma', 'shear_posa']
+    assert lens.galaxies() == ('deflector',)
+    assert lens_parser.dump(lens)['pieces'] == [
+        dict(type='mass', galaxy='deflector'), dict(type='shear')]
+
+
+def test_the_mass_of_a_galaxy_bends_what_does_not_see_it():
+    # The image of the arc alone is bent by the mass of the deflector: its
+    # model takes the mass on the sky of the deflector, not its parameters
+    galaxy = deflector(components=[GAS, disk('stars')])
+    group = mass_group(galaxy, mass_lens(LensShear()), [
+        image(['arc'], name='alma'), image(['deflector'], name='ground')])
+    assert group.lensing_galaxies() == (0,)
+    assert group.bending_masses(0) == (0,)
+    assert group.bending_masses(1) == ()
+    params = group.model_params(0)
+    assert 'lens_shear_gamma' in params
+    assert not any(name.startswith('deflector_') for name in params)
+
+
+def test_a_galaxy_whose_mass_only_lenses_is_not_warned_of(caplog):
+    # (a galaxy of no 'mass' traits whose mass is that of a lens: its mass
+    # is used; its stars place it, followed by its mass)
+    stars = disk('stars')
+    galaxy = galaxy_parser.load(dict(
+        name='deflector', redshift=0.3, components=[stars],
+        mass=[dict(type='traced_disk', name='stars', component='stars'),
+              HALO], distance=dict(type='cosmological')))
+    with caplog.at_level(logging.WARNING):
+        mass_group(galaxy)
+    assert "only derived values can use it" not in caplog.text
+
+
+@pytest.mark.parametrize('lens, message', [
+    (mass_lens(galaxy='other'), "which is not one of the galaxies"),
+    (Lens('lens', 0.3, [LensGalaxyMass('deflector', name='a'),
+                        LensGalaxyMass('deflector', name='b')]),
+     "would bend light twice"),
+    (mass_lens(redshift=0.5), "within 3000 km/s of it")])
+def test_a_piece_of_the_mass_of_a_galaxy_is_checked(lens, message):
+    with pytest.raises(ValueError, match=message):
+        mass_group(lens=lens)
+
+
+def test_two_lenses_of_the_mass_of_one_galaxy_are_refused():
+    with pytest.raises(ValueError, match="would bend light twice"):
+        ObservationGroup(
+            [deflector(), galaxy('arc', 2.0)], image(['arc']),
+            [mass_lens(), Lens('other', 0.3, LensGalaxyMass('deflector'))])
+
+
+@pytest.mark.parametrize('options, message', [
+    (dict(components=[disk()], mass=None, distance=None), "which has none"),
+    (dict(distance=dict(type='parameter'), redshift=0.3), None),
+    (dict(components=[], mass=[HALO]), "sie, epl or nfw"),
+    (dict(gravity=dict(type='mond', interpolation='simple')),
+     "relativistic theory"),
+    (dict(gravity=dict(type='palatini')), "Toniato"),
+    (dict(mass=[HALO, dict(
+        type='table', name='table', radii=dict(value=[1, 2], unit='kpc'),
+        velocities=[100, 120])]), "do not say where their mass is"),
+    (dict(mass=[dict(type='disk', name='thin', surface=dict(
+        type='exponential'), vertical=dict(type='thin'))],
+        components=[GAS | dict(type='thin_disk')]), None)])
+def test_what_the_galaxy_of_a_mass_lens_must_give(options, message):
+    galaxy = deflector(**options)
+    if message is None:
+        mass_group(galaxy)
+        return
+    with pytest.raises(ValueError, match=message):
+        mass_group(galaxy)
+
+
+def test_a_mass_in_its_plane_needs_a_component_of_a_plane():
+    # A disk of mass lies in the plane of the mass, which a sphere that
+    # its mass follows does not give
+    spheroid = dict(
+        type='spheroid', name='stars', profile=dict(type='sersic'),
+        rmax=5, emission=dict(type='band'))
+    traced = dict(type='traced_spheroid', name='stars', component='stars')
+    galaxy = deflector(components=[spheroid], mass=[traced, dict(
+        type='disk', name='disk', surface=dict(type='exponential'),
+        vertical=dict(type='sech2'))])
+    with pytest.raises(ValueError, match="none of the components that "
+                                         "place its mass has a plane"):
+        mass_group(galaxy)
+    # (a halo needs no plane)
+    mass_group(deflector(components=[spheroid], mass=[traced, HALO]))
+
+
+def test_hu_sawicki_gravity_bends_light_as_its_mass():
+    galaxy = deflector(gravity=dict(type='hu_sawicki'))
+    assert mass_group(galaxy).lensing_galaxies() == (0,)
+
+
+def test_rings_that_are_not_ellipses_place_no_mass_and_describe_says_so():
+    # A disk of a vertical distortion of order 2, which a mass follows,
+    # has rings that are not ellipses on the sky: its galaxy cannot lens,
+    # as gbkfit.describe says at the piece; a disk that the mass only
+    # moves is not refused (its rings place no mass)
+    bowl = dict(
+        type='thick_disk', name='gas', loose=False, tilted=False,
+        rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+        rhtraits=dict(type='sech2', zmax=1),
+        zptraits=dict(type='nw_harmonic', order=2, zmax=1),
+        emission=dict(type='band'))
+    config = lensed_config()
+    config['galaxies'][0] |= dict(
+        components=[bowl], distance=dict(type='cosmological'),
+        mass=[dict(type='traced_disk', name='gas', component='gas')])
+    config['lenses'][0] = dict(
+        name='lens', redshift=0.3,
+        pieces=[dict(type='mass', galaxy='deflector')])
+    description = gbkfit.describe(config)
+    [error] = [p for p in description.problems if p.severity == 'error']
+    assert error.path[:4] == ['lenses', 0, 'pieces', 0]
+    assert "not ellipses on the sky" in error.message
+    moved = bowl | dict(
+        vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
+        emission=dict(type='lines'))
+    mass_group(deflector(components=[moved]))

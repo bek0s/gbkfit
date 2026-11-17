@@ -758,7 +758,7 @@ class DiskProfiles(ComponentProfiles):
     def orientation(
             self, params: ParamValues, R: np.ndarray, which: str
     ) -> np.ndarray:
-        return self._disk.orientation(params, R, checked_angle(which))
+        return self._disk.geometry_at(params, R, checked_angle(which))
 
 
 def _disk_state(state: 'ComponentState | None') -> 'DiskState | None':

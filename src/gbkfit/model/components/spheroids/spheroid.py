@@ -26,7 +26,7 @@ from gbkfit.params import (
     ParamVectorDesc, pdescs_with_units)
 from ...mass._numerics import (
     sersic_b, sersic_density_table, sersic_tables)
-from ...mass import SpheroidDensity
+from ...mass import SpheroidDensity, projected_ratio
 from ...mass.profiles import ProfileGauss, ProfileSersic, SpheroidProfile
 from ...mass.shapes import (
     ShapeFlattened, ShapeSphere, SpheroidShape, spheroid_shape_parser)
@@ -263,7 +263,7 @@ class LightSersic(LightProfile):
         # ie exp(-b (u^(1/n) - 1)) = ie e^b exp(-b u^(1/n)), of q' (the
         # projection of rho_sph(m) / q is Sigma_sph(m') / q')
         b = sersic_b(float(params['n']))
-        qp = _projected_ratio(q, incl)
+        qp = projected_ratio(q, incl)
         with np.errstate(divide='ignore', invalid='ignore'):
             return _checked_terms(np.array([[
                 params['ie'] * np.exp(b) / qp, params['re'], qp]]))
@@ -409,7 +409,7 @@ class LightMGE(LightProfile):
         i0, sigma, ratio = (
             np.asarray(params[name], dtype=float)
             for name in ('i0', 'sigma', 'q'))
-        qp = _projected_ratio(ratio, incl)
+        qp = projected_ratio(ratio, incl)
         with np.errstate(divide='ignore', invalid='ignore'):
             return _checked_terms(
                 np.stack((i0 / qp, sigma, qp), axis=-1))
@@ -447,17 +447,6 @@ class LightMGE(LightProfile):
             terms.append((flattened, gaussian, dict(
                 log_m=log_m, sigma=sigma * kpc_per_arcsec, q=q)))
         return terms
-
-
-def _projected_ratio(q: npt.ArrayLike, incl: float) -> np.ndarray:
-    """
-    Return the axis ratio q' of the projection of a spheroid of the axis
-    ratio q at the inclination incl (degrees): q'^2 = cos^2(incl) + q^2
-    sin^2(incl), complete the square of m^2 along the line of sight
-    (face-on 1, edge-on q).
-    """
-    i = np.radians(incl)
-    return np.sqrt(np.cos(i) ** 2 + np.asarray(q) ** 2 * np.sin(i) ** 2)
 
 
 def _checked_terms(terms: np.ndarray) -> np.ndarray:

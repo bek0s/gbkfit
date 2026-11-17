@@ -21,8 +21,8 @@ from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectraData
 from gbkfit.io import Beam
 from gbkfit.lensing import Tracer
-from gbkfit.model import DataUnit, DepthUnit, Galaxy
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.model import DataUnit, DepthUnit, Galaxy, Reference
+from gbkfit.params import ParamDesc
 from .plan import FluxScale, ObservationPlan
 
 if TYPE_CHECKING:
@@ -392,7 +392,7 @@ class Observation(TypedSerializable, abc.ABC):
             self,
             driver: Driver,
             seen: SeenGalaxies,
-            reference: ParamValues | None
+            reference: Reference | None
     ) -> ObservationPlan:
         """
         Plan the evaluation of its model (see ObservationGroup.plan).
@@ -403,11 +403,13 @@ class Observation(TypedSerializable, abc.ABC):
             The driver it is evaluated on.
         seen : SeenGalaxies
             The galaxies it sees.
-        reference : ParamValues, optional
+        reference : Reference, optional
             The values of the parameters of the group at which what is
             laid out once for all evaluations is laid out (see
             ParamSpace.reference; e.g. the grids of the planes whose light
-            a lens bends); required when it sees such planes.
+            a lens bends), with the masses on the sky there of the
+            galaxies whose masses lenses are; required when it sees such
+            planes.
 
         Returns
         -------

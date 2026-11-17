@@ -30,6 +30,10 @@ from .profiles import (
 from .responses import (
     SIDM_PDESCS, Contraction, contraction_parser, sidm_vcirc2)
 from .shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
+from .sky import (
+    LinearBetweenKnots, SkyLayer, SkyPlacement, SpheroidAxis, band_layer,
+    elliptical_layer, fixed_geometry, round_layer, spheroid_stretch)
+from . import _numerics
 from .units import G
 
 
@@ -68,7 +72,12 @@ class _ShapedMass(MassComponent, abc.ABC):
     """
     A spheroid of a spherical profile laid out in a shape (a sphere, or
     flattened; see shapes): its density, circular velocity, forces and
-    potential are those of the profile in the shape (see _profile_at).
+    potential are those of the profile in the shape (see _profile_at). On
+    the sky, for lenses (see sky.SkyProjected): a sphere, a round layer of
+    the projection of its mass within spheres (see
+    _numerics.projected_mass; after its responses, for a halo); flattened,
+    the projection of its profile (see sky.spheroid_stretch) in the plane
+    of the mass at its centre, its axis along the normal of the plane.
 
     Parameters
     ----------
@@ -155,6 +164,55 @@ class _ShapedMass(MassComponent, abc.ABC):
         return self._shape.potential(
             R, z, self._profile_at(params, context), params, context)
 
+    def takes_mass_plane(self) -> bool:
+        # (a flattened spheroid lies in the plane of the mass)
+        return not self._shape.spherical()
+
+    def sky_layers(
+            self,
+            params: ParamValues,
+            context: MassContext,
+            placement: SkyPlacement
+    ) -> tuple[SkyLayer, ...]:
+        # A sphere, of the projection of its mass within spheres; flattened,
+        # of the projection of its profile (see sky.spheroid_stretch), in
+        # the plane of the mass, its axis along the normal of the plane
+        scale, unit = self._sky_scale(params)
+        centre = placement.centre
+        if self._shape.spherical():
+            return (round_layer(centre, scale, lambda r: self.enclosed_mass(
+                r, unit, context)),)
+        plane = placement.plane()
+        posa, stretch = spheroid_stretch(params['q'], plane.posa, plane.incl)
+        return (self._flattened_layer(
+            centre, scale, posa, stretch, unit, context),)
+
+    @abc.abstractmethod
+    def _sky_scale(self, params: ParamValues) -> tuple[float, ParamValues]:
+        """
+        Return its scale on the sky (see sky.SkyMass), and the values of
+        its parameters of its unit shape (of a scale of 1).
+        """
+        pass
+
+    @abc.abstractmethod
+    def _flattened_layer(
+            self,
+            centre: tuple[float, float],
+            scale: float,
+            posa: float,
+            stretch: tuple[float, float],
+            unit: ParamValues,
+            context: MassContext
+    ) -> SkyLayer:
+        """
+        Return its layer on the sky, flattened: the projection of its
+        profile at the values of the parameters of its unit shape (see
+        _sky_scale), stretched (see sky.spheroid_stretch), about a centre
+        (kpc).
+        """
+        pass
+
 
 class MassSpheroid(_ShapedMass):
     """
@@ -229,6 +287,37 @@ class MassSpheroid(_ShapedMass):
             self, params: ParamValues, context: MassContext
     ) -> SphericalProfile:
         return self._profile
+
+    def _sky_scale(self, params: ParamValues) -> tuple[float, ParamValues]:
+        # (the mass of its profile, if it has one, which scales it alone)
+        if 'log_m' not in self._profile.pdescs():
+            return 1.0, params
+        return 10.0 ** params['log_m'], dict(params) | dict(log_m=0.0)
+
+    def _flattened_layer(
+            self,
+            centre: tuple[float, float],
+            scale: float,
+            posa: float,
+            stretch: tuple[float, float],
+            unit: ParamValues,
+            context: MassContext
+    ) -> SkyLayer:
+        # (bands, exactly, of a profile linear between knots; else
+        # elliptical, of its projected density, or of its density, by the
+        # Abel integral)
+        profile = self._profile
+
+        def sigma(R: np.ndarray) -> np.ndarray:
+            if profile.gives_surface_density():
+                return profile.surface_density(R, unit, context)
+            return _numerics.abel_projection(
+                lambda r: profile.density(r, unit, context), R)
+        if isinstance(profile, LinearBetweenKnots):
+            return band_layer(
+                scale, profile.linear_knots(),
+                fixed_geometry(centre, posa, stretch), sigma)
+        return elliptical_layer(centre, scale, posa, stretch, sigma)
 
 
 class Halo(_ShapedMass):
@@ -536,6 +625,26 @@ class Halo(_ShapedMass):
             return self._solved(params, context)
         return self._profile.at(params, self._overdensity.density(context))
 
+    def _sky_scale(self, params: ParamValues) -> tuple[float, ParamValues]:
+        # (no parameter scales a halo alone in every parameterisation)
+        return 1.0, params
+
+    def _flattened_layer(
+            self,
+            centre: tuple[float, float],
+            scale: float,
+            posa: float,
+            stretch: tuple[float, float],
+            unit: ParamValues,
+            context: MassContext
+    ) -> SkyLayer:
+        # (of the Abel integral of its density; a flattened halo does not
+        # respond, see the class)
+        halo = self._profile_at(unit, context)
+        return elliptical_layer(
+            centre, scale, posa, stretch,
+            lambda R: _numerics.abel_projection(halo.density, R))
+
     def _halo_vcirc2(
             self,
             halo: SphericalHalo,
@@ -665,6 +774,10 @@ class TracedSpheroid(MassComponent):
     emission, in Msun/kpc^2 per unit of its surface brightness; with one,
     in Msun/pc^2 per unit (a mass-to-light ratio, in its first band).
 
+    On the sky, for lenses (see sky.SkyProjected): each term about the
+    centre of the spheroid, a round layer if spherical, else the
+    projection of its profile along the axis of the spheroid.
+
     Parameters
     ----------
     name : str
@@ -791,6 +904,61 @@ class TracedSpheroid(MassComponent):
         return self._sum(
             lambda shape, profile, values: shape.potential(
                 R, z, profile, values, context), params, context)
+
+    def takes_mass_plane(self) -> bool:
+        # (the axis of the spheroid it traces orients it)
+        return False
+
+    def sky_layers(
+            self,
+            params: ParamValues,
+            context: MassContext,
+            placement: SkyPlacement
+    ) -> tuple[SkyLayer, ...]:
+        # Each term about the centre of the spheroid it traces: a sphere, of
+        # the projection of its mass within spheres; flattened, of its
+        # projected profile (see sky.spheroid_stretch), along the axis of
+        # the spheroid
+        axis = placement.axis(self._component)
+        scale = self._upsilon(params, context)
+        return tuple(
+            self._term_layer(shape, profile, values, axis, scale, context)
+            for shape, profile, values in self._terms(context))
+
+    def _term_layer(
+            self,
+            shape: SpheroidShape,
+            profile: SpheroidProfile,
+            values: ParamValues,
+            axis: SpheroidAxis,
+            scale: float,
+            context: MassContext
+    ) -> SkyLayer:
+        """
+        Return the layer on the sky of a term of the spheroid it traces (see
+        sky_layers), of its axis and the scale of its layers.
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the term is flattened, but the spheroid has no axis.
+        """
+        centre = (axis.x, axis.y)
+        if shape.spherical():
+            return round_layer(centre, scale, lambda r: shape.enclosed_mass(
+                r, profile, values, context))
+        if axis.posa is None:
+            raise ModelEvaluationError(
+                f"the mass component {self.name()!r} traces a flattened "
+                f"spheroid, {self._component!r}, which has no axis")
+
+        def sigma(R: np.ndarray) -> np.ndarray:
+            if profile.gives_surface_density():
+                return profile.surface_density(R, values, context)
+            return _numerics.abel_projection(
+                lambda r: profile.density(r, values, context), R)
+        posa, stretch = spheroid_stretch(values['q'], axis.posa, axis.incl)
+        return elliptical_layer(centre, scale, posa, stretch, sigma)
 
     def _terms(self, context: MassContext) -> tuple[tuple[
             SpheroidShape, SpheroidProfile, ParamValues], ...]:

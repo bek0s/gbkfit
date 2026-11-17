@@ -117,7 +117,7 @@ class GalaxyFunctions:
       seen face-on
     - orientation_{component}(R, which): its position angle or its
       inclination (which: 'posa' or 'incl'; degrees): of a disk that
-      tilts, as it is evaluated (see NodalDisk.orientation); else its one
+      tilts, as it is evaluated (see NodalDisk.geometry_at); else its one
       value
 
     A disk or a cone has its density and its orientation, and those of

@@ -28,10 +28,9 @@ from gbkfit.instrument import Instrument, instrument_parser
 from gbkfit.io import Beam
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import (
-    Band, DataUnit, LightUnit, View, band_parser)
+    Band, DataUnit, LightUnit, Reference, View, band_parser)
 from gbkfit.model.components.lines import catalogue_in_use
-from gbkfit.params import (
-    ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
+from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .._scene import SeenScenes, check_component_names, make_scenes
 from ..depth import Depth, check_scene
 from ..observation import Observation, SeenGalaxies, SkyFrame
@@ -1189,7 +1188,7 @@ class ObservationSky(Observation, abc.ABC):
             self,
             driver: Driver,
             seen: SeenGalaxies,
-            reference: ParamValues | None
+            reference: Reference | None
     ) -> ObservationPlan:
         """
         Plan the evaluation of what it sees (see ObservationGroup.plan):
@@ -1202,10 +1201,11 @@ class ObservationSky(Observation, abc.ABC):
             The driver it is evaluated on.
         seen : SeenGalaxies
             The galaxies it sees.
-        reference : ParamValues, optional
+        reference : Reference, optional
             The values of the parameters at which the grids of the planes
             behind lenses that it sees are laid out (see
-            ParamSpace.reference); required with them.
+            ParamSpace.reference), with the masses of galaxies there;
+            required with them.
 
         Returns
         -------

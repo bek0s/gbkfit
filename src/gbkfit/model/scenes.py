@@ -12,7 +12,7 @@ gives the transmission of its column (see ScenePlan.transmission).
 
 import abc
 import enum
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
 import astropy.units
@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
     from .components.base import Component
     from .galaxy import Galaxy
+    from .mass.sky import SkyMass
 
 
 __all__ = [
@@ -47,9 +48,11 @@ __all__ = [
     'MAX_SUBCHANNELS',
     'AdditiveScenePlan',
     'DepthUnit',
+    'Reference',
     'Scene',
     'SceneEvaluation',
     'ScenePlan',
+    'SceneState',
     'TransferScenePlan',
     'named_components'
 ]
@@ -58,6 +61,32 @@ __all__ = [
 # The spectral axis of an image: one channel, without a width
 IMAGE_SPECTRAL_AXIS = Grid(
     (1,), Coords((0,), (0,), (0,), 0), 0)
+
+
+class SceneState(NamedTuple):
+    """
+    The galaxies of a scene in one evaluation, which the plans that draw it
+    take (see ScenePlan.evaluate; e.g. those of the observations, see
+    gbkfit.observation): the state of each of its galaxies, in their
+    order (see GalaxyStage.evaluate), and the mass on the sky of each
+    galaxy whose mass bends their light (see GalaxyState.sky), by the name
+    of the galaxy: of the lenses of the masses of galaxies in front of
+    them (see gbkfit.lensing), which the scene need not see.
+    """
+    galaxies: tuple[GalaxyState, ...]
+    masses: Mapping[str, SkyMass]
+
+
+class Reference(NamedTuple):
+    """
+    The values of the parameters at which what is laid out once for all
+    evaluations is laid out (see ParamSpace.reference; e.g. the grids of
+    the planes behind lenses, see gbkfit.lensing), and there the mass on
+    the sky of each galaxy whose mass bends light, by the name of the
+    galaxy (see SceneState).
+    """
+    values: ParamValues
+    masses: Mapping[str, SkyMass]
 
 
 class DepthUnit(NamedTuple):
@@ -359,7 +388,7 @@ class ScenePlan(abc.ABC):
     def evaluate(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             data: DeviceArray,
             out_extra: Extras | None
     ) -> None:
@@ -367,9 +396,9 @@ class ScenePlan(abc.ABC):
         Add the light of the galaxies to the data (the image or spectral
         cube), with the parameters of the observation group (params) and
         what each galaxy gives its components in the evaluation (see
-        GalaxyState). The extra outputs of each galaxy have its label as
-        the id 'galaxy', and those of a group of galaxies its name as the
-        id 'group'.
+        SceneState and GalaxyState). The extra outputs of each galaxy have
+        its label as the id 'galaxy', and those of a group of galaxies its
+        name as the id 'group'.
         """
         scene = self._scene
         values = [
@@ -378,7 +407,7 @@ class ScenePlan(abc.ABC):
         extras = None if out_extra is None else [
             out_extra.scoped(galaxy=label) for label in scene._labels]
         self._evaluate(
-            params, values, [galaxy.states for galaxy in galaxies],
+            params, values, [galaxy.states for galaxy in state.galaxies],
             {self._key: data}, extras, out_extra)
 
     @abc.abstractmethod

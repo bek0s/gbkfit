@@ -5,7 +5,7 @@ which the galaxy checks when it is made (see check_needs), and which can
 be asked before (see galaxy_gives).
 """
 
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 
 from .._capabilities import Capability, Need
 from ..gravity import Gravity
@@ -15,6 +15,7 @@ from ..mass import MassModel
 __all__ = [
     'Need',
     'check_densities',
+    'check_given',
     'check_needs',
     'density_needs',
     'galaxy_gives'
@@ -73,16 +74,35 @@ def check_needs(
 ) -> None:
     """
     Check that a galaxy of a mass model (None without mass), a gravity and
-    a distance or not gives what its components need (see galaxy_gives).
-    Without mass, only the needs of the mass alone fail: those of the
-    rest of what the mass gives come with them.
+    a distance or not gives what its components need (see galaxy_gives
+    and check_given).
 
     Raises
     ------
     ValueError
         If the galaxy does not give a need, saying what needs it.
     """
-    gives = galaxy_gives(mass_model, gravity, has_distance)
+    check_given(
+        needs, galaxy_gives(mass_model, gravity, has_distance), mass_model)
+
+
+def check_given(
+        needs: Iterable[Need],
+        gives: Mapping[Capability, str | None],
+        mass_model: MassModel | None
+) -> None:
+    """
+    Check that a galaxy of a mass model (None without mass) that gives the
+    capabilities given (of each, None if it gives it, or else why not; see
+    galaxy_gives) gives what needs need. Without mass, only the needs of
+    the mass alone fail: those of the rest of what the mass gives come
+    with them.
+
+    Raises
+    ------
+    ValueError
+        If the galaxy does not give a need, saying what needs it.
+    """
     names = [] if mass_model is None \
         else [component.name() for component in mass_model.components()]
     for need in needs:

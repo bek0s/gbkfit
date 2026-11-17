@@ -11,8 +11,11 @@ import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid, sky_positions, sky_to_pixel
+from gbkfit.model import Reference
+from gbkfit.model.mass import SkyMass
 from gbkfit.params import (
     ModelEvaluationError, ParamValues, ParamView, StageCache)
+from ._mass_deflections import MassBending, MassDeflections
 from .pieces import SkyPoints
 from .source_grids import SourceGrid, source_step
 from .tracer import Tracer, stretch
@@ -43,8 +46,16 @@ class TracePlan:
     galaxies are drawn.
 
     The deflection of the lenses of each plane is evaluated again only
-    when the values of their parameters, or the offsets, change, or a
-    plane in front changes it; that of fixed lenses once.
+    when the values of their parameters, or the offsets, change, a plane
+    in front changes it, or the mass on the sky of a galaxy whose mass
+    they are (see LensGalaxyMass) is not that of its last evaluation (the
+    stage of a galaxy lays it out again only when what it reads changes,
+    see GalaxyStage); that of fixed lenses once. The mass of a galaxy is
+    then deflected again layer by layer, only where the unit shape of a
+    layer, or the rays, changed (see MassDeflections), by the native
+    kernels of its driver (the rays copied to its device and their
+    deflections back): a change of a mass scale alone (e.g. a
+    mass-to-light ratio) only scales its layers.
 
     Parameters
     ----------
@@ -69,9 +80,10 @@ class TracePlan:
     offsets : tuple of (str or None)
         The names of the parameters of the offsets of the frame of the
         observation along x and y, None for those it does not fit.
-    reference : ParamValues
+    reference : Reference
         The values of the parameters (e.g. ParamSpace.reference) at which
-        the grids of the planes are laid out.
+        the grids of the planes are laid out, and there the masses on the
+        sky of the galaxies whose masses the lenses are.
     options : SourceGrid
         How the grids are laid out.
     driver : Driver
@@ -97,7 +109,7 @@ class TracePlan:
             origin: tuple[float, float],
             alignment: tuple[float, float],
             offsets: tuple[str | None, str | None],
-            reference: ParamValues,
+            reference: Reference,
             options: SourceGrid,
             driver: Driver,
             dtype: np.dtype
@@ -129,6 +141,12 @@ class TracePlan:
         self._offsets = tuple(offsets)
         self._driver = driver
         self._dtype = np.dtype(dtype)
+        # The galaxies whose masses the lenses of each plane are, by name
+        self._galaxies = {
+            p: tuple(
+                name for i in plane.lenses
+                for name in tracer.lenses()[i].galaxies())
+            for p, plane in enumerate(tracer.planes())}
         self._grids = self._layout(reference, options)
         self._init_caches()
         # The positions of the rays on each plane, in the pixels of its
@@ -163,19 +181,24 @@ class TracePlan:
         return self._grids[plane]
 
     def positions(
-            self, params: ParamValues
+            self,
+            params: ParamValues,
+            masses: Mapping[str, SkyMass]
     ) -> dict[int, tuple[DeviceArray, DeviceArray]]:
         """
         Return the positions of the rays on each of its planes at the
         values of the parameters, in the pixels of its grid (see grid),
         each an array (ny, nx) on the device, of x and of y, NaN off the
         footprint (see lens_composite of the native module DModel); each
-        written again only if it changed.
+        written again only if it changed (see the class).
 
         Parameters
         ----------
         params : ParamValues
             The values of the parameters (those it reads among them).
+        masses : Mapping of str to SkyMass
+            The mass on the sky of each galaxy whose mass the lenses are
+            (see Lens.galaxies), by name.
 
         Returns
         -------
@@ -189,8 +212,20 @@ class TracePlan:
         """
         deflections = {}
         for p, cache in self._lens_caches.items():
-            deflections[p] = cache.evaluate(
-                params, lambda view, p=p: self._deflect(p, view, deflections))
+            held = tuple(masses[name] for name in self._galaxies[p])
+
+            def deflect(view: ParamView, p: int = p) -> tuple[
+                    np.ndarray, np.ndarray]:
+                return self._deflect(p, view, deflections, masses)
+            # (the masses of its last evaluation are held: their objects
+            # are never those of others)
+            last = self._held.get(p)
+            if last is not None and all(
+                    new is old for new, old in zip(held, last, strict=True)):
+                deflections[p] = cache.evaluate(params, deflect)
+            else:
+                deflections[p] = cache.refresh(params, deflect)
+                self._held[p] = held
         for q, cache in self._placements.items():
             self._rays[q] = cache.evaluate(
                 params, lambda view, q=q: self._place(q, view, deflections))
@@ -296,26 +331,43 @@ class TracePlan:
         return values
 
     def _layout(
-            self, reference: ParamValues, options: SourceGrid
+            self, reference: Reference, options: SourceGrid
     ) -> dict[int, Grid]:
         """
         Return the grid of each of its planes, laid out at the reference
-        values (see SourceGrid).
+        values, with the masses there (see SourceGrid).
+
+        Raises
+        ------
+        ValueError
+            If the reference has no mass of a galaxy whose mass a lens is.
         """
         tracer = self._tracer
-        shift = self._shift(reference)
+        if missing := sorted(
+                {name for names in self._galaxies.values() for name in names}
+                - set(reference.masses)):
+            raise ValueError(
+                f"the lenses bend light by the masses of the galaxies "
+                f"{missing}, which the reference lacks")
+        shift = self._shift(reference.values)
         points = self._group_points(shift)
         lenses = [i for plane in tracer.planes() for i in plane.lenses]
-        values = self._values(reference, lenses)
+        values = self._values(reference.values, lenses)
+        # (deflected once each: their layers kept for no evaluation)
+        galaxies = {
+            name: MassBending(mass, MassDeflections(self._driver))
+            for name, mass in reference.masses.items()}
         substep = float(min(np.abs(self._spatial.coords.step[:2])))
         grids = {}
         try:
-            rays = tracer.trace(points, values, max(self._planes))
+            rays = tracer.trace(
+                points, values, self._driver, max(self._planes), galaxies)
             for q in self._planes:
                 step = options.step()
                 if step == 'auto':
                     step = source_step(substep, stretch(tracer.jacobian(
-                        q, points, values, substep / 2)))
+                        q, points, values, substep / 2, self._driver,
+                        galaxies)))
                 grids[q] = options.layout(
                     rays[q].x + shift[0], rays[q].y + shift[1], step,
                     self._spatial.coords.rval)
@@ -334,11 +386,18 @@ class TracePlan:
     def _init_caches(self) -> None:
         """
         Make the caches of the deflection of each lens plane in front of
-        its planes, and of the positions of the rays on each of them.
+        its planes (with the masses of galaxies of their last evaluation,
+        and where the deflections of their layers are kept), and of the
+        positions of the rays on each of them.
         """
         tracer = self._tracer
         farthest = max(self._planes)
         offsets = tuple(name for name in self._offsets if name is not None)
+        self._held: dict[int, tuple[SkyMass, ...]] = {}
+        self._kept = {
+            p: {name: MassDeflections(self._driver)
+                for name in self._galaxies[p]}
+            for p in range(farthest)}
         self._lens_caches: dict[int, StageCache] = {}
         for p in range(farthest):
             lenses = tracer.planes()[p].lenses
@@ -358,17 +417,23 @@ class TracePlan:
             self,
             plane: int,
             view: ParamView,
-            deflections: Mapping[int, tuple[np.ndarray, np.ndarray]]
+            deflections: Mapping[int, tuple[np.ndarray, np.ndarray]],
+            masses: Mapping[str, SkyMass]
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Return the deflection of the lenses of a lens plane at the rays of
-        the footprint there, of the deflections of the planes in front.
+        the footprint there, of the deflections of the planes in front and
+        the masses on the sky of the galaxies whose masses they are.
         """
         tracer = self._tracer
         ray = tracer.ray(
             plane, self._group_points(self._shift(view)), deflections)
+        galaxies = {
+            name: MassBending(masses[name], kept)
+            for name, kept in self._kept[plane].items()}
         return tracer.deflection(
-            plane, ray, self._values(view, tracer.planes()[plane].lenses))
+            plane, ray, self._values(view, tracer.planes()[plane].lenses),
+            self._driver, galaxies)
 
     def _place(
             self,

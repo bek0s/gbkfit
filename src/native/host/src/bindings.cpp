@@ -5,6 +5,7 @@
 
 #include "gbkfit/bindings/dmodel.hpp"
 #include "gbkfit/bindings/gmodel.hpp"
+#include "gbkfit/bindings/lensing.hpp"
 #include "gbkfit/bindings/objective.hpp"
 #include "gbkfit/bindings/orbits.hpp"
 #include "gbkfit/host/fft.hpp"
@@ -20,6 +21,7 @@ bind_precision(nb::module_& m, const std::string& suffix)
     using Kernels = host::Wrapper<T>;
     bindings::DModel<T, Device, Kernels>::bind(m, suffix);
     bindings::GModel<T, Device, Kernels>::bind(m, suffix);
+    bindings::Lensing<T, Device, Kernels>::bind(m, suffix);
     bindings::Objective<T, Device, Kernels>::bind(m, suffix);
     bindings::Orbits<T, Device, Kernels>::bind(m, suffix);
     host::FFTConvolution<T, T>::bind(m, "FFTConvolution" + suffix);

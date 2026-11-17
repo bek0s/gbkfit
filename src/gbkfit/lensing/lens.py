@@ -5,25 +5,36 @@ gbkfit.lensing.pieces).
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import numpy as np
 from annotated_types import Gt
 
 from gbkfit.config import (
-    BasicParser, Serializable, check_name, check_options)
+    BasicParser, Serializable, TypedParser, check_name, check_options)
 from gbkfit.cosmology import Cosmology
 from gbkfit.params import ParamScalarDesc
 from gbkfit.utils import iterutils
+from .galaxy_mass import LensGalaxyMass
 from .pieces import (
-    LensPiece, Normalisation, PieceInputs, SkyPoints, lens_piece_parser)
+    Deflects, GalaxyBending, LensDeflectionMap, LensEPL, LensNFW, LensPiece,
+    LensSIE, LensShear, LensSheet, Normalisation, OfGalaxy, SkyPoints)
 from .planes import PLANE_LINKING_VELOCITY, velocity_separation
+
+if TYPE_CHECKING:
+    from gbkfit.driver import Driver
 
 
 __all__ = [
     'Lens',
-    'lens_parser'
+    'lens_parser',
+    'lens_piece_parser'
 ]
+
+
+lens_piece_parser = TypedParser(LensPiece, [
+    LensDeflectionMap, LensEPL, LensGalaxyMass, LensNFW, LensSIE, LensShear,
+    LensSheet], family='lens_piece')
 
 
 class Lens(Serializable):
@@ -38,7 +49,10 @@ class Lens(Serializable):
     Einstein radius of an SIE) are those of a source at its
     source_redshift, as lens models quote them; the deflection of the
     light of a source at another redshift is scaled by D_ls / D_s from
-    them (see quoted_factor). Its other pieces are of D_ls / D_s = 1.
+    them (see quoted_factor). Its other pieces are of D_ls / D_s = 1. A
+    piece that is the mass of a galaxy (see OfGalaxy and galaxies) bends
+    light by that mass laid out on the sky, which its deflection takes
+    (see deflection).
 
     Its parameters are those of its pieces, each prefixed by its name
     when there are several ('main_theta_e', 'shear_gamma'); its name
@@ -52,7 +66,8 @@ class Lens(Serializable):
     redshift : float
         Its redshift: that of the plane of its pieces (above 0).
     pieces : LensPiece or Sequence of LensPiece
-        Its pieces; they need names when there are several.
+        Its pieces; of different names when there are several (each is
+        named after its type by default, see LensPiece).
     source_redshift : float, optional
         The redshift of the source whose light the strengths of its
         quoted pieces are those of (see Normalisation); required with
@@ -61,8 +76,8 @@ class Lens(Serializable):
     Raises
     ------
     ValueError
-        If the name is not valid, there are no pieces, several pieces
-        without names or of one name, the source_redshift is missing with
+        If the name is not valid, there are no pieces, several pieces of
+        one name, the source_redshift is missing with
         quoted pieces, given without them, or not behind the plane of the
         lens (more than PLANE_LINKING_VELOCITY behind its redshift).
     """
@@ -99,15 +114,18 @@ class Lens(Serializable):
         pieces = iterutils.tuplify(pieces)
         if not pieces:
             raise ValueError(f"lens {name!r} needs at least one piece")
+        if neither := [
+                piece.type() for piece in pieces
+                if not isinstance(piece, (Deflects, OfGalaxy))]:
+            raise TypeError(
+                f"the pieces {neither} of lens {name!r} neither deflect by "
+                f"their parameters (Deflects) nor are the mass of a galaxy "
+                f"(OfGalaxy)")
         names = [piece.name() for piece in pieces]
-        if len(pieces) > 1:
-            if None in names:
-                raise ValueError(
-                    f"the pieces of lens {name!r} need names when there are "
-                    f"several; they have the names {names}")
-            if len(set(names)) != len(names):
-                raise ValueError(
-                    f"the pieces of lens {name!r} repeat names: {names}")
+        if len(set(names)) != len(names):
+            raise ValueError(
+                f"the pieces of lens {name!r} repeat names: {names} (a "
+                f"piece is named after its type unless given a name)")
         quoted = [
             piece.type() for piece in pieces
             if piece.normalisation() is Normalisation.QUOTED]
@@ -154,6 +172,15 @@ class Lens(Serializable):
     def pieces(self) -> tuple[LensPiece, ...]:
         """Return its pieces."""
         return self._pieces
+
+    def galaxies(self) -> tuple[str, ...]:
+        """
+        Return the names of the galaxies whose masses its pieces are (see
+        OfGalaxy), in the order of its pieces.
+        """
+        return tuple(
+            piece.galaxy() for piece in self._pieces
+            if isinstance(piece, OfGalaxy))
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         """
@@ -202,7 +229,9 @@ class Lens(Serializable):
             self,
             points: SkyPoints,
             params: Mapping[str, float],
-            quoted_factor: float
+            quoted_factor: float,
+            driver: 'Driver',
+            galaxies: Mapping[str, GalaxyBending] | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Return its deflection at points of its plane, at D_ls / D_s = 1
@@ -218,6 +247,13 @@ class Lens(Serializable):
             The values of its parameters, by their names (see pdescs).
         quoted_factor : float
             The factor of its quoted pieces (see quoted_factor).
+        driver : Driver
+            The driver whose native kernels compute the deflections of its
+            pieces that have any (see Deflects).
+        galaxies : Mapping of str to GalaxyBending, optional
+            The bending of the light by the mass of each galaxy whose mass
+            its pieces are (see galaxies and OfGalaxy), by name (others may
+            be there too); none by default, for a lens of no such pieces.
 
         Returns
         -------
@@ -229,13 +265,24 @@ class Lens(Serializable):
         ------
         ModelEvaluationError
             If a piece has no deflection at a point (e.g. off a map).
+        ValueError
+            If the bending by the mass of the galaxy of a piece is
+            missing.
         """
+        galaxies = {} if galaxies is None else galaxies
         alpha_x = np.zeros(np.shape(points.x))
         alpha_y = np.zeros(np.shape(points.y))
         for piece, names in zip(self._pieces, self._mappings):
-            inputs = PieceInputs(
-                {name: params[full] for name, full in names.items()})
-            piece_x, piece_y = piece.deflection(points, inputs)
+            if isinstance(piece, OfGalaxy):
+                if (bending := galaxies.get(piece.galaxy())) is None:
+                    raise ValueError(
+                        f"the piece {piece.name()!r} of lens "
+                        f"{self._name!r} bends light by the mass of the "
+                        f"galaxy {piece.galaxy()!r}, which is not given")
+                piece_x, piece_y = bending.deflection(points)
+            else:
+                own = {name: params[full] for name, full in names.items()}
+                piece_x, piece_y = piece.deflection(points, own, driver)
             scale = quoted_factor \
                 if piece.normalisation() is Normalisation.QUOTED else 1.0
             alpha_x += scale * piece_x

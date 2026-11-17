@@ -15,8 +15,8 @@ from gbkfit.lensing import (
     Lens, LensedPlane, LensedScene, LensSheet, LensSIE, SourceGrid,
     TracePlan, Tracer, plane_layout)
 from gbkfit.model import (
-    AdditiveScenePlan, DepthAxis, Extras, Scene, SceneEvaluation, View,
-    galaxy_parser)
+    AdditiveScenePlan, DepthAxis, Extras, Reference, Scene, SceneEvaluation,
+    SceneState, View, galaxy_parser)
 
 
 ORIGIN = (150.0, 2.0)
@@ -50,7 +50,8 @@ def trace_plan(driver, grid, tracer=None, names=None, params=None,
     return TracePlan(
         tracer or tracer_of(NO_LENS), [names or dict(kappa='lens_kappa')],
         [1], grid, footprint, ORIGIN, (0.0, 0.0), (None, None),
-        params or dict(lens_kappa=0.0), options, driver, np.float64)
+        Reference(params or dict(lens_kappa=0.0), {}), options, driver,
+        np.float64)
 
 
 # Scenes of stand-ins: planes of uniform light and transmission, which
@@ -125,7 +126,8 @@ def composite(scene, planner, plan, grid):
     lensed = scene.plan(planner, plan(driver, grid), driver, grid, np.float64)
     channels = 1 if grid.spectral_axis is None else grid.size[2]
     cube = np.zeros((channels,) + grid.size[1::-1])
-    lensed.evaluate(dict(lens_kappa=0.0), [None, None], cube, None)
+    lensed.evaluate(
+        dict(lens_kappa=0.0), SceneState((None, None), {}), cube, None)
     return cube
 
 
@@ -258,9 +260,9 @@ def planner_of(driver):
 
 
 def states(driver):
-    return [
+    return SceneState(tuple(
         galaxy.plan_stage(ORIGIN, driver).evaluate(values)
-        for galaxy, values in zip(GALAXIES, VALUES)]
+        for galaxy, values in zip(GALAXIES, VALUES)), {})
 
 
 def evaluate(plan, driver, extras=None, params=PARAMS):

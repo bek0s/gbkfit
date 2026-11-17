@@ -15,6 +15,7 @@ nanobind_add_module(
   src/gmodel.cu
   src/gmodel_mcdisk.cu
   src/gmodel_smdisk.cu
+  src/lensing.cu
   src/objective.cu
   src/orbits.cu
 )

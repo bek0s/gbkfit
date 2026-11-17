@@ -3,13 +3,12 @@ The plan of an observation on the sky whose flux scale has several
 values (see ObservationSky): its items of light times the values.
 """
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.model import Extras, GalaxyState
+from gbkfit.model import Extras, SceneState
 from gbkfit.params import ParamValues
 from ..plan import FluxScale, HostModelData, ModelData, ObservationPlan
 
@@ -45,10 +44,10 @@ class FluxScaledPlan(ObservationPlan):
     def evaluate(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             out_extra: Extras | None
     ) -> ModelData:
-        model = self._plan.evaluate(params, galaxies, out_extra)
+        model = self._plan.evaluate(params, state, out_extra)
         driver = self._driver
         if self._h_values is None:
             shape = model[self._scale.items[0]].data.shape
@@ -66,7 +65,7 @@ class FluxScaledPlan(ObservationPlan):
     def mock(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
@@ -85,7 +84,7 @@ class FluxScaledPlan(ObservationPlan):
             raise ValueError(
                 f"mock data take a flux scale per spectrum or per row of 1 "
                 f"only; '{self._param}' is not")
-        return self._plan.mock(params, galaxies, noise, rng, ndraws)
+        return self._plan.mock(params, state, noise, rng, ndraws)
 
     def has_exact_errors(self) -> bool:
         return self._plan.has_exact_errors()

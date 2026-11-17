@@ -9,12 +9,16 @@ import pytest
 from astropy.cosmology import Planck18
 
 from gbkfit.cosmology import DEFAULT, CosmologyFlatLambdaCDM
+from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.lensing import (
-    Lens, LensDeflectionMap, LensSIE, PieceInputs, Plane, SkyPoints, Tracer,
+    Lens, LensDeflectionMap, LensSIE, Plane, SkyPoints, Tracer,
     plane_layout, stretch)
 
 
 ORIGIN = (150.0, 2.0)
+
+# (the driver of the deflections: the host)
+HOST = DriverHost()
 
 
 def distance(z1, z2=None):
@@ -71,7 +75,7 @@ def test_an_isothermal_sphere_makes_an_einstein_ring():
     tracer = tracer_of(
         [('deflector', 0.35), ('arc', 2.1)], [sis('lens', 0.35, 2.1)])
     centre = (0.1, -0.2)
-    rays = tracer.trace(circle(1.2, centre), [sis_values(1.2, centre)])
+    rays = tracer.trace(circle(1.2, centre), [sis_values(1.2, centre)], HOST)
     assert len(rays) == 2
     np.testing.assert_allclose(rays[1].x, 0.1, atol=1e-12)
     np.testing.assert_allclose(rays[1].y, -0.2, atol=1e-12)
@@ -86,8 +90,8 @@ def test_one_lens_of_its_quoted_source_is_todays_model():
     tracer = tracer_of([('arc', 2.1)], [lens])
     points = SkyPoints(*np.mgrid[-2:2:7j, -2:2:5j], ORIGIN)
     values = dict(theta_e=1.3, q=0.6, posa=30, xpos=0.2, ypos=-0.1)
-    alpha = LensSIE().deflection(points, PieceInputs(values))
-    ray = tracer.trace(points, [values])[-1]
+    alpha = LensSIE().deflection(points, values, HOST)
+    ray = tracer.trace(points, [values], HOST)[-1]
     np.testing.assert_allclose(ray.x, points.x - alpha[0], atol=1e-12)
     np.testing.assert_allclose(ray.y, points.y - alpha[1], atol=1e-12)
 
@@ -98,7 +102,7 @@ def test_the_deflection_scales_by_d_ls_over_d_s(z_source):
     # the ratio of the D_ls / D_s of the two
     tracer = tracer_of([('arc', z_source)], [sis('lens', 0.35, 2.1)])
     radius = 1.2 * ratio(0.35, z_source) / ratio(0.35, 2.1)
-    ray = tracer.trace(circle(radius), [sis_values(1.2)])[-1]
+    ray = tracer.trace(circle(radius), [sis_values(1.2)], HOST)[-1]
     np.testing.assert_allclose(np.hypot(ray.x, ray.y), 0, atol=1e-12)
 
 
@@ -108,7 +112,7 @@ def test_maps_are_of_a_unit_ratio():
         np.full((5, 5), 0.4), np.full((5, 5), -0.2), step=1, rval=ORIGIN)
     tracer = tracer_of([('arc', 1.5)], [Lens('cluster', 0.4, deflection)])
     points = SkyPoints(np.array([0.5, -1.0]), np.array([0.0, 1.0]), ORIGIN)
-    ray = tracer.trace(points, [{}])[-1]
+    ray = tracer.trace(points, [{}], HOST)[-1]
     f = ratio(0.4, 1.5)
     np.testing.assert_allclose(ray.x, points.x - f * 0.4, atol=1e-12)
     np.testing.assert_allclose(ray.y, points.y + f * 0.2, atol=1e-12)
@@ -124,7 +128,7 @@ def test_maps_made_for_one_source_are_quoted_for_it():
     for z_source in (1.5, 3.0):
         tracer = tracer_of([('arc', z_source)], [
             Lens('cluster', 0.4, deflection, source_redshift=1.5)])
-        ray = tracer.trace(points, [{}])[-1]
+        ray = tracer.trace(points, [{}], HOST)[-1]
         f = ratio(0.4, z_source) / ratio(0.4, 1.5)
         np.testing.assert_allclose(ray.x, points.x - f * 0.4, atol=1e-12)
         np.testing.assert_allclose(ray.y, points.y + f * 0.2, atol=1e-12)
@@ -136,13 +140,13 @@ def test_the_lenses_of_one_plane_add_up():
     assert len(tracer.planes()) == 2
     points = SkyPoints(*np.mgrid[-2:2:5j, -2:2:4j], ORIGIN)
     values = [sis_values(0.8, (0.3, 0)), sis_values(0.5, (-0.4, 0.2))]
-    both = tracer.trace(points, values)[-1]
+    both = tracer.trace(points, values, HOST)[-1]
     # (each at the distance of the plane, their mean redshift)
     z = 0.4005
     expected_x, expected_y = points.x.copy(), points.y.copy()
     for lens, value in zip(lenses, values):
         quoted = distance(2.0) / distance(z, 2.0)
-        alpha = LensSIE().deflection(points, PieceInputs(value))
+        alpha = LensSIE().deflection(points, value, HOST)
         expected_x -= ratio(z, 2.0) * quoted * alpha[0]
         expected_y -= ratio(z, 2.0) * quoted * alpha[1]
     np.testing.assert_allclose(both.x, expected_x, atol=1e-12)
@@ -173,7 +177,8 @@ def test_two_planes_make_the_ring_of_their_sum():
     f23 = distance(1.0, 2.5) / distance(2.5)
     radius = f13 * b1 + f23 * b2
     assert radius > f12 * b1
-    rays = tracer.trace(circle(radius), [sis_values(0.9), sis_values(0.5)])
+    rays = tracer.trace(
+        circle(radius), [sis_values(0.9), sis_values(0.5)], HOST)
     np.testing.assert_allclose(
         np.hypot(rays[1].x, rays[1].y), radius - f12 * b1, rtol=1e-12)
     np.testing.assert_allclose(np.hypot(rays[2].x, rays[2].y), 0, atol=1e-12)
@@ -187,7 +192,8 @@ def test_the_lens_of_a_farther_plane_bends_rays_where_they_cross_it():
     tracer, units = two_planes()
     centre = np.array([0.3, 0.1])
     points = SkyPoints(*np.mgrid[-2:2:6j, -2:2:5j] + 0.01, ORIGIN)
-    rays = tracer.trace(points, [sis_values(0.9), sis_values(0.5, centre)])
+    rays = tracer.trace(
+        points, [sis_values(0.9), sis_values(0.5, centre)], HOST)
 
     def alpha(x, y, b, c):
         dx, dy = x - c[0], y - c[1]
@@ -205,8 +211,9 @@ def test_the_lens_of_a_farther_plane_bends_rays_where_they_cross_it():
     np.testing.assert_allclose(
         rays[2].y, points.y - f13 * a1[1] - f23 * a2[1], atol=1e-12)
     # (to a plane, and from deflections given)
-    assert len(tracer.trace(points, [sis_values(0.9), {}], upto=1)) == 2
-    deflections = {0: tracer.deflection(0, rays[0], [sis_values(0.9), {}])}
+    assert len(tracer.trace(points, [sis_values(0.9), {}], HOST, upto=1)) == 2
+    deflections = {
+        0: tracer.deflection(0, rays[0], [sis_values(0.9), {}], HOST)}
     np.testing.assert_allclose(
         tracer.ray(1, points, deflections).y, rays[1].y, atol=1e-15)
     with pytest.raises(KeyError):
@@ -219,7 +226,7 @@ def test_the_jacobian_of_an_isothermal_sphere():
     tracer = tracer_of([('arc', 2.1)], [sis('lens', 0.35, 2.1)])
     points = SkyPoints(
         np.array([2.4, 0.0, -0.6]), np.array([0.0, 1.0, 0.8]), ORIGIN)
-    jacobian = tracer.jacobian(1, points, [sis_values(1.2)], 1e-4)
+    jacobian = tracer.jacobian(1, points, [sis_values(1.2)], 1e-4, HOST)
     r = np.hypot(points.x, points.y)
     n = np.stack([points.x / r, points.y / r], -1)
     expected = np.eye(2) - (1.2 / r)[:, None, None] * (

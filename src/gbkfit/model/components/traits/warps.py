@@ -70,6 +70,9 @@ class ZPTraitNWUniform(ZPTrait):
     def consts(self) -> tuple[float, ...]:
         return (self.zmax(),)
 
+    def order(self) -> int:
+        return 0
+
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(a=self._amplitude_desc(nnodes))
 
@@ -127,7 +130,10 @@ class ZPTraitNWHarmonic(ZPTrait):
             Harmonic(order), Zmax(zmax), Sampling(sampling), name=name)
 
     def consts(self) -> tuple[float, ...]:
-        return (self.zmax(), self._option(Harmonic).order)
+        return (self.zmax(), self.order())
+
+    def order(self) -> int:
+        return self._option(Harmonic).order
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return self._option(Harmonic).params(nnodes, unit='arcsec') | dict(

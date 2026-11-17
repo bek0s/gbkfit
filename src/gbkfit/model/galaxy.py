@@ -2,7 +2,7 @@
 Galaxies: their components and their mass, at one distance.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from gbkfit.config import (
@@ -12,13 +12,15 @@ from gbkfit.cosmology import Cosmology
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils
+from ._capabilities import Capability, Need
 from ._functions import (
     GalaxyFunctions, function_names, function_radius_range)
 from ._galaxy_plan import GalaxyPlan
 from ._galaxy_stage import GalaxyStage
 from ._relations import MassLinks, link
+from .components._needs import check_given, galaxy_gives
 from .components.base import (
-    Component, DepthAxis, FrameParams, OpacityCubes, SceneTarget)
+    Component, DepthAxis, FrameParams, OpacityCubes, Ringed, SceneTarget)
 from .components.cones import Cone
 from .components.disks import ThickDisk, ThinDisk
 from .components.particles import Particles
@@ -267,6 +269,89 @@ class Galaxy(Serializable):
         """Return its mass, as a mass model, if any."""
         return self._mass_model
 
+    def placed(self) -> tuple[int, ...]:
+        """
+        Return the indices of its components that are where its mass is:
+        those that its mass moves or holds up (that need it, see
+        Component.needs) or follows (see MassLinks). The gravity takes
+        them at the one centre of its mass, and its mass on the sky is
+        placed by them (see GalaxyStage); none without mass.
+        """
+        if self._mass_model is None:
+            return ()
+        links = self._links
+        return tuple(
+            i for i, component in enumerate(self._components)
+            if component.name() in links.followed
+            or component.needs(links.of(component)))
+
+    def gives(self) -> dict[Capability, str | None]:
+        """
+        Return what the galaxy gives what needs it (see Capability): of
+        each capability, None if it gives it, or else why not. What its
+        mass, its distance and its gravity give (see Gravity.gives), and
+        the bending of light by its mass only if it can lay out its mass
+        on the sky (see GalaxyStage): at its distance, if components place
+        it (see placed), if a mass component lies in the plane of its mass
+        (see MassModel.takes_mass_plane) one of them has a plane, and the
+        rings of the components of rings that its mass follows are
+        ellipses on the sky (see Ringed).
+        """
+        gives = galaxy_gives(
+            self._mass_model, self.gravity(), self._distance is not None)
+        if gives[Capability.LENSING] is None:
+            gives[Capability.LENSING] = self._sky_gap()
+        return gives
+
+    def _sky_gap(self) -> str | None:
+        """
+        Return why the galaxy, of mass and a gravity that bends light as its
+        mass (see gives), cannot lay out its mass on the sky, if it cannot;
+        None if it can.
+        """
+        if self._distance is None:
+            return "it has no distance, at which its mass lies on the sky"
+        placed = self.placed()
+        if not placed:
+            return (
+                "it places its mass on the sky by the components that its "
+                "mass moves, holds up or follows, and has none (e.g. a "
+                "galaxy of mass alone): bend light by such a mass with a "
+                "shape instead (sie, epl or nfw)")
+        if self._mass_model.takes_mass_plane() and all(
+                self._components[i].frame_params().posa is None
+                for i in placed):
+            return (
+                "its mass components lie in the plane of its mass, but "
+                "none of the components that place its mass has a plane "
+                "(a disk, or a spheroid of an axis)")
+        followed = self._links.followed
+        for component in self._components:
+            if component.name() in followed \
+                    and isinstance(component, Ringed) \
+                    and (gap := component.rings_gap()) is not None:
+                return (
+                    f"its mass lies on the rings of the components that it "
+                    f"follows, but {gap}")
+        return None
+
+    def check_needs(self, needs: Iterable[Need]) -> None:
+        """
+        Check that the galaxy gives what something outside it needs of it
+        (e.g. a lens of its mass, see gbkfit.lensing; see gives).
+
+        Parameters
+        ----------
+        needs : Iterable of Need
+            The needs.
+
+        Raises
+        ------
+        ValueError
+            If it does not give one, saying what needs it and why not.
+        """
+        check_given(needs, self.gives(), self._mass_model)
+
     def components_use_mass(self) -> bool:
         """
         Check whether its components use its mass: whether any needs
@@ -308,7 +393,8 @@ class Galaxy(Serializable):
             self,
             sky_origin: tuple[float, float] | None = None,
             driver: Driver | None = None,
-            cosmology: Cosmology | None = None
+            cosmology: Cosmology | None = None,
+            sky_mass: bool = False
     ) -> GalaxyStage:
         """
         Plan the stage of the galaxy on a driver, in float64, evaluated
@@ -331,6 +417,9 @@ class Galaxy(Serializable):
             the overdensities that define the masses of its halos), and of
             its cosmological distance; Planck18 by default, as of a galaxy
             on its own (see gbkfit.cosmology.DEFAULT).
+        sky_mass : bool, optional
+            Whether its stage lays out its mass on the sky, for the lenses
+            of its mass (see GalaxyState.sky); not by default.
 
         Returns
         -------
@@ -341,9 +430,12 @@ class Galaxy(Serializable):
         ------
         ValueError
             If it has image traits, but there is no sky origin, or its mass
-            takes the cosmic baryon fraction, which the cosmology lacks.
+            takes the cosmic baryon fraction, which the cosmology lacks; or
+            with sky_mass, if it cannot lay out its mass on the sky (see
+            GalaxyStage).
         """
-        return GalaxyStage(self, _or_host(driver), sky_origin, cosmology)
+        return GalaxyStage(
+            self, _or_host(driver), sky_origin, cosmology, sky_mass)
 
     def plan_functions(
             self,

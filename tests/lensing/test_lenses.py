@@ -10,9 +10,9 @@ import pytest
 from astropy.cosmology import Planck18
 
 from gbkfit.cosmology import DEFAULT
+from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.lensing import (
-    Lens, LensDeflectionMap, LensSIE, LensShear, PieceInputs, SkyPoints,
-    lens_parser)
+    Lens, LensDeflectionMap, LensSIE, LensShear, SkyPoints, lens_parser)
 from gbkfit.params import ModelEvaluationError
 
 
@@ -21,6 +21,9 @@ POINTS = SkyPoints(
     (150.0, 2.0))
 
 SIE = dict(theta_e=1.3, q=0.7, posa=20, xpos=0.1, ypos=-0.2)
+
+# (the driver of the deflections: the host)
+HOST = DriverHost()
 
 
 def test_the_parameters_of_a_lens():
@@ -32,12 +35,17 @@ def test_the_parameters_of_a_lens():
         'shear_gamma', 'shear_posa']
     alone = Lens('lens', 0.35, LensSIE(name='main'), source_redshift=2.1)
     assert list(alone.pdescs()) == ['theta_e', 'q', 'posa', 'xpos', 'ypos']
-    with pytest.raises(ValueError, match="need names"):
-        Lens('lens', 0.35, [LensSIE(name='main'), LensShear()],
-             source_redshift=2.1)
+    # (named after their types by default)
+    unnamed = Lens('lens', 0.35, [LensSIE(), LensShear()], source_redshift=2.1)
+    assert list(unnamed.pdescs()) == [
+        'sie_theta_e', 'sie_q', 'sie_posa', 'sie_xpos', 'sie_ypos',
+        'shear_gamma', 'shear_posa']
+    assert 'name' not in lens_parser.dump(unnamed)['pieces'][0]
     with pytest.raises(ValueError, match="repeat names"):
         Lens('lens', 0.35, [LensSIE(name='a'), LensShear(name='a')],
              source_redshift=2.1)
+    with pytest.raises(ValueError, match="named after its type"):
+        Lens('lens', 0.35, [LensSIE(), LensSIE()], source_redshift=2.1)
     with pytest.raises(ValueError, match="at least one piece"):
         Lens('lens', 0.35, [])
     with pytest.raises(ValueError):
@@ -84,8 +92,8 @@ def test_a_lens_converts_its_quoted_pieces_only():
     lens = Lens('lens', 0.35, [LensSIE(name='main'), deflection],
                 source_redshift=2.1)
     params = {f'main_{key}': value for key, value in SIE.items()}
-    sie = np.array(LensSIE().deflection(POINTS, PieceInputs(SIE)))
-    alpha = np.array(lens.deflection(POINTS, params, 1.7))
+    sie = np.array(LensSIE().deflection(POINTS, SIE, HOST))
+    alpha = np.array(lens.deflection(POINTS, params, 1.7, HOST))
     np.testing.assert_allclose(
         alpha, 1.7 * sie + np.array([0.4, -0.1])[:, None, None])
 
@@ -94,7 +102,7 @@ def test_a_lens_deflects_nowhere_off_its_maps():
     deflection = LensDeflectionMap(
         np.zeros((3, 3)), np.zeros((3, 3)), step=0.1, rval=POINTS.origin)
     with pytest.raises(ModelEvaluationError, match="do not cover"):
-        Lens('map', 0.35, deflection).deflection(POINTS, {}, 1)
+        Lens('map', 0.35, deflection).deflection(POINTS, {}, 1, HOST)
 
 
 def test_lenses_from_configurations(tmp_path):
@@ -120,4 +128,4 @@ def test_lenses_from_configurations(tmp_path):
     again = lens_parser.load(copy.deepcopy(dumped))
     centre = SkyPoints(np.zeros(1), np.zeros(1), (150.0, 2.0))
     np.testing.assert_allclose(
-        again.deflection(centre, {}, 1), np.ones((2, 1)))
+        again.deflection(centre, {}, 1, HOST), np.ones((2, 1)))

@@ -1,7 +1,8 @@
 """
 Gravitational lensing: lenses (see Lens), flat bendings of the light at
 redshifts made of pieces (see LensPiece: SIE, EPL, NFW, shear, mass
-sheets, deflection maps), the planes of galaxies and lenses by redshift
+sheets, deflection maps, and the masses of galaxies, see
+LensGalaxyMass), the planes of galaxies and lenses by redshift
 (see plane_layout), the paths of the light of the planes through the
 lenses to the observer (see Tracer), and their drawing: the rays of an
 observation onto the grids of the planes behind lenses (see TracePlan
@@ -10,7 +11,9 @@ the grid of its image (see LensedScene).
 """
 
 from . import (
-    lens, lensed_scene, pieces, planes, source_grids, trace_plan, tracer)
+    galaxy_mass, lens, lensed_scene, pieces, planes, source_grids,
+    trace_plan, tracer)
+from .galaxy_mass import *
 from .lens import *
 from .lensed_scene import *
 from .pieces import *
@@ -21,6 +24,7 @@ from .tracer import *
 
 
 __all__ = []
+__all__ += galaxy_mass.__all__
 __all__ += lens.__all__
 __all__ += lensed_scene.__all__
 __all__ += pieces.__all__

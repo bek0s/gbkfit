@@ -18,7 +18,7 @@ from gbkfit.dataset import Data, Dataset, DatasetProfile, check_profile_radii
 from gbkfit.driver import Driver
 from gbkfit.grid import make_grid
 from gbkfit.model import (
-    DataUnit, Extras, GalaxyFunctions, GalaxyState)
+    DataUnit, Extras, GalaxyFunctions, Reference, SceneState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from .plan import HostModelData, ModelData, ModelItem, ObservationPlan
 from .observation import Observation, SeenGalaxies
@@ -392,7 +392,7 @@ class ObservationProfile(Observation):
             self,
             driver: Driver,
             seen: SeenGalaxies,
-            reference: ParamValues | None
+            reference: Reference | None
     ) -> ObservationPlan:
         """
         Plan the evaluation of its model (see ObservationGroup.plan): the
@@ -405,7 +405,7 @@ class ObservationProfile(Observation):
             The driver it is evaluated on.
         seen : SeenGalaxies
             The galaxy it sees.
-        reference : ParamValues, optional
+        reference : Reference, optional
             The reference values of the parameters, which it does not
             take.
 
@@ -526,10 +526,10 @@ class _ProfilePlan(ObservationPlan):
     def evaluate(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             out_extra: Extras | None
     ) -> ModelData:
-        values = self._values(params, galaxies)
+        values = self._values(params, state)
         for key, value in values.items():
             self._driver.mem_copy_h2d(value, self._model[key])
         return {key: ModelItem(self._model[key]) for key in self._keys}
@@ -537,12 +537,12 @@ class _ProfilePlan(ObservationPlan):
     def mock(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
     ) -> tuple[list[HostModelData], dict[str, np.ndarray]]:
-        values = self._values(params, galaxies)
+        values = self._values(params, state)
         grid = self._noise_grid
         draws = [
             {key: ModelItem(value + noise.draw(rng, grid, None, value))
@@ -558,7 +558,7 @@ class _ProfilePlan(ObservationPlan):
     def _values(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState]
+            state: SceneState
     ) -> dict[str, np.ndarray]:
         """
         Return the values of the functions at the radii, on the host, at
@@ -566,7 +566,7 @@ class _ProfilePlan(ObservationPlan):
         galaxy, scaled by the inclination, if any.
         """
         own = {name: params[full] for name, full in self._mapping.items()}
-        bound = self._functions.bind(own, galaxies[0])
+        bound = self._functions.bind(own, state.galaxies[0])
         values = {}
         for key in self._keys:
             if GalaxyFunctions.radial_units(key)[1] == u.arcsec:

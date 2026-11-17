@@ -5,13 +5,17 @@ lenses of the planes in front of it.
 """
 
 from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from gbkfit.cosmology import Cosmology
 from .lens import Lens
-from .pieces import SkyPoints
+from .pieces import GalaxyBending, SkyPoints
 from .planes import Plane
+
+if TYPE_CHECKING:
+    from gbkfit.driver import Driver
 
 
 __all__ = [
@@ -142,7 +146,9 @@ class Tracer:
             self,
             plane: int,
             points: SkyPoints,
-            values: Sequence[Mapping[str, float]]
+            values: Sequence[Mapping[str, float]],
+            driver: 'Driver',
+            galaxies: Mapping[str, GalaxyBending] | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Return the deflection of the lenses of a plane (by index) at
@@ -158,6 +164,13 @@ class Tracer:
         values : Sequence of Mapping
             The values of the parameters of each lens, by its own names
             (see Lens.pdescs).
+        driver : Driver
+            The driver whose native kernels compute the deflections of the
+            pieces that have any (see Lens.deflection).
+        galaxies : Mapping of str to GalaxyBending, optional
+            The bending of the light by the mass of each galaxy whose mass
+            the pieces of the lenses are (see Lens.galaxies), by name; none
+            by default.
 
         Returns
         -------
@@ -174,7 +187,7 @@ class Tracer:
         alpha_y = np.zeros(np.shape(points.y))
         for i in self._planes[plane].lenses:
             lens_x, lens_y = self._lenses[i].deflection(
-                points, values[i], self._quoted[i])
+                points, values[i], self._quoted[i], driver, galaxies)
             alpha_x += lens_x
             alpha_y += lens_y
         return alpha_x, alpha_y
@@ -222,7 +235,9 @@ class Tracer:
             self,
             points: SkyPoints,
             values: Sequence[Mapping[str, float]],
-            upto: int | None = None
+            driver: 'Driver',
+            upto: int | None = None,
+            galaxies: Mapping[str, GalaxyBending] | None = None
     ) -> tuple[SkyPoints, ...]:
         """
         Return the points where the rays of points of the image cross each
@@ -235,8 +250,15 @@ class Tracer:
         values : Sequence of Mapping
             The values of the parameters of each lens, by its own names
             (see Lens.pdescs).
+        driver : Driver
+            The driver whose native kernels compute the deflections (see
+            deflection).
         upto : int, optional
             The farthest plane (by index); the last by default.
+        galaxies : Mapping of str to GalaxyBending, optional
+            The bending of the light by the mass of each galaxy whose mass
+            the pieces of the lenses are (see deflection); none by
+            default.
 
         Returns
         -------
@@ -256,7 +278,8 @@ class Tracer:
             rays.append(self.ray(q, points, deflections))
             # (the deflection of the farthest plane bends no ray traced)
             if self._planes[q].lenses and q < upto:
-                deflections[q] = self.deflection(q, rays[q], values)
+                deflections[q] = self.deflection(
+                    q, rays[q], values, driver, galaxies)
         return tuple(rays)
 
     def jacobian(
@@ -264,7 +287,9 @@ class Tracer:
             plane: int,
             points: SkyPoints,
             values: Sequence[Mapping[str, float]],
-            step: float
+            step: float,
+            driver: 'Driver',
+            galaxies: Mapping[str, GalaxyBending] | None = None
     ) -> np.ndarray:
         """
         Return the Jacobian of the points of the rays on a plane against
@@ -283,6 +308,13 @@ class Tracer:
         step : float
             The step of the differences (arcsec), on either side of each
             point: e.g. half a pixel of the image.
+        driver : Driver
+            The driver whose native kernels compute the deflections (see
+            deflection).
+        galaxies : Mapping of str to GalaxyBending, optional
+            The bending of the light by the mass of each galaxy whose mass
+            the pieces of the lenses are (see deflection); none by
+            default.
 
         Returns
         -------
@@ -299,7 +331,7 @@ class Tracer:
         """
         def ray(dx: float, dy: float) -> SkyPoints:
             moved = SkyPoints(points.x + dx, points.y + dy, points.origin)
-            return self.trace(moved, values, plane)[plane]
+            return self.trace(moved, values, driver, plane, galaxies)[plane]
         along_x = [ray(step, 0), ray(-step, 0)]
         along_y = [ray(0, step), ray(0, -step)]
         jacobian = np.empty(np.shape(points.x) + (2, 2))

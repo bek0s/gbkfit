@@ -19,11 +19,13 @@ from gbkfit.driver import Driver
 from gbkfit.params import ModelEvaluationError, ParamValues
 from ...extras import Extras
 from ...mass import MassContext, MassModel
+from ...mass.sky import RingGeometry
 from ...mass.units import G
 from .._images import ImageMaps
 from .._units import mass_per_unit
 from ..base import (
-    ComponentLinks, ComponentStage, ComponentState, Frame, GalaxyMass)
+    ComponentLinks, ComponentStage, ComponentState, Frame, GalaxyMass,
+    SkyPlacements)
 from ..roles import Emission
 from ._nodal import NodalDisk, DiskPlan
 from ._profiles import (
@@ -112,6 +114,68 @@ class DiskState(ComponentState):
             | self.waves | self.image_light
 
 
+class _DiskRings:
+    """
+    Where the rings of a disk are on the sky (see mass.RingPlacement), at
+    the values of all its parameters (by its own names), in a galaxy of
+    the given length of an arcsec (kpc), with a plan of it, which
+    evaluates its vertical distortions (if any; None without them).
+    """
+
+    def __init__(
+            self,
+            disk: NodalDisk,
+            plan: DiskPlan | None,
+            values: ParamValues,
+            kpc_per_arcsec: float
+    ):
+        self._disk = disk
+        self._plan = plan
+        self._values = values
+        self._kpc_per_arcsec = kpc_per_arcsec
+
+    def rings(self, radii: np.ndarray) -> RingGeometry:
+        """
+        Return the geometry of the rings of the disk at the radii (kpc, in
+        their planes; see mass.RingPlacement): its centre and orientation
+        as it draws them (see NodalDisk.geometry_at), and the lift and the
+        tilt of its vertical distortions of orders 0 and 1, of their
+        displacements at the azimuths 0, 90, 180 and 270 degrees (z = lift
+        + tilt_x x + tilt_y y in the plane of the ring: lift = (z0 +
+        z180) / 2, tilt_x = (z0 - z180) / 2R, tilt_y = (z90 - z270) / 2R;
+        no tilt at R = 0). Those of higher orders are left out: the rings
+        that they distort are not ellipses on the sky (see Disk.rings_gap;
+        the plane of the innermost ring, which the mass can lie in, does
+        not take them).
+        """
+        disk, values = self._disk, self._values
+        kpc = self._kpc_per_arcsec
+        radii = np.asarray(radii, dtype=float)
+        r = radii / kpc
+        frame = disk.frame_params()
+        x, y, posa, incl = (
+            disk.geometry_at(values, r, name)
+            for name in (frame.x, frame.y, frame.posa, frame.incl))
+        lift = np.zeros_like(r)
+        tilt_x = np.zeros_like(r)
+        tilt_y = np.zeros_like(r)
+        rows = [k for k, trait in enumerate(disk.traits('zpt'))
+                if trait.order() <= 1]
+        if rows:
+            z = self._plan.evaluate_polar_traits(
+                values, 'zpt', r[:, None], np.array([0.0, 90.0, 180.0, 270.0])
+            )[rows].sum(axis=0) * kpc
+            lift = (z[:, 0] + z[:, 2]) / 2
+            twice = 2 * radii
+            nonzero = twice > 0
+            tilt_x = np.divide(
+                z[:, 0] - z[:, 2], twice, out=tilt_x, where=nonzero)
+            tilt_y = np.divide(
+                z[:, 1] - z[:, 3], twice, out=tilt_y, where=nonzero)
+        return RingGeometry(
+            x * kpc, y * kpc, posa, incl, lift, tilt_x, tilt_y)
+
+
 def plan_disk_stage(
         disk: NodalDisk,
         emission: Emission | None,
@@ -141,7 +205,8 @@ def plan_disk_stage(
 
 class DiskStage(ComponentStage):
     """
-    The part of a disk in the stage of its galaxy (see GalaxyStage): the
+    The part of a disk in the stage of its galaxy (see GalaxyStage): where
+    its rings are (see Placed), the
     face-on light of its image traits (see ImageMaps), its density, which
     the mass of the galaxy can follow (see NodalDiskDensity), and what the
     galaxy gives it (see state): the circular velocity of the mass at the
@@ -211,6 +276,11 @@ class DiskStage(ComponentStage):
         sampled = followed or disk.balance_gravity() is not None \
             or disk.wave_params() or disk.pressure_support() is not None
         self._plan = disk.plan(driver, 0, np.float64) if sampled else None
+        # The plan that evaluates its vertical distortions where its rings
+        # place the mass on the sky (see place): its plan, or one made at
+        # the first placement, for that alone
+        self._driver = driver
+        self._rings_plan = self._plan
 
     def thickness(
             self, values: ParamValues, mass: GalaxyMass
@@ -328,22 +398,47 @@ class DiskStage(ComponentStage):
                 state, waves=density_waves(disk, self._plan, values, state))
         return state
 
-    def frames(self, values: ParamValues) -> list[Frame]:
+    def placement_params(self) -> tuple[str, ...]:
         """
-        Return where the gravity takes each ring of its disk to be (see
-        Frame), if the mass follows it, moves it or holds it up; none
-        otherwise.
+        Return the names of the parameters of its disk that place its
+        rings (see Placed): its centre and orientation, and those of its
+        vertical distortions, if any.
         """
         disk = self._disk
-        if not (self._followed or disk.circular_velocity_params()
-                or disk.balance_gravity() is not None):
-            return []
+        frame = disk.frame_params()
+        return (frame.x, frame.y, frame.posa, frame.incl,
+                *disk.trait_params('zpt').pdescs)
+
+    def frames(self, values: ParamValues) -> list[Frame]:
+        """
+        Return where each ring of its disk is (see Frame): its centre and
+        orientation at the radius of each of its nodes.
+        """
+        disk = self._disk
         radii = np.asarray(disk.rnodes())
         frame = disk.frame_params()
         geometry = np.broadcast_arrays(radii, *(
             np.asarray(values[name], dtype=float)
             for name in (frame.x, frame.y, frame.posa, frame.incl)))
         return [Frame(*map(float, ring)) for ring in zip(*geometry)]
+
+    def place(
+            self,
+            label: str,
+            values: ParamValues,
+            kpc_per_arcsec: float,
+            placement: SkyPlacements
+    ) -> None:
+        """
+        Add the rings of its disk to the placement of the mass of its
+        galaxy (see Placed.place): where they are, at the values of all
+        the parameters of its disk (see _DiskRings).
+        """
+        disk = self._disk
+        if disk.traits('zpt') and self._rings_plan is None:
+            self._rings_plan = disk.plan(self._driver, 0, np.float64)
+        placement.add_rings(label, _DiskRings(
+            disk, self._rings_plan, values, kpc_per_arcsec))
 
     def _mass_rotation(
             self,

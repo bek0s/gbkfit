@@ -10,11 +10,12 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
+from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.grid import Coords, make_grid, sky_positions
 from gbkfit.io import write_data
 from gbkfit.lensing import (
     LensDeflectionMap, LensEPL, LensNFW, LensSIE, LensShear, LensSheet,
-    Normalisation, PieceInputs, SkyPoints, lens_piece_parser)
+    Normalisation, SkyPoints, lens_piece_parser)
 from gbkfit.params import ModelEvaluationError
 
 
@@ -28,7 +29,7 @@ ELLIPSE = dict(q=0.6, posa=30, xpos=0.2, ypos=-0.1)
 
 
 def deflect(piece, points=POINTS, **params):
-    return piece.deflection(points, PieceInputs(params))
+    return piece.deflection(points, params, DriverHost())
 
 
 def moved(points, dx, dy):

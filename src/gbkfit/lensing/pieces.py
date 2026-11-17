@@ -33,7 +33,8 @@ import math
 import os.path
 from collections.abc import Mapping, Sequence
 from typing import (
-    TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, TypeAlias)
+    TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Protocol, TypeAlias,
+    runtime_checkable)
 
 import numpy as np
 import numpy.typing as npt
@@ -41,22 +42,27 @@ import scipy.ndimage
 from annotated_types import Ge
 
 from gbkfit.config import (
-    Choices, DataFile, TypedParser, TypedSerializable, Unit, check_name,
+    Choices, DataFile, TypedSerializable, Unit, check_name,
     check_options, split_data_file)
 from gbkfit.grid import (
     Coords, Grid, frame_to_pixels, make_grid, sky_to_pixel)
 from gbkfit.io import (
     Orientation, coords_from_header, model_header, read_image, write_data)
+from gbkfit.model.mass import LogTable
 from gbkfit.params import ModelEvaluationError, ParamScalarDesc
 from ._deflections import (
-    elliptical_deflection, epl_deflection, multipole_deflection,
-    nfw_convergence, nfw_round_deflection, sie_deflection)
+    epl_deflection, multipole_deflection, nfw_convergence,
+    nfw_round_deflection, sie_deflection)
+from ._layers import SheetFrame, elliptical_convergence
 
 if TYPE_CHECKING:
-    from gbkfit.model import GalaxyState
+    from gbkfit.driver import Driver
+    from gbkfit.model import Need
 
 
 __all__ = [
+    'Deflects',
+    'GalaxyBending',
     'LensDeflectionMap',
     'LensEPL',
     'LensNFW',
@@ -65,9 +71,8 @@ __all__ = [
     'LensShear',
     'LensSheet',
     'Normalisation',
-    'PieceInputs',
-    'SkyPoints',
-    'lens_piece_parser'
+    'OfGalaxy',
+    'SkyPoints'
 ]
 
 
@@ -81,6 +86,12 @@ _MapUnit: TypeAlias = Annotated[
 
 # The orders of the multipoles of a shape
 _Orders: TypeAlias = Sequence[Annotated[int, Ge(1)]]
+
+# The table of the convergence of an elliptical NFW halo (see LensNFW):
+# from this share of its scale radius (or closer, of the points), at
+# this step of ln xi (64 per decade)
+_NFW_TABLE_START = 1e-8
+_NFW_TABLE_STEP = math.log(10) / 64
 
 
 class Normalisation(enum.Enum):
@@ -111,22 +122,12 @@ class SkyPoints(NamedTuple):
     origin: tuple[float, float]
 
 
-class PieceInputs(NamedTuple):
-    """
-    What a piece of a lens deflects with in an evaluation (see
-    LensPiece.deflection): the values of its parameters, by its own names
-    (see LensPiece.pdescs), and the state of the galaxy whose mass it is,
-    for a piece that is the mass of a galaxy (None for the others).
-    """
-    params: Mapping[str, float]
-    galaxy: 'GalaxyState | None' = None
-
-
 class LensPiece(TypedSerializable, abc.ABC):
     """
-    A piece of a lens (see Lens): its deflection of the light at points
-    of the plane of its lens, of a strength for the source that its
-    normalisation says (see normalisation).
+    A piece of a lens (see Lens): it deflects the light at points of the
+    plane of its lens, of a strength for the source that its
+    normalisation says (see normalisation): by its parameters (see
+    Deflects), or by the mass of a galaxy (see OfGalaxy).
 
     A piece may have parameters (see pdescs), named in its lens after it
     (see Lens.pdescs).
@@ -135,7 +136,7 @@ class LensPiece(TypedSerializable, abc.ABC):
     ----------
     name : str, optional
         Its name, which prefixes its parameters when its lens has several
-        pieces.
+        pieces; its type by default (e.g. 'shear').
 
     Raises
     ------
@@ -156,9 +157,9 @@ class LensPiece(TypedSerializable, abc.ABC):
         check_name(name)
         self._name = name
 
-    def name(self) -> str | None:
-        """Return its name, if any."""
-        return self._name
+    def name(self) -> str:
+        """Return its name: that given, or else its type."""
+        return self.type() if self._name is None else self._name
 
     @abc.abstractmethod
     def normalisation(self) -> Normalisation:
@@ -171,9 +172,19 @@ class LensPiece(TypedSerializable, abc.ABC):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         """Return its parameters, by name."""
 
-    @abc.abstractmethod
+
+@runtime_checkable
+class Deflects(Protocol):
+    """
+    A piece of a lens that deflects the light by its parameters (e.g. a
+    shape, a shear, a sheet or deflection maps).
+    """
+
     def deflection(
-            self, points: SkyPoints, inputs: PieceInputs
+            self,
+            points: SkyPoints,
+            params: Mapping[str, float],
+            driver: 'Driver'
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Return its deflection at points of the plane of its lens.
@@ -182,8 +193,12 @@ class LensPiece(TypedSerializable, abc.ABC):
         ----------
         points : SkyPoints
             The points.
-        inputs : PieceInputs
-            The values of its parameters, and the state of its galaxy.
+        params : Mapping of str to float
+            The values of its parameters, by its own names (see
+            LensPiece.pdescs).
+        driver : Driver
+            The driver whose native kernels compute it, if it has any (the
+            points and the deflection on the host).
 
         Returns
         -------
@@ -196,6 +211,45 @@ class LensPiece(TypedSerializable, abc.ABC):
         ModelEvaluationError
             If it has no deflection there (e.g. points off a map).
         """
+        ...
+
+
+@runtime_checkable
+class OfGalaxy(Protocol):
+    """
+    A piece of a lens that is the mass of a galaxy (e.g. LensGalaxyMass):
+    it deflects as that mass, laid out on the sky by the galaxy in each
+    evaluation, which those who evaluate its lens give it (see
+    GalaxyBending and Lens.deflection) and the galaxy must have (see
+    needs).
+    """
+
+    def galaxy(self) -> str:
+        """Return the name of its galaxy."""
+
+    def needs(self, label: str) -> tuple['Need', ...]:
+        """
+        Return what it needs of its galaxy (see Galaxy.check_needs), as
+        the piece of the given label in messages (e.g. "the piece 'mass'
+        of lens 'lens'").
+        """
+
+
+class GalaxyBending(Protocol):
+    """
+    The bending of the light by the mass of a galaxy in an evaluation (of
+    a piece that is that mass, see OfGalaxy): e.g. the mass on the sky,
+    with where the deflections of its layers are kept (see
+    MassDeflections).
+    """
+
+    def deflection(self, points: SkyPoints) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Return its deflection at points of the plane of the galaxy, at
+        D_ls / D_s = 1 (alpha-hat, see Normalisation): along x and y
+        (arcsec), of the shape of the points.
+        """
+        ...
 
 
 class _Multipoles:
@@ -333,9 +387,11 @@ class LensSIE(LensPiece):
             | self._multipoles.pdescs()
 
     def deflection(
-            self, points: SkyPoints, inputs: PieceInputs
+            self,
+            points: SkyPoints,
+            params: Mapping[str, float],
+            driver: 'Driver'
     ) -> tuple[np.ndarray, np.ndarray]:
-        params = inputs.params
         x, y = _centred(points, params)
         u, v = _on_axes(x, y, params['posa'])
         alpha_u, alpha_v = sie_deflection(
@@ -422,9 +478,11 @@ class LensEPL(LensPiece):
         ) | _ellipse_pdescs() | self._multipoles.pdescs()
 
     def deflection(
-            self, points: SkyPoints, inputs: PieceInputs
+            self,
+            points: SkyPoints,
+            params: Mapping[str, float],
+            driver: 'Driver'
     ) -> tuple[np.ndarray, np.ndarray]:
-        params = inputs.params
         x, y = _centred(points, params)
         u, v = _on_axes(x, y, params['posa'])
         alpha_u, alpha_v = epl_deflection(
@@ -449,8 +507,10 @@ class LensNFW(LensPiece):
 
     Round (q = 1), its deflection is analytic: 4 kappa_s r_s h(x) / x
     along the radius, with h(x) = ln(x / 2) + F(x). Elliptical, it is the
-    integral over the ellipses within each point (see
-    elliptical_deflection). It is 0 at its centre.
+    integral over the ellipses within each point, by the native kernels of
+    the driver (see _layers.elliptical_convergence), of its convergence in
+    a table cubic in ln xi, 64 points per decade (to about 1e-7). It is 0
+    at its centre.
 
     Its parameters (see pdescs): kappa_s, r_s (arcsec, the scale radius),
     q (the axis ratio), posa, xpos and ypos (see the module). Its
@@ -485,17 +545,34 @@ class LensNFW(LensPiece):
         ) | _ellipse_pdescs()
 
     def deflection(
-            self, points: SkyPoints, inputs: PieceInputs
+            self,
+            points: SkyPoints,
+            params: Mapping[str, float],
+            driver: 'Driver'
     ) -> tuple[np.ndarray, np.ndarray]:
-        params = inputs.params
-        u, v = _on_axes(*_centred(points, params), params['posa'])
+        x, y = _centred(points, params)
         kappa_s, r_s, q = params['kappa_s'], params['r_s'], params['q']
         if q == 1:
+            u, v = _on_axes(x, y, params['posa'])
             alpha_u, alpha_v = nfw_round_deflection(u, v, kappa_s, r_s)
-        else:
-            alpha_u, alpha_v = elliptical_deflection(
-                u, v, q, lambda xi: kappa_s * nfw_convergence(xi / r_s))
-        return _from_axes(alpha_u, alpha_v, params['posa'])
+            return _from_axes(alpha_u, alpha_v, params['posa'])
+        # Elliptical: its convergence as a sheet of kappa(xi), xi = sqrt(q)
+        # a, stretched by 1 / sqrt(q) and sqrt(q), tabulated to the
+        # farthest point (the ellipses beyond a point do not bend it)
+        u, v = _on_axes(x, y, params['posa'])
+        xi = np.sqrt(q * u * u + v * v / q)
+        start = math.log(_NFW_TABLE_START * r_s)
+        if (inside := xi[xi > 0]).size:
+            start = min(start, math.log(inside.min() / 2))
+        end = math.log(max(np.max(xi, initial=r_s), r_s) * 2)
+        radii = np.exp(start + _NFW_TABLE_STEP * np.arange(
+            max(4, math.ceil((end - start) / _NFW_TABLE_STEP) + 1)))
+        frame = SheetFrame(
+            (0.0, 0.0), params['posa'], (1 / math.sqrt(q), math.sqrt(q)),
+            np.zeros(1), (0.0, 0.0))
+        kappa = LogTable(start, _NFW_TABLE_STEP, np.log(
+            kappa_s * nfw_convergence(radii / r_s)))
+        return elliptical_convergence(frame, kappa, x, y, driver)
 
 
 class LensShear(LensPiece):
@@ -535,9 +612,11 @@ class LensShear(LensPiece):
                 default=0, period=180))
 
     def deflection(
-            self, points: SkyPoints, inputs: PieceInputs
+            self,
+            points: SkyPoints,
+            params: Mapping[str, float],
+            driver: 'Driver'
     ) -> tuple[np.ndarray, np.ndarray]:
-        params = inputs.params
         x, y = points.x, points.y
         # (the angle from +x of the position angle is 90 degrees more)
         angle = 2 * math.radians(params['posa'] + 90)
@@ -578,9 +657,12 @@ class LensSheet(LensPiece):
             "the convergence", title='Convergence', unit='', default=0))
 
     def deflection(
-            self, points: SkyPoints, inputs: PieceInputs
+            self,
+            points: SkyPoints,
+            params: Mapping[str, float],
+            driver: 'Driver'
     ) -> tuple[np.ndarray, np.ndarray]:
-        kappa = inputs.params['kappa']
+        kappa = params['kappa']
         return kappa * points.x, kappa * points.y
 
 
@@ -817,14 +899,17 @@ class LensDeflectionMap(LensPiece):
                 unit='arcsec', default=0))
 
     def deflection(
-            self, points: SkyPoints, inputs: PieceInputs
+            self,
+            points: SkyPoints,
+            params: Mapping[str, float],
+            driver: 'Driver'
     ) -> tuple[np.ndarray, np.ndarray]:
         x, y = points.x, points.y
         if self._shifted:
             # The deflection of shifted maps at a point is theirs at the
             # point less the shift
-            x = x - inputs.params['xpos']
-            y = y - inputs.params['ypos']
+            x = x - params['xpos']
+            y = y - params['ypos']
         # The points in the projection of the maps, where their deflection
         # gives the points of the source, moved back into the frame
         map_x, map_y = frame_to_pixels(x, y, points.origin, self._projection)
@@ -861,18 +946,13 @@ class LensDeflectionMap(LensPiece):
             first = np.flatnonzero(off)[0]
             x = np.ravel(points.x)[first]
             y = np.ravel(points.y)[first]
-            label = '' if self.name() is None else f" {self.name()!r}"
             raise ModelEvaluationError(
-                f"the deflection maps{label} do not cover {np.sum(off)} of "
-                f"the {off.size} points where they deflect light (e.g. at "
+                f"the deflection maps {self.name()!r} do not cover "
+                f"{np.sum(off)} of the {off.size} points where they deflect "
+                f"light (e.g. at "
                 f"x = {x:.6g}, y = {y:.6g} arcsec from the origin of the "
                 f"frame); give maps of a larger field, or a smaller field "
                 f"of the data")
-
-
-lens_piece_parser = TypedParser(LensPiece, [
-    LensDeflectionMap, LensEPL, LensNFW, LensSIE, LensShear, LensSheet],
-    family='lens_piece')
 
 
 def _projection(origin: Sequence[float]) -> Grid:

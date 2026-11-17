@@ -8,6 +8,7 @@ import numpy.typing as npt
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext, MassSpherical
+from .sky import PointLayer, SkyLayer, SkyPlacement
 from .units import G
 
 
@@ -19,7 +20,8 @@ __all__ = [
 class MassPoint(MassSpherical):
     """
     A point mass of 10^log_m Msun at the centre: v^2 = G M / r and the
-    potential -G M / r. Its density is 0 away from the centre.
+    potential -G M / r. Its density is 0 away from the centre. On the sky,
+    a point at the centre of its galaxy (see sky.SkyProjected).
 
     Parameters
     ----------
@@ -66,3 +68,14 @@ class MassPoint(MassSpherical):
     ) -> np.ndarray:
         r = np.hypot(R, z)
         return -G * 10 ** params['log_m'] / r
+
+    def takes_mass_plane(self) -> bool:
+        return False
+
+    def sky_layers(
+            self,
+            params: ParamValues,
+            context: MassContext,
+            placement: SkyPlacement
+    ) -> tuple[SkyLayer, ...]:
+        return (PointLayer(placement.centre, 10.0 ** params['log_m']),)

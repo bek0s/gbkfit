@@ -6,7 +6,9 @@ the cubes of opacity, the fields of radiative transfer).
 
 import abc
 import dataclasses
-from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, TypedDict
+from typing import (
+    TYPE_CHECKING, Any, ClassVar, NamedTuple, Protocol, TypedDict,
+    runtime_checkable)
 
 import numpy as np
 
@@ -23,6 +25,7 @@ if TYPE_CHECKING:
     from ..extras import Extras
     from ..gravity import GravityField
     from ..mass import ComponentDensity, MassContext, MassModel
+    from ..mass.sky import RingPlacement, SpheroidAxis
     from ._needs import Need
     from ._profiles import ComponentProfiles
     from ._units import DataUnit
@@ -42,7 +45,10 @@ __all__ = [
     'GalaxyMass',
     'NativeGrid',
     'OpacityCubes',
-    'SceneTarget'
+    'Placed',
+    'Ringed',
+    'SceneTarget',
+    'SkyPlacements'
 ]
 
 
@@ -601,20 +607,95 @@ class ComponentStage(abc.ABC):
         """
         return None
 
+
+@runtime_checkable
+class Placed(Protocol):
+    """
+    The part of a component in the stage of its galaxy (see
+    ComponentStage) that says where the parts of the component are: of a
+    component that is where the mass of the galaxy is (one that the mass
+    moves, holds up or follows, see Galaxy.placed), which the gravity
+    takes at the one centre of the mass and a lens of the mass places
+    the mass on the sky by (see GalaxyStage).
+    """
+
+    def placement_params(self) -> tuple[str, ...]:
+        """
+        Return the names of the parameters of its component (its own
+        names) that say where its parts are (see frames): those of its
+        geometry (e.g. its centre and orientation, at each ring of a
+        disk) and of its displacements, if any.
+        """
+
     def frames(self, values: ParamValues) -> list['Frame']:
         """
-        Return where the gravity of its galaxy takes it to be, at the
-        values of its parameters (see Frame and GalaxyStage): the centre
-        and the plane (or axis) of each of its parts that the mass moves,
-        holds up or follows; none here.
+        Return where each of its parts is in the frame of the mass of its
+        galaxy (see Frame), at the values of the parameters of its
+        component (by its own names; those of placement_params among
+        them): its centre and the plane (or axis) of each.
         """
-        return []
+
+    def place(
+            self,
+            label: str,
+            values: ParamValues,
+            kpc_per_arcsec: float,
+            placement: 'SkyPlacements'
+    ) -> None:
+        """
+        Add where its component is on the sky to the placement of the mass
+        of its galaxy (see SkyPlacements): a disk its rings, a spheroid
+        its axis.
+
+        Parameters
+        ----------
+        label : str
+            The name of its component, by which the mass components that
+            follow it ask for it (or its position, e.g. 'component0').
+        values : ParamValues
+            The values of all the parameters of its component (by its own
+            names).
+        kpc_per_arcsec : float
+            The length of an arcsec in its galaxy (kpc).
+        placement : SkyPlacements
+            The placement.
+        """
+
+
+class SkyPlacements(Protocol):
+    """
+    The placement of the mass of a galaxy on the sky, as the components
+    where the mass is add themselves to it (see Placed.place), by name:
+    the rings of each disk and the axis of each spheroid (see
+    mass.SkyPlacement).
+    """
+
+    def add_rings(self, name: str, rings: 'RingPlacement') -> None:
+        """Add the rings of a disk (see mass.RingPlacement), by name."""
+
+    def add_axis(self, name: str, axis: 'SpheroidAxis') -> None:
+        """Add the centre and axis of a spheroid, by name."""
+
+
+@runtime_checkable
+class Ringed(Protocol):
+    """
+    A component of rings (e.g. a disk), whose rings a mass that follows
+    its density lays out on the sky (see mass.RingGeometry).
+    """
+
+    def rings_gap(self) -> str | None:
+        """
+        Return why its rings are not ellipses on the sky, if they are not
+        (e.g. vertical distortions of an order of 2 or more); None if
+        they are.
+        """
 
 
 class Frame(NamedTuple):
     """
     Where a part of a component is in the frame of the mass of its galaxy
-    (see ComponentStage.frames): its radius (arcsec; 0 for the whole of a
+    (see Placed.frames): its radius (arcsec; 0 for the whole of a
     component without rings), its centre (x, y; arcsec), and the
     orientation of its plane or axis (posa, incl; degrees), None for a
     part without one (e.g. a sphere).

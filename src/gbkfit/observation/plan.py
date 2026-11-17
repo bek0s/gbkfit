@@ -5,13 +5,12 @@ and how a flux scale scales them (see FluxScale).
 """
 
 import abc
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, NamedTuple, TypeAlias
 
 import numpy as np
 
 from gbkfit.driver import DeviceArray
-from gbkfit.model import Extras, GalaxyState
+from gbkfit.model import Extras, SceneState
 from gbkfit.params import ParamValues
 
 if TYPE_CHECKING:
@@ -78,7 +77,7 @@ class ObservationPlan(abc.ABC):
     def evaluate(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             out_extra: Extras | None
     ) -> ModelData:
         """
@@ -88,10 +87,12 @@ class ObservationPlan(abc.ABC):
         ----------
         params : dict
             The parameters of the model.
-        galaxies : Sequence of GalaxyState
-            Each galaxy it sees in the evaluation: its mass, and what it
-            gives its components (see GalaxyStage.evaluate), in the order
-            of the galaxies it sees.
+        state : SceneState
+            The galaxies it sees in the evaluation: the state of each (its
+            mass, and what it gives its components, see
+            GalaxyStage.evaluate), in the order of the galaxies it sees,
+            and the mass on the sky of each galaxy whose mass bends their
+            light (see GalaxyState.sky).
         out_extra : Extras, optional
             Where the extra outputs go, if wanted: those of the instrument
             (e.g. the model cube), and those of the model (with the ids of
@@ -107,7 +108,7 @@ class ObservationPlan(abc.ABC):
     def mock(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
@@ -121,7 +122,7 @@ class ObservationPlan(abc.ABC):
 
         Parameters
         ----------
-        params, galaxies
+        params, state
             As for evaluate.
         noise : Noise
             The noise of the recorded data.

@@ -15,7 +15,8 @@ from gbkfit.config import config_path, item_prefixes, warn
 from gbkfit.cosmology import DEFAULT, Cosmology
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
-from gbkfit.lensing import Lens, Plane, Tracer, plane_layout
+from gbkfit.lensing import (
+    PLANE_LINKING_VELOCITY, Lens, OfGalaxy, Plane, Tracer, plane_layout)
 from gbkfit.model import DepthUnit, Galaxy
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
@@ -68,7 +69,12 @@ class ObservationGroup:
     redshift), and the light of each plane is bent by the lenses of the
     planes in front of it (see Tracer), and dimmed by the opacity of
     their galaxies. The parameters of each lens are prefixed by its name
-    (e.g. 'lens_main_theta_e').
+    (e.g. 'lens_main_theta_e'). A piece of a lens can be the mass of a
+    galaxy of the group (see LensGalaxyMass and OfGalaxy): the galaxy must
+    be at the plane of the lens and give what the piece needs (see
+    Galaxy.check_needs), and no other piece may be its mass. Its mass then
+    bends the light of every observation of the planes behind, whether
+    the observation sees the galaxy or not.
 
     The centres of the components (xpos, ypos) are measured from the
     origin of the frame of the first observation on the sky (see
@@ -135,8 +141,9 @@ class ObservationGroup:
         unknown galaxies or repeats them, has a group of fewer than two
         galaxies, or of the name of a galaxy or an observation, every
         observation of a galaxy has offsets of position or of velocity,
-        or with lenses, a galaxy has no redshift, or the planes cannot be
-        laid out (see plane_layout).
+        or with lenses, a galaxy has no redshift, the planes cannot be
+        laid out (see plane_layout), or a piece of a lens is the mass of a
+        galaxy that it cannot be (see _check_masses).
     """
 
     def __init__(
@@ -202,11 +209,15 @@ class ObservationGroup:
         labels = [
             f'observation{i}' if name is None else name
             for i, name in enumerate(observation_names)]
-        # The paths of the light of the planes through the lenses, if any
+        # The paths of the light of the planes through the lenses, if any,
+        # and the galaxies whose masses pieces of them are (see
+        # _check_masses)
         self._tracer = None
+        self._lensing: tuple[int, ...] = ()
         if self._lenses:
             self._tracer = Tracer(
                 self._plane_layout(), self._lenses, self._cosmology)
+            self._lensing = self._check_masses()
         # (the origin of the frame of the parameters of the galaxies)
         frames = [observation.sky_frame() for observation in observations]
         first = first_on_sky(frames)
@@ -225,7 +236,7 @@ class ObservationGroup:
                 observations, labels, seen, frames, alignments(frames)))
         check_offsets(self._galaxies, frames, seen)
         warn_frames(self._galaxies, frames, seen)
-        _warn_unused_masses(self._galaxies, observations, seen)
+        _warn_unused_masses(self._galaxies, observations, seen, self._lensing)
         self._warn_idle_lenses()
         self._check_observations()
 
@@ -258,6 +269,56 @@ class ObservationGroup:
                 [self._galaxy_label(g) for g in plane.galaxies],
                 [self._lenses[i].name() for i in plane.lenses])
         return planes
+
+    def _check_masses(self) -> tuple[int, ...]:
+        """
+        Check the pieces of the lenses that are the masses of galaxies (see
+        OfGalaxy): each is the mass of a galaxy of the group, at the plane
+        of its lens (its mass bends light at its own distance), that gives
+        what the piece needs (see Galaxy.check_needs); and no galaxy is the
+        mass of two pieces (its mass would bend light twice). Return the
+        galaxies whose masses they are, by index.
+
+        Raises
+        ------
+        ValueError
+            If one does not hold, of the path of the piece.
+        """
+        names = [galaxy.name() for galaxy in self._galaxies]
+        planes = self._tracer.planes()
+        plane_of = {
+            g: p for p, plane in enumerate(planes) for g in plane.galaxies}
+        lens_plane = {
+            i: p for p, plane in enumerate(planes) for i in plane.lenses}
+        pieces: dict[int, str] = {}
+        for i, lens in enumerate(self._lenses):
+            for k, piece in enumerate(lens.pieces()):
+                if not isinstance(piece, OfGalaxy):
+                    continue
+                label = f"the piece {piece.name()!r} of lens {lens.name()!r}"
+                name = piece.galaxy()
+                with config_path('lenses', i, 'pieces', k):
+                    if name not in names:
+                        raise ValueError(
+                            f"{label} is the mass of the galaxy {name!r}, "
+                            f"which is not one of the galaxies: {names}")
+                    g = names.index(name)
+                    if g in pieces:
+                        raise ValueError(
+                            f"{label} and {pieces[g]} are both the mass of "
+                            f"the galaxy {name!r}, which would bend light "
+                            f"twice")
+                    if plane_of[g] != lens_plane[i]:
+                        raise ValueError(
+                            f"{label} is the mass of the galaxy {name!r}, "
+                            f"which bends light at its own redshift "
+                            f"({self._galaxies[g].redshift()}): give the "
+                            f"lens a redshift within "
+                            f"{PLANE_LINKING_VELOCITY:g} km/s of it; it is "
+                            f"at {lens.redshift()}")
+                    self._galaxies[g].check_needs(piece.needs(label))
+                pieces[g] = label
+        return tuple(sorted(pieces))
 
     def _galaxy_label(self, index: int) -> str:
         """Return the name of a galaxy in messages, or its index."""
@@ -482,7 +543,8 @@ class ObservationGroup:
             The values of the parameters at which what is laid out once
             for all evaluations is laid out (see ParamSpace.reference):
             the grids of the planes behind lenses that observations see,
-            which need them.
+            which need them (with the masses on the sky there of the
+            galaxies whose masses pieces of lenses are, see GroupPlan).
 
         Returns
         -------
@@ -492,10 +554,12 @@ class ObservationGroup:
         Raises
         ------
         ValueError
-            If the placement names unknown galaxies or observations, or
+            If the placement names unknown galaxies or observations,
             what an observation sees does not go with it (see
-            Observation.plan), or a galaxy cannot plan its stage (see
-            Galaxy.plan_stage).
+            Observation.plan), a galaxy cannot plan its stage (see
+            Galaxy.plan_stage), or the mass of a galaxy that a lens bends
+            light with cannot be laid out on the sky at the reference
+            values.
         """
         return GroupPlan(
             self, *place_drivers(self, driver, placement), reference)
@@ -579,6 +643,27 @@ class ObservationGroup:
         the group, by its own names (see Lens.pdescs).
         """
         return tuple(self._lens_mappings)
+
+    def lensing_galaxies(self) -> tuple[int, ...]:
+        """
+        Return the galaxies whose masses pieces of the lenses are (see
+        OfGalaxy), by index: their stages lay out their masses on the sky
+        (see GroupPlan).
+        """
+        return self._lensing
+
+    def bending_masses(self, index: int) -> tuple[int, ...]:
+        """
+        Return the galaxies whose masses bend the light of what the
+        observation of the given index sees, by index: those whose masses
+        pieces of the lenses in front of its planes are (see model_params),
+        which it need not see.
+        """
+        names = [galaxy.name() for galaxy in self._galaxies]
+        return tuple(sorted(
+            names.index(name)
+            for i in self._bending(self._members[index].galaxies)
+            for name in self._lenses[i].galaxies()))
 
     def tracer(self) -> Tracer | None:
         """
@@ -780,15 +865,18 @@ def _with_observation_pdescs(
 def _warn_unused_masses(
         galaxies: Sequence[Galaxy],
         observations: Sequence[Observation],
-        seen: Sequence[Sequence[int]]
+        seen: Sequence[Sequence[int]],
+        lensing: Collection[int]
 ) -> None:
     """
-    Log a warning for each galaxy with mass that neither its components
-    nor the observations that see it take (e.g. of components without
+    Log a warning for each galaxy with mass that neither its components,
+    the observations that see it nor a lens (those of the given indices
+    are the masses of pieces of lenses) take (e.g. of components without
     'mass' velocity traits): only derived values can then use it.
     """
     for g, galaxy in enumerate(galaxies):
-        if galaxy.mass_model() is None or galaxy.components_use_mass():
+        if galaxy.mass_model() is None or galaxy.components_use_mass() \
+                or g in lensing:
             continue
         if any(g in indices and observation.takes_mass()
                for observation, indices in zip(observations, seen)):
@@ -797,6 +885,6 @@ def _warn_unused_masses(
             else f"galaxy {galaxy.name()!r}"
         _log.warning(
             f"the mass of {name} is used by none of its components ('mass' "
-            f"velocity traits or a vertical equilibrium) and none of its "
-            f"observations (profiles of its mass): only derived values can "
-            f"use it")
+            f"velocity traits or a vertical equilibrium), none of its "
+            f"observations (profiles of its mass) and no lens: only derived "
+            f"values can use it")

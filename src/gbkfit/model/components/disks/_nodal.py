@@ -192,15 +192,16 @@ class NodalDisk(NodalComponent):
         """Return the parameters of the traits of one kind (TraitParams)."""
         return self._traits.params(kind)
 
-    def orientation(
+    def geometry_at(
             self, params: ParamValues, R: np.ndarray, which: str
     ) -> np.ndarray:
         """
-        Return its position angle or inclination (which: 'posa' or
-        'incl'; degrees) at the radii R (arcsec), as it is evaluated: of a
-        disk that tilts (or wanders), its values at the nodes interpolated
-        to the subnodes (see interp), linearly between them, and beyond
-        them their first or last values; else its one value.
+        Return a parameter of its geometry (which: e.g. 'posa' or 'incl',
+        degrees, or 'xpos' or 'ypos', arcsec) at the radii R (arcsec), as
+        it is evaluated: of a disk that tilts (or wanders), its values at
+        the nodes interpolated to the subnodes (see interp), linearly
+        between them, and beyond them their first or last values; else its
+        one value.
         """
         values = params[which]
         if not self._geometry_isnw[which]:

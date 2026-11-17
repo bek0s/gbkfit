@@ -217,6 +217,23 @@ class Disk(Component, abc.ABC):
     def needs_depth(self, view: View) -> bool:
         return self.has_height()
 
+    def rings_gap(self) -> str | None:
+        """
+        Return why its rings are not ellipses on the sky, as a mass that
+        follows it lays them out (see Ringed), if they are not: of vertical
+        distortions of an order of 2 or more (those of the orders 0 and 1
+        move and tilt a ring, which stays an ellipse).
+        """
+        orders = sorted({
+            trait.order() for trait in self._disk.traits('zpt')
+            if trait.order() > 1})
+        if not orders:
+            return None
+        return (
+            f"the disk {self.name()!r} has vertical distortions of the "
+            f"orders {orders}, whose rings are not ellipses on the sky "
+            f"(those of the orders 0 and 1 are)")
+
     def equilibrium(self) -> traits.DispersionEquilibrium | None:
         """
         Return the vertical equilibrium of its dispersion, if any (a

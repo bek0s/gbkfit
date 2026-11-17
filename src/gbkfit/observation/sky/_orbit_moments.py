@@ -4,14 +4,13 @@ OrbitMomentsPlan), and the check of the observations that see them (see
 check_orbits).
 """
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.grid import Coords, Grid, GridData
-from gbkfit.model import Extras, GalaxyState
+from gbkfit.model import Extras, SceneState
 from gbkfit.model.components.spheroids import OrbitIntegrator
 from gbkfit.moments import MomentsPlan
 from gbkfit.params import ParamValues
@@ -195,14 +194,14 @@ class OrbitMomentsPlan(ObservationPlan):
     def evaluate(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             out_extra: Extras | None
     ) -> ModelData:
-        state = galaxies[self._galaxy].states[self._component]
+        library = state.galaxies[self._galaxy].states[self._component]
         records, weights, light = self._record(
-            params, state, out_extra is not None)
+            params, library, out_extra is not None)
         if out_extra is not None:
-            self._add_extras(out_extra, state, weights, light, records)
+            self._add_extras(out_extra, library, weights, light, records)
         return self._measure(records.spectra[:, :self._nregions])
 
     def _record(
@@ -329,15 +328,15 @@ class OrbitMomentsPlan(ObservationPlan):
     def mock(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
     ) -> tuple[list[HostModelData], dict[str, np.ndarray] | None]:
         # (the cube of the pixels, plus the noise of each draw, summed over
         # the pixels of each bin: as RegionMomentsPlan does)
-        state = galaxies[self._galaxy].states[self._component]
-        records, _, _ = self._record(params, state, True)
+        library = state.galaxies[self._galaxy].states[self._component]
+        records, _, _ = self._record(params, library, True)
         recorded = self._pixels.cube(records.spectra[:, self._nregions:])
         # (a model that failed raises here, not in the draws)
         self._measure(records.spectra[:, :self._nregions])

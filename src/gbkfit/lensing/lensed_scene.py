@@ -6,18 +6,15 @@ front, on the grid of the image.
 
 import logging
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, NamedTuple, Protocol
+from typing import NamedTuple, Protocol
 
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid, GridData
-from gbkfit.model import DepthAxis, Extras, Scene
+from gbkfit.model import DepthAxis, Extras, Scene, SceneState
 from gbkfit.params import ParamValues
 from .trace_plan import TracePlan
-
-if TYPE_CHECKING:
-    from gbkfit.model import GalaxyState
 
 
 __all__ = [
@@ -54,14 +51,14 @@ class SceneDrawing(Protocol):
     def evaluate(
             self,
             params: ParamValues,
-            galaxies: Sequence['GalaxyState'],
+            state: SceneState,
             data: DeviceArray,
             out_extra: Extras | None
     ) -> None:
         """
         Add the light of the galaxies to the data (the image or spectral
         cube), with the parameters of the evaluations and the state of
-        each galaxy (see ScenePlan.evaluate).
+        the galaxies (see ScenePlan.evaluate).
         """
 
     def transmission(self) -> DeviceArray | None:
@@ -383,7 +380,7 @@ class LensedScenePlan:
     def evaluate(
             self,
             params: ParamValues,
-            galaxies: Sequence['GalaxyState'],
+            state: SceneState,
             data: DeviceArray,
             out_extra: Extras | None
     ) -> None:
@@ -398,9 +395,10 @@ class LensedScenePlan:
             The values of the parameters of the evaluations: those of the
             galaxies (moved into the frame of the observation), of the
             lenses and of the offsets of the observation.
-        galaxies : Sequence of GalaxyState
+        state : SceneState
             The state of each of the galaxies (see LensedPlane:
-            galaxies).
+            galaxies), and the mass on the sky of each galaxy whose mass
+            the lenses bend light with (see TracePlan.positions).
         data : DeviceArray
             The image or spectral cube, (nchannels, ny, nx).
         out_extra : Extras, optional
@@ -412,14 +410,15 @@ class LensedScenePlan:
             If the lenses have no deflection at a ray (e.g. off a map).
         """
         driver = self._driver
-        positions = self._trace.positions(params)
+        positions = self._trace.positions(params, state.masses)
         for plane in self._planes:
             driver.mem_fill(plane.emission, 0)
             extras = out_extra
             if out_extra is not None and plane.plane.plane is not None:
                 extras = out_extra.scoped(plane=plane.label)
             plane.plan.evaluate(
-                params, [galaxies[g] for g in plane.plane.galaxies],
+                params, state._replace(galaxies=tuple(
+                    state.galaxies[g] for g in plane.plane.galaxies)),
                 plane.emission, extras)
         behind = None
         for plane in reversed(self._planes):

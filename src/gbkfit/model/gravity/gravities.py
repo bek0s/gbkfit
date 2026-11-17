@@ -141,6 +141,9 @@ class Gravity(TypedSerializable, abc.ABC):
     - the shares of the components in the squared circular velocity
       (SHARES), which the dark fraction of a halo takes (see
       mass.Halo)
+    - the bending of light as the Newtonian mass (LENSING), which a lens
+      of the mass of the galaxy takes (see gbkfit.lensing): of the mass
+      laid out on the sky (see MassModel.sky_mass)
     """
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
@@ -219,7 +222,8 @@ class GravityNewton(Gravity):
         forces = _forces_of_components(mass_model)
         return {
             Capability.FORCES: forces, Capability.POTENTIAL: forces,
-            Capability.SHEETS: None, Capability.SHARES: None}
+            Capability.SHEETS: None, Capability.SHARES: None,
+            Capability.LENSING: mass_model.projection_gaps()}
 
 
 class _NewtonField(GravityField):
@@ -288,9 +292,11 @@ class GravityMOND(Gravity):
       the circular velocity), but gives the circular velocity in the
       plane only: off it, nu g_N has curl, unlike the gravity of a field.
 
-    Neither gives the vertical structure of self-gravitating sheets, or
-    the shares of the components (the squared circular velocities of MOND
-    do not add up); and there is no external field effect. The Newtonian
+    Neither gives the vertical structure of self-gravitating sheets, the
+    shares of the components (the squared circular velocities of MOND do
+    not add up), or the bending of light (that of MOND is of a
+    relativistic theory of it, e.g. TeVeS or AeST, which is not
+    modelled); and there is no external field effect. The Newtonian
     circular velocities of the components remain in the rotation tables
     and the functions of the galaxy (see DiskStage.state and
     GalaxyFunctions).
@@ -404,7 +410,10 @@ class GravityMOND(Gravity):
                 "Newtonian gravity",
             Capability.SHARES:
                 "the squared circular velocities of the components do not "
-                "add up in MOND"}
+                "add up in MOND",
+            Capability.LENSING:
+                "the bending of light in MOND is that of a relativistic "
+                "theory of it (e.g. TeVeS or AeST), which is not modelled"}
 
 
 class _MONDField(GravityField):
@@ -489,10 +498,15 @@ class GravityHuSawicki(Gravity):
     out). Its forces anywhere are those of the Newtonian forces of all the
     mass, plus the fifth force; it does not give the vertical structure
     of self-gravitating sheets, or the shares of the components (the
-    fifth force is not a sum over them). The Newtonian circular
-    velocities of the components remain in the rotation tables and the
-    functions of the galaxy (see DiskStage.state and
-    GalaxyFunctions).
+    fifth force is not a sum over them). Its light bends as in Newtonian
+    gravity, by the mass laid out on the sky (see MassModel.sky_mass):
+    light couples to the metric conformally, so that the potential of
+    lensing, (Phi + Psi) / 2, is sourced by the density alone and the
+    fifth force bends no light, screened or not (Zhao, Li & Koyama 2011),
+    to relative corrections of the order of |f_R| <= |f_R0|. The
+    Newtonian circular velocities of the components remain in the
+    rotation tables and the functions of the galaxy (see DiskStage.state
+    and GalaxyFunctions).
 
     Parameters
     ----------
@@ -631,7 +645,8 @@ class GravityHuSawicki(Gravity):
                 "of Newtonian gravity",
             Capability.SHARES:
                 "the fifth force of f(R) gravity is not a sum over the "
-                "components"}
+                "components",
+            Capability.LENSING: mass_model.projection_gaps()}
 
 
 class _GradientField(GravityField):
@@ -694,8 +709,10 @@ class GravityPalatini(Gravity):
     of a vertical law Z, infinite for a thin disk), nor do tables, user
     components and halos that respond to their baryons; point masses
     have none away from the centre. It does not give the vertical
-    structure of self-gravitating sheets, or the shares of the
-    components (those of the dark fraction are Newtonian). The Newtonian
+    structure of self-gravitating sheets, the shares of the components
+    (those of the dark fraction are Newtonian), or the bending of light
+    (that of the metric of its photons is not yet checked against
+    Toniato et al. 2020). The Newtonian
     circular velocities of the components remain in the rotation tables
     and the functions of the galaxy (see DiskStage.state and
     GalaxyFunctions).
@@ -764,7 +781,11 @@ class GravityPalatini(Gravity):
                 "not those of Newtonian gravity",
             Capability.SHARES:
                 "the shares of the components that the dark fraction takes "
-                "are Newtonian, not those of Palatini f(R) gravity"}
+                "are Newtonian, not those of Palatini f(R) gravity",
+            Capability.LENSING:
+                "the bending of light in Palatini f(R) gravity, by the "
+                "metric of its photons, is not yet checked against Toniato "
+                "et al. (2020)"}
 
 
 def _density_gradient(

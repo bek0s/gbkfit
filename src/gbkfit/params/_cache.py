@@ -49,21 +49,33 @@ class StageCache(Generic[_Output]):
     Two values are the same when equal, element by element for arrays;
     NaN is never the same as itself.
 
+    A stage whose output can come out the same when what it reads changes
+    (e.g. one of a mass laid out on the sky, which a step in the rotation
+    of a disk that the mass follows leaves as it was) can say how its
+    outputs compare (same): an output evaluated again that is the same as
+    the last is not kept, and its version stays, so that the stages that
+    take it are not evaluated again.
+
     Parameters
     ----------
     reads : Iterable of str
         The names of the parameters that the stage reads.
     takes : Iterable of StageCache, optional
         The caches of the stages whose outputs it takes.
+    same : callable, optional
+        Whether a new output of the stage is the same as the last (new,
+        last); none by default: every output evaluated is new.
     """
 
     def __init__(
             self,
             reads: Iterable[str],
-            takes: Iterable['StageCache[Any]'] = ()
+            takes: Iterable['StageCache[Any]'] = (),
+            same: Callable[[_Output, _Output], bool] | None = None
     ):
         self._reads = tuple(reads)
         self._takes = tuple(takes)
+        self._same = same
         self._version = 0
         # The values that the stage read, the versions of the stages it
         # took and its output, at its last evaluation
@@ -125,7 +137,9 @@ class StageCache(Generic[_Output]):
         Evaluate the stage at the values of the parameters it reads, keep
         its output, as a new version, with copies of those values, and
         return it: e.g. with extra outputs, which the stage gives only when
-        evaluated.
+        evaluated. An output that is the same as the last (see the class:
+        same) is not kept: the last is returned, of its version, with the
+        new values.
 
         Parameters
         ----------
@@ -144,8 +158,12 @@ class StageCache(Generic[_Output]):
         values = {
             name: value if np.isscalar(value) else np.array(value)
             for name, value in view.items()}
+        if self._kept is not None and self._same is not None \
+                and self._same(output, self._kept[2]):
+            output = self._kept[2]
+        else:
+            self._version += 1
         self._kept = (values, self._taken(), output)
-        self._version += 1
         return output
 
     def view(self, params: ParamValues) -> ParamView:

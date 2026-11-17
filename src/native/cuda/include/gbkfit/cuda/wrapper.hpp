@@ -6,6 +6,7 @@
 // only its own
 #include "gbkfit/cuda/wrapper_dmodel.hpp"
 #include "gbkfit/cuda/wrapper_gmodel.hpp"
+#include "gbkfit/cuda/wrapper_lensing.hpp"
 #include "gbkfit/cuda/wrapper_objective.hpp"
 #include "gbkfit/cuda/wrapper_orbits.hpp"
 
@@ -30,8 +31,8 @@ private:
 // All the kernels, as the bindings take them
 template<typename T>
 struct Wrapper
-    : DModelWrapper<T>, GModelWrapper<T>, ObjectiveWrapper<T>,
-      OrbitsWrapper<T>
+    : DModelWrapper<T>, GModelWrapper<T>, LensingWrapper<T>,
+      ObjectiveWrapper<T>, OrbitsWrapper<T>
 {
     using DeviceScope = cuda::DeviceScope;
 };

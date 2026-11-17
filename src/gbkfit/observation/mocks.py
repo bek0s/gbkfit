@@ -253,8 +253,7 @@ def _draw(
         exact = observation_plan.has_exact_errors()
         items = _data_options(observation, noise, exact)
         draws, errors = observation_plan.mock(
-            group.moved(index, params),
-            [states[g] for g in group.seen_galaxies(index)],
+            group.moved(index, params), plan.scene_state(index, states),
             noise, np.random.default_rng(stream),
             nmocks + (0 if exact else options.nsamples()))
     if errors is None:

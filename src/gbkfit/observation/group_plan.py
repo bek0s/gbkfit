@@ -19,10 +19,12 @@ import numpy as np
 from gbkfit.config import config_path
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.model import Extras, GalaxyFunctions, GalaxyState
+from gbkfit.model import (
+    Extras, GalaxyFunctions, GalaxyState, Reference, SceneState)
 from gbkfit.model.mass.units import G
 from gbkfit.params import (
-    ParamFunctions, ParamValues, ParamView, StageCache, with_elements)
+    ModelEvaluationError, ParamFunctions, ParamValues, ParamView, StageCache,
+    with_elements)
 from gbkfit.utils import threadutils, timeutils
 from .orbits import OrbitRecording, OrbitSeries, orbit_recordings
 from .plan import HostModelData, ModelData, ModelItem, ObservationPlan
@@ -97,7 +99,10 @@ class GroupPlan:
     fitter that moves the noise of an observation, or the offset of its
     frame, evaluates no other model again, and one that moves the
     position angle of a spheroid of Jeans kinematics only the models of
-    its observations.
+    its observations. The stage of a galaxy whose mass a piece of a lens
+    is lays out its mass on the sky (see GalaxyState.sky), which the
+    model of each observation whose light that lens bends takes (see
+    ObservationGroup.bending_masses), whether it sees the galaxy or not.
 
     The observations on one driver evaluate their models one after the
     other; those on different drivers (e.g. one on each GPU, for models
@@ -119,7 +124,9 @@ class GroupPlan:
         The values of the parameters at which the plans of the
         observations lay out what they lay out once (see
         ParamSpace.reference; the grids of the planes behind lenses),
-        which need them; its copies keep them.
+        which need them, with the masses on the sky there of the galaxies
+        whose masses pieces of lenses are (see Reference); its copies keep
+        them.
 
     Raises
     ------
@@ -127,8 +134,9 @@ class GroupPlan:
         If there is not one driver per galaxy and one per observation.
     ValueError
         If what an observation sees does not go with it (see
-        Observation.plan), or a galaxy cannot plan its stage (see
-        Galaxy.plan_stage).
+        Observation.plan), a galaxy cannot plan its stage (see
+        Galaxy.plan_stage), or the mass of a galaxy cannot be laid out on
+        the sky at the reference values.
     """
 
     def __init__(
@@ -151,20 +159,27 @@ class GroupPlan:
         self._observation_drivers = tuple(observation_drivers)
         self._reference = reference
         self._functions = _GroupFunctions(group, self._galaxy_drivers)
-        plans = []
-        for i, (observation, driver) in enumerate(
-                zip(observations, self._observation_drivers)):
-            with config_path('observations', i):
-                plans.append(observation.plan(
-                    driver, group.seen_by(i), reference))
-        self._plans = tuple(plans)
+        # The stages first: the reference takes the masses on the sky of
+        # the galaxies that lenses are the masses of, the plans the
+        # reference
+        lensing = group.lensing_galaxies()
         stages = []
         for g, (galaxy, driver) in enumerate(
                 zip(galaxies, self._galaxy_drivers)):
             with config_path('galaxies', g):
                 stages.append(galaxy.plan_stage(
-                    group.sky_origin(), driver, group.cosmology()))
+                    group.sky_origin(), driver, group.cosmology(),
+                    g in lensing))
         self._stages = tuple(stages)
+        self._reference_state = None if reference is None \
+            else self._reference_of(reference)
+        plans = []
+        for i, (observation, driver) in enumerate(
+                zip(observations, self._observation_drivers)):
+            with config_path('observations', i):
+                plans.append(observation.plan(
+                    driver, group.seen_by(i), self._reference_state))
+        self._plans = tuple(plans)
         self._lock = threading.RLock()
         self._init_recordings()
         # The cache of the model of each observation (see model_d)
@@ -180,6 +195,37 @@ class GroupPlan:
             else concurrent.futures.ThreadPoolExecutor(
                 len(self._on_drivers), thread_name_prefix='gbkfit-driver')
         self._init_evaluations()
+
+    def _reference_of(self, values: ParamValues) -> Reference:
+        """
+        Return the reference of the plans of the observations at the given
+        values of the parameters: with the mass on the sky of each galaxy
+        whose mass a piece of a lens is, by name (see
+        GalaxyStage.sky_mass).
+
+        Raises
+        ------
+        ValueError
+            If the mass of such a galaxy cannot be laid out on the sky at
+            the values.
+        """
+        group = self._group
+        masses = {}
+        for g in group.lensing_galaxies():
+            own = {
+                name: values[full]
+                for name, full in group.mappings()[g].items()}
+            galaxy = group.galaxies()[g]
+            try:
+                masses[galaxy.name()] = self._stages[g].sky_mass(own)
+            except ModelEvaluationError as e:
+                with config_path('galaxies', g):
+                    raise ValueError(
+                        f"at the reference values of the parameters, which "
+                        f"the grids of the planes behind lenses are laid out "
+                        f"at, the mass of the galaxy {galaxy.name()!r} cannot "
+                        f"be laid out on the sky: {e}") from e
+        return Reference(values, masses)
 
     def _init_evaluations(self) -> None:
         """
@@ -221,13 +267,18 @@ class GroupPlan:
         """
         Return a cache of the model of the observation of the given index
         (see model_d): of those of its parameters that its model reads
-        (see ObservationGroup.model_params), or of the weights of the
-        orbits of the recording that models it (see orbit_series), which
-        it takes.
+        (see ObservationGroup.model_params), taking the masses on the sky
+        of the galaxies whose masses bend its light (see
+        ObservationGroup.bending_masses); or of the weights of the orbits
+        of the recording that models it (see orbit_series), which it
+        takes.
         """
         k = self._recording_of.get(index)
         if k is None:
-            return StageCache(self._group.model_params(index))
+            group = self._group
+            return StageCache(group.model_params(index), (
+                self._stages[g].sky_cache()
+                for g in group.bending_masses(index)))
         recording = self._recordings[k]
         return StageCache(
             (recording.weights(),), (self._recording_caches[k],))
@@ -327,7 +378,8 @@ class GroupPlan:
                 self._observation_drivers)):
             if not old.same_plan(new, group.seen_by(i)):
                 with config_path('observations', i):
-                    plan = new.plan(driver, group.seen_by(i), self._reference)
+                    plan = new.plan(
+                        driver, group.seen_by(i), self._reference_state)
                 cache = copied._model_cache(i)
             elif i in copied._recording_of:
                 cache = copied._model_cache(i)
@@ -379,6 +431,34 @@ class GroupPlan:
         """
         with self._lock:
             return self._galaxy_states(params, None)
+
+    def scene_state(
+            self, index: int, states: Sequence[GalaxyState]
+    ) -> SceneState:
+        """
+        Return what the observation of the given index sees in the states
+        of the galaxies (see galaxy_states), which its plan takes (see
+        ObservationPlan.evaluate): the states of the galaxies it sees, and
+        the mass on the sky of each galaxy whose mass bends their light,
+        by name (see ObservationGroup.bending_masses).
+
+        Parameters
+        ----------
+        index : int
+            The observation, by index.
+        states : Sequence of GalaxyState
+            The state of each galaxy of the group.
+
+        Returns
+        -------
+        SceneState
+            What it sees.
+        """
+        group = self._group
+        return SceneState(
+            tuple(states[g] for g in group.seen_galaxies(index)),
+            {group.galaxies()[g].name(): states[g].sky
+             for g in group.bending_masses(index)})
 
     def stage_caches(self) -> dict[str, StageCache[Any]]:
         """
@@ -683,7 +763,7 @@ class GroupPlan:
         group = self._group
         plan = self._plans[index]
         cache = self._model_caches[index]
-        seen = [states[g] for g in group.seen_galaxies(index)]
+        seen = self.scene_state(index, states)
         extra = None if out_extra is None else out_extra.scoped(
             observation=group.observation_label(index))
         k = self._recording_of.get(index)

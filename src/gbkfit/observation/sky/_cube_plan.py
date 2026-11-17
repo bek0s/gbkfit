@@ -4,14 +4,14 @@ The base plan of the observations on the sky made from a ModelCube
 """
 
 import abc
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData
-from gbkfit.model import Extras, GalaxyState
+from gbkfit.model import Extras, Reference, SceneState
 from gbkfit.params import ParamValues
 from .._scene import SeenScenes
 from ..depth import plan_scenes
@@ -35,7 +35,7 @@ class SkyDrawing(NamedTuple):
     which the rays through the lenses are traced.
     """
     scenes: SeenScenes
-    reference: ParamValues | None
+    reference: Reference | None
     measured: Callable[[], np.ndarray]
 
 
@@ -127,11 +127,11 @@ class CubePlan(ObservationPlan):
     def evaluate(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             out_extra: Extras | None
     ) -> ModelData:
         model_extra = None if out_extra is None else Extras()
-        self._evaluate_model(params, galaxies, model_extra)
+        self._evaluate_model(params, state, model_extra)
         self._model_cube_plan.evaluate(
             out_extra, self._extra_lo, self._extra_high_res,
             self._flux_scale(params), self._light_unit)
@@ -145,13 +145,13 @@ class CubePlan(ObservationPlan):
     def mock(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
     ) -> tuple[list[HostModelData], dict[str, np.ndarray] | None]:
         # The recorded data, without noise, are kept on the host
-        self._evaluate_model(params, galaxies, None)
+        self._evaluate_model(params, state, None)
         model_cube_plan = self._model_cube_plan
         model_cube_plan.record(self._flux_scale(params))
         recorded = self._driver.mem_copy_d2h(model_cube_plan.cube())
@@ -232,7 +232,7 @@ class CubePlan(ObservationPlan):
     def _evaluate_model(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             model_extra: Extras | None
     ) -> None:
         """
@@ -246,4 +246,4 @@ class CubePlan(ObservationPlan):
         # The model adds to its cube, so clear it
         cube = model_cube_plan.high_res_cube()
         self._driver.mem_fill(cube, 0)
-        self._model_plan.evaluate(params, galaxies, cube, model_extra)
+        self._model_plan.evaluate(params, state, cube, model_extra)

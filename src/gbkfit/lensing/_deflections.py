@@ -1,12 +1,13 @@
 """
 The numerical kernels of the pieces of a lens (see the module pieces):
-the deflections of the SIE, the EPL and the NFW halo along their major
-and minor axes, that of an elliptical convergence by a tanh-sinh
-quadrature, and that of a circular multipole of a power-law profile.
+the deflections of the SIE, the EPL and the round NFW halo along their
+major and minor axes, the convergence of the NFW halo, and the
+deflection of a circular multipole of a power-law profile (that of an
+elliptical convergence is the kernel of elliptical layers, see
+_layers).
 """
 
 import math
-from collections.abc import Callable
 
 import numpy as np
 
@@ -14,7 +15,6 @@ from gbkfit.params import ModelEvaluationError
 
 
 __all__ = [
-    'elliptical_deflection',
     'epl_deflection',
     'multipole_deflection',
     'nfw_convergence',
@@ -127,62 +127,6 @@ def nfw_round_deflection(
     h = np.log(x / 2) + _nfw_f(x)
     scale = np.where(centre, 0, 4 * kappa_s * h / (x * x))
     return scale * u, scale * v
-
-
-def _tanh_sinh_nodes(
-        step: float = 1 / 8, extent: float = 3.2
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Return the nodes w of the tanh-sinh quadrature over [0, 1], 1 - w
-    (exact near w = 1) and their weights.
-    """
-    tau = np.arange(-extent, extent + step / 2, step)
-    s = math.pi / 2 * np.sinh(tau)
-    weights = step * math.pi / 4 * np.cosh(tau) / np.cosh(s) ** 2
-    return 1 / (1 + np.exp(-2 * s)), 1 / (1 + np.exp(2 * s)), weights
-
-
-_NODES, _ONE_MINUS_NODES, _WEIGHTS = _tanh_sinh_nodes()
-
-
-def elliptical_deflection(
-        u: np.ndarray,
-        v: np.ndarray,
-        q: float,
-        kappa: Callable[[np.ndarray], np.ndarray],
-        chunk: int = 4096
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Return the deflection of an elliptical convergence kappa(xi) (a
-    function of xi = sqrt(q u^2 + v^2 / q)) along its major (u) and minor
-    (v) axes, by the integrals over the ellipses within each point (Keeton
-    2001, with xi^2 = q xi_K^2): alpha_u = q u J_0 and alpha_v = q v J_1,
-
-        J_n = integral over w from 0 to 1 of kappa(xi(w)) / d^(n + 1/2),
-        d = 1 - (1 - q^2) w,   xi(w)^2 = q w (u^2 + v^2 / d);
-
-    0 at its centre. The tanh-sinh quadrature of 52 nodes has a relative
-    error below 1e-8 for the NFW halo from 1e-3 to 1e3 scale radii. The
-    points are integrated in chunks, to keep the memory of the nodes at
-    each point small.
-    """
-    shape = u.shape
-    u, v = u.ravel(), v.ravel()
-    d = q * q + (1 - q * q) * _ONE_MINUS_NODES
-    alpha_u = np.empty_like(u)
-    alpha_v = np.empty_like(v)
-    for start in range(0, u.size, chunk):
-        part = slice(start, start + chunk)
-        u_part, v_part = u[part, None], v[part, None]
-        xi = np.sqrt(q * _NODES * (u_part * u_part + v_part * v_part / d))
-        with np.errstate(divide='ignore', invalid='ignore'):
-            weighted = _WEIGHTS * kappa(xi) / np.sqrt(d)
-        alpha_u[part] = q * u[part] * weighted.sum(-1)
-        alpha_v[part] = q * v[part] * (weighted / d).sum(-1)
-    centre = (u == 0) & (v == 0)
-    alpha_u[centre] = 0
-    alpha_v[centre] = 0
-    return alpha_u.reshape(shape), alpha_v.reshape(shape)
 
 
 def multipole_deflection(

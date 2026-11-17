@@ -826,6 +826,7 @@ def evaluate_galaxies(driver, planned, properties):
     of its column (see ScenePlan.transmission; None if none).
     """
     import gbkfit.params
+    from gbkfit.model import SceneState
     loaded, mappings, plan = planned
     pdescs = {
         mapping[name]: pdesc for galaxy, mapping in zip(loaded, mappings)
@@ -842,7 +843,7 @@ def evaluate_galaxies(driver, planned, properties):
     data = driver.mem_alloc_d(
         (nchannels, grid.size[1], grid.size[0]), np.float64)
     driver.mem_fill(data, 0)
-    plan.evaluate(params, states, data, None)
+    plan.evaluate(params, SceneState(tuple(states), {}), data, None)
     transmission = plan.transmission()
     return driver.mem_copy_d2h(data), None if transmission is None \
         else driver.mem_copy_d2h(transmission)

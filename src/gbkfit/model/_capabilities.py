@@ -17,9 +17,10 @@ __all__ = [
 
 class Capability(enum.Enum):
     """
-    What a galaxy gives the components that need it (see Component.needs):
-    its mass, its distance, and what its gravity gives of its mass (see
-    Gravity.gives).
+    What a galaxy gives the components that need it (see Component.needs),
+    and what uses it from outside (e.g. a lens of its mass, see
+    Galaxy.check_needs): its mass, its distance, and what its gravity gives
+    of its mass (see Gravity.gives).
     """
 
     # The mass (e.g. the circular velocity in its gravity)
@@ -39,6 +40,9 @@ class Capability(enum.Enum):
     # The shares of the components in the squared circular velocity (they
     # add up to that of the mass)
     SHARES = 'shares'
+    # The bending of light by the mass as its gravity bends it: as its
+    # Newtonian mass, projected on the sky (see mass.SkyProjected)
+    LENSING = 'lensing'
 
 
 class Need(NamedTuple):

@@ -541,6 +541,15 @@ class ZPTrait(PTrait, abc.ABC):
         """Return its zmax (arcsec): a bound along z."""
         return self._option(Zmax).value
 
+    @abc.abstractmethod
+    def order(self) -> int:
+        """
+        Return the azimuthal order m of its displacement, of the form
+        a(r) cos(m (theta - p(r))): 0 for one that does not change with
+        the azimuth, 1 for a warp (the rings stay ellipses on the sky up
+        to order 1).
+        """
+
     def _amplitude_desc(self, nnodes: int) -> ParamVectorDesc:
         """Return the description of its node-wise amplitude, a."""
         return ParamVectorDesc(

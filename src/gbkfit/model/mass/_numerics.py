@@ -13,6 +13,7 @@ import scipy.integrate
 import scipy.interpolate
 import scipy.special
 
+from gbkfit.params import ModelEvaluationError
 from .units import G
 
 
@@ -245,6 +246,156 @@ def sersic_density_table(
     step = np.log(u[1] / u[0])
     slope = (log_f[1] - log_f[0]) / step
     return log_f, np.array([np.log(u[0]), step, slope])
+
+
+# The projections of spherical masses (see projected_mass and
+# abel_projection): integrated along each line of sight out to the
+# radius _END_FACTOR times its own, or _END_RADIUS (kpc) if farther (where
+# every profile is its power law), and beyond, of that power law
+_END_FACTOR = 1e6
+_END_RADIUS = 1e9
+
+# The projected mass within circles (see projected_mass): Gauss-Legendre
+# nodes on panels of the angle t of these edges, then on _PROJECTED_PANELS
+# panels of ln cos(t), each of this many nodes
+_PROJECTED_T_EDGES = np.array([0, 0.25, 0.5, 0.75, 1.0, 1.25])
+_PROJECTED_PANELS = 24
+_PROJECTED_NODES = 6
+
+# The surface density (see abel_projection): Gauss-Legendre nodes on
+# panels of u (R cosh u, the radius of the line of sight) of these edges,
+# then on _ABEL_PANELS panels, each of this many nodes
+_ABEL_FIRST_EDGES = np.array([0, 0.01, 0.03, 0.1, 0.25])
+_ABEL_PANELS = 40
+_ABEL_NODES = 6
+
+
+def _gauss_legendre(
+        edges: np.ndarray, count: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the nodes and weights of the composite Gauss-Legendre rules of
+    count nodes on the panels between edges (along the last axis), flat
+    over the panels of each row.
+    """
+    x, w = np.polynomial.legendre.leggauss(count)
+    lo, hi = edges[..., :-1, None], edges[..., 1:, None]
+    shape = edges.shape[:-1] + (-1,)
+    return ((((hi - lo) * x + hi + lo) / 2).reshape(shape),
+            ((hi - lo) * w / 2).reshape(shape))
+
+
+def _end(R: np.ndarray) -> np.ndarray:
+    """
+    Return the radius (kpc) out to which the lines of sight of the radii R
+    are integrated (see _END_FACTOR).
+    """
+    return np.maximum(_END_FACTOR * R, _END_RADIUS)
+
+
+def _power_slope(f: np.ndarray, r: np.ndarray) -> np.ndarray:
+    """
+    Return the slope d ln f / d ln r of a function f between its last two
+    values, at the last two radii r (along the last axis); 0 where its
+    last value is 0.
+    """
+    with np.errstate(divide='ignore', invalid='ignore'):
+        slope = np.log(f[..., -1] / f[..., -2]) \
+            / np.log(r[..., -1] / r[..., -2])
+    return np.where(f[..., -1] > 0, slope, 0.0)
+
+
+def projected_mass(
+        enclosed_mass: Callable[[np.ndarray], np.ndarray],
+        R: np.ndarray
+) -> np.ndarray:
+    """
+    Return the projected mass (Msun) of a spherical mass within the
+    circles of the radii R (kpc, positive) about its centre, from its mass
+    within spheres M(r) (a function of an array of radii): M2D(<R) =
+    int_0^(pi/2) M(R / cos t) cos t dt (the mass within each sphere seen
+    through the circle, M(R) plus the share of the shells beyond R that
+    the cylinder holds, integrated by parts), by Gauss-Legendre quadrature
+    out to the sphere of the radius r_end (see _END_FACTOR), and beyond, of
+    the power law M ~ r^p there: M(r_end) c^2 / (2 - p), c = R / r_end (to
+    about 1e-9, and 2e-8 near the core of a cored profile).
+
+    Raises
+    ------
+    ModelEvaluationError
+        If it is infinite (a mass that grows as r^2 or faster).
+    """
+    R = np.asarray(R, dtype=float)
+    radii = R.ravel()
+    n = len(radii)
+    # In t near 0, then in s = ln cos(t), where the integrand M(R / c) c^2 /
+    # sin(t) ds is smooth (c = cos t), and of no weight, the end and a
+    # point before it, of the power law beyond
+    t, t_weights = _gauss_legendre(_PROJECTED_T_EDGES, _PROJECTED_NODES)
+    log_end = np.log(radii / _end(radii))[:, None]
+    log_start = np.log(np.cos(_PROJECTED_T_EDGES[-1]))
+    log_cos, s_weights = _gauss_legendre(
+        log_end + (log_start - log_end) * np.linspace(
+            0, 1, _PROJECTED_PANELS + 1), _PROJECTED_NODES)
+    cos = np.concatenate((
+        np.broadcast_to(np.cos(t), (n, len(t))), np.exp(log_cos),
+        np.exp(log_end + np.log([1.5, 1.0]))), axis=1)
+    weights = np.concatenate((
+        np.broadcast_to(t_weights * np.cos(t), (n, len(t))),
+        s_weights * np.exp(2 * log_cos) / np.sqrt(-np.expm1(2 * log_cos))),
+        axis=1)
+    r = radii[:, None] / cos
+    mass = enclosed_mass(r.ravel()).reshape(r.shape)
+    slope = _power_slope(mass, r)
+    if np.any(slope >= 2 - 1e-6):
+        raise ModelEvaluationError(
+            "a spherical mass has an infinite projected mass: its mass "
+            "within spheres grows as r^2 or faster")
+    tail = mass[:, -1] * np.exp(2 * log_end[:, 0]) / (2 - slope)
+    return (np.sum(mass[:, :-2] * weights, axis=1) + tail).reshape(R.shape)
+
+
+def abel_projection(
+        density: Callable[[np.ndarray], np.ndarray],
+        R: np.ndarray
+) -> np.ndarray:
+    """
+    Return the surface density (Msun/kpc^2) of a spherical density at the
+    projected radii R (kpc, positive), from its density rho(r) (a function
+    of an array of radii): Sigma(R) = 2 int_R^inf rho r dr / sqrt(r^2 -
+    R^2) = 2 R int_0^inf rho(R cosh u) cosh u du, by Gauss-Legendre
+    quadrature out to the radius r_end (see _END_FACTOR), and beyond, of
+    the power law rho ~ r^p there: 2 rho(r_end) r_end / -(p + 1) (to about
+    1e-10 for halo profiles; a kink of the density, e.g. at a node of a
+    nodewise halo, costs some 1e-6 near it).
+
+    Raises
+    ------
+    ModelEvaluationError
+        If it is infinite (a density that falls as r^-1 or slower).
+    """
+    R = np.asarray(R, dtype=float)
+    radii = R.ravel()
+    end = np.arccosh(_end(radii) / radii)[:, None]
+    first = _ABEL_FIRST_EDGES[-1]
+    edges = np.concatenate((np.broadcast_to(
+        _ABEL_FIRST_EDGES[:-1], (len(radii), len(_ABEL_FIRST_EDGES) - 1)),
+        first + (end - first) * np.linspace(0, 1, _ABEL_PANELS + 1)), axis=1)
+    u, weights = _gauss_legendre(edges, _ABEL_NODES)
+    # (and of no weight, a point before the end and the end, of the power
+    # law beyond)
+    u = np.concatenate((u, end - 0.4, end), axis=1)
+    r = radii[:, None] * np.cosh(u)
+    rho = density(r.ravel()).reshape(r.shape)
+    slope = _power_slope(rho, r)
+    slope = np.where(rho[:, -1] > 0, slope, -2.0)
+    if np.any(slope >= -1 - 1e-6):
+        raise ModelEvaluationError(
+            "a spherical density has an infinite surface density: it falls "
+            "as r^-1 or slower")
+    tail = rho[:, -1] * np.cosh(end[:, 0]) / -(slope + 1)
+    total = np.sum(rho[:, :-2] * weights * np.cosh(u[:, :-2]), axis=1)
+    return (2 * radii * (total + tail)).reshape(R.shape)
 
 
 def spherical_potential(

@@ -18,7 +18,7 @@ from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import (
-    Band, DataUnit, Extras, GalaxyState, LightUnit)
+    Band, DataUnit, Extras, LightUnit, SceneState)
 from gbkfit.params import ParamValues
 from ..depth import Depth
 from ..plan import HostModelData, ModelData, ModelItem
@@ -514,14 +514,14 @@ class VisibilitiesPlan(CubePlan):
     def evaluate(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             out_extra: Extras | None
     ) -> ModelData:
-        data = super().evaluate(params, galaxies, out_extra)
+        data = super().evaluate(params, state, out_extra)
         if self._refinement is not None:
             refinement, self._refinement = self._refinement, None
             self._check_sampling(
-                data, refinement().evaluate(params, galaxies, None))
+                data, refinement().evaluate(params, state, None))
         return data
 
     def _check_sampling(self, data: ModelData, refined: ModelData) -> None:
@@ -558,12 +558,12 @@ class VisibilitiesPlan(CubePlan):
     def mock(
             self,
             params: ParamValues,
-            galaxies: Sequence[GalaxyState],
+            state: SceneState,
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
     ) -> tuple[list[HostModelData], dict[str, np.ndarray] | None]:
-        self._evaluate_model(params, galaxies, None)
+        self._evaluate_model(params, state, None)
         self._model_cube_plan.record(self._flux_scale(params))
         recorded = self._to_host(self._measure())
         draws = [{
