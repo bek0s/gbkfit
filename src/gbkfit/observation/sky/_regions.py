@@ -3,22 +3,20 @@ The base of the observations of data in regions of the sky (see
 ObservationRegions), its plan, and the grids and weights of regions.
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+import numpy as np
 import scipy.sparse
 
 from gbkfit.dataset import Dataset, Regions, regions_parser
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid, SpectralAxis, grid_options, make_grid, per_axis
-from ._cube_plan import CubePlan
+from ._cube_plan import CubePlan, SkyDrawing
 from ._model_cube import ModelCube
 from ._options import (
     GRID_OPTIONS, Rota, Rpix, Rval, Size, Step, without_options_from_data)
 from ._sparse_sums import SparseSumsPlan
 from .base import ObservationSky, SkyOptions
-
-if TYPE_CHECKING:
-    from gbkfit.model import Scene
 
 
 def spatial_grid_of_regions(
@@ -157,6 +155,12 @@ class ObservationRegions(ObservationSky):
         options = grid_options(self._grid)
         return {key: options[key] for key in GRID_OPTIONS}
 
+    def _measured_pixels(self) -> np.ndarray:
+        # (the pixels of its regions)
+        size = self._grid.size
+        counted = np.asarray(abs(self._flux_weights).sum(axis=0)) > 0
+        return counted.reshape(size[1], size[0])
+
     def regions(self) -> Regions:
         """Return the regions."""
         return self._regions
@@ -187,10 +191,10 @@ class RegionsPlan(CubePlan):
             weights: scipy.sparse.csr_array,
             model_cube: ModelCube,
             driver: Driver,
-            scene: 'Scene',
+            drawing: SkyDrawing,
             options: SkyOptions
     ):
-        super().__init__(model_cube, driver, scene, options)
+        super().__init__(model_cube, driver, drawing, options)
         self._sums = SparseSumsPlan(weights, driver, options.dtype)
         # The spectra of the regions (nchannels, nregions)
         self._spectra = driver.mem_alloc_d(

@@ -111,22 +111,25 @@ dmodel_dcube_convolve_z(
 }
 
 template<typename T> __global__ void
-dmodel_lens_resample(
-        int nx, int ny, int nz, int sx, int sy,
+dmodel_lens_composite(
+        int nx, int ny, int nz, int sx, int sy, int subchannels,
         const T* source_x, const T* source_y,
-        const T* source, T* image)
+        const T* emission, const T* transmission, const T* behind,
+        T* out)
 {
-    // Parallelization: per 3d position in the image cube
-    const int nthreads = nx * ny * nz;
-    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    // Parallelization: per 3d position in out
+    const long long nthreads = 1LL * nx * ny * nz;
+    const long long tid = 1LL * blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= nthreads)
         return;
 
-    int x, y, z;
-    index_1d_to_3d(x, y, z, tid, nx, ny);
+    const int x = int(tid % nx);
+    const int y = int(tid / nx % ny);
+    const int z = int(tid / (1LL * nx * ny));
 
-    gbkfit::dmodel_lens_resample(
-            x, y, z, nx, ny, sx, sy, source_x, source_y, source, image);
+    gbkfit::dmodel_lens_composite(
+            x, y, z, nx, ny, sx, sy, subchannels, source_x, source_y,
+            emission, transmission, behind, out);
 }
 
 template<typename T> __global__ void

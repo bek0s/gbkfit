@@ -255,23 +255,22 @@ def _user_likelihood(func: str, form: str, *params: str) -> dict[str, Any]:
 
 # --- The recipes ---------------------------------------------------------
 
+# A lens at z = 0.5 of a source at z = 1.5, whose strengths are quoted
+# for that source (as the masses of the lens of an observation were,
+# before format 15)
 _LENS_TRUTH = dict(
     xpos=0.1, ypos=-0.05, posa=40, incl=55, rpt_a=1, rpt_s=0.2,
-    hst_lens_main_theta_e=1.0, hst_lens_main_slope=2.1,
-    hst_lens_main_q=0.8, hst_lens_main_posa=30, hst_lens_main_xpos=0,
-    hst_lens_main_ypos=0,
-    hst_lens_m4_theta_e='hst_lens_main_theta_e', hst_lens_m4_a=0.02,
-    hst_lens_m4_posa='hst_lens_main_posa',
-    hst_lens_m4_xpos='hst_lens_main_xpos',
-    hst_lens_m4_ypos='hst_lens_main_ypos',
-    hst_lens_shear_gamma=0.05, hst_lens_shear_posa=70)
+    lens_main_theta_e=1.0, lens_main_slope=2.1, lens_main_q=0.8,
+    lens_main_posa=30, lens_main_xpos=0, lens_main_ypos=0,
+    lens_main_a4=0.02, lens_main_posa4='lens_main_posa',
+    lens_shear_gamma=0.05, lens_shear_posa=70)
 
 _LENS_TRIAL = _LENS_TRUTH | dict(
     rpt_s=dict(value=0.22, min=0.05, max=1),
     posa=dict(value=45, min=0, max=90),
-    hst_lens_main_theta_e=dict(value=1.03, min=0.5, max=2),
-    hst_lens_main_q=dict(value=0.78, min=0.5, max=1),
-    hst_lens_shear_gamma=dict(value=0.06, min=0, max=0.2))
+    lens_main_theta_e=dict(value=1.03, min=0.5, max=2),
+    lens_main_q=dict(value=0.78, min=0.5, max=1),
+    lens_shear_gamma=dict(value=0.06, min=0, max=0.2))
 
 
 # The first science: a thick, turbulent disk with three clumps of a galaxy
@@ -510,20 +509,22 @@ CASES: list[dict[str, Any]] = [
         prepare=_write_uv_coverage),
     dict(
         name='lens_foreground',
-        doc="The image of a source disk behind a foreground lens of three "
-            "masses: an elliptical power law, its multipole of order 4 "
-            "(tied to it by expressions) and an external shear.",
-        galaxies=[dict(components=[_band_disk()])],
+        doc="The image of a source disk behind a lens of two pieces: an "
+            "elliptical power law with a multipole of order 4, and an "
+            "external shear; the source drawn on a grid of a given step "
+            "and extent.",
+        galaxies=[dict(redshift=1.5, components=[_band_disk()])],
         observations=[_sky(
             dict(type='pixel_brightness', size=[40, 40], step=[0.1, 0.1]),
             name='hst', instrument=dict(psf=dict(type='gauss', sigma=0.08)),
-            foreground=dict(lens=dict(
-                source_size=[40, 40], source_step=[0.05, 0.05], masses=[
-                    dict(type='epl', name='main'),
-                    dict(type='multipole', order=4, name='m4'),
-                    dict(type='shear', name='shear')])))],
+            source_grid=dict(
+                step=0.05, extent=[-0.975, 0.975, -0.975, 0.975]))],
         truth=_LENS_TRUTH, trial=_LENS_TRIAL,
-        noises=[_gauss(0.01)]),
+        noises=[_gauss(0.01)],
+        sections=dict(lenses=[dict(
+            name='lens', redshift=0.5, source_redshift=1.5, pieces=[
+                dict(name='main', type='epl', multipoles=[4]),
+                dict(name='shear', type='shear')])])),
     dict(
         name='instrument_full',
         doc="A cube seen through a Moffat PSF whose alpha varies with "

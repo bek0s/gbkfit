@@ -76,14 +76,16 @@ DModelWrapper<T>::dmodel_dcube_convolve_z(
 }
 
 template<typename T> void
-DModelWrapper<T>::dmodel_lens_resample(
-        int nx, int ny, int nz, int sx, int sy,
+DModelWrapper<T>::dmodel_lens_composite(
+        int nx, int ny, int nz, int sx, int sy, int subchannels,
         const T* source_x, const T* source_y,
-        const T* source, T* image)
+        const T* emission, const T* transmission, const T* behind,
+        T* out)
 {
-    const int n = nx * ny * nz;
-    launch("lens_resample", n, kernels::dmodel_lens_resample<T>,
-            nx, ny, nz, sx, sy, source_x, source_y, source, image);
+    const long long n = 1LL * nx * ny * nz;
+    launch("lens_composite", n, kernels::dmodel_lens_composite<T>,
+            nx, ny, nz, sx, sy, subchannels, source_x, source_y,
+            emission, transmission, behind, out);
 }
 
 template<typename T> void

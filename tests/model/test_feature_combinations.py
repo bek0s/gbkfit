@@ -1,8 +1,8 @@
 """
-Every kind of observation with the options of the instrument, the
-foreground and the galaxy together (oversampling, psf, lsf, primary
-beam, lens, a selection of components, emission lines): the model is
-finite, of the shape of its data, and not empty.
+Every kind of observation with the options of the instrument, a lens
+and the galaxy together (oversampling, psf, lsf, primary beam, lens, a
+selection of components, emission lines): the model is finite, of the
+shape of its data, and not empty.
 """
 
 import copy
@@ -12,10 +12,9 @@ import numpy as np
 import pytest
 
 from gbkfit.instrument import instrument_parser
+from gbkfit.lensing import Lens, LensDeflectionMap
 from gbkfit.model import Extras, galaxy_parser
-from gbkfit.observation import (
-    Foreground, Lens, LensDeflectionMap, ObservationGroup,
-    observation_parser)
+from gbkfit.observation import ObservationGroup, observation_parser
 
 
 def component(name, **emission):
@@ -34,6 +33,11 @@ LINES = [dict(name='ha', rest='6562.8 Angstrom'),
 
 GALAXY = dict(components=[
     component('gas', lines=LINES), component('stars')])
+
+# The redshift of the galaxy behind a lens, and of the lens: the
+# spectral axes of a lensed galaxy are of its lines at its redshift
+SOURCE_REDSHIFT = 1.0
+LENS_REDSHIFT = 0.3
 
 # The geometry of the gas, which that of the stars is tied to
 GEOMETRY = dict(vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60)
@@ -96,23 +100,27 @@ def test_feature_combinations(driver, name, lens):
         # Moments of a narrow spectral axis do not need the Hanning LSF
         instrument['lsf'] = dict(
             type='gauss', sigma='15 km/s')
-    foreground = None
+    galaxy = copy.deepcopy(GALAXY)
+    lenses = []
     if lens:
         # A constant deflection: the source moved by (1, -1) arcsec
-        foreground = Foreground(Lens((40, 40), (0.5, 0.5), LensDeflectionMap(
-            np.ones((40, 40)), -np.ones((40, 40)))))
+        lenses = [Lens('lens', LENS_REDSHIFT, LensDeflectionMap(
+            np.ones((80, 80)), -np.ones((80, 80))))]
+        galaxy['redshift'] = SOURCE_REDSHIFT
+        info['spectral']['rest'] = \
+            f'{6562.8 * (1 + SOURCE_REDSHIFT)} Angstrom'
     observation = observation_parser.load(info | dict(
-        foreground=foreground,
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
         components=['gas'], oversampling=OVERSAMPLING[name],
         # Moments are of one line (they would mix the lines of a spectrum)
         lines=['ha'] if moments else None))
     group = ObservationGroup(
-        [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
+        [galaxy_parser.load(galaxy)], [observation], lenses)
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
     extra = Extras()
-    data = group.plan(driver).model_h(params.evaluate(), extra)[0]
+    data = group.plan(driver, reference=params.evaluate()).model_h(
+        params.evaluate(), extra)[0]
     assert set(data) == set(observation.keys())
     for key, value in data.items():
         model = value.data

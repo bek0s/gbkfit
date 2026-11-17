@@ -1,7 +1,8 @@
 """
 The base of the observations on the sky (see ObservationSky): galaxies
 seen through an instrument as one kind of data (images, moment maps,
-spectral cubes and others), along a line of sight, through a foreground.
+spectral cubes and others), along a line of sight, through the lenses in
+front of them.
 """
 
 import abc
@@ -25,19 +26,21 @@ from gbkfit.grid import (
     make_cube_grid, make_grid, per_axis)
 from gbkfit.instrument import Instrument, instrument_parser
 from gbkfit.io import Beam
+from gbkfit.lensing import SourceGrid
 from gbkfit.model import (
-    Band, DataUnit, LightUnit, Scene, View, band_parser)
+    Band, DataUnit, LightUnit, View, band_parser)
 from gbkfit.model.components.lines import catalogue_in_use
-from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from .._scene import check_component_names, make_scene
+from gbkfit.params import (
+    ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
+from .._scene import SeenScenes, check_component_names, make_scenes
 from ..depth import Depth, check_scene
-from ..foreground import Foreground, foreground_parser
 from ..observation import Observation, SeenGalaxies, SkyFrame
 from ..plan import FluxScale, ObservationPlan
 from ..weights import Weights, weights_geometry
 from ._checks import (
     check_beams, check_flux_scale, check_offsets, has_correlated_noise,
     light_unit)
+from ._cube_plan import SkyDrawing
 from ._flux_scale import FluxScaledPlan
 from ._options import GRID_OPTIONS, dump_grid, without_options_from_data
 
@@ -51,6 +54,24 @@ if TYPE_CHECKING:
 __all__ = [
     'ObservationSky'
 ]
+
+
+def unmasked_pixels(
+        dataset: Dataset | None, shape: tuple[int, int]
+) -> np.ndarray:
+    """
+    Return the pixels of a grid of the given shape (ny, nx) where an item
+    of the data has a value that counts (see Data.mask), in any channel;
+    all of them without data. The items are of the grid, or of its
+    channels before it (e.g. a spectral cube).
+    """
+    if dataset is None:
+        return np.ones(shape, dtype=bool)
+    measured = np.zeros(shape, dtype=bool)
+    for key in dataset.keys():
+        counts = dataset[key].mask() != 0
+        measured |= counts.reshape((-1,) + shape).any(axis=0)
+    return measured
 
 
 # The floating types of models: those the native modules have kernels for
@@ -71,8 +92,9 @@ class SkyOptions(NamedTuple):
         The depth axis along the line of sight, for the scenes that need
         one, on which its plan plans its scene (see plan_scene of
         gbkfit.observation.depth).
-    foreground : Foreground
-        What the light meets before the telescope (e.g. a lens).
+    source_grid : SourceGrid
+        How the grids of the planes behind lenses are laid out, which its
+        plan draws them on (see plan_scenes of gbkfit.observation.depth).
     instrument : Instrument
         The telescope and the instrument.
     oversampling : tuple of int
@@ -93,7 +115,7 @@ class SkyOptions(NamedTuple):
         (see ObservationSky), and is not here.
     """
     depth: Depth
-    foreground: Foreground
+    source_grid: SourceGrid
     instrument: Instrument
     oversampling: tuple[int, ...]
     dtype: np.dtype
@@ -107,9 +129,9 @@ class ObservationSky(Observation, abc.ABC):
     An observation on the sky: galaxies seen through an instrument as one
     kind of data (its type: e.g. an image, moment maps or a spectral
     cube), optionally with its data. They are seen along a line of sight,
-    through a foreground (e.g. a gravitational lens) and the instrument,
-    and an objective compares the model of the galaxies with the data
-    under the likelihood of its setup (see Observation).
+    through the lenses in front of them (see ObservationGroup) and the
+    instrument, and an objective compares the model of the galaxies with
+    the data under the likelihood of its setup (see Observation).
 
     Each kind of data is a subclass, which gives the form of the data
     (their items, see keys) and where they are measured (e.g. their grid),
@@ -172,8 +194,9 @@ class ObservationSky(Observation, abc.ABC):
 
     Parameters
     ----------
-    foreground : Foreground, optional
-        What the light meets before the telescope; nothing by default.
+    source_grid : SourceGrid, optional
+        How the grids of the planes of galaxies behind lenses that it sees
+        are laid out (see SourceGrid); SourceGrid() by default (automatic).
     instrument : Instrument, optional
         The telescope and the instrument; a perfect one by default.
     galaxies : Sequence of str, optional
@@ -215,9 +238,9 @@ class ObservationSky(Observation, abc.ABC):
         north), and 'velocity' adds '{name}_dv' (km/s); its name is then
         required. They move what it sees: the centres (xpos, ypos) and
         systemic velocities (vsys) of all the components of the galaxies
-        it sees, and the masses of its lens (deflection maps if shifted,
-        see LensDeflectionMap). None by default; a galaxy needs an
-        observation without them (see ObservationGroup).
+        it sees, and the lenses in front of them (see TracePlan). None by
+        default; a galaxy needs an observation without them (see
+        ObservationGroup).
     dataset : Dataset, optional
         The data, of the dataset class of its kind.
     oversampling : Sequence of int, optional
@@ -278,9 +301,9 @@ class ObservationSky(Observation, abc.ABC):
         where its kind of data cannot have it, its kind cannot be seen
         through the instrument (see _check_options), the dtype or the
         fft_dtype is not one of the native modules (see Driver.dtypes), or
-        the fft_dtype is less precise than the dtype, it has pixel weights
-        and a lens (not supported yet), or the unit is given with data, is
-        not a unit, or is per beam without a beam (see light_unit).
+        the fft_dtype is less precise than the dtype, or the unit is given
+        with data, is not a unit, or is per beam without a beam (see
+        light_unit).
     """
 
     spectral_axis: ClassVar[int | None]
@@ -292,7 +315,7 @@ class ObservationSky(Observation, abc.ABC):
     spectral_view: ClassVar[bool]
 
     # What it sees of the stars on orbits whose weights are solved (see
-    # Component.orbit_weights and _check_scene): their light ('light', of
+    # Component.orbit_weights and _check_scenes): their light ('light', of
     # an image), their moments ('moments', see ObservationRegionMoments),
     # or nothing
     orbit_stars: ClassVar[Literal['light', 'moments'] | None]
@@ -392,8 +415,7 @@ class ObservationSky(Observation, abc.ABC):
             | flux_scale \
             | offsets | unit | dataset | dtype | dict(
                 depth=options.depth.dump(),
-                foreground=foreground_parser.dump(
-                    options.foreground, **kwargs),
+                source_grid=options.source_grid.dump(),
                 instrument=instrument_parser.dump(
                     options.instrument, **kwargs),
                 oversampling=options.oversampling,
@@ -561,7 +583,7 @@ class ObservationSky(Observation, abc.ABC):
     def __init__(
             self,
             grid: Grid,
-            foreground: Foreground | None,
+            source_grid: SourceGrid | None,
             instrument: Instrument | None,
             galaxies: Sequence[str] | None,
             components: Sequence[str] | None,
@@ -607,14 +629,6 @@ class ObservationSky(Observation, abc.ABC):
             raise ValueError(
                 "an image sees the light in its band; the continuum is of "
                 "spectral observations")
-        if foreground is None:
-            foreground = Foreground()
-        if name is None and foreground.pdescs():
-            raise ValueError(
-                "an observation with a lens of parameters needs a name, "
-                "which names them (e.g. '{name}_lens_theta_e')")
-        foreground = foreground.with_prefix(
-            '' if name is None else f'{name}_')
         if instrument is None:
             instrument = Instrument()
         ndim = len(self.size())
@@ -652,13 +666,12 @@ class ObservationSky(Observation, abc.ABC):
         one = scale is not None and scale[1].axis is None
         self._sky_options = SkyOptions(
             depth=depth if depth is not None else Depth(),
-            foreground=foreground,
+            source_grid=source_grid if source_grid is not None
+            else SourceGrid(),
             instrument=instrument, oversampling=oversampling, dtype=dtype,
             fft_dtype=fft_dtype, pixel_weights=pixel_weights,
             flux_scale_param=scale[0] if one else None)
         self._check_options(self._sky_options)
-        if pixel_weights is not None and foreground.lens() is not None:
-            raise ValueError("a lens does not support pixel_weights yet")
         # (the unit of the model without data, and its beam, of a unit per
         # beam: those of data of the model, e.g. mock data)
         self._light, self._light_beam = (None, None) if unit is None \
@@ -696,7 +709,7 @@ class ObservationSky(Observation, abc.ABC):
         return type(self)(
             **{key: value for key, value in self._kind_options().items()
                if key not in from_data},
-            foreground=options.foreground, instrument=options.instrument,
+            source_grid=options.source_grid, instrument=options.instrument,
             galaxies=self._galaxies, components=self._components,
             lines=self._lines, continuum=self._continuum, band=self._band,
             pixel_weights=options.pixel_weights, flux_scale=self._flux_scale,
@@ -911,6 +924,19 @@ class ObservationSky(Observation, abc.ABC):
                 f"the data are on the grid {dataset.grid()}, but {desc} "
                 f"is on the grid {self._grid}")
 
+    def same_plan(self, other: Observation, seen: SeenGalaxies) -> bool:
+        """
+        Check whether its plan is also that of another observation (see
+        Observation.same_plan): with planes behind lenses, its plan takes
+        the pixels its data measure too, whose rays it traces (see
+        _measured_pixels).
+        """
+        if not super().same_plan(other, seen):
+            return False
+        return not seen.lensed() or (
+            isinstance(other, ObservationSky) and np.array_equal(
+                self._measured_pixels(), other._measured_pixels()))
+
     def depth(self) -> Depth:
         """Return its depth axis, for what it sees that needs one."""
         return self._sky_options.depth
@@ -946,8 +972,7 @@ class ObservationSky(Observation, abc.ABC):
     def pdescs(self) -> dict[str, ParamDesc]:
         """
         Return its parameters: that of its flux scale and those of the
-        offsets of its frame, if any (see the class), and those of its
-        lens, '{name}_lens_{parameter}' (see Foreground.pdescs).
+        offsets of its frame, if any (see the class).
         """
         flux_scale = {}
         if (scale := self.flux_scale()) is not None:
@@ -971,7 +996,7 @@ class ObservationSky(Observation, abc.ABC):
             for param, (title, desc, unit) in zip(
                 self._offset_params(), descs)
             if param is not None}
-        return flux_scale | offsets | self._sky_options.foreground.pdescs()
+        return flux_scale | offsets
 
     def _offset_params(self) -> tuple[str | None, str | None, str | None]:
         """
@@ -990,18 +1015,14 @@ class ObservationSky(Observation, abc.ABC):
         """
         Return the frame of its model on the sky (see SkyFrame and
         ObservationGroup): its origin is the reference pixel of its grid
-        (see sky_rval), its offsets those it fits (see the class), the
+        (see sky_rval), its offsets those it fits (see the class), and the
         frame of rest of its velocities that of its spectral axis (see
-        SpectralAxis), if it has one that gives it, and what it adds the
-        masses of its lens (see Foreground.centre_params and
-        Foreground.shift_params).
+        SpectralAxis), if it has one that gives it.
         """
         spectral = self.spectral()
-        foreground = self._sky_options.foreground
         return SkyFrame(
             self.sky_rval(), self._offset_params(),
-            None if spectral is None else spectral.frame(),
-            foreground.centre_params(), foreground.shift_params())
+            None if spectral is None else spectral.frame())
 
     def flux_scale(self) -> tuple[str, FluxScale] | None:
         """
@@ -1013,9 +1034,12 @@ class ObservationSky(Observation, abc.ABC):
         return (f'{self._name}_flux_scale',
                 self.flux_scale_kinds()[self._flux_scale])
 
-    def foreground(self) -> Foreground:
-        """Return the foreground."""
-        return self._sky_options.foreground
+    def source_grid(self) -> SourceGrid:
+        """
+        Return how the grids of the planes behind lenses that it sees are
+        laid out.
+        """
+        return self._sky_options.source_grid
 
     def instrument(self) -> Instrument:
         """Return the instrument."""
@@ -1091,55 +1115,56 @@ class ObservationSky(Observation, abc.ABC):
     def light_amplitudes(self, seen: SeenGalaxies) -> dict[str, str | None]:
         linear = self.linear_in_light()
         amplitudes = {}
-        for galaxy, mapping, emitters in zip(
-                seen.galaxies, seen.mappings, self._scene(seen).emitters()):
+        for g, i, component in self._scenes(seen).components():
+            galaxy, mapping = seen.galaxies[g], seen.mappings[g]
             reasons = galaxy.light_amplitudes()
-            for i in emitters:
-                names = galaxy.component_param_names(i)
-                for param in galaxy.components()[i].light_amplitudes():
-                    reason = reasons[names[param]]
-                    if reason is None and not linear:
-                        reason = (
-                            f"the observation of type {self.type()!r} is "
-                            f"not linear in the light (e.g. moments, ratios "
-                            f"of sums of the light)")
-                    amplitudes[mapping[names[param]]] = reason
+            names = galaxy.component_param_names(i)
+            for param in component.light_amplitudes():
+                reason = reasons[names[param]]
+                if reason is None and not linear:
+                    reason = (
+                        f"the observation of type {self.type()!r} is not "
+                        f"linear in the light (e.g. moments, ratios of sums "
+                        f"of the light)")
+                amplitudes[mapping[names[param]]] = reason
         return amplitudes
 
     def orbit_components(
             self, seen: SeenGalaxies
     ) -> tuple[tuple[int, int], ...]:
-        return self._scene(seen).orbit_emitters()
+        return self._scenes(seen).orbit_emitters()
 
-    def _scene(self, seen: SeenGalaxies) -> Scene:
+    def _scenes(self, seen: SeenGalaxies) -> SeenScenes:
         """
-        Return the scene of the galaxies it sees (see make_scene).
+        Return the scenes of the galaxies it sees (see make_scenes).
         """
-        return make_scene(
+        return make_scenes(
             seen, self._components, self.view(), self.data_unit())
 
     def check(self, seen: SeenGalaxies) -> None:
-        scene = self._scene(seen)
+        scenes = self._scenes(seen)
         options = self._sky_options
-        # (the light of an image is blurred by its PSF and again by ours)
-        scene.check_psf(options.instrument.psf())
+        for scene in scenes.scenes:
+            # (the light of an image is blurred by its PSF and again by
+            # ours)
+            scene.check_psf(options.instrument.psf())
+            check_scene(scene)
         if options.pixel_weights is not None:
-            weights_geometry(options.pixel_weights, scene)
-        check_scene(scene)
-        self._check_scene(scene)
+            weights_geometry(options.pixel_weights, seen)
+        self._check_scenes(scenes)
 
-    def _check_scene(self, scene: Scene) -> None:
+    def _check_scenes(self, scenes: SeenScenes) -> None:
         """
-        Check that it can see a scene (see make_scene) through its
-        foreground and its instrument, with its flux scale of one value,
-        if any, before any plan. Here, that it sees the stars on orbits
-        whose weights are solved, if any (see orbit_stars); the kinds of
-        moments also check that they see one line (see
-        _moments.check_one_line), and ObservationRegionMoments more.
+        Check that it can see its scenes (see make_scenes) through its
+        instrument, with its flux scale of one value, if any, before any
+        plan. Here, that it sees the stars on orbits whose weights are
+        solved, if any (see orbit_stars); the kinds of moments also check
+        that they see one line (see _moments.check_one_line), and
+        ObservationRegionMoments more.
 
         Parameters
         ----------
-        scene : Scene
+        scenes : SeenScenes
             What is seen.
 
         Raises
@@ -1147,7 +1172,7 @@ class ObservationSky(Observation, abc.ABC):
         ValueError
             If it cannot.
         """
-        if scene.orbit_emitters() and self.orbit_stars is None:
+        if scenes.orbit_emitters() and self.orbit_stars is None:
             # (the registered kinds of observations on the sky)
             from ..observation import observation_parser
             seeing = sorted(
@@ -1160,11 +1185,16 @@ class ObservationSky(Observation, abc.ABC):
                 f"(e.g. of Schwarzschild kinematics) are seen by "
                 f"{', '.join(seeing)}; {self.type()} does not see them")
 
-    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservationPlan:
+    def plan(
+            self,
+            driver: Driver,
+            seen: SeenGalaxies,
+            reference: ParamValues | None
+    ) -> ObservationPlan:
         """
         Plan the evaluation of what it sees (see ObservationGroup.plan):
-        the scene of the galaxies it sees, along its line of sight (see
-        make_scene), as its kind of data (see _plan).
+        the scenes of the galaxies it sees, along its line of sight (see
+        make_scenes), as its kind of data (see _plan).
 
         Parameters
         ----------
@@ -1172,6 +1202,10 @@ class ObservationSky(Observation, abc.ABC):
             The driver it is evaluated on.
         seen : SeenGalaxies
             The galaxies it sees.
+        reference : ParamValues, optional
+            The values of the parameters at which the grids of the planes
+            behind lenses that it sees are laid out (see
+            ParamSpace.reference); required with them.
 
         Returns
         -------
@@ -1181,10 +1215,12 @@ class ObservationSky(Observation, abc.ABC):
         Raises
         ------
         ValueError
-            If what it sees does not go with it (see make_scene), or with
-            its kind (see _plan).
+            If what it sees does not go with it (see make_scenes), or with
+            its kind (see _plan), or it sees planes behind lenses and has
+            no reference values.
         """
-        plan = self._plan(driver, self._scene(seen))
+        plan = self._plan(driver, SkyDrawing(
+            self._scenes(seen), reference, self._measured_pixels))
         # (its kind applies a flux scale of one value, see __init__; one
         # of several values multiplies the items of light of its plan)
         scale = self.flux_scale()
@@ -1193,22 +1229,40 @@ class ObservationSky(Observation, abc.ABC):
         return FluxScaledPlan(plan, driver, *scale, self._sky_options.dtype)
 
     @abc.abstractmethod
-    def _plan(self, driver: Driver, scene: Scene) -> ObservationPlan:
+    def _measured_pixels(self) -> np.ndarray:
         """
-        Plan the evaluation of a scene (what it sees) as its kind of data,
-        with its options of every observation on the sky: its depth axis,
-        for a scene that needs one (see plan_scene of
-        gbkfit.observation.depth), its foreground, its instrument, the
-        oversampling and the floating types of its model, its pixel
-        weights and its flux scale of one value, if any (see SkyOptions).
+        Return the pixels of the grid of the cube of its model (x and y,
+        before the oversampling; see ModelCube) whose light its data
+        measure: those unmasked of data on its pixels, those of its
+        regions or slits; all of them without data, or for data that see
+        the whole field (e.g. visibilities). From them, the rays through
+        the lenses in front of what it sees are traced (see TracePlan).
+
+        Returns
+        -------
+        np.ndarray
+            The pixels, a bool array of shape (ny, nx).
+        """
+
+    @abc.abstractmethod
+    def _plan(self, driver: Driver, drawing: SkyDrawing) -> ObservationPlan:
+        """
+        Plan the evaluation of what it draws (see SkyDrawing) as its kind
+        of data, with its options of every observation on the sky: its
+        depth axis, for a scene that needs one, and the grids of the
+        planes behind lenses (see plan_scenes of
+        gbkfit.observation.depth), its instrument, the oversampling and
+        the floating types of its model, its pixel weights and its flux
+        scale of one value, if any (see SkyOptions).
 
         Parameters
         ----------
         driver : Driver
             The driver it is evaluated on.
-        scene : Scene
-            What is seen: the galaxies, and the components of each whose
-            light is seen.
+        drawing : SkyDrawing
+            What it draws: the scenes of the galaxies it sees (the
+            components of each whose light is seen), and what lays out
+            the planes behind lenses.
 
         Returns
         -------
@@ -1218,6 +1272,5 @@ class ObservationSky(Observation, abc.ABC):
         Raises
         ------
         ValueError
-            If the pixel weights are not in the plane of a disk of the
-            scene (see CubePlan).
+            If the scenes cannot be planned (see CubePlan).
         """

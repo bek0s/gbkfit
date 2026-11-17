@@ -4,7 +4,7 @@ Workers in processes of this machine.
 
 import concurrent.futures
 import multiprocessing
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Annotated, Any
 
 import threadpoolctl
@@ -13,11 +13,10 @@ from annotated_types import Ge
 from gbkfit.config import check_options
 from gbkfit.control import StopControl, StopFlag
 from gbkfit.driver import Driver
-from gbkfit.objective import Likelihoods, Objective
-from gbkfit.params import Solve
+from gbkfit.objective import Objective
 from ._detail import (
-    Drivers, Item, LocalWorker, Result, Worker, cores, dump_placements,
-    objective_on, own_placement, placement_drivers)
+    CopyParts, Drivers, Item, LocalWorker, Result, Worker, copy_parts,
+    cores, dump_placements, objective_on, own_placement, placement_drivers)
 from .pool import Placement, Workers
 
 
@@ -106,9 +105,7 @@ class WorkersProcesses(Workers):
     ) -> list[Worker]:
         threads = self._threads or max(1, cores() // len(placements))
         return [
-            _ProcessWorker(
-                objective.likelihoods(), objective.solves(), placement,
-                threads)
+            _ProcessWorker(copy_parts(objective), placement, threads)
             for placement in placements]
 
 
@@ -117,8 +114,7 @@ class _ProcessWorker(LocalWorker):
 
     def __init__(
             self,
-            likelihoods: Likelihoods,
-            solves: Mapping[str, Solve],
+            parts: CopyParts,
             placement: Drivers,
             threads: int
     ):
@@ -126,7 +122,7 @@ class _ProcessWorker(LocalWorker):
         super().__init__(context.Event())
         self._executor = concurrent.futures.ProcessPoolExecutor(
             1, mp_context=context, initializer=_start_process,
-            initargs=(likelihoods, solves, placement, threads, self._flag))
+            initargs=(parts, placement, threads, self._flag))
 
     def submit(
             self,
@@ -153,8 +149,7 @@ _process_control: StopControl | None = None
 
 
 def _start_process(
-        likelihoods: Likelihoods,
-        solves: Mapping[str, Solve],
+        parts: CopyParts,
         placement: Drivers,
         threads: int,
         flag: StopFlag
@@ -165,7 +160,7 @@ def _start_process(
     by then, as the host driver loads its own).
     """
     global _process_copy, _process_control
-    _process_copy = objective_on(likelihoods, solves, placement)
+    _process_copy = objective_on(parts, placement)
     _process_control = StopControl(flag)
     threadpoolctl.threadpool_limits(threads)
 

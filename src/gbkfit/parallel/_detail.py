@@ -19,7 +19,7 @@ from gbkfit.control import StopControl, StopFlag
 from gbkfit.driver import Driver, driver_parser
 from gbkfit.objective import Likelihoods, Objective
 from gbkfit.observation import GroupPlan, place_drivers
-from gbkfit.params import Solve
+from gbkfit.params import ParamValues, Solve
 
 if typing.TYPE_CHECKING:
     from .pool import Placement
@@ -120,6 +120,27 @@ class PolledFlag:
         return self._set
 
 
+class CopyParts(typing.NamedTuple):
+    """
+    What a worker makes a copy of an objective of (see objective_on), sent
+    to it pickled: its likelihoods (see Objective.likelihoods), whose
+    group it plans (the group and the likelihoods of its observations
+    share it), its solves, and the values of the parameters at which its
+    plan lays out what it lays out once (see GroupPlan.reference; e.g. the
+    grids of the planes behind lenses), if any.
+    """
+    likelihoods: Likelihoods
+    solves: Mapping[str, Solve]
+    reference: ParamValues | None
+
+
+def copy_parts(objective: Objective) -> CopyParts:
+    """Return what a worker makes a copy of an objective of."""
+    return CopyParts(
+        objective.likelihoods(), objective.solves(),
+        objective.group_plan().reference())
+
+
 class ActorCopy:
     """
     The copy of an objective of a worker that is an actor of Ray or Dask
@@ -129,12 +150,11 @@ class ActorCopy:
 
     def __init__(
             self,
-            likelihoods: Likelihoods,
-            solves: Mapping[str, Solve],
+            parts: CopyParts,
             placement: Drivers,
             threads: int | None
     ):
-        self._copy = objective_on(likelihoods, solves, placement)
+        self._copy = objective_on(parts, placement)
         self._flag = threading.Event()
         if threads is not None:
             threadpoolctl.threadpool_limits(threads)
@@ -172,19 +192,15 @@ def cores() -> int:
     return os.cpu_count() or 1
 
 
-def objective_on(
-        likelihoods: Likelihoods,
-        solves: Mapping[str, Solve],
-        placement: Drivers
-) -> Objective:
+def objective_on(parts: CopyParts, placement: Drivers) -> Objective:
     """
-    Return a copy of an objective on the drivers of a placement, of its
-    likelihoods (see Objective.likelihoods), whose group it plans, and its
-    solves: what a worker makes of an objective (sent to it pickled, as
-    the group and the likelihoods of its observations, which share it).
+    Return a copy of an objective on the drivers of a placement, of what
+    it is made of (see CopyParts): what a worker makes of an objective.
     """
+    likelihoods = parts.likelihoods
     return Objective(
-        GroupPlan(likelihoods.group(), *placement), likelihoods, solves)
+        GroupPlan(likelihoods.group(), *placement, parts.reference),
+        likelihoods, parts.solves)
 
 
 def own_placement(objective: Objective) -> Drivers:

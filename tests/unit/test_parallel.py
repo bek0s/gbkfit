@@ -25,7 +25,7 @@ from gbkfit.fitting import (
     run_bootstrap)
 from gbkfit.params import ParamSpace
 from gbkfit.parallel import Workers, WorkersDask, WorkersRay
-from gbkfit.parallel._detail import own_placement
+from gbkfit.parallel._detail import copy_parts, own_placement
 from gbkfit.parallel.mpi import _serve_mpi
 
 from test_fitting import bounded_properties, mock_objective, run_until_stopped
@@ -163,8 +163,7 @@ class FakeComm:
 def start_message(key, objective):
     """The message that starts a copy of an objective on a rank."""
     return (
-        'start', key, objective.likelihoods(), objective.solves(),
-        own_placement(objective), None)
+        'start', key, copy_parts(objective), own_placement(objective), None)
 
 
 def stop_on_control(copy, item, control):
@@ -177,7 +176,7 @@ def stop_on_control(copy, item, control):
 def test_a_rank_whose_copy_failed_answers_the_calls_of_its_pool():
     # It used to exit, and the first rank waited for its reply forever
     comm = FakeComm([
-        ('start', 0, None, None, ((), ()), None),
+        ('start', 0, None, ((), ()), None),
         ('run', 0, stop_on_control, [1]),
         ('run_controlled', 0, stop_on_control, 1),
         ('close', 0), ('exit',)])

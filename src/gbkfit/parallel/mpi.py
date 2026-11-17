@@ -10,7 +10,7 @@ import runpy
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from typing import Annotated, Any
 
 import threadpoolctl
@@ -19,11 +19,10 @@ from annotated_types import Ge
 from gbkfit.config import check_options
 from gbkfit.control import StopControl
 from gbkfit.driver import Driver
-from gbkfit.objective import Likelihoods, Objective
-from gbkfit.params import Solve
+from gbkfit.objective import Objective
 from ._detail import (
-    Drivers, Item, PolledFlag, Result, Worker, dump_placements,
-    objective_on, own_placement, placement_drivers)
+    CopyParts, Drivers, Item, PolledFlag, Result, Worker, copy_parts,
+    dump_placements, objective_on, own_placement, placement_drivers)
 from .pool import Placement, Workers
 
 
@@ -122,8 +121,8 @@ class WorkersMPI(Workers):
         key = next(_mpi_pools)
         return [
             _MPIWorker(
-                MPI.COMM_WORLD, rank, key, objective.likelihoods(),
-                objective.solves(), placement, self._threads)
+                MPI.COMM_WORLD, rank, key, copy_parts(objective), placement,
+                self._threads)
             for rank, placement in enumerate(placements, 1)]
 
 
@@ -173,8 +172,7 @@ class _MPIWorker(Worker):
             comm: Any,
             rank: int,
             key: int,
-            likelihoods: Likelihoods,
-            solves: Mapping[str, Solve],
+            parts: CopyParts,
             placement: Drivers,
             threads: int | None
     ):
@@ -183,7 +181,7 @@ class _MPIWorker(Worker):
         self._key = key
         self._executor = concurrent.futures.ThreadPoolExecutor(
             1, thread_name_prefix='gbkfit-mpi')
-        self._send(('start', key, likelihoods, solves, placement, threads))
+        self._send(('start', key, parts, placement, threads))
 
     def submit(
             self,
@@ -255,9 +253,9 @@ def _serve_mpi(comm: Any) -> None:
         if kind == 'exit':
             return
         if kind == 'start':
-            key, likelihoods, solves, placement, threads = args
+            key, parts, placement, threads = args
             try:
-                copies[key] = objective_on(likelihoods, solves, placement)
+                copies[key] = objective_on(parts, placement)
             except Exception as e:
                 copies[key] = e
             if threads is not None:

@@ -14,6 +14,7 @@ from gbkfit.config import option_types
 import gbkfit.fitting
 import gbkfit.grid
 import gbkfit.instrument
+import gbkfit.lensing
 import gbkfit.model
 import gbkfit.model.components.disks
 import gbkfit.model.components.parts
@@ -35,10 +36,10 @@ CLASSES = [
     gbkfit.model.components.disks.Clouds,
     gbkfit.model.Line,
     gbkfit.model.mass.MassModel,
+    gbkfit.lensing.Lens,
+    gbkfit.lensing.SourceGrid,
     gbkfit.observation.Depth,
     gbkfit.observation.Exposure,
-    gbkfit.observation.Foreground,
-    gbkfit.observation.Lens,
     gbkfit.observation.Weights,
     gbkfit.grid.SpectralAxis]
 

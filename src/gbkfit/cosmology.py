@@ -75,6 +75,35 @@ class Cosmology(TypedSerializable, abc.ABC):
         return float(self.astropy_cosmology().angular_diameter_distance(
             redshift).to_value('Mpc'))
 
+    def angular_diameter_distance_between(
+            self, near: float, far: float
+    ) -> float:
+        """
+        Return the angular diameter distance between two redshifts: of a
+        length at the far one, seen from the near one (e.g. D_ls, of a
+        source seen from a lens).
+
+        Parameters
+        ----------
+        near, far : float
+            The redshifts.
+
+        Returns
+        -------
+        float
+            The distance (Mpc).
+
+        Raises
+        ------
+        ValueError
+            If near is beyond far.
+        """
+        if near > far:
+            raise ValueError(
+                f"the near redshift ({near}) is beyond the far one ({far})")
+        return float(self.astropy_cosmology().angular_diameter_distance(
+            near, far).to_value('Mpc'))
+
     def critical_density(self, redshift: float) -> float:
         """Return the critical density (Msun/kpc^3) at a redshift."""
         return float(self.astropy_cosmology().critical_density(

@@ -19,7 +19,7 @@ from . import _model_cube
 from ..plan import ModelData, ModelItem
 
 if TYPE_CHECKING:
-    from gbkfit.model import Scene
+    from .._scene import SeenScenes
     from .base import SkyOptions
     from .pixel_moments import ObservationPixelMoments
     from .region_moments import ObservationRegionMoments
@@ -159,20 +159,19 @@ def spectra_model_cube(
         median_size=median_size)
 
 
-def check_one_line(scene: 'Scene') -> None:
+def check_one_line(scenes: 'SeenScenes') -> None:
     """
-    Raise ValueError if the moments of the spectra of a scene would mix
-    several lines: its emitters draw more than one (e.g. Ha and [NII] of
-    one component, or of two; or stars and a line of gas). Moments cannot
-    tell the lines of a spectrum apart, whatever the spectral axis covers,
-    so that an observation of moments names the line of its data (its
-    option lines), whose moments its data are.
+    Raise ValueError if the moments of the spectra of what an observation
+    sees would mix several lines: the components whose light it sees
+    draw more than one (e.g. Ha and [NII] of one component, or of two; or
+    stars and a line of gas). Moments cannot tell the lines of a spectrum
+    apart, whatever the spectral axis covers, so that an observation of
+    moments names the line of its data (its option lines), whose moments
+    its data are.
     """
     lines = set()
-    for galaxy, emitters in enumerate(scene.emitters()):
-        for index in emitters:
-            lines.update(scene.component(galaxy, index).emission()
-                         .spectral_lines(scene.view()))
+    for _, _, component in scenes.components():
+        lines.update(component.emission().spectral_lines(scenes.view()))
     if len(lines) > 1:
         named = sorted(str(line) for line in lines if line is not None)
         raise ValueError(

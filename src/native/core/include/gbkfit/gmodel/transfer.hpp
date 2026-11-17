@@ -278,4 +278,26 @@ gmodel_transfer_opacity_front(int x, int y, const TransferArgs<T>& a)
     }
 }
 
+// The transmission of the whole line of sight of the spaxel (x, y) of a
+// march (nx by ny spaxels), after its last slab, at row r of the light
+// from behind it (a channel of the march, or with line opacity a
+// sub-channel): exp(-sum over k of ratios[r][k] opacity_front[k] -
+// tau[r]), the optical depth of the dust of each of nopacity cubes of
+// opacity at the wavelength of the row (ratios, of the row to that the
+// cube holds), and of the lines at the row (tau; null without line
+// opacity), into out (one image of nx by ny pixels for each row).
+// opacity_front and ratios are null without dust.
+template<typename T> constexpr void
+gmodel_transfer_transmission(
+        int x, int y, int r, int nx, int ny, int nopacity,
+        const T* opacity_front, const T* ratios, const T* tau, T* out)
+{
+    const long long nimage = 1LL * nx * ny;
+    const long long idx2 = index_2d_to_1d<long long>(x, y, nx);
+    T depth = tau ? tau[r * nimage + idx2] : T{0};
+    for (int k = 0; k < nopacity; ++k)
+        depth += ratios[r * nopacity + k] * opacity_front[k * nimage + idx2];
+    out[r * nimage + idx2] = std::exp(-depth);
+}
+
 } // namespace gbkfit

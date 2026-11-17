@@ -19,11 +19,12 @@ from gbkfit.config import (
     Unit, check_options)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid, sky_positions
+from gbkfit.model import named_components
 from gbkfit.params import ParamValues, StageCache
 from gbkfit.utils import iterutils
 
 if TYPE_CHECKING:
-    from gbkfit.model import Scene
+    from .observation import SeenGalaxies
 
 
 __all__ = [
@@ -289,29 +290,44 @@ class WeightsPlan:
 
 def plan_weights(
         weights: Weights,
-        scene: 'Scene',
+        seen: 'SeenGalaxies',
         grid: Grid,
         driver: Driver,
         dtype: np.dtype
 ) -> WeightsPlan:
     """
-    Plan the evaluation of the weights of an observation of a scene on the
-    spatial grid of its model (see weights_geometry).
+    Plan the evaluation of the weights of an observation of the galaxies
+    it sees on the spatial grid of its model (see weights_geometry).
     """
     return WeightsPlan(
-        weights, weights_geometry(weights, scene), grid, driver, dtype)
+        weights, weights_geometry(weights, seen), grid, driver, dtype)
 
 
-def weights_geometry(weights: Weights, scene: 'Scene') -> dict[str, str]:
+def weights_geometry(
+        weights: Weights, seen: 'SeenGalaxies'
+) -> dict[str, str]:
     """
-    Return the parameters of the plane of the disk of pixel weights in a
-    scene, by role (xpos, ypos, posa, incl). Raise ValueError unless
-    their component is a disk of the scene.
+    Return the parameters of the plane of the disk of pixel weights among
+    the galaxies an observation sees, by role (xpos, ypos, posa, incl).
+
+    Raises
+    ------
+    ValueError
+        Unless their component is a disk of the galaxies, whose light no
+        lens bends (the pixels of the image are not where the rays from
+        them cross its plane).
     """
-    frame = scene.frame_params(weights.component())
+    name = weights.component()
+    g, i = named_components(seen.galaxies, [name])[name]
+    if any(g in plane.galaxies and plane.traced is not None
+           for plane in seen.planes):
+        raise ValueError(
+            f"pixel weights are in the plane of a disk whose light no lens "
+            f"bends; a lens bends that of the component {name!r}")
+    frame = seen.galaxies[g].component_frame_params(i, seen.mappings[g])
     names = dict(xpos=frame.x, ypos=frame.y, posa=frame.posa, incl=frame.incl)
-    if missing := [role for role, name in names.items() if name is None]:
+    if missing := [role for role, param in names.items() if param is None]:
         raise ValueError(
             f"pixel weights need the plane of a disk; the component "
-            f"{weights.component()!r} has no {missing}")
+            f"{name!r} has no {missing}")
     return names

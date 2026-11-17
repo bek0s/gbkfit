@@ -468,6 +468,46 @@ struct GModel
         Kernels::gmodel_transfer_march(a);
     }
 
+    // Write the transmission of the whole line of sight of each spaxel of
+    // a march, after its last slab, for light from behind it, into out
+    // (nrows, ny, nx), a row for each channel of the march (or with line
+    // opacity, each sub-channel; see gbkfit::gmodel_transfer_transmission):
+    // of the dust in front of the far end, opacity_front (ncubes, ny, nx),
+    // with the ratios of the cubes at the wavelength of each row, ratios
+    // (nrows, ncubes) (both None without dust), and of the lines at each
+    // row, tau (nrows, ny, nx; None without line opacity)
+    static void
+    transfer_transmission(
+            ConstData opacity_front, Ratios ratios, ConstData tau, Data out)
+    {
+        const typename Kernels::DeviceScope scope(out.device_id());
+        require(out.ndim() == 3, "out must have shape (nrows, ny, nx)");
+        const int nrows = int(out.shape(0));
+        const int ny = int(out.shape(1));
+        const int nx = int(out.shape(2));
+        require(opacity_front.is_valid() == ratios.is_valid(),
+                "opacity_front and ratios are given together");
+        int nopacity = 0;
+        if (opacity_front.is_valid()) {
+            require(opacity_front.ndim() == 3
+                    && int(opacity_front.shape(1)) == ny
+                    && int(opacity_front.shape(2)) == nx
+                    && opacity_front.shape(0) >= 1
+                    && opacity_front.shape(0) <= size_t(OPACITY_NUM_MAX),
+                    "opacity_front must have shape (ncubes, ny, nx) of "
+                    "out, of 1 to " + std::to_string(OPACITY_NUM_MAX)
+                    + " cubes");
+            nopacity = int(opacity_front.shape(0));
+            require(int(ratios.shape(0)) == nrows
+                    && int(ratios.shape(1)) == nopacity,
+                    "ratios must have shape (nrows, ncubes)");
+        }
+        require_same_shape(tau, out, "tau", "out");
+        Kernels::gmodel_transfer_transmission(
+                nx, ny, nrows, nopacity, data(opacity_front), data(ratios),
+                data(tau), out.data());
+    }
+
     // Evaluate each polar trait of one kind of a disk ('rpt', 'vpt',
     // 'dpt', 'zpt' or 'spt') at the points (r, theta) of its plane,
     // into out (a row for each trait), as the disk kernels evaluate them
@@ -810,6 +850,12 @@ struct GModel
                 nb::arg("opacity").noconvert().none() = nb::none(),
                 nb::arg("opacity_front").noconvert().none() = nb::none(),
                 nb::arg("tau").noconvert().none() = nb::none(),
+                nb::arg("out").noconvert());
+        cls.def_static("transfer_transmission", &transfer_transmission,
+                ReleaseGil(),
+                nb::arg("opacity_front").noconvert().none(),
+                nb::arg("ratios").noconvert().none(),
+                nb::arg("tau").noconvert().none(),
                 nb::arg("out").noconvert());
         cls.def_static("disk_ptraits_evaluate", &disk_ptraits_evaluate,
                 ReleaseGil(),

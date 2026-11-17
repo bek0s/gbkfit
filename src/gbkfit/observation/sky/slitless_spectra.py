@@ -24,21 +24,20 @@ from gbkfit.grid import (
     vacuum_wavelength)
 from gbkfit.instrument import (
     Instrument, SlitMask, Trace, slit_mask_parser, trace_parser)
+from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from gbkfit.utils import iterutils
 from ..depth import Depth
-from ..foreground import Foreground
 from ..plan import FluxScale, HostModelData, ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube, _moments
-from ._cube_plan import CubePlan
+from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
 from ._options import Rota, Rpix, Rval, Size, Step
 from ._sparse_sums import SparseSumsPlan
 from .base import DType, ObservationSky, SkyOptions
 
 if TYPE_CHECKING:
-    from gbkfit.model import Scene
     from ..noise import Noise
 
 
@@ -473,7 +472,7 @@ class ObservationSlitlessSpectra(ObservationSky):
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: Annotated[int, Ge(1)] = 1,
             resampled: bool = False,
-            foreground: Foreground | None = None,
+            source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
@@ -513,7 +512,7 @@ class ObservationSlitlessSpectra(ObservationSky):
         self._sky_sampling = sky_sampling
         self._resampled = resampled
         super().__init__(
-            self._make_grid(**grid), foreground, instrument, galaxies,
+            self._make_grid(**grid), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
             offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
             unit)
@@ -541,6 +540,13 @@ class ObservationSlitlessSpectra(ObservationSky):
     def resampled(self) -> bool:
         """Check whether the image was resampled from the detector."""
         return self._resampled
+
+    def _measured_pixels(self) -> np.ndarray:
+        # (the light of every pixel of the sky it sees is dispersed across
+        # the image, see _plan)
+        _, size = self._sky(self._channel_edges())
+        k = self._sky_sampling
+        return np.ones((size[1] * k, size[0] * k), dtype=bool)
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
@@ -594,7 +600,9 @@ class ObservationSlitlessSpectra(ObservationSky):
                 "along the trace sets their resolution; remove the LSF of "
                 "the instrument, or give the slit mask")
 
-    def _plan(self, driver: Driver, scene: 'Scene') -> 'SlitlessSpectraPlan':
+    def _plan(
+            self, driver: Driver, drawing: SkyDrawing
+    ) -> 'SlitlessSpectraPlan':
         options = self._sky_options
         edges = self._channel_edges()
         offset, size = self._sky(edges)
@@ -616,7 +624,7 @@ class ObservationSlitlessSpectra(ObservationSky):
             fft_dtype=options.fft_dtype)
         dispersion = self._dispersion(edges, size, offset)
         return SlitlessSpectraPlan(
-            model_cube, dispersion, self.grid(), driver, scene, options)
+            model_cube, dispersion, self.grid(), driver, drawing, options)
 
     def _channel_edges(self) -> np.ndarray:
         """
@@ -828,12 +836,12 @@ class SlitlessSpectraPlan(CubePlan):
             dispersion: scipy.sparse.csr_array,
             grid: Grid,
             driver: Driver,
-            scene: 'Scene',
+            drawing: SkyDrawing,
             options: SkyOptions
     ):
         # (without pixel weights, which
         # ObservationSlitlessSpectra._check_options refuses)
-        super().__init__(model_cube, driver, scene, options)
+        super().__init__(model_cube, driver, drawing, options)
         dtype = options.dtype
         self._dispersion = SparseSumsPlan(dispersion, driver, dtype)
         size = grid.size

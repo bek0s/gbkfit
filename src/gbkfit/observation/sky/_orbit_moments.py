@@ -21,6 +21,7 @@ from ..plan import HostModelData, ModelData, ModelItem, ObservationPlan
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
+    from .._scene import SeenScenes
     from gbkfit.model.components.spheroids import (
         OrbitLibraryState, OrbitRecords)
     from ..noise import Noise
@@ -30,14 +31,14 @@ if TYPE_CHECKING:
 
 def check_orbits(
         moments: 'ObservationRegionMoments',
-        scene: 'Scene',
+        scenes: 'SeenScenes',
         options: 'SkyOptions'
 ) -> None:
     """
     Raise ValueError unless moments of regions can see stars on orbits
-    whose weights are solved (see OrbitMomentsPlan) in a scene, as the
-    observation sees them with its options (see
-    ObservationSky._check_scene): only them, in bins, of the method
+    whose weights are solved (see OrbitMomentsPlan) in what they see (see
+    SeenScenes), with the options of the observation (see
+    ObservationSky._check_scenes): only them, in bins, of the method
     gauss_hermite and the orders 1 to M (V, sigma, h3 ... hM), without a
     flux scale; through a PSF that does not vary, without an LSF (pPXF
     takes it out of their kinematics), a primary beam, a lens or dust,
@@ -52,15 +53,15 @@ def check_orbits(
             (instrument.psf() is not None and instrument.psf().varies(),
              "a PSF that varies"),
             (instrument.primary_beam() is not None, "a primary beam"),
-            (options.foreground.lens() is not None, "a lens"),
-            (scene.has_dust(), "dust in the galaxies it sees")):
+            (scenes.lensed(), "a lens in front of them"),
+            (any(scene.has_dust() for scene in scenes.scenes),
+             "dust in the galaxies it sees")):
         if applies:
             raise ValueError(
                 f"moments of stars on orbits whose weights are solved "
                 f"are seen without {what}: their recording does not "
                 f"apply it")
-    if sum(len(emitters) for emitters in scene.emitters()) != 1 \
-            or len(scene.orbit_emitters()) != 1:
+    if len(scenes.components()) != 1 or len(scenes.orbit_emitters()) != 1:
         raise ValueError(
             "moments of regions that see stars on orbits whose weights "
             "are solved (e.g. of a spheroid of Schwarzschild kinematics) "

@@ -19,7 +19,7 @@ from ruamel.yaml.comments import CommentedMap
 from gbkfit.config import FORMAT_VERSION, ConfigError
 import gbkfit.project
 from . import (
-    v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14)
+    v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15)
 from .rules import Change, PiecesView, Rule, ViewedPiece, insert_first
 
 
@@ -33,9 +33,7 @@ __all__ = [
 
 # The sections and options of configurations whose items are pieces of
 # projects (see gbkfit.project.piece_folder)
-_SECTIONS = (
-    'galaxies', 'observations', 'dataset', 'psf', 'lsf', 'noise', 'params',
-    'fitter')
+_SECTIONS = gbkfit.project.piece_sections()
 
 # The sections of setups whose pieces the rules see with them, as they
 # were (rules that rename parameters take the galaxies and the
@@ -75,7 +73,7 @@ RULES: tuple[Rule, ...] = (
     *v2.RULES, *v3.RULES, *v4.RULES, *v5.RULES, *v6.RULES, *v7.RULES,
     *v8.RULES, *v9.RULES, *v10.RULES, *v11.RULES, *v12.RULES,
     *v13.RULES,
-    *v14.RULES)
+    *v14.RULES, *v15.RULES)
 
 
 def migrate(
@@ -162,10 +160,13 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
     The pieces are migrated together, as one configuration with all of
     them (so that a rule can change a piece of observations and one of
     parameters, as one; see PiecesView); each setup is migrated alone,
-    with copies of the galaxy and observation pieces it names. The marker
-    of the project gives their version; they have no section 'version'.
-    Nothing is written until all are rewritten: a rule that refuses a
-    setup leaves the project as it was.
+    with copies of the galaxy and observation pieces it names. The pieces
+    that rules add to the pieces of a section (e.g. the lens that the
+    lenses of observation pieces become) are new pieces, in files of
+    their names (their option name). The marker of the project gives
+    their version; they have no section 'version'. Nothing is written
+    until all are rewritten: a rule that refuses a setup leaves the
+    project as it was.
 
     Parameters
     ----------
@@ -223,10 +224,15 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
         section: pieces[section] + inline[section] for section in _VIEWED})
     for change in _rewrite(view, version):
         section, index, *rest = change.path
-        # (not the copies of the galaxies and observations of the setups)
-        if index < len(files[section]):
+        # (not the copies of the galaxies and observations of the setups;
+        # those beyond the files of other sections are pieces that the
+        # rules added, new files of their names)
+        if index < len(files[section]) or section not in _VIEWED:
             by_piece.setdefault((section, index), []).append(
                 Change(rest, change.message))
+    for section in _SECTIONS:
+        for piece in pieces[section][len(files[section]):]:
+            files[section].append(project.piece_file(section, piece['name']))
     changes = {
         files[section][index]: piece_changes
         for (section, index), piece_changes in by_piece.items()}

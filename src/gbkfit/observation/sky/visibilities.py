@@ -16,22 +16,21 @@ from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
 from gbkfit.instrument import Instrument
+from gbkfit.lensing import SourceGrid
 from gbkfit.model import (
     Band, DataUnit, Extras, GalaxyState, LightUnit)
 from gbkfit.params import ParamValues
 from ..depth import Depth
-from ..foreground import Foreground
 from ..plan import HostModelData, ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube
-from ._cube_plan import CubePlan
+from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import flux_data_unit
 from ._options import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
 from .base import DType, ObservationSky, SkyOptions
 
 if TYPE_CHECKING:
-    from gbkfit.model import Scene
     from ..noise import Noise
 
 
@@ -213,7 +212,7 @@ class ObservationVisibilities(ObservationSky):
             rota: Rota = 0,
             transform: _Transform = 'exact',
             eps: Annotated[float, Gt(0)] | None = None,
-            foreground: Foreground | None = None,
+            source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
@@ -266,7 +265,7 @@ class ObservationVisibilities(ObservationSky):
         self._transform = transform
         self._eps = eps
         super().__init__(
-            grid, foreground, instrument, galaxies, components, lines,
+            grid, source_grid, instrument, galaxies, components, lines,
             continuum, band, pixel_weights, flux_scale, offsets, dataset,
             oversampling, depth, dtype, fft_dtype, name, unit)
 
@@ -285,6 +284,10 @@ class ObservationVisibilities(ObservationSky):
     def eps(self) -> float | None:
         """Return the tolerance of the transform, if given."""
         return self._eps
+
+    def _measured_pixels(self) -> np.ndarray:
+        # (every pixel of its field gives every visibility)
+        return np.ones(self._grid.size[1::-1], dtype=bool)
 
     def keys(self) -> tuple[str, ...]:
         return ('re', 'im')
@@ -396,7 +399,7 @@ class ObservationVisibilities(ObservationSky):
                 / w.sum(axis=1)[:, None, None]
         return GridData(image, self._grid.coords, 2)
 
-    def _plan(self, driver: Driver, scene: 'Scene') -> 'VisibilitiesPlan':
+    def _plan(self, driver: Driver, drawing: SkyDrawing) -> 'VisibilitiesPlan':
         options = self._sky_options
         # (of the same field at half the step, with the same reference
         # point, for the check of the first evaluation)
@@ -404,14 +407,18 @@ class ObservationVisibilities(ObservationSky):
             self._fov, self._coverage, tuple(x / 2 for x in self.step()[:2]),
             tuple(2 * x + 0.5 for x in self.rpix()[:2]), self.rval()[:2],
             self.rota(), self._transform, self._eps)
+        # (whose cube is of its own pixels, from which the rays through
+        # lenses are traced)
+        refined_drawing = drawing._replace(measured=refined._measured_pixels)
         return self._plan_checked(
-            driver, scene, options,
-            lambda: refined._plan_checked(driver, scene, options, None))
+            driver, drawing, options,
+            lambda: refined._plan_checked(
+                driver, refined_drawing, options, None))
 
     def _plan_checked(
             self,
             driver: Driver,
-            scene: 'Scene',
+            drawing: SkyDrawing,
             options: SkyOptions,
             refinement: Callable[[], 'VisibilitiesPlan'] | None
     ) -> 'VisibilitiesPlan':
@@ -433,7 +440,7 @@ class ObservationVisibilities(ObservationSky):
             driver, options.dtype)
         return VisibilitiesPlan(
             transform, abs(self.step()[0] * self.step()[1]),
-            increasing_frequency, model_cube, driver, scene, options,
+            increasing_frequency, model_cube, driver, drawing, options,
             refinement)
 
     def _make_transform(
@@ -484,13 +491,13 @@ class VisibilitiesPlan(CubePlan):
             increasing_frequency: bool,
             model_cube: _model_cube.ModelCube,
             driver: Driver,
-            scene: 'Scene',
+            drawing: SkyDrawing,
             options: SkyOptions,
             refinement: Callable[[], 'VisibilitiesPlan'] | None = None
     ):
         # (without pixel weights, which
         # ObservationVisibilities._check_options refuses)
-        super().__init__(model_cube, driver, scene, options)
+        super().__init__(model_cube, driver, drawing, options)
         self._refinement = refinement
         self._transform = transform
         self._area = area

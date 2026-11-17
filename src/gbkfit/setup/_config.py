@@ -21,6 +21,7 @@ from gbkfit.config import (
     strict_mode, type_problem, warn)
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.cosmology import Cosmology, cosmology_parser
+import gbkfit.lensing
 import gbkfit.model
 import gbkfit.observation
 import gbkfit.project
@@ -85,6 +86,10 @@ _SECTIONS = dict(
     galaxies=_Section(
         gbkfit.model.Galaxy, "The galaxies.", True, True,
         dict(driver=str)),
+    lenses=_Section(
+        gbkfit.lensing.Lens,
+        "The gravitational lenses, which bend the light of the galaxies "
+        "behind them, of every observation of them.", False, True),
     observations=_Section(
         gbkfit.observation.Observation, "The observations of the galaxies.",
         True, True, dict(driver=str)),
@@ -121,8 +126,10 @@ _SECTIONS = dict(
     mock=_Section(MockOptions, "Mock data of the observations."),
     bootstrap=_Section(BootstrapOptions, "A bootstrap of a fit."))
 
-# The required sections, and the others (but those read before them, see
+# The sections that are lists of items (or one), and the required
+# sections, and the others (but those read before them, see
 # _check_version and _root)
+_LISTED = tuple(k for k, v in _SECTIONS.items() if v.listed)
 _REQUIRED = tuple(k for k, v in _SECTIONS.items() if v.required)
 _OPTIONAL = tuple(
     k for k, v in _SECTIONS.items()
@@ -678,8 +685,8 @@ def _prepare_config(
     """
     Check the sections of a configuration, and return it as plain values
     (see _plain): unknown sections are reported (see report_unknown)
-    and left out, null sections are empty, and the sections 'galaxies' and
-    'observations' are lists.
+    and left out, null sections are empty, and the sections of items
+    (e.g. 'galaxies') are lists.
 
     Raises
     ------
@@ -702,7 +709,7 @@ def _prepare_config(
               'likelihoods', 'fitter', 'workers'):
         if s in config and not iterutils.is_mapping(config[s]):
             raise ConfigError(f"section '{s}' must be a dictionary")
-    for s in ('galaxies', 'observations'):
+    for s in _LISTED:
         if s in config:
             if not iterutils.is_sequence_or_mapping(config[s]):
                 raise ConfigError(
@@ -792,9 +799,9 @@ def _driver_path(name: str | None) -> tuple[str, ...]:
 
 def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
-    Return the galaxies and observations (with their data, if any) of a
-    configuration, as an ObservationGroup, with the order of the galaxies
-    along the line of sight of its section 'depth_order' and the
+    Return the galaxies, lenses and observations (with their data, if
+    any) of a configuration, as an ObservationGroup, with the order of the
+    galaxies along the line of sight of its section 'depth_order' and the
     cosmology of its section 'cosmology'. The galaxies
     and observations name lines and bands of the catalogue of GBKFIT and
     of the sections 'lines' and 'bands' of the configuration (see
@@ -809,6 +816,10 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
         with config_path('observations'):
             observations = gbkfit.observation.observation_parser.load(
                 _without_driver(cfg['observations']))
+    lenses = []
+    if 'lenses' in cfg:
+        with config_path('lenses'):
+            lenses = gbkfit.lensing.lens_parser.load(cfg['lenses'])
     with config_path('depth_order'):
         depth_order = _load_depth_order(cfg.get('depth_order'))
     cosmology = None
@@ -816,7 +827,7 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
         with config_path('cosmology'):
             cosmology = cosmology_parser.load(cfg['cosmology'])
     return gbkfit.observation.ObservationGroup(
-        galaxies, observations, depth_order, cosmology)
+        galaxies, observations, lenses, depth_order, cosmology)
 
 
 def _load_likelihoods(

@@ -4,30 +4,30 @@ maps.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import Any
+
+import numpy as np
 
 from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis, grid_options
 from gbkfit.instrument import Instrument
+from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from gbkfit.moments import (
     FluxFloor, Method, MomentsPlan, check_moment_items, check_moment_orders,
     moment_item, split_moments)
+from .._scene import SeenScenes
 from ..depth import Depth
-from ..foreground import Foreground
 from ..plan import ModelData
 from ..weights import Weights
 from . import _model_cube, _moments
-from ._cube_plan import CubePlan
+from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
 from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size)
-from .base import DType, ObservationSky, SkyOptions
-
-if TYPE_CHECKING:
-    from gbkfit.model import Scene
+from .base import DType, ObservationSky, SkyOptions, unmasked_pixels
 
 
 __all__ = [
@@ -172,7 +172,7 @@ class ObservationPixelMoments(ObservationSky):
             orders: Sequence[int] | None = None,
             method: Method = 'moments',
             median_size: MedianSize | None = None,
-            foreground: Foreground | None = None,
+            source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
@@ -201,10 +201,13 @@ class ObservationPixelMoments(ObservationSky):
         self._flux_floor = flux_floor
         self._method = method
         super().__init__(
-            self._make_grid(**options), foreground, instrument, galaxies,
+            self._make_grid(**options), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
             offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
             unit)
+
+    def _measured_pixels(self) -> np.ndarray:
+        return unmasked_pixels(self._dataset, self._grid.size[1::-1])
 
     def keys(self) -> tuple[str, ...]:
         return tuple(moment_item(i, self._method) for i in self._orders)
@@ -260,19 +263,19 @@ class ObservationPixelMoments(ObservationSky):
                 f"yet")
         _moments.warn_unmasked_noise(self._flux_floor, options.instrument)
 
-    def _check_scene(self, scene: 'Scene') -> None:
-        _moments.check_one_line(scene)
-        super()._check_scene(scene)
+    def _check_scenes(self, scenes: SeenScenes) -> None:
+        _moments.check_one_line(scenes)
+        super()._check_scenes(scenes)
 
     def check_dataset(self, dataset: Dataset) -> None:
         check_moment_items(dataset, self._method)
         super().check_dataset(dataset)
 
-    def _plan(self, driver: Driver, scene: 'Scene') -> 'PixelMomentsPlan':
+    def _plan(self, driver: Driver, drawing: SkyDrawing) -> 'PixelMomentsPlan':
         options = self._sky_options
         model_cube = _moments.spectra_model_cube(
             self, options, self._median_size)
-        return PixelMomentsPlan(self, model_cube, driver, scene, options)
+        return PixelMomentsPlan(self, model_cube, driver, drawing, options)
 
 
 class PixelMomentsPlan(CubePlan):
@@ -282,10 +285,10 @@ class PixelMomentsPlan(CubePlan):
             moments: ObservationPixelMoments,
             model_cube: _model_cube.ModelCube,
             driver: Driver,
-            scene: 'Scene',
+            drawing: SkyDrawing,
             options: SkyOptions
     ):
-        super().__init__(model_cube, driver, scene, options)
+        super().__init__(model_cube, driver, drawing, options)
         self._moments = MomentsPlan(
             driver, moments.size(), moments.orders(), moments.flux_floor(),
             moments.method(), options.dtype)

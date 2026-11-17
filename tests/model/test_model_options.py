@@ -81,7 +81,8 @@ def evaluation(info):
     sight (see Scene.evaluation), which the components it sees decide.
     """
     group = config_group(info)
-    return group.observations()[0]._scene(group.seen_by(0)).evaluation()
+    return group.observations()[0]._scenes(
+        group.seen_by(0)).scene().evaluation()
 
 
 def with_dust(kind):

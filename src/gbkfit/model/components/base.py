@@ -141,9 +141,12 @@ class SceneTarget:
     spectral axis (one axis), the floating type, what the observation
     sees of the light (see View: its band, or its lines and continuum),
     the unit of the data of the observation, which the light
-    takes (None without data; see Component.plan), and the dispersion
+    takes (None without data; see Component.plan), the dispersion
     (km/s) by which the instrument smooths the spectra of the model (None
-    for an image; see LineResolution).
+    for an image; see LineResolution), and whether the grid is the source
+    plane of a gravitational lens (lensed), whose image the lens draws by
+    sampling it at the rays of the image (see gbkfit.lensing): light drawn
+    on it must be a surface brightness that the grid resolves.
     """
     driver: Driver
     spatial: Grid
@@ -152,6 +155,7 @@ class SceneTarget:
     view: View
     data_unit: 'DataUnit | None'
     smoothing: float | None
+    lensed: bool = False
 
 
 @dataclasses.dataclass(frozen=True)

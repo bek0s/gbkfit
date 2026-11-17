@@ -121,28 +121,72 @@ struct DModel
                 mmaps_d.data(), mmaps_m.data());
     }
 
-    // The image-plane cube image (nz, ny, nx) lensed from the source-plane
-    // cube source (nz, sy, sx): each pixel is the bilinear interpolation
-    // of the source at its position on the source plane, in the pixel
-    // coordinates of the source (source_x and source_y, of shape (ny, nx))
+    // The light that leaves a plane of a lensed scene toward the viewer,
+    // into out (nz, ny, nx), on the image plane: the light the plane emits
+    // (emission, (nz, sy, sx)) plus that from behind it (behind, (nz S, ny,
+    // nx)) through its transmission (transmission, (nz S, sy, sx)),
+    // averaged over the S sub-channels of each channel of out, each of
+    // emission and transmission at the position of each pixel on the
+    // plane, in the pixel coordinates of their grid (source_x and
+    // source_y, of shape (ny, nx); see gbkfit::dmodel_lens_composite).
+    // Without positions, the plane is on the image grid. emission,
+    // transmission and behind are optional (none, 1, none); S is the
+    // number of channels of behind (or transmission) over those of out.
+    // out can be behind when S is 1.
     static void
-    lens_resample(
+    lens_composite(
             ConstImage source_x, ConstImage source_y,
-            ConstCube source, Cube image)
+            ConstCube emission, ConstCube transmission, ConstCube behind,
+            Cube out)
     {
-        const typename Kernels::DeviceScope scope(image.device_id());
-        const auto src = size_xyz(source);
-        const auto dst = size_xyz(image);
-        require(src[2] == dst[2],
-                "source and image must have the same number of channels");
-        require(int(source_x.shape(0)) == dst[1]
-                && int(source_x.shape(1)) == dst[0],
-                "source_x must have shape (ny, nx) of the image");
-        require_same_shape(source_y, source_x, "source_y", "source_x");
-        Kernels::dmodel_lens_resample(
-                dst[0], dst[1], dst[2], src[0], src[1],
-                source_x.data(), source_y.data(),
-                source.data(), image.data());
+        const typename Kernels::DeviceScope scope(out.device_id());
+        const auto dst = size_xyz(out);
+        require(dst[2] >= 1, "out needs a channel");
+        require(source_x.is_valid() == source_y.is_valid(),
+                "source_x and source_y are given together");
+        if (source_x.is_valid()) {
+            require(int(source_x.shape(0)) == dst[1]
+                    && int(source_x.shape(1)) == dst[0],
+                    "source_x must have shape (ny, nx) of out");
+            require_same_shape(source_y, source_x, "source_y", "source_x");
+        }
+        // (the grid of the plane: that of emission or of transmission, or
+        // without positions the image plane's)
+        std::array<int, 3> src = dst;
+        if (emission.is_valid())
+            src = size_xyz(emission);
+        else if (transmission.is_valid())
+            src = size_xyz(transmission);
+        require(source_x.is_valid() || (src[0] == dst[0] && src[1] == dst[1]),
+                "without positions, the plane must be on the grid of out");
+        require(!emission.is_valid() || src[2] == dst[2],
+                "emission must have the channels of out");
+        // The sub-channels of each channel of out, of the light from behind
+        int subchannels = 1;
+        if (behind.is_valid()) {
+            const auto from = size_xyz(behind);
+            require(from[0] == dst[0] && from[1] == dst[1]
+                    && from[2] % dst[2] == 0,
+                    "behind must have shape (nz S, ny, nx) of out, of S "
+                    "sub-channels of each of its channels");
+            subchannels = from[2] / dst[2];
+            require(subchannels == 1 || behind.data() != out.data(),
+                    "out can be behind only without sub-channels");
+        }
+        if (transmission.is_valid()) {
+            const auto through = size_xyz(transmission);
+            require(behind.is_valid(),
+                    "a transmission needs the light from behind");
+            require(through[0] == src[0] && through[1] == src[1]
+                    && through[2] == dst[2] * subchannels,
+                    "transmission must be on the grid of emission, with a "
+                    "channel for each of behind");
+        }
+        Kernels::dmodel_lens_composite(
+                dst[0], dst[1], dst[2], src[0], src[1], subchannels,
+                data(source_x), data(source_y),
+                data(emission), data(transmission), data(behind),
+                out.data());
     }
 
     // The weighted sums of the pixels of regions in each channel of cube
@@ -205,12 +249,14 @@ struct DModel
                         nb::arg("mmaps_d").noconvert(),
                         nb::arg("mmaps_m").noconvert(),
                         nb::arg("hermite"))
-                .def_static("lens_resample", &lens_resample,
+                .def_static("lens_composite", &lens_composite,
                         ReleaseGil(),
-                        nb::arg("source_x").noconvert(),
-                        nb::arg("source_y").noconvert(),
-                        nb::arg("source").noconvert(),
-                        nb::arg("image").noconvert())
+                        nb::arg("source_x").noconvert().none(),
+                        nb::arg("source_y").noconvert().none(),
+                        nb::arg("emission").noconvert().none(),
+                        nb::arg("transmission").noconvert().none(),
+                        nb::arg("behind").noconvert().none(),
+                        nb::arg("out").noconvert())
                 .def_static("regions_sum", &regions_sum,
                         ReleaseGil(),
                         nb::arg("indptr").noconvert(),

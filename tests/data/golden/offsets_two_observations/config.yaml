@@ -1,6 +1,6 @@
 # offsets_two_observations: One galaxy in a cube and in moment maps whose reference pixels are 1.4 arcsec apart on the sky (aligned), the maps with fitted offsets of position and velocity.
 # (written by make_golden.py; do not edit)
-version: 14
+version: 15
 driver: {type: host}
 galaxies:
 - components:
@@ -26,7 +26,6 @@ observations:
     error: 0.0005
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
@@ -49,7 +48,6 @@ observations:
     moment2: {data: sinfoni_moment2_d.fits, mask: sinfoni_moment2_m.fits, error: sinfoni_moment2_e.fits}
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}

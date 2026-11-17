@@ -8,7 +8,9 @@ describes:
 
 - the galaxy: its components, their light, their kinematics and their
   mass;
-- how a telescope sees it: line of sight, foreground lens, PSF, LSF;
+- what bends its light on the way: gravitational lenses at their
+  redshifts;
+- how a telescope sees it: line of sight, PSF, LSF;
 - what the instrument records: cubes, moment maps, images, slits, grism
   images, visibilities.
 
@@ -42,11 +44,13 @@ Every change is judged by three things:
 ```
 dataset (data + errors + mask, on a grid or in regions)
    |
-observation = observable + line of sight + foreground (lens) + instrument
+observation = observable + line of sight + instrument
    |                (PSF, LSF, primary beam)
    |   sees one or more
 galaxy = components (thin/thick disk, cone, spheroid, point, particles)
-         + mass model + gravity law + distance
+         + mass model + gravity law + distance + redshift
+   |   behind
+lens = pieces (SIE, EPL, NFW, shear, sheet, deflection maps) at a redshift
    |
 objective = observations x likelihood (noise model)  --> fitter
 ```
@@ -98,8 +102,10 @@ objective = observations x likelihood (noise model)  --> fitter
     MSA shutters, nods).
   - Interferometric visibilities (NUFFT).
   - Radial profiles, such as rotation-curve tables.
-  - Gravitational lensing in front of any of them (SIE, EPL, NFW,
-    multipoles, shear, deflection maps).
+  - Gravitational lensing of any of them, by lenses at their redshifts
+    (SIE, EPL with multipoles, NFW, shear, mass sheet, deflection maps),
+    in several planes; the lens galaxies' own light and dust drawn in
+    their planes.
 - **Instrument:**
   - PSFs: Gauss, Moffat, beams, images, sums.
   - LSFs: Gauss, Hanning, Moffat, images.

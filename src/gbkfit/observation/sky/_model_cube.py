@@ -5,6 +5,7 @@ from typing import Any, TypeAlias
 
 import astropy.units as u
 import numpy as np
+import scipy.ndimage
 from astropy.stats import gaussian_fwhm_to_sigma
 
 from gbkfit.grid import Grid, GridData, VelocityConvention
@@ -576,6 +577,55 @@ class ModelCubePlan:
 
     def high_res_cube(self) -> DeviceArray:
         return self._cube_high_res
+
+    def footprint(self, measured: np.ndarray) -> np.ndarray:
+        """
+        Return the pixels of the high-resolution grid (x and y) whose
+        light can reach given pixels of the low-resolution grid: those
+        of them, widened by the median filter, if any (see smooth), each
+        oversampled, and widened by the PSF (by the padding of its
+        convolution, half its size).
+
+        Parameters
+        ----------
+        measured : np.ndarray
+            The pixels of the low-resolution grid, a bool array of shape
+            (ny, nx).
+
+        Returns
+        -------
+        np.ndarray
+            The pixels, a bool array of the shape of the high-resolution
+            grid (ny, nx).
+
+        Raises
+        ------
+        ValueError
+            If the pixels are not of the shape of the low-resolution grid.
+        """
+        size_lo = self._model_cube.grid().size
+        measured = np.asarray(measured, dtype=bool)
+        if measured.shape != (size_lo[1], size_lo[0]):
+            raise ValueError(
+                f"the measured pixels must be of the shape of the grid "
+                f"{(size_lo[1], size_lo[0])}; they are of {measured.shape}")
+        median = self._model_cube.median_size()
+        if median is not None:
+            measured = scipy.ndimage.binary_dilation(
+                measured, np.ones((median, median), dtype=bool))
+        oversampling = self._model_cube.oversampling()
+        fine = np.repeat(
+            np.repeat(measured, oversampling[1], axis=0),
+            oversampling[0], axis=1)
+        size = self._grid_high_res.size
+        edge_x, edge_y = self._edge_high_res[:2]
+        footprint = np.zeros((size[1], size[0]), dtype=bool)
+        footprint[edge_y:edge_y + fine.shape[0],
+                  edge_x:edge_x + fine.shape[1]] = fine
+        if edge_x or edge_y:
+            footprint = scipy.ndimage.binary_dilation(
+                footprint, np.ones((2 * edge_y + 1, 2 * edge_x + 1), bool))
+        return footprint
 
     def high_res_weights(self) -> DeviceArray | None:
         return self._weights_high_res

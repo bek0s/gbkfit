@@ -1,6 +1,6 @@
 # slitless_rows: Slitless spectra of a polynomial trace along x, with a solved flux scale per row (along the dispersion).
 # (written by make_golden.py; do not edit)
-version: 14
+version: 15
 driver: {type: host}
 galaxies:
 - components:
@@ -26,7 +26,6 @@ observations:
     error: 0.02
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}

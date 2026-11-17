@@ -1,11 +1,11 @@
 """
 The base plan of the observations on the sky made from a ModelCube
-(see CubePlan).
+(see CubePlan), and what it draws (see SkyDrawing).
 """
 
 import abc
-from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
@@ -13,26 +13,42 @@ from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData
 from gbkfit.model import Extras, GalaxyState
 from gbkfit.params import ParamValues
-from ..depth import plan_scene
+from .._scene import SeenScenes
+from ..depth import plan_scenes
 from ..weights import plan_weights
 from ._model_cube import ModelCube, cube_extra
 from ..plan import HostModelData, ModelData, ModelItem, ObservationPlan
 
 if TYPE_CHECKING:
-    from gbkfit.model import Scene
     from ..noise import Noise
     from .base import SkyOptions
+
+
+class SkyDrawing(NamedTuple):
+    """
+    What the plan of an observation on the sky draws (see
+    ObservationSky.plan): its scenes (see SeenScenes), the values of the
+    parameters at which what is laid out once is laid out (see
+    ParamSpace.reference; the grids of its planes behind lenses), if
+    given, and how to find the pixels of the grid of its model cube whose
+    light its data measure (see ObservationSky._measured_pixels), from
+    which the rays through the lenses are traced.
+    """
+    scenes: SeenScenes
+    reference: ParamValues | None
+    measured: Callable[[], np.ndarray]
 
 
 class CubePlan(ObservationPlan):
     """
     The evaluation of an observation made from a ModelCube: the plan of the
-    cube, the plan of the scene (what an observation sees) along its line
-    of sight on its high-resolution grid (see _model_grid), that of the
-    pixel weights of the data, if any, which fill the weight cube of the
-    ModelCube, and the name of the parameter of the flux scale of the
-    observation, if one value (see ObservationSky), which scales the flux
-    of the cube.
+    cube, the plan of the scenes (what an observation sees) along its line
+    of sight on its high-resolution grid (see _model_grid; those of the
+    planes behind lenses on grids of their own, lensed into it, see
+    plan_scenes), that of the pixel weights of the data, if any, which
+    fill the weight cube of the ModelCube, and the name of the parameter
+    of the flux scale of the observation, if one value (see
+    ObservationSky), which scales the flux of the cube.
 
     It evaluates the model on the cube, records and masks it (see
     ModelCubePlan.evaluate), and measures the data items from its
@@ -47,7 +63,7 @@ class CubePlan(ObservationPlan):
         The cube of the model.
     driver : Driver
         The driver it is evaluated on.
-    scene : Scene
+    drawing : SkyDrawing
         What is seen.
     options : SkyOptions
         The options of the observation (see ObservationSky._plan).
@@ -55,51 +71,45 @@ class CubePlan(ObservationPlan):
     Raises
     ------
     ValueError
-        If the pixel weights are not in the plane of a disk of the scene.
+        If the pixel weights are not in the plane of a disk of the
+        galaxies seen (see weights_geometry), or the scenes cannot be
+        planned (see plan_scenes).
     """
 
     def __init__(
             self,
             model_cube: ModelCube,
             driver: Driver,
-            scene: 'Scene',
+            drawing: SkyDrawing,
             options: 'SkyOptions'
     ):
         dtype = options.dtype
+        scenes = drawing.scenes
         self._driver = driver
         self._dtype = dtype
         self._model_cube = model_cube
         self._flux_scale_param = options.flux_scale_param
         # (the unit of the light of the model, if known)
-        data_unit = scene.data_unit()
+        data_unit = scenes.data_unit()
         self._light_unit = None if data_unit is None \
             else data_unit.cube_unit()
-        self._model_cube_plan = model_cube.plan(
+        self._model_cube_plan = model_cube_plan = model_cube.plan(
             driver, has_weights=options.pixel_weights is not None)
         grid = self._model_grid()
         self._weights_plan = None
         if options.pixel_weights is not None:
             self._weights_plan = plan_weights(
-                options.pixel_weights, scene,
-                self._model_cube_plan.high_res_grid().spatial(), driver,
-                dtype)
-        # With a lens, the model is evaluated on the source plane, into a
-        # cube of its own, which is lensed into the high-resolution cube
-        self._lens_plan = None
-        self._source_cube = None
-        if options.foreground.lens() is not None:
-            self._lens_plan = options.foreground.plan_lens(
-                driver, self._model_cube_plan.high_res_grid(), dtype)
-            grid = self._lens_plan.source_grid(grid)
-            nz = self._model_cube_plan.high_res_cube().shape[0]
-            self._source_cube = driver.mem_alloc_d(
-                (nz,) + grid.size[:2][::-1], dtype)
+                options.pixel_weights, scenes.seen,
+                model_cube_plan.high_res_grid().spatial(), driver, dtype)
         # (the smoothing of the spectra checks the resolution of the light;
         # an image has none)
         smoothing = None if grid.spectral_axis is None \
             else model_cube.spectral_smoothing()
-        self._model_plan = plan_scene(
-            scene, options.depth, driver, grid, dtype, smoothing)
+        self._model_plan = plan_scenes(
+            scenes, options.depth, options.source_grid, driver, grid, dtype,
+            smoothing,
+            lambda: model_cube_plan.footprint(drawing.measured()),
+            drawing.reference)
 
     def _model_grid(self) -> Grid:
         """
@@ -224,19 +234,14 @@ class CubePlan(ObservationPlan):
             model_extra: Extras | None
     ) -> None:
         """
-        Evaluate the model on the high-resolution cube (or on the source
-        plane of a lens, lensed into it), and the weights of the data, if
-        any.
+        Evaluate the model on the high-resolution cube, and the weights of
+        the data, if any.
         """
         model_cube_plan = self._model_cube_plan
         if self._weights_plan is not None:
             self._weights_plan.evaluate(
                 params, model_cube_plan.high_res_weights())
         # The model adds to its cube, so clear it
-        cube = model_cube_plan.high_res_cube() if self._lens_plan is None \
-            else self._source_cube
+        cube = model_cube_plan.high_res_cube()
         self._driver.mem_fill(cube, 0)
         self._model_plan.evaluate(params, galaxies, cube, model_extra)
-        if self._lens_plan is not None:
-            self._lens_plan.evaluate(
-                params, cube, model_cube_plan.high_res_cube())

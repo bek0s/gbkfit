@@ -4,7 +4,10 @@ sees; see gbkfit.observation), and their evaluation on the grid of an
 image or of a spectral cube: their light added up (AdditiveScenePlan), on
 the plane of the sky or on a depth axis, or marched through, front to
 back, by radiative transfer (TransferScenePlan). Which of them a scene
-needs follows from its components (see Scene.evaluation).
+needs follows from its components (see Scene.evaluation). A scene can
+have light from behind it (e.g. the planes behind a lens plane, see
+gbkfit.lensing), which the opacity of its galaxies dims: its plan then
+gives the transmission of its column (see ScenePlan.transmission).
 """
 
 import abc
@@ -12,13 +15,15 @@ import enum
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
+import astropy.units
 import numpy as np
+import scipy.constants
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.grid import Coords, Grid
+from gbkfit.grid import Coords, Grid, VelocityConvention
 from gbkfit.params import ParamValues
 from ._galaxy_plan import GalaxyPlan
-from ._opacity import opacity_cubes
+from ._opacity import check_behind, opacity_cubes
 from ._transfer import (
     MAX_SUBCHANNELS, LineResolution, TransferMember, TransferPlan,
     check_emitters, warn_resolution)
@@ -106,6 +111,13 @@ class Scene:
     galaxy among those of its group of galaxies (e.g. ObservationGroup),
     and its extra outputs its label as the id 'galaxy' (those of a group
     of them, its name as the id 'group').
+
+    Light can enter a scene from behind (behind; e.g. that of the planes
+    behind a lens plane, see gbkfit.lensing): the opacity of its galaxies
+    then dims it too, through their whole column (see
+    ScenePlan.transmission). A scene can be drawn on the source plane of a
+    gravitational lens (lensed), whose image the lens draws (see
+    gbkfit.lensing): its components are told so (see SceneTarget).
     """
 
     def __init__(
@@ -116,7 +128,9 @@ class Scene:
             emitters: Sequence[tuple[int, ...]],
             view: View,
             order: Sequence[DepthUnit] | None = None,
-            data_unit: DataUnit | None = None
+            data_unit: DataUnit | None = None,
+            behind: bool = False,
+            lensed: bool = False
     ):
         self._galaxies = tuple(galaxies)
         self._mappings = tuple(mappings)
@@ -124,6 +138,8 @@ class Scene:
         self._emitters = tuple(emitters)
         self._view = view
         self._data_unit = data_unit
+        self._behind = behind
+        self._lensed = lensed
         order = tuple(order or ())
         ordered = {g for unit in order for g in unit.galaxies}
         self._order = order + tuple(
@@ -140,6 +156,33 @@ class Scene:
     def view(self) -> View:
         """Return what it sees of the light of its components (see View)."""
         return self._view
+
+    def behind(self) -> bool:
+        """
+        Check whether light enters it from behind (see the class), which
+        its opacity dims (see ScenePlan.transmission).
+        """
+        return self._behind
+
+    def lensed(self) -> bool:
+        """
+        Check whether it is drawn on the source plane of a gravitational
+        lens (see the class).
+        """
+        return self._lensed
+
+    def line_opacity(self) -> bool:
+        """
+        Check whether a component that it draws has line opacity (see
+        LineOpacity): radiative transfer then marches it at the
+        sub-channels of each channel (see Depth: subchannels), and the
+        transmission of its column is of each sub-channel (see
+        ScenePlan.transmission).
+        """
+        return any(
+            not o.dims_others()
+            for components in self._drawn() for c in components
+            if (o := c.opacity()) is not None)
 
     def emitters(self) -> tuple[tuple[int, ...], ...]:
         """
@@ -162,28 +205,36 @@ class Scene:
         galaxies, see Galaxy.absorbers) decide (see SceneEvaluation):
 
         - by radiative transfer if one has line opacity (see LineOpacity),
-          or there are several galaxies and one has opacity (its light,
-          or that of the others behind it, is then dimmed by the dust in
-          front of it, in their order);
+          or one has opacity and there are several galaxies, or light from
+          behind (its light, or that of the others behind it, is then
+          dimmed by the dust in front of it, in their order; and the light
+          from behind, by all of it, see ScenePlan.transmission);
         - otherwise on a depth axis if one is thick in the emission it is
           seen in (see Component.thick) or has opacity;
         - otherwise on the plane of the sky.
         """
-        drawn = [
-            [galaxy.components()[i]
-             for i in sorted(set(emitters) | set(galaxy.absorbers()))]
-            for galaxy, emitters in zip(self._galaxies, self._emitters)]
-        opacities = [
-            [c.opacity() for c in components if c.opacity() is not None]
-            for components in drawn]
-        if any(not o.dims_others() for galaxy in opacities for o in galaxy) \
-                or (len(drawn) > 1 and any(opacities)):
+        drawn = self._drawn()
+        opacity = any(
+            c.opacity() is not None
+            for components in drawn for c in components)
+        if self.line_opacity() \
+                or (opacity and (len(drawn) > 1 or self._behind)):
             return SceneEvaluation.TRANSFER
-        if any(opacities) or any(
+        if opacity or any(
                 c.needs_depth(self._view)
                 for components in drawn for c in components):
             return SceneEvaluation.DEPTH
         return SceneEvaluation.PLANE
+
+    def _drawn(self) -> list[list['Component']]:
+        """
+        Return the components that it draws of each galaxy: its emitters
+        and its absorbers (see Galaxy.absorbers).
+        """
+        return [
+            [galaxy.components()[i]
+             for i in sorted(set(emitters) | set(galaxy.absorbers()))]
+            for galaxy, emitters in zip(self._galaxies, self._emitters)]
 
     def target(
             self,
@@ -203,7 +254,7 @@ class Scene:
         return SceneTarget(
             driver, grid if image else grid.spatial(),
             IMAGE_SPECTRAL_AXIS if image else grid.spectral(), dtype,
-            self._view, self._data_unit, smoothing)
+            self._view, self._data_unit, smoothing, self._lensed)
 
     def galaxy_label(self, galaxy: int) -> str:
         """
@@ -281,7 +332,9 @@ class ScenePlan(abc.ABC):
     The evaluation of a scene on a grid (e.g. along the line of sight of
     an observation, as it needs, see Scene.evaluation and
     gbkfit.observation.plan_scene): the plan of each galaxy, whose light
-    adds up in the image or spectral cube.
+    adds up in the image or spectral cube, and of a scene with light from
+    behind it (see Scene.behind), the transmission of its column at each
+    evaluation (see transmission).
     """
 
     def __init__(self, scene: Scene, grid: Grid, target: SceneTarget):
@@ -315,6 +368,22 @@ class ScenePlan(abc.ABC):
         self._evaluate(
             params, values, [galaxy.states for galaxy in galaxies],
             {self._key: data}, extras, out_extra)
+
+    @abc.abstractmethod
+    def transmission(self) -> DeviceArray | None:
+        """
+        Return the transmission of its scene for the light from behind it
+        (see Scene.behind) at its last evaluation (see evaluate): the
+        fraction of that light that its whole column lets through, at each
+        spaxel of its grid, for each row of the light, an array of shape
+        (nrows, ny, nx) on its driver, which each evaluation writes. Its
+        rows are the channels of its grid (one for an image), or with line
+        opacity the sub-channels of each, as radiative transfer marches it
+        (see TransferScenePlan): those of the light from behind that it
+        dims. None if no light enters from behind, or its galaxies have
+        no opacity (the light passes whole).
+        """
+        pass
 
     @abc.abstractmethod
     def _evaluate(
@@ -371,6 +440,15 @@ class AdditiveScenePlan(ScenePlan):
         self._dust = [galaxy_cubes.model for galaxy_cubes in cubes]
         self._depth = depth
 
+    def transmission(self) -> None:
+        """
+        Return None: the light from behind a scene passes it whole, as a
+        scene that it evaluates with light from behind has no opacity
+        (that of one with opacity is evaluated by radiative transfer, see
+        Scene.evaluation).
+        """
+        return None
+
     @staticmethod
     def check(scene: Scene) -> None:
         """
@@ -421,6 +499,14 @@ class TransferScenePlan(ScenePlan):
     of cubes of opacity holds the dust of all of them (see opacity_cubes).
     (The light of galaxies without opacity just adds up, in any order.)
 
+    With light from behind the scene (see Scene.behind), each evaluation
+    also writes the transmission of its whole column (see transmission):
+    from the state of the march after its last unit (the optical depth of
+    the dust of each cube of opacity, at the wavelength of each row of the
+    light from behind in the frame of each kind of dust, see
+    opacity_cubes; and that of the lines at each sub-channel), as light
+    behind its last voxel is dimmed.
+
     With extra outputs, it logs a warning if the march resolves line
     opacity, or the depth axis the velocity of the light, too coarsely
     (see warn_resolution).
@@ -431,8 +517,9 @@ class TransferScenePlan(ScenePlan):
         """
         Check, without a driver, that a scene can be evaluated so: the
         dust of all its galaxies in one set of cubes of opacity (see
-        opacity_cubes), and the components that emit in each unit (see
-        _transfer.check_emitters).
+        opacity_cubes), which can dim the light from behind it, if any
+        (as far as its view tells, see check_behind), and the components
+        that emit in each unit (see _transfer.check_emitters).
 
         Raises
         ------
@@ -442,6 +529,8 @@ class TransferScenePlan(ScenePlan):
         opacity_cubes(
             scene._galaxies, scene._emitters, scene.view(),
             np.float64)
+        if scene.behind():
+            check_behind(scene._galaxies, scene.view())
         for unit in scene._order:
             check_emitters(
                 sum(len(scene._emitters[g]) for g in unit.galaxies))
@@ -460,9 +549,16 @@ class TransferScenePlan(ScenePlan):
         target = scene.target(driver, grid, dtype, smoothing)
         super().__init__(scene, grid, target)
         spatial = self._spatial
+        # The rows of the light from behind, if any: those of the march,
+        # the sub-channels of each channel with line opacity
+        rows_per_channel = subchannels if scene.line_opacity() else 1
+        behind = None
+        if scene.behind():
+            behind = _behind_wavelengths(
+                target.view, self._spectral, rows_per_channel)
         cubes = opacity_cubes(
             scene._galaxies, scene._emitters, target.view,
-            dtype)
+            dtype, behind)
         # (the dust of all the galaxies, which dims the light of those
         # behind it: one model, see opacity_cubes)
         self._dust = cubes[0].model
@@ -491,6 +587,22 @@ class TransferScenePlan(ScenePlan):
         if any(plan.has_line_opacity() for plan in self._plans):
             self._tau = driver.mem_alloc_d(
                 (self._spectral.size[0] * subchannels,) + shape, dtype)
+        # The transmission of the column, with light from behind, and the
+        # ratios of the cubes of opacity at each of its rows (their host
+        # array, which the model of the dust updates in place, and its
+        # copy on the device; none without dust)
+        self._transmission = None
+        self._behind_ratios = None
+        if scene.behind():
+            self._transmission = driver.mem_alloc_d(
+                (self._spectral.size[0] * rows_per_channel,) + shape, dtype)
+            if self._dust is not None:
+                ratios = self._dust.behind
+                self._behind_ratios = (ratios, driver.mem_copy_h2d(ratios))
+            self._gmodel = driver.native_class('GModel', dtype)()
+
+    def transmission(self) -> DeviceArray | None:
+        return self._transmission
 
     def _evaluate(
             self,
@@ -530,11 +642,56 @@ class TransferScenePlan(ScenePlan):
                 self._tau if line_opacity else None, positions)
             if resolution is not None:
                 resolutions.append(resolution)
+        if self._transmission is not None:
+            self._transmit()
         if resolutions:
             warn_resolution(
                 LineResolution(*np.max(resolutions, axis=0)),
                 self._spectral.coords.step[0], self._subchannels,
                 self._depth_step)
+
+    def _transmit(self) -> None:
+        """
+        Write the transmission of the column of the scene (see
+        transmission), from the state of the march after its last unit:
+        the optical depth of the dust in each cube of opacity, at the
+        wavelength of each row (its ratios), and of the lines at each
+        row, if any.
+        """
+        ratios = None
+        if self._behind_ratios is not None:
+            host, ratios = self._behind_ratios
+            self._driver.mem_copy_h2d(host, ratios)
+        self._gmodel.transfer_transmission(
+            opacity_front=self._opacity_front, ratios=ratios,
+            tau=self._tau, out=self._transmission)
+
+
+def _behind_wavelengths(
+        view: View, spectral: Grid, subchannels: int
+) -> tuple[float | None, ...]:
+    """
+    Return the observed wavelengths (um, in vacuum) of the rows of the
+    light from behind a scene of a view on a spectral axis (one channel,
+    of no width, for an image; see Scene.target): the centre of each of
+    the given number of sub-channels of each of its channels, as the
+    march of radiative transfer places them (see the native
+    transfer_march), or None for each without a rest of the axis; or the
+    band of an image, None if not known.
+    """
+    if not view.spectral:
+        return (None if view.band is None
+                else view.band.wavelength().to_value(astropy.units.um),)
+    step = spectral.coords.step[0]
+    size = spectral.size[0] * subchannels
+    velocities = spectral.zero()[0] - step / 2 \
+        + (np.arange(size) + 0.5) * step / subchannels
+    convention = VelocityConvention.of(spectral.coords)
+    if convention.rest() is None:
+        return (None,) * size
+    # (from the frequencies, in vacuum whatever the medium of the axis)
+    wavelengths = scipy.constants.c / convention.frequency(velocities)
+    return tuple(float(w) * 1e6 for w in wavelengths)
 
 
 def _bounding_radius(galaxy: 'Galaxy', emitters: Sequence[int]) -> float:

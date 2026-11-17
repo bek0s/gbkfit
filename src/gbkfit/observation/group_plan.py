@@ -112,6 +112,11 @@ class GroupPlan:
         The driver of the stage of each galaxy (see Galaxy.plan_stage).
     observation_drivers : Sequence of Driver
         The driver of each observation (see Observation.plan).
+    reference : ParamValues, optional
+        The values of the parameters at which the plans of the
+        observations lay out what they lay out once (see
+        ParamSpace.reference; the grids of the planes behind lenses),
+        which need them; its copies keep them.
 
     Raises
     ------
@@ -127,7 +132,8 @@ class GroupPlan:
             self,
             group: 'ObservationGroup',
             galaxy_drivers: Sequence[Driver],
-            observation_drivers: Sequence[Driver]
+            observation_drivers: Sequence[Driver],
+            reference: ParamValues | None = None
     ):
         galaxies, observations = group.galaxies(), group.observations()
         if len(galaxy_drivers) != len(galaxies) \
@@ -140,12 +146,14 @@ class GroupPlan:
         self._group = group
         self._galaxy_drivers = tuple(galaxy_drivers)
         self._observation_drivers = tuple(observation_drivers)
+        self._reference = reference
         self._functions = _GroupFunctions(group, self._galaxy_drivers)
         plans = []
         for i, (observation, driver) in enumerate(
                 zip(observations, self._observation_drivers)):
             with config_path('observations', i):
-                plans.append(observation.plan(driver, group.seen_by(i)))
+                plans.append(observation.plan(
+                    driver, group.seen_by(i), reference))
         self._plans = tuple(plans)
         stages = []
         for g, (galaxy, driver) in enumerate(
@@ -224,7 +232,8 @@ class GroupPlan:
     def __reduce__(self) -> tuple[type, tuple]:
         # (pickled copies make their memory, lock and threads again)
         return GroupPlan, (
-            self._group, self._galaxy_drivers, self._observation_drivers)
+            self._group, self._galaxy_drivers, self._observation_drivers,
+            self._reference)
 
     def __copy__(self) -> Self:
         # (shallow copies share them, see with_datasets)
@@ -243,6 +252,14 @@ class GroupPlan:
     def observation_drivers(self) -> tuple[Driver, ...]:
         """Return the driver of each observation."""
         return self._observation_drivers
+
+    def reference(self) -> ParamValues | None:
+        """
+        Return the values of the parameters at which the plans of the
+        observations lay out what they lay out once, if given (see
+        ObservationGroup.plan).
+        """
+        return self._reference
 
     def timers(self) -> timeutils.Timers:
         """Return the times of the steps of its evaluations."""
@@ -305,9 +322,9 @@ class GroupPlan:
         for i, (plan, cache, new, old, driver) in enumerate(zip(
                 self._plans, self._model_caches, news, olds,
                 self._observation_drivers)):
-            if not old.same_plan(new):
+            if not old.same_plan(new, group.seen_by(i)):
                 with config_path('observations', i):
-                    plan = new.plan(driver, group.seen_by(i))
+                    plan = new.plan(driver, group.seen_by(i), self._reference)
                 cache = copied._model_cache(i)
             elif i in copied._recording_of:
                 cache = copied._model_cache(i)

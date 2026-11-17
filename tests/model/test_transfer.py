@@ -482,7 +482,7 @@ def galaxies_model(
         depth_order = [galaxy['name'] for galaxy in galaxies]
     group = ObservationGroup(
         galaxy_parser.load(galaxies),
-        observation_parser.load([observation]), depth_order)
+        observation_parser.load([observation]), depth_order=depth_order)
     plan = group.plan(driver)
     pdescs = group.pdescs()
     params = gbkfit.params.ParamSpace.from_properties(pdescs, {
@@ -785,3 +785,217 @@ def test_lines_of_zero_dispersion_are_left_out_of_the_checks(
         evaluate_cases, transfer_case(driver, [gas]),
         PROPERTIES | dict(gas_op_a=50, gas_dpt_a=0))
     assert extra.get('total_line_tau').data.max() > 1
+
+
+# The transmission of a scene for the light from behind it (e.g. of the
+# planes behind a lens plane): that of the whole column of its galaxies,
+# as the light of a galaxy marched behind them is dimmed
+
+def plan_galaxies(
+        driver, galaxies, emitters, view, grid, behind=False, subchannels=1):
+    """
+    Return the galaxies of the given configurations (with names), the
+    names of their parameters (each prefixed by the name of its galaxy)
+    and the plan of their scene on a grid (see plan_scene): of the light
+    of the given components of each (emitters, by index), front to back in
+    their order, with light from behind it or not, of the given number of
+    sub-channels of the march.
+    """
+    from gbkfit.model import DepthUnit, Scene
+    from gbkfit.observation.depth import Depth, plan_scene
+    loaded = galaxy_parser.load(galaxies)
+    mappings = [
+        {name: f'{galaxy.name()}_{name}' for name in galaxy.pdescs()}
+        for galaxy in loaded]
+    scene = Scene(
+        loaded, mappings, [galaxy.name() for galaxy in loaded], emitters,
+        view, [DepthUnit((g,)) for g in range(len(loaded))], None, behind)
+    plan = plan_scene(
+        scene, Depth(extent=120, subchannels=subchannels), driver, grid,
+        np.dtype(np.float64), None if grid.spectral_axis is None else 20.0)
+    return loaded, mappings, plan
+
+
+def evaluate_galaxies(driver, planned, properties):
+    """
+    Return the model of a scene of galaxies planned by plan_galaxies (an
+    image of one channel, or a spectral cube) at the given values of
+    their parameters (the defaults of the others), and the transmission
+    of its column (see ScenePlan.transmission; None if none).
+    """
+    import gbkfit.params
+    loaded, mappings, plan = planned
+    pdescs = {
+        mapping[name]: pdesc for galaxy, mapping in zip(loaded, mappings)
+        for name, pdesc in galaxy.pdescs().items()}
+    params = gbkfit.params.ParamSpace.from_properties(pdescs, {
+        key: value for key, value in properties.items()
+        if key in pdescs}).evaluate()
+    states = [
+        galaxy.plan_stage(driver=driver).evaluate(
+            {name: params[full] for name, full in mapping.items()})
+        for galaxy, mapping in zip(loaded, mappings)]
+    grid = plan._spatial
+    nchannels = plan._spectral.size[0]
+    data = driver.mem_alloc_d(
+        (nchannels, grid.size[1], grid.size[0]), np.float64)
+    driver.mem_fill(data, 0)
+    plan.evaluate(params, states, data, None)
+    transmission = plan.transmission()
+    return driver.mem_copy_d2h(data), None if transmission is None \
+        else driver.mem_copy_d2h(transmission)
+
+
+# Galaxies of stars whose light is in a band, and of dust, face-on
+STARS = dict(THIN_GAS, name='stars', emission=dict(type='band')) | dict(
+    vptraits=None, dptraits=None)
+FACE_ON = dict(
+    stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0, stars_rpt_a=1,
+    stars_rpt_s=4, dust_xpos=0.5, dust_ypos=0, dust_posa=0, dust_incl=0,
+    dust_rpt_a=0.5, dust_rpt_s=4, dust_rht_s=1)
+
+
+def dust_of(law):
+    """The configuration of dust of an extinction law (grey if None)."""
+    return DUST | dict(opacity=dict(type='dust', law=law))
+
+
+@pytest.mark.parametrize('law', [
+    None, dict(type='table', wavelengths=[0.2, 1.0], ratios=[3.0, 1.0])])
+def test_the_transmission_of_a_scene_dims_the_light_behind_it(driver, law):
+    # An image of a galaxy of stars and dust at z = 0.5 in front of one of
+    # stars at z = 1: the light of both is that of the one in front, plus
+    # that of the one behind through the transmission of the column of the
+    # one in front, alone with light from behind; that of a law is that of
+    # grey dust at the ratio of the law at the band in the rest frame of
+    # the dust, exp(-tau(lambda / (1 + z)))
+    from gbkfit.grid import make_grid
+    from gbkfit.model import LineCatalogue
+    band = LineCatalogue().band('sdss_r')
+    view = View(spectral=False, band=band)
+    grid = make_grid((24, 24))
+    front = dict(name='front', components=[STARS, dust_of(law)], redshift=0.5)
+    back = dict(name='back', components=[STARS], redshift=1.0)
+    properties = galaxy_properties('front', FACE_ON) | galaxy_properties(
+        'back', FACE_ON | dict(stars_rpt_a=2, stars_xpos=-1))
+
+    def model(galaxies, emitters, behind=False, galaxy_law=law):
+        galaxies = [
+            g | dict(components=[STARS, dust_of(galaxy_law)])
+            if g['name'] == 'front' else g for g in galaxies]
+        return evaluate_galaxies(driver, plan_galaxies(
+            driver, galaxies, emitters, view, grid, behind), properties)
+    both, none = model([front, back], [(0,), (0,)])
+    light, transmission = model([front], [(0,)], behind=True)
+    behind, _ = model([back], [(0,)])
+    assert none is None and transmission.shape == (1, 24, 24)
+    assert transmission.min() < 0.8
+    assert_same_model(both, light + transmission * behind)
+    _, grey = model([front], [(0,)], behind=True, galaxy_law=None)
+    wavelength = band.wavelength().to_value('um') / 1.5
+    ratio = 1.0 if law is None else 3 - 2.5 * (wavelength - 0.2)
+    np.testing.assert_allclose(
+        np.log(transmission), ratio * np.log(grey), rtol=1e-9)
+
+
+def test_the_transmission_of_a_cube_is_at_each_channel(driver):
+    # The dust of a law at z = 0.3 dims the light from behind at each
+    # channel at its wavelength in the rest frame of the dust: lambda / 1.3
+    # (a cube of optical velocities about the observed halpha of a galaxy
+    # at z = 0.3, in vacuum)
+    from gbkfit.grid import make_grid
+    rest = 6564.61e-4 * 1.3
+    grid = make_grid(
+        (24, 24, 31), step=(1, 1, 10), spectral_axis=2,
+        rest=f'{rest} um', medium='vacuum', convention='optical')
+    law = dict(type='table', wavelengths=[0.6560, 0.6570], ratios=[3.0, 0.5])
+    gas = GAS | dict(emission=dict(type='lines', lines=['halpha']))
+    properties = galaxy_properties('front', PROPERTIES | FACE_ON)
+
+    def transmission(dust_law):
+        galaxies = [dict(
+            name='front', components=[gas, dust_of(dust_law)],
+            redshift=0.3)]
+        return evaluate_galaxies(driver, plan_galaxies(
+            driver, galaxies, [(0,)], View(spectral=True), grid, True),
+            properties)[1]
+    grey = transmission(None)
+    dimmed = transmission(law)
+    velocities = (np.arange(31) - 15) * 10.0
+    wavelengths = rest * (1 + velocities / 299792.458) / 1.3
+    ratios = np.interp(wavelengths, [0.6560, 0.6570], [3.0, 0.5])
+    assert grey.shape == (31, 24, 24) and grey.min() < 0.8
+    np.testing.assert_allclose(
+        np.log(dimmed), ratios[:, None, None] * np.log(grey), rtol=1e-9)
+    assert ratios.max() - ratios.min() > 0.1
+
+
+def test_the_transmission_of_line_opacity_is_at_each_subchannel(driver):
+    # Gas with line opacity in front of thin gas behind it: the light of
+    # both, marched at 4 sub-channels, is that of the gas in front plus
+    # the mean over the sub-channels of each channel of its transmission
+    # (at each sub-channel) times the light behind on channels 4 times
+    # narrower
+    from gbkfit.grid import make_grid
+    gas = line_opacity(GAS, dict(type='uniform'))
+    front = dict(name='front', components=[gas])
+    back = dict(name='back', components=[THIN_GAS])
+    properties = galaxy_properties('front', PROPERTIES | dict(
+        gas_incl=0, gas_dpt_a=4, gas_op_a=0)) | galaxy_properties(
+        'back', PROPERTIES | dict(gas_posa=120, gas_dpt_a=8))
+
+    def model(galaxies, nchannels, step, behind=False, subchannels=1):
+        grid = make_grid(
+            (24, 24, nchannels), step=(1, 1, step), spectral_axis=2,
+            convention='relativistic')
+        return evaluate_galaxies(driver, plan_galaxies(
+            driver, galaxies, [(0,)] * len(galaxies), View(spectral=True),
+            grid, behind, subchannels), properties)
+    thin, _ = model([front], 31, 10, subchannels=4)
+    properties |= dict(front_gas_op_a=3 / thin.max())
+    both, _ = model([front, back], 31, 10, subchannels=4)
+    light, transmission = model([front], 31, 10, True, subchannels=4)
+    behind, _ = model([back], 31 * 4, 2.5)
+    assert transmission.shape == (31 * 4, 24, 24)
+    assert transmission.min() < 0.5
+    passed = (transmission * behind).reshape((31, 4, 24, 24)).mean(axis=1)
+    assert_same_model(both, light + passed)
+
+
+@pytest.mark.parametrize('components, behind, evaluation', [
+    ([STARS], True, 'plane'),
+    ([STARS, DUST], False, 'depth'),
+    ([STARS, DUST], True, 'transfer')])
+def test_light_from_behind_needs_the_column_of_the_opacity(
+        components, behind, evaluation):
+    # A scene without opacity lets the light from behind through whole; one
+    # with opacity is marched by radiative transfer, for its whole column
+    from gbkfit.model import Scene
+    galaxy = galaxy_parser.load(dict(components=components))
+    scene = Scene(
+        [galaxy], [{}], ['galaxy'], [(0,)],
+        View(spectral=False), behind=behind)
+    assert scene.evaluation().value == evaluation
+    assert scene.behind() is behind and not scene.line_opacity()
+
+
+def test_a_scene_without_light_from_behind_has_no_transmission(driver):
+    from gbkfit.grid import make_grid
+    galaxies = [dict(name='front', components=[STARS, DUST])]
+    for behind in (False, True):
+        _, transmission = evaluate_galaxies(driver, plan_galaxies(
+            driver, galaxies, [(0,)], View(spectral=False),
+            make_grid((24, 24)), behind), galaxy_properties('front', FACE_ON))
+        assert (transmission is None) is not behind
+
+
+def test_light_from_behind_needs_a_known_wavelength():
+    # Dust of a law dims the light from behind at its wavelength: an image
+    # needs its band
+    from gbkfit.model import Scene, TransferScenePlan
+    galaxy = galaxy_parser.load(dict(components=[
+        STARS, dust_of(dict(type='ccm'))], redshift=0.5))
+    scene = Scene(
+        [galaxy], [{}], ['galaxy'], [()], View(spectral=False), behind=True)
+    with pytest.raises(ValueError, match="an image needs its band"):
+        TransferScenePlan.check(scene)

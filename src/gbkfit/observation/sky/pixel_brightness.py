@@ -12,20 +12,19 @@ from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, grid_options
 from gbkfit.instrument import Instrument
+from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from ..depth import Depth
-from ..foreground import Foreground
 from ..plan import ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube
-from ._cube_plan import CubePlan
+from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
 from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size)
-from .base import DType, ObservationSky, SkyOptions
+from .base import DType, ObservationSky, SkyOptions, unmasked_pixels
 
 if TYPE_CHECKING:
-    from gbkfit.model import Scene
     from ..noise import Noise
 
 
@@ -112,7 +111,7 @@ class ObservationPixelBrightness(ObservationSky):
             rval: Rval | None = None,
             rota: Rota | None = None,
             median_size: MedianSize | None = None,
-            foreground: Foreground | None = None,
+            source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
@@ -136,10 +135,13 @@ class ObservationPixelBrightness(ObservationSky):
         check_median_size(median_size)
         self._median_size = median_size
         super().__init__(
-            self._make_grid(**grid), foreground, instrument, galaxies,
+            self._make_grid(**grid), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
             offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
             unit)
+
+    def _measured_pixels(self) -> np.ndarray:
+        return unmasked_pixels(self._dataset, self._grid.size[1::-1])
 
     def keys(self) -> tuple[str, ...]:
         return ('brightness',)
@@ -176,7 +178,9 @@ class ObservationPixelBrightness(ObservationSky):
                 "an image has no spectral axis for an LSF; remove the LSF "
                 "of the instrument")
 
-    def _plan(self, driver: Driver, scene: 'Scene') -> 'PixelBrightnessPlan':
+    def _plan(
+            self, driver: Driver, drawing: SkyDrawing
+    ) -> 'PixelBrightnessPlan':
         options = self._sky_options
         # The cube of an image has one channel (of no width)
         coords = self._grid.coords
@@ -192,7 +196,7 @@ class ObservationPixelBrightness(ObservationSky):
             dtype=options.dtype,
             fft_dtype=options.fft_dtype,
             median_size=self._median_size)
-        return PixelBrightnessPlan(model_cube, driver, scene, options)
+        return PixelBrightnessPlan(model_cube, driver, drawing, options)
 
 
 class PixelBrightnessPlan(CubePlan):

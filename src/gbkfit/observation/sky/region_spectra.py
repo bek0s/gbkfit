@@ -13,12 +13,13 @@ from gbkfit.dataset import Data, Dataset, DatasetRegionSpectra, Regions
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, SpectraData, SpectralAxis
 from gbkfit.instrument import Instrument
+from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from ..depth import Depth
-from ..foreground import Foreground
 from ..plan import FluxScale, ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube
+from ._cube_plan import SkyDrawing
 from ._data_units import flux_data_unit
 from ._options import Rota, Rpix, Rval, Size, Step
 from ._regions import (
@@ -27,8 +28,6 @@ from .base import DType, SkyOptions
 
 if TYPE_CHECKING:
     import scipy.sparse
-
-    from gbkfit.model import Scene
 
 
 __all__ = [
@@ -128,7 +127,7 @@ class ObservationRegionSpectra(ObservationRegions):
             rpix: Rpix | None = None,
             rval: Rval | None = None,
             rota: Rota | None = None,
-            foreground: Foreground | None = None,
+            source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
@@ -158,7 +157,7 @@ class ObservationRegionSpectra(ObservationRegions):
                 f"channels; the spectral axis has "
                 f"{grid.spectral().size[0]}")
         super().__init__(
-            grid, foreground, instrument, galaxies, components, lines,
+            grid, source_grid, instrument, galaxies, components, lines,
             continuum, band, pixel_weights, flux_scale, offsets, dataset,
             oversampling, depth, dtype, fft_dtype, name, unit)
 
@@ -210,7 +209,9 @@ class ObservationRegionSpectra(ObservationRegions):
     def _output(self, data: np.ndarray) -> SpectraData:
         return SpectraData(data, self.spectral_grid().coords)
 
-    def _plan(self, driver: Driver, scene: 'Scene') -> 'RegionSpectraPlan':
+    def _plan(
+            self, driver: Driver, drawing: SkyDrawing
+    ) -> 'RegionSpectraPlan':
         options = self._sky_options
         # The masking of ModelCube is disabled: every pixel of a region adds
         # to its spectrum
@@ -225,7 +226,7 @@ class ObservationRegionSpectra(ObservationRegions):
             fft_dtype=options.fft_dtype)
         return RegionSpectraPlan(
             self._flux_weights, self._regions.valid(), model_cube, driver,
-            scene, options)
+            drawing, options)
 
 
 class RegionSpectraPlan(RegionsPlan):
@@ -242,10 +243,10 @@ class RegionSpectraPlan(RegionsPlan):
             valid: np.ndarray | None,
             model_cube: _model_cube.ModelCube,
             driver: Driver,
-            scene: 'Scene',
+            drawing: SkyDrawing,
             options: SkyOptions
     ):
-        super().__init__(weights, model_cube, driver, scene, options)
+        super().__init__(weights, model_cube, driver, drawing, options)
         self._valid = self._valid_cube = None
         if valid is not None:
             self._valid = driver.mem_copy_h2d(valid.astype(options.dtype))

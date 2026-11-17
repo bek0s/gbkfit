@@ -727,6 +727,40 @@ class ParamSpace(Serializable):
         self._check_values(buffer, values)
         return values
 
+    def reference(self) -> ParamValues:
+        """
+        Evaluate the parameters at a reference point: each free element at
+        its 'value' (the start of a fit), or else at the median of its
+        proper prior (see FreeElement.proper_prior), as samplers, which
+        need no 'value', give them. Things that are laid out once for all
+        evaluations are laid out there (e.g. the source grids of a
+        gravitational lens).
+
+        Returns
+        -------
+        ParamValues
+            The values of all parameters, by name (see evaluate).
+
+        Raises
+        ------
+        ValueError
+            If a free element has neither a 'value' nor a proper prior.
+        ParamEvaluationError
+            If the evaluation fails (see evaluate).
+        """
+        free = []
+        for name, element in zip(self._free_names, self._free_elements):
+            given = self._free[element]
+            if (value := given.value()) is None:
+                try:
+                    value = float(given.proper_prior().ppf(0.5))
+                except ValueError as e:
+                    raise ValueError(
+                        f"free parameter '{name}' has no reference value: "
+                        f"give it a 'value', or a prior ({e})") from e
+            free.append(value)
+        return self.evaluate(free)
+
     def derived_values(
             self,
             values: ParamValues,

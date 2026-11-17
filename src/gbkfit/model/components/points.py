@@ -358,6 +358,15 @@ class Point(Component):
             opacity_ratios: np.ndarray | None,
             redshift: float
     ) -> PointPlan:
+        # A point is unresolved: on the source plane of a lens, its flux
+        # would land in one pixel of the grid, which the rays of the image
+        # sample (or miss) at random; its images need the lens equation
+        # solved for it instead
+        if target.lensed:
+            raise ValueError(
+                "a point behind a gravitational lens is not supported: its "
+                "images need the lens equation solved for it; leave it out "
+                "of the components the observation sees")
         # (it always emits: it has no opacity, so that a plan of it that
         # does not emit, which would take no unit of the data, is not made)
         setup = self.emission().setup(

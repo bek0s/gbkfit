@@ -289,25 +289,221 @@ def test_mmaps_gaussian(driver):
             result_map[valid], expected_map[valid], rtol=1e-3)
 
 
-def test_lens_resample(driver):
-    # Each pixel of the image takes the bilinear interpolation of the
-    # source (nz, sy, sx) at its position on the source (in pixels): exact
-    # for a ramp, and 0 beyond the source
+def bilinear(data, x, y, outside):
+    """
+    Return the bilinear interpolation of each plane of data (n, sy, sx)
+    at the points (x, y) of the pixel coordinates of its grid (each of
+    shape (ny, nx)), with the value outside off the grid: (n, ny, nx).
+    """
+    n, sy, sx = data.shape
+    # (a point far off the grid has the value just off it)
+    x, y = np.clip(x, -2, sx + 1), np.clip(y, -2, sy + 1)
+    x0, y0 = np.floor(x).astype(int), np.floor(y).astype(int)
+    fx, fy = x - x0, y - y0
+    value = np.zeros((n,) + x.shape)
+    for dy in (0, 1):
+        for dx in (0, 1):
+            xs, ys = x0 + dx, y0 + dy
+            inside = (xs >= 0) & (ys >= 0) & (xs < sx) & (ys < sy)
+            weight = (fx if dx else 1 - fx) * (fy if dy else 1 - fy)
+            pixels = data[:, np.clip(ys, 0, sy - 1), np.clip(xs, 0, sx - 1)]
+            value += weight * np.where(inside, pixels, outside)
+    return value
+
+
+def lens_composite_expected(
+        source_x, source_y, emission, transmission, behind, nz, shape):
+    """
+    Return the light that leaves a plane toward the viewer (see the
+    native lens_composite), nz channels of the given shape (ny, nx), in
+    numpy: the emission plus the mean over the sub-channels of each
+    channel of the transmission times the light from behind, the emission
+    and the transmission at the position of each pixel on the plane (0
+    light and a transmission of 1 off it; neither for a ray not traced),
+    without positions at the pixel itself.
+    """
+    if source_x is None:
+        source_y, source_x = np.indices(shape, dtype=float)
+    traced = ~(np.isnan(source_x) | np.isnan(source_y))
+    x, y = np.where(traced, source_x, 0), np.where(traced, source_y, 0)
+    value = np.zeros((nz,) + shape)
+    if emission is not None:
+        value += np.where(traced, bilinear(emission, x, y, 0), 0)
+    if behind is not None:
+        through = 1 if transmission is None \
+            else np.where(traced, bilinear(transmission, x, y, 1), 1)
+        value += (through * behind).reshape(
+            (nz, -1) + shape).mean(axis=1)
+    return value
+
+
+def lens_composite_case(rng, nz, subchannels, traced):
+    """
+    Return the arrays of a case of lens_composite (on the host, in
+    DTYPE): the positions of the pixels of an image of 7 x 9 pixels on a
+    plane of 6 x 8 pixels (across it and beyond, with a ray not traced
+    and one far off it; None without positions, on the image grid), the
+    emission (nz channels), the transmission and the light from behind (nz
+    times the sub-channels).
+    """
+    ny, nx = 7, 9
+    sy, sx = (6, 8) if traced else (ny, nx)
+    source_x = source_y = None
+    if traced:
+        source_y, source_x = np.meshgrid(
+            np.linspace(-1.5, sy + 0.5, ny), np.linspace(-1.5, sx + 0.5, nx),
+            indexing='ij')
+        source_x[3, 4] = np.nan
+        source_y[2, 5] = np.nan
+        source_x[5, 1] = 1e30
+        source_x, source_y = source_x.astype(DTYPE), source_y.astype(DTYPE)
+    nrows = nz * subchannels
+    return dict(
+        source_x=source_x, source_y=source_y,
+        emission=rng.uniform(0, 1, (nz, sy, sx)).astype(DTYPE),
+        transmission=rng.uniform(0, 1, (nrows, sy, sx)).astype(DTYPE),
+        behind=rng.uniform(0, 1, (nrows, ny, nx)).astype(DTYPE))
+
+
+@pytest.mark.parametrize('subchannels', [1, 3])
+@pytest.mark.parametrize('traced', [True, False])
+@pytest.mark.parametrize('given', [
+    ('emission', 'transmission', 'behind'), ('emission',),
+    ('emission', 'behind'), ('transmission', 'behind'), ('behind',)])
+def test_lens_composite(driver, subchannels, traced, given):
+    # The light that leaves a plane toward the viewer: its emission plus
+    # the light from behind through its transmission, both at the
+    # position of each pixel on the plane, averaged over the sub-channels
+    # of each channel (see lens_composite_expected)
     memory = Memory(driver)
     dmodel = driver.native_class('DModel', DTYPE)()
-    z, y, x = np.indices((2, 6, 8), dtype=DTYPE)
-    source = 1 + 2 * x + 3 * y + 10 * z
-    source_y, source_x = np.meshgrid(
-        np.linspace(0, 5, 7), np.linspace(0, 7, 9), indexing='ij')
-    source_x[0, 0], source_y[0, 0] = -2, 1
-    image = memory.to_device(np.zeros((2, 7, 9), DTYPE))
-    dmodel.lens_resample(
-        memory.to_device(source_x.astype(DTYPE)),
-        memory.to_device(source_y.astype(DTYPE)),
-        memory.to_device(source), image)
-    expected = 1 + 2 * source_x + 3 * source_y + 10 * np.arange(2)[:, None, None]
-    expected[:, 0, 0] = 0
-    np.testing.assert_allclose(memory.to_host(image), expected, rtol=1e-6)
+    nz = 2
+    case = lens_composite_case(
+        np.random.default_rng(3), nz, subchannels, traced)
+    for name in ('emission', 'transmission', 'behind'):
+        if name not in given:
+            case[name] = None
+    out = memory.to_device(np.full((nz, 7, 9), -1, DTYPE))
+    dmodel.lens_composite(
+        **{name: memory.to_device(value) for name, value in case.items()},
+        out=out)
+    expected = lens_composite_expected(**case, nz=nz, shape=(7, 9))
+    np.testing.assert_allclose(
+        memory.to_host(out), expected, rtol=1e-6, atol=1e-6)
+
+
+def test_lens_composite_in_place(driver):
+    # Without sub-channels, the light that leaves a plane can replace that
+    # from behind it, in place (each pixel is read before it is written)
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    case = lens_composite_case(np.random.default_rng(4), 2, 1, True)
+    expected = lens_composite_expected(**case, nz=2, shape=(7, 9))
+    device = {name: memory.to_device(value) for name, value in case.items()}
+    dmodel.lens_composite(**device, out=device['behind'])
+    np.testing.assert_allclose(
+        memory.to_host(device['behind']), expected, rtol=1e-6, atol=1e-6)
+
+
+@pytest.mark.cuda
+def test_lens_composite_on_the_host_and_cuda():
+    # The two drivers composite one case alike (in float64, to rounding)
+    import cupy
+    from gbkfit.driver.drivers.cuda import DriverCuda
+    from gbkfit.driver.drivers.host import DriverHost
+    if not cupy.cuda.is_available():
+        pytest.skip("no CUDA device found")
+    rng = np.random.default_rng(5)
+    case = {
+        name: None if value is None else value.astype(np.float64)
+        for name, value in lens_composite_case(rng, 3, 4, True).items()}
+    outs = []
+    for driver in (DriverHost(), DriverCuda()):
+        memory = Memory(driver)
+        out = memory.to_device(np.zeros((3, 7, 9)))
+        driver.native_class('DModel', np.float64)().lens_composite(
+            **{name: memory.to_device(v) for name, v in case.items()},
+            out=out)
+        outs.append(memory.to_host(out))
+    np.testing.assert_allclose(outs[1], outs[0], rtol=1e-13, atol=1e-15)
+
+
+@pytest.mark.parametrize('change, message', [
+    (dict(emission=(3, 6, 8)), "emission must have the channels of out"),
+    (dict(behind=(5, 7, 9)), "behind must have shape"),
+    (dict(transmission=(2, 6, 8)), "transmission must be on the grid"),
+    (dict(source_y=None), "source_x and source_y are given together"),
+    (dict(source_x=(7, 8), source_y=(7, 8)), "source_x must have shape"),
+    (dict(source_x=None, source_y=None),
+     "without positions, the plane must be on the grid of out"),
+    (dict(behind=None), "a transmission needs the light from behind")])
+def test_lens_composite_is_checked(driver, change, message):
+    # What the kernel cannot composite is an error, not a read out of
+    # bounds: arrays of other shapes are replaced
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    case = lens_composite_case(np.random.default_rng(6), 2, 2, True)
+    case |= {
+        name: None if shape is None else np.zeros(shape, DTYPE)
+        for name, shape in change.items()}
+    with pytest.raises(ValueError, match=message):
+        dmodel.lens_composite(
+            **{name: memory.to_device(v) for name, v in case.items()},
+            out=memory.to_device(np.zeros((2, 7, 9), DTYPE)))
+
+
+def test_lens_composite_in_place_needs_one_subchannel(driver):
+    memory = Memory(driver)
+    dmodel = driver.native_class('DModel', DTYPE)()
+    case = lens_composite_case(np.random.default_rng(7), 1, 2, True)
+    device = {name: memory.to_device(value) for name, value in case.items()}
+    with pytest.raises(ValueError, match="out can be behind only"):
+        dmodel.lens_composite(**device, out=device['behind'][:1])
+
+
+@pytest.mark.parametrize('dust, lines', [
+    (True, True), (True, False), (False, True), (False, False)])
+def test_transfer_transmission(driver, dust, lines):
+    # The transmission of the column of each spaxel at each row: that of
+    # the dust of each cube of opacity, at the ratio of the row, and of
+    # the lines at the row
+    memory = Memory(driver)
+    gmodel = driver.native_class('GModel', DTYPE)()
+    rng = np.random.default_rng(8)
+    nrows, ncubes, shape = 5, 3, (4, 6)
+    front = rng.uniform(0, 2, (ncubes,) + shape).astype(DTYPE)
+    ratios = rng.uniform(0.5, 2, (nrows, ncubes)).astype(DTYPE)
+    tau = rng.uniform(0, 2, (nrows,) + shape).astype(DTYPE)
+    depth = np.zeros((nrows,) + shape)
+    if dust:
+        depth += np.einsum('rk,kyx->ryx', ratios, front)
+    if lines:
+        depth += tau
+    out = memory.to_device(np.full((nrows,) + shape, -1, DTYPE))
+    gmodel.transfer_transmission(
+        opacity_front=memory.to_device(front) if dust else None,
+        ratios=memory.to_device(ratios) if dust else None,
+        tau=memory.to_device(tau) if lines else None, out=out)
+    np.testing.assert_allclose(memory.to_host(out), np.exp(-depth), rtol=1e-6)
+
+
+@pytest.mark.parametrize('arrays, message', [
+    (dict(opacity_front=(3, 4, 6)), "given together"),
+    (dict(opacity_front=(3, 4, 5), ratios=(5, 3)),
+     "opacity_front must have shape"),
+    (dict(opacity_front=(5, 4, 6), ratios=(5, 5)),
+     "opacity_front must have shape"),
+    (dict(opacity_front=(3, 4, 6), ratios=(4, 3)), "ratios must have shape"),
+    (dict(tau=(4, 4, 6)), "tau must have the shape of out")])
+def test_transfer_transmission_is_checked(driver, arrays, message):
+    memory = Memory(driver)
+    gmodel = driver.native_class('GModel', DTYPE)()
+    arguments = dict(opacity_front=None, ratios=None, tau=None) | {
+        name: memory.to_device(np.zeros(shape, DTYPE))
+        for name, shape in arrays.items()}
+    with pytest.raises(ValueError, match=message):
+        gmodel.transfer_transmission(
+            **arguments, out=memory.to_device(np.zeros((5, 4, 6), DTYPE)))
 
 
 @pytest.mark.parametrize('method', ['moments', 'gaussian'])

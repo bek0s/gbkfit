@@ -13,7 +13,8 @@ from gbkfit.config import check_options
 from gbkfit.control import StopControl
 from gbkfit.objective import Objective
 from ._detail import (
-    ActorCopy, Drivers, Item, PolledFlag, Result, Worker, own_placement)
+    ActorCopy, Drivers, Item, PolledFlag, Result, Worker, copy_parts,
+    own_placement)
 from .pool import Workers
 
 
@@ -94,8 +95,8 @@ class WorkersDask(Workers):
         hosts = list(client.scheduler_info()['workers'])
         return [
             _DaskWorker(client.submit(
-                ActorCopy, objective.likelihoods(), objective.solves(),
-                placement, self._threads, actor=True, pure=False,
+                ActorCopy, copy_parts(objective), placement, self._threads,
+                actor=True, pure=False,
                 workers=[hosts[k % len(hosts)]]).result(),
                 client, own)
             for k, placement in enumerate(placements)]

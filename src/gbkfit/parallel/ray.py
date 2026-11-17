@@ -12,7 +12,8 @@ from annotated_types import Ge, Gt
 from gbkfit.config import check_options
 from gbkfit.control import StopControl
 from gbkfit.objective import Objective
-from ._detail import ActorCopy, Drivers, Item, Result, Worker, own_placement
+from ._detail import (
+    ActorCopy, Drivers, Item, Result, Worker, copy_parts, own_placement)
 from .pool import Workers
 
 
@@ -101,9 +102,7 @@ class WorkersRay(Workers):
             num_cpus=self._cpus, num_gpus=self._gpus, max_concurrency=2)
         threads = self._threads or max(1, math.floor(self._cpus))
         return [
-            _RayWorker(actor.remote(
-                objective.likelihoods(), objective.solves(), placement,
-                threads))
+            _RayWorker(actor.remote(copy_parts(objective), placement, threads))
             for placement in placements]
 
 

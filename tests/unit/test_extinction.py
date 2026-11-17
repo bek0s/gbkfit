@@ -51,3 +51,20 @@ def test_laws_of_the_same_options_are_equal():
 def test_laws_of_equal_options_share_a_cube():
     # (3 and 3.0 are one option: the laws are one key of a dict)
     assert len(dict.fromkeys([ExtinctionCCM(3), ExtinctionCCM(3.0)])) == 1
+
+
+@pytest.mark.parametrize('law', [
+    ExtinctionCCM(), ExtinctionCalzetti(),
+    ExtinctionTable([0.3, 0.5, 0.9], [2, 1.2, 0.5])])
+def test_laws_take_arrays(law):
+    # An array of wavelengths (e.g. the channels of a cube) at once, each
+    # as alone, across every branch of the law
+    import numpy as np
+    low, high = law.range()
+    wavelengths = np.geomspace(low, high, 101).reshape(1, -1)
+    ratios = law.ratio(wavelengths)
+    assert ratios.shape == wavelengths.shape
+    np.testing.assert_array_equal(
+        ratios.ravel(), [law.ratio(w) for w in wavelengths.ravel()])
+    with pytest.raises(ValueError, match=f"a wavelength is {high * 2:.6g}"):
+        law.ratio([low, high * 2, high])

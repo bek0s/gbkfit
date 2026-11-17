@@ -301,14 +301,14 @@ class ObservationProfile(Observation):
             inclination=self._inclination, galaxies=self._galaxies,
             dataset=dataset, name=self._name)
 
-    def same_plan(self, other: Observation) -> bool:
+    def same_plan(self, other: Observation, seen: SeenGalaxies) -> bool:
         """
         Check whether its plan is also that of another observation (see
         Observation.same_plan): its plan takes the functions, the radii
         and their assumed distance of its data, and the inclination.
         """
         if not isinstance(other, ObservationProfile) \
-                or not super().same_plan(other):
+                or not super().same_plan(other, seen):
             return False
         # (the radii as the plan takes them: in arcsec, or in kpc)
         return self.keys() == other.keys() \
@@ -388,11 +388,16 @@ class ObservationProfile(Observation):
                 u.arcsec, u.dimensionless_angles()), None
         return None, self._radii.to_value(u.kpc)
 
-    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservationPlan:
+    def plan(
+            self,
+            driver: Driver,
+            seen: SeenGalaxies,
+            reference: ParamValues | None
+    ) -> ObservationPlan:
         """
         Plan the evaluation of its model (see ObservationGroup.plan): the
         functions of the galaxy it sees at its radii (see
-        GalaxyFunctions).
+        GalaxyFunctions), which are intrinsic to it: no lens bends them.
 
         Parameters
         ----------
@@ -400,6 +405,9 @@ class ObservationProfile(Observation):
             The driver it is evaluated on.
         seen : SeenGalaxies
             The galaxy it sees.
+        reference : ParamValues, optional
+            The reference values of the parameters, which it does not
+            take.
 
         Returns
         -------

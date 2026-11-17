@@ -1435,7 +1435,7 @@ def test_the_parameters_of_lens_masses_are_named_as_those_of_disks():
             modes=dict(alma_lens_pa='mean'),
             derived=dict(offset='hst_lens_main_x - alma_lens_x'),
             transforms=dict(file='t.py', func='f')))
-    changes = migration.migrate(config, 8)
+    changes = rewritten(config, 8, 9)
     params = config['params']
     assert list(params['properties']) == [
         'xpos', 'hst_lens_main_posa', 'hst_lens_main_xpos',
@@ -1453,11 +1453,25 @@ def test_the_parameters_of_lens_masses_are_named_as_those_of_disks():
         == [['params', 'transforms']]
 
 
+def rewritten(config, from_version, to_version):
+    """
+    Rewrite a configuration of a version by the rules of the versions
+    after it, up to a version, in place, and return the changes.
+    """
+    return [
+        change for rule in migration.RULES
+        if from_version < rule.version() <= to_version
+        for change in rule.rewrite(config)]
+
+
 def test_the_lens_parameters_of_a_project_are_renamed_with_its_pieces(
         tmp_path):
     # Of a params piece with an observation piece; of the params of a
     # setup that names the observation piece; and of a params piece of a
-    # setup with its observation in place
+    # setup with its observation in place: their names of version 9, and
+    # those of the lens of version 15, which the observation piece and the
+    # observation in place share (the piece lenses/lens.yaml, which the
+    # setup of the piece names; the other has it in place)
     study = project.create(str(tmp_path / 'study'))
     yaml.dump(dict(format=project.FORMAT, version=8),
               tmp_path / 'study' / project.MARKER)
@@ -1476,16 +1490,22 @@ def test_the_lens_parameters_of_a_project_are_renamed_with_its_pieces(
               tmp_path / 'study' / 'setups' / 'inline.yaml')
     changes = migration.migrate_project(study.path)
     assert study.piece('params', 'hst') == dict(
-        properties=dict(hst_lens_xpos=0, hst_lens_posa=30))
+        properties=dict(lens_xpos=0, lens_posa=30))
     assert study.piece('params', 'alma') == dict(
-        properties=dict(alma_lens_xpos=0))
+        properties=dict(lens_xpos=0))
+    lens = dict(name='lens', pieces=dict(type='sie'))
+    assert study.piece('lenses', 'lens') == lens
     named = yaml.load(tmp_path / 'study' / 'setups' / 'named.yaml')
-    assert named == dict(observations='hst', params=dict(properties=dict(
-        hst_lens_ypos=0.1)))
-    assert study.piece('observations', 'hst') == hst
-    assert 'observations/hst.yaml' not in changes
+    assert named == dict(
+        observations='hst', lenses=['lens'],
+        params=dict(properties=dict(lens_ypos=0.1)))
+    observation = {k: v for k, v in hst.items() if k != 'foreground'}
+    assert study.piece('observations', 'hst') == observation
+    assert 'observations/hst.yaml' in changes
+    assert 'lenses/lens.yaml' in changes
     assert yaml.load(tmp_path / 'study' / 'setups' / 'inline.yaml') == dict(
-        observations=[hst | dict(name='alma')], params='alma')
+        observations=[observation | dict(name='alma')], lenses=[lens],
+        params='alma')
 
 
 def with_data(name=None, **options):
@@ -1890,3 +1910,113 @@ def test_the_dispersion_equilibrium_is_an_option_of_the_disk():
     assert beside['equilibrium'] == dict(gravity='galaxy', direction='ver')
     assert alone == dict(type='thick_disk', equilibrium=dict(gravity='sheet'))
     assert sum('option equilibrium' in c.message for c in changes) == 2
+
+
+def lensed(name, *masses, **lens):
+    """An observation of version 14 behind a lens of the given masses."""
+    return dict(
+        type='pixel_brightness', name=name, size=[16, 16],
+        foreground=dict(lens=dict(
+            source_size=[40, 40], source_step=[0.1, 0.1],
+            masses=list(masses)) | lens))
+
+
+def test_the_lenses_of_observations_become_one_lens():
+    # Version 15: identical lenses of a joint fit (their grids aside)
+    # become the lens 'lens' of the section lenses, whose parameters the
+    # observations share (a tie of one to the other is the one
+    # parameter); its strengths are quoted for the galaxy it bent, and
+    # its redshift is given by hand
+    config = dict(
+        galaxies=[dict(redshift=1.5, components=[])],
+        observations=[
+            lensed('hst', dict(type='sie', name='main'),
+                   dict(type='shear', name='shear')),
+            lensed('alma', dict(type='sie', name='main'),
+                   dict(type='shear', name='shear'), source_size=[80, 80]),
+            dict(type='pixel_brightness', name='ground',
+                 foreground=dict(lens=None))],
+        params=dict(properties=dict(
+            hst_lens_main_theta_e=dict(value=1, min=0.5, max=2),
+            alma_lens_main_theta_e='hst_lens_main_theta_e',
+            hst_lens_shear_gamma=0.05, alma_lens_shear_gamma=0.05,
+            hst_lens_main_q='alma_lens_main_q', alma_lens_main_q=0.8),
+            derived=dict(e='1 - alma_lens_main_q')))
+    changes = rewritten(config, 14, 15)
+    assert [list(o) for o in config['observations']] == [
+        ['type', 'name', 'size'], ['type', 'name', 'size'], ['type', 'name']]
+    assert config['lenses'] == [dict(
+        name='lens', source_redshift=1.5, pieces=[
+            dict(name='main', type='sie'), dict(name='shear', type='shear')])]
+    assert list(config)[:2] == ['galaxies', 'lenses']
+    assert config['params'] == dict(properties=dict(
+        lens_main_theta_e=dict(value=1, min=0.5, max=2),
+        lens_shear_gamma=0.05, lens_main_q=0.8),
+        derived=dict(e='1 - lens_main_q'))
+    by_hand = [c.path for c in changes if c.message.startswith('by hand')]
+    assert by_hand == [['lenses', 0, 'redshift']]
+
+
+def test_a_multipole_is_an_option_of_the_shape_it_is_tied_to():
+    config = dict(
+        galaxies=[dict(components=[])],
+        observations=[lensed(
+            'hst', dict(type='epl', name='main'),
+            dict(type='multipole', order=4, name='m4'))],
+        params=dict(properties=dict(
+            hst_lens_main_theta_e=1, hst_lens_main_posa=30,
+            hst_lens_m4_theta_e='hst_lens_main_theta_e',
+            hst_lens_m4_xpos='hst_lens_main_xpos',
+            hst_lens_m4_ypos=' hst_lens_main_ypos', hst_lens_m4_a=0.02,
+            hst_lens_m4_posa='hst_lens_main_posa + 45')))
+    changes = rewritten(config, 14, 15)
+    # (one piece, whose parameters are those of the lens; no redshifts)
+    assert config['lenses'] == [dict(name='lens', pieces=dict(
+        name='main', type='epl', multipoles=[4]))]
+    assert config['params']['properties'] == dict(
+        lens_theta_e=1, lens_posa=30, lens_a4=0.02,
+        lens_posa4='lens_posa + 45')
+    assert [c.path for c in changes if c.message.startswith('by hand')] \
+        == [['galaxies', 0, 'redshift'], ['lenses', 0, 'redshift'],
+            ['lenses', 0, 'source_redshift']]
+
+
+@pytest.mark.parametrize('scaled', [False, True])
+def test_deflection_maps_are_quoted_for_the_galaxies_they_bent(scaled):
+    # A map was the deflection of the light of the galaxies it bent (or a
+    # scale of one made for another source, by hand then); the redshifts
+    # scale it now. Shifted maps keep their shifts
+    config = dict(
+        galaxies=[dict(redshift=1, components=[])],
+        observations=[lensed('muse', dict(
+            type='deflection_map', alpha_x='ax.fits', alpha_y='ay.fits',
+            scaled=scaled, shifted=True))],
+        params=dict(properties=dict(
+            muse_lens_scale=0.5, muse_lens_xpos=0.1, muse_lens_ypos=0)
+            if scaled else dict(muse_lens_xpos=0.1, muse_lens_ypos=0)))
+    changes = rewritten(config, 14, 15)
+    assert config['lenses'] == [dict(
+        name='lens', source_redshift=1, pieces=dict(
+            type='deflection_map', alpha_x='ax.fits', alpha_y='ay.fits',
+            shifted=True, quoted=True))]
+    assert config['params']['properties'] == dict(lens_xpos=0.1, lens_ypos=0)
+    by_hand = [c.path for c in changes if c.message.startswith('by hand')]
+    assert by_hand == [['lenses', 0, 'redshift']] + (
+        [['lenses', 0, 'pieces']] if scaled else [])
+
+
+@pytest.mark.parametrize('observations, properties, message', [
+    ([lensed('hst', dict(type='sie')), lensed('alma', dict(type='epl'))],
+     {}, "different lenses"),
+    ([lensed('hst', dict(type='sie', name='main'),
+             dict(type='multipole', order=3, name='m3'))],
+     dict(hst_lens_m3_theta_e=1), "not tied to a shape"),
+    ([lensed('hst', dict(type='sie')), lensed('alma', dict(type='sie'))],
+     dict(hst_lens_theta_e=1, alma_lens_theta_e=1.2), "become one")])
+def test_lenses_that_cannot_be_one_stop_the_migration(
+        observations, properties, message):
+    config = dict(
+        galaxies=[dict(components=[])], observations=observations,
+        params=dict(properties=properties))
+    with pytest.raises(ConfigError, match=message):
+        rewritten(config, 14, 15)

@@ -38,10 +38,11 @@ struct DModelWrapper
             int nk, const T* kernels, T* cube, T* scratch);
 
     static void
-    dmodel_lens_resample(
-            int nx, int ny, int nz, int sx, int sy,
+    dmodel_lens_composite(
+            int nx, int ny, int nz, int sx, int sy, int subchannels,
             const T* source_x, const T* source_y,
-            const T* source, T* image);
+            const T* emission, const T* transmission, const T* behind,
+            T* out);
 
     static void
     dmodel_regions_sum(

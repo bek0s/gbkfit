@@ -38,6 +38,11 @@ struct GModelWrapper
     gmodel_transfer_march(const TransferArgs<T>& a);
 
     static void
+    gmodel_transfer_transmission(
+            int nx, int ny, int nrows, int nopacity,
+            const T* opacity_front, const T* ratios, const T* tau, T* out);
+
+    static void
     gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a);
 };
 

@@ -1,6 +1,6 @@
 # user_likelihoods: Three observations of user likelihoods of parameters: a cube and moment maps of residuals (Cauchy and Student's t noise), and moment maps of a log-likelihood (Gaussian noise of a free jitter).
 # (written by make_golden.py; do not edit)
-version: 14
+version: 15
 driver: {type: host}
 galaxies:
 - components:
@@ -26,7 +26,6 @@ observations:
     error: 0.0005
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
@@ -48,7 +47,6 @@ observations:
     moment2: {data: maps_moment2_d.fits, mask: maps_moment2_m.fits, error: maps_moment2_e.fits}
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
@@ -72,7 +70,6 @@ observations:
     moment2: {data: jittered_moment2_d.fits, mask: jittered_moment2_m.fits, error: jittered_moment2_e.fits}
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}

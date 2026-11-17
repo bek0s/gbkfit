@@ -218,6 +218,24 @@ gmodel_transfer_opacity_front(TransferArgs<T> a)
 }
 
 template<typename T> __global__ void
+gmodel_transfer_transmission(
+        int nx, int ny, int nrows, int nopacity,
+        const T* opacity_front, const T* ratios, const T* tau, T* out)
+{
+    // Parallelization: per 3d position in out
+    const long long nthreads = 1LL * nx * ny * nrows;
+    const long long tid = 1LL * blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads)
+        return;
+
+    const int x = int(tid % nx);
+    const int y = int(tid / nx % ny);
+    const int r = int(tid / (1LL * nx * ny));
+    gbkfit::gmodel_transfer_transmission(
+            x, y, r, nx, ny, nopacity, opacity_front, ratios, tau, out);
+}
+
+template<typename T> __global__ void
 gmodel_disk_traits_evaluate(DiskTraitsArgs<T> a)
 {
     // Parallelization: per point

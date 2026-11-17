@@ -102,6 +102,7 @@ def test_a_step_evaluates_again_the_stages_that_read_it(case):
                 if cache.version() != versions[label]}
             assert again == _declared(plan, name), name
             fresh = GroupPlan(
-                group, plan.galaxy_drivers(), plan.observation_drivers())
+                group, plan.galaxy_drivers(), plan.observation_drivers(),
+                plan.reference())
             _same_models(models, _evaluate(fresh, stepped))
             plan.model_h(values)

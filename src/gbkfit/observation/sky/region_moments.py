@@ -14,15 +14,17 @@ from gbkfit.dataset import Data, Dataset, DatasetRegionMoments, Regions
 from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectralAxis
 from gbkfit.instrument import Instrument
+from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from gbkfit.moments import (
     FluxFloor, Method, MomentsPlan, check_moment_items, check_moment_orders,
     moment_item, split_moments)
+from .._scene import SeenScenes
 from ..depth import Depth
-from ..foreground import Foreground
 from ..plan import ModelData, ObservationPlan
 from ..weights import Weights
 from . import _model_cube, _moments
+from ._cube_plan import SkyDrawing
 from ._data_units import flux_data_unit
 from ._options import Rota, Rpix, Rval, Size, Step
 from ._orbit_moments import OrbitMomentsPlan, check_orbits
@@ -32,8 +34,6 @@ from .base import DType, SkyOptions
 
 if TYPE_CHECKING:
     import scipy.sparse
-
-    from gbkfit.model import Scene
 
 
 __all__ = [
@@ -162,7 +162,7 @@ class ObservationRegionMoments(ObservationRegions):
             flux_floor: FluxFloor = 1e-6,
             orders: Sequence[int] | None = None,
             method: Method = 'moments',
-            foreground: Foreground | None = None,
+            source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
@@ -195,7 +195,7 @@ class ObservationRegionMoments(ObservationRegions):
                 "take no valid pixels of each channel (those of the spectra "
                 "of regions)")
         super().__init__(
-            grid, foreground, instrument, galaxies, components, lines,
+            grid, source_grid, instrument, galaxies, components, lines,
             continuum, band, pixel_weights, flux_scale, offsets, dataset,
             oversampling, depth, dtype, fft_dtype, name, unit)
 
@@ -249,11 +249,11 @@ class ObservationRegionMoments(ObservationRegions):
         super()._check_options(options)
         _moments.warn_unmasked_noise(self._flux_floor, options.instrument)
 
-    def _check_scene(self, scene: 'Scene') -> None:
+    def _check_scenes(self, scenes: SeenScenes) -> None:
         options = self._sky_options
-        _moments.check_one_line(scene)
-        if scene.orbit_emitters():
-            check_orbits(self, scene, options)
+        _moments.check_one_line(scenes)
+        if scenes.orbit_emitters():
+            check_orbits(self, scenes, options)
 
     def check_dataset(self, dataset: Dataset) -> None:
         check_moment_items(dataset, self._method)
@@ -282,13 +282,14 @@ class ObservationRegionMoments(ObservationRegions):
         image[index >= 0] = data[index[index >= 0]]
         return GridData(image, grid.coords, None)
 
-    def _plan(self, driver: Driver, scene: 'Scene') -> ObservationPlan:
+    def _plan(self, driver: Driver, drawing: SkyDrawing) -> ObservationPlan:
         options = self._sky_options
-        if scene.orbit_emitters():
-            return OrbitMomentsPlan(self, driver, scene, options)
+        if drawing.scenes.orbit_emitters():
+            return OrbitMomentsPlan(
+                self, driver, drawing.scenes.scene(), options)
         model_cube = _moments.spectra_model_cube(self, options)
         return RegionMomentsPlan(
-            self, self._flux_weights, model_cube, driver, scene, options)
+            self, self._flux_weights, model_cube, driver, drawing, options)
 
 
 class RegionMomentsPlan(RegionsPlan):
@@ -299,10 +300,10 @@ class RegionMomentsPlan(RegionsPlan):
             weights: 'scipy.sparse.csr_array',
             model_cube: _model_cube.ModelCube,
             driver: Driver,
-            scene: 'Scene',
+            drawing: SkyDrawing,
             options: SkyOptions
     ):
-        super().__init__(weights, model_cube, driver, scene, options)
+        super().__init__(weights, model_cube, driver, drawing, options)
         nchannels, nregions = self._spectra.shape
         # The spectra of the regions, as a cube of one row of regions
         self._spectra_cube = self._spectra.reshape(nchannels, 1, nregions)

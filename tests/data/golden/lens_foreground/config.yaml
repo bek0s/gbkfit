@@ -1,18 +1,29 @@
-# lens_foreground: The image of a source disk behind a foreground lens of three masses: an elliptical power law, its multipole of order 4 (tied to it by expressions) and an external shear.
+# lens_foreground: The image of a source disk behind a lens of two pieces: an elliptical power law with a multipole of order 4, and an external shear; the source drawn on a grid of a given step and extent.
 # (written by make_golden.py; do not edit)
-version: 14
+version: 15
 driver: {type: host}
 galaxies:
-- components:
+- redshift: 1.5
+  components:
   - type: thin_disk
     loose: false
     tilted: false
     rnodes: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
     rptraits: {type: exponential}
     emission: {type: band}
+lenses:
+- name: lens
+  redshift: 0.5
+  source_redshift: 1.5
+  pieces:
+  - name: main
+    type: epl
+    multipoles: [4]
+  - {name: shear, type: shear}
 observations:
 - type: pixel_brightness
   name: hst
+  median_size: null
   dataset:
     type: pixel_brightness
     step: [0.1, 0.1]
@@ -23,19 +34,13 @@ observations:
     error: 0.01
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  foreground:
-    lens:
-      source_size: [40, 40]
-      source_step: [0.05, 0.05]
-      masses:
-      - {type: epl, name: main}
-      - {type: multipole, name: m4, order: 4}
-      - {type: shear, name: shear}
+  source_grid:
+    step: 0.05
+    extent: [-0.975, 0.975, -0.975, 0.975]
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.08, ratio: 1.0, posa: 0.0}
     lsf: null
-  median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
 likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
@@ -47,16 +52,13 @@ params:
     incl: 55
     rpt_a: 1
     rpt_s: {value: 0.22, min: 0.05, max: 1}
-    hst_lens_main_theta_e: {value: 1.03, min: 0.5, max: 2}
-    hst_lens_main_slope: 2.1
-    hst_lens_main_q: {value: 0.78, min: 0.5, max: 1}
-    hst_lens_main_posa: 30
-    hst_lens_main_xpos: 0
-    hst_lens_main_ypos: 0
-    hst_lens_m4_theta_e: hst_lens_main_theta_e
-    hst_lens_m4_a: 0.02
-    hst_lens_m4_posa: hst_lens_main_posa
-    hst_lens_m4_xpos: hst_lens_main_xpos
-    hst_lens_m4_ypos: hst_lens_main_ypos
-    hst_lens_shear_gamma: {value: 0.06, min: 0, max: 0.2}
-    hst_lens_shear_posa: 70
+    lens_main_theta_e: {value: 1.03, min: 0.5, max: 2}
+    lens_main_slope: 2.1
+    lens_main_q: {value: 0.78, min: 0.5, max: 1}
+    lens_main_posa: 30
+    lens_main_xpos: 0
+    lens_main_ypos: 0
+    lens_main_a4: 0.02
+    lens_main_posa4: lens_main_posa
+    lens_shear_gamma: {value: 0.06, min: 0, max: 0.2}
+    lens_shear_posa: 70

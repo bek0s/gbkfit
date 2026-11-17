@@ -109,8 +109,11 @@ class Setup:
         of mock data, the fitter cannot fit the
         parameters (see Fitter.check), the options of mock data are not
         of the observations (see MockOptions.check), the options of a
-        bootstrap do not suit the data (see BootstrapOptions.check), or
-        the group cannot be planned (see ObservationGroup.plan).
+        bootstrap do not suit the data (see BootstrapOptions.check), the
+        group has lenses and a free parameter has no reference value, at
+        which the grids of the planes behind them are laid out (see
+        ParamSpace.reference), or the group cannot be planned (see
+        ObservationGroup.plan).
 
     Examples
     --------
@@ -166,7 +169,11 @@ class Setup:
             mock_options.check(group)
         if bootstrap_options is not None and likelihoods.observations():
             bootstrap_options.check(group, params)
-        self._group_plan = group.plan(driver, placement)
+        # (the grids of the planes behind lenses are laid out at the
+        # reference values of the parameters: e.g. the start of a fit)
+        self._group_plan = group.plan(
+            driver, placement,
+            params.reference() if group.lenses() else None)
         self._params = params
         self._likelihoods = likelihoods
         self._objective = None

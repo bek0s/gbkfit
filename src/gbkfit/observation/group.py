@@ -1,7 +1,8 @@
 """
-Groups of observations: galaxies and the observations of them,
-evaluated together (see ObservationGroup), and the galaxies that pass
-through each other along the line of sight (see DepthGroup).
+Groups of observations: galaxies, the lenses in front of them and the
+observations of them, evaluated together (see ObservationGroup), and the
+galaxies that pass through each other along the line of sight (see
+DepthGroup).
 """
 
 import copy
@@ -10,12 +11,12 @@ from collections.abc import Collection, Mapping, Sequence
 from typing import Any, NamedTuple, Self
 
 
-from gbkfit.config import (
-    config_path, item_prefixes)
+from gbkfit.config import config_path, item_prefixes, warn
 from gbkfit.cosmology import DEFAULT, Cosmology
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
-from gbkfit.model import Galaxy
+from gbkfit.lensing import Lens, Plane, Tracer, plane_layout
+from gbkfit.model import DepthUnit, Galaxy
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
 from ._depth_order import DepthGroup, DepthOrder
@@ -23,7 +24,7 @@ from ._frames import (
     FrameShift, alignments, check_offsets, first_on_sky, frame_shift,
     warn_frames)
 from .group_plan import GroupPlan, place_drivers
-from .observation import Observation, SeenGalaxies
+from .observation import Observation, SeenGalaxies, SeenPlane
 
 
 __all__ = [
@@ -40,19 +41,19 @@ class _Member(NamedTuple):
     An observation of a group, with what the group keeps of it, made once
     (see ObservationGroup): its label (the id 'observation' of its extra
     outputs; see ObservationGroup.observation_label), the indices of the
-    galaxies it sees, those galaxies as it sees them (see
-    ObservationGroup.seen_by), and how it moves them into its frame.
+    galaxies it sees, and those galaxies as it sees them (see
+    ObservationGroup.seen_by), with how it moves them into its frame.
     """
     observation: Observation
     label: str
     seen: tuple[int, ...]
     galaxies: SeenGalaxies
-    shift: FrameShift
 
 
 class ObservationGroup:
     """
-    Galaxies and the observations of them, evaluated together.
+    Galaxies, the lenses in front of them and the observations of them,
+    evaluated together.
 
     Each observation names the galaxies it sees, which it may leave out
     when there is one galaxy; the light of several galaxies adds up, or
@@ -60,6 +61,14 @@ class ObservationGroup:
     in front (see depth_order). The parameters and constants of the
     galaxies are prefixed by their names when they have names (which they
     need when there are several; e.g. 'north_').
+
+    The lenses (see Lens) bend the light of the galaxies behind them, of
+    every observation of them: the galaxies and the lenses are laid out
+    in planes by redshift (see plane_layout; every galaxy then needs a
+    redshift), and the light of each plane is bent by the lenses of the
+    planes in front of it (see Tracer), and dimmed by the opacity of
+    their galaxies. The parameters of each lens are prefixed by its name
+    (e.g. 'lens_main_theta_e').
 
     The centres of the components (xpos, ypos) are measured from the
     origin of the frame of the first observation on the sky (see
@@ -76,13 +85,9 @@ class ObservationGroup:
     its frame (see ObservationSky) sees the galaxies moved by them too,
     for what the coordinates do not know (e.g. the errors of their
     astrometry); each galaxy seen on the sky needs an observation on the
-    sky without them. The centres of what an observation adds in the
-    frame of the model (e.g. the masses of its lens, see
-    SkyFrame.centre_params) are moved with those of the components; the
-    shifts of what it adds that is placed by its RA and Dec (e.g. shifted
-    deflection maps, see SkyFrame.shift_params), by its offsets alone.
-    The observations that are not on the sky see the parameters as they
-    are.
+    sky without them. The rays of its pixels meet the lenses moved as the
+    galaxies (see Tracer). The observations that are not on the sky see
+    the parameters as they are.
 
     The group describes the galaxies and the observations; its
     evaluation is planned on devices by plan (see GroupPlan), where the
@@ -103,6 +108,8 @@ class ObservationGroup:
         The galaxies.
     observations : Observation or Sequence of Observation
         The observations.
+    lenses : Lens or Sequence of Lens, optional
+        The lenses; none by default.
     depth_order : Sequence of str or DepthGroup, optional
         The galaxies along the line of sight, front to back, by name, or
         in groups of galaxies that can pass through each other (see
@@ -110,7 +117,9 @@ class ObservationGroup:
         opacity marches them in this order by radiative transfer (the
         light of each is dimmed by the opacity of those in front of it;
         see Scene.evaluation), and needs it then of all of them. In
-        configurations, a group is {name: [galaxies]}.
+        configurations, a group is {name: [galaxies]}. With lenses, it
+        orders the galaxies of each plane, and the redshifts the planes
+        (see plane_layout).
     cosmology : Cosmology, optional
         The cosmology of the galaxies, that of their setup (see
         Galaxy.plan_stage); Planck18 by default (see
@@ -120,23 +129,27 @@ class ObservationGroup:
     ------
     ValueError
         If there are no galaxies or no observations, several galaxies
-        without names, names repeat, an observation does not name the
-        galaxies it sees (when there are several) or names unknown ones,
-        depth_order names unknown galaxies or repeats them, has a group of
-        fewer than two galaxies, or of the name of a galaxy or an
-        observation, every observation of a galaxy has offsets of position
-        or of velocity.
+        without names, names repeat (of the galaxies, the lenses and the
+        observations), an observation does not name the galaxies it sees
+        (when there are several) or names unknown ones, depth_order names
+        unknown galaxies or repeats them, has a group of fewer than two
+        galaxies, or of the name of a galaxy or an observation, every
+        observation of a galaxy has offsets of position or of velocity,
+        or with lenses, a galaxy has no redshift, or the planes cannot be
+        laid out (see plane_layout).
     """
 
     def __init__(
             self,
             galaxies: Galaxy | Sequence[Galaxy],
             observations: Observation | Sequence[Observation],
+            lenses: Lens | Sequence[Lens] = (),
             depth_order: Sequence[str | DepthGroup] | None = None,
             cosmology: Cosmology | None = None
     ):
         self._galaxies = iterutils.tuplify(galaxies)
         observations = iterutils.tuplify(observations)
+        self._lenses = iterutils.tuplify(lenses)
         if not self._galaxies:
             raise ValueError("at least one galaxy is required")
         if not observations:
@@ -146,21 +159,17 @@ class ObservationGroup:
             raise ValueError(
                 "the galaxies need names when there are several")
         observation_names = [obs.name() for obs in observations]
+        lens_names = [lens.name() for lens in self._lenses]
         self._prefixes = item_prefixes(
             galaxy_names, 'galaxies', 'galaxy', False)
         item_prefixes(
             observation_names, 'observations', 'observation', False)
-        repeated = sorted(
-            set(galaxy_names) & set(observation_names) - {None})
-        if repeated:
-            raise ValueError(
-                f"the galaxies and the observations must have different "
-                f"names; repeated: {repeated}")
+        _check_names(galaxy_names, observation_names, lens_names)
         self._cosmology = DEFAULT if cosmology is None else cosmology
         self._depth = None if depth_order is None else DepthOrder(
             depth_order, galaxy_names, observation_names, self._prefixes)
         # The parameters of the galaxies (and of their separations), to
-        # which those of the observations are added
+        # which those of the lenses and of the observations are added
         galaxy_pdescs, self._mappings = iterutils.merge_with_prefixes(
             [galaxy.pdescs() for galaxy in self._galaxies], self._prefixes)
         # The separations of the galaxies of groups, by galaxy
@@ -173,8 +182,15 @@ class ObservationGroup:
                 f"names of parameters of the galaxies: {taken}; rename their "
                 f"components")
         galaxy_pdescs |= separations
+        lens_pdescs, self._lens_mappings = iterutils.merge_with_prefixes(
+            [lens.pdescs() for lens in self._lenses],
+            [f'{name}_' for name in lens_names])
+        if taken := sorted(lens_pdescs.keys() & galaxy_pdescs.keys()):
+            raise ValueError(
+                f"the parameters of the lenses have the names of parameters "
+                f"of the galaxies: {taken}; rename the lenses")
         self._pdescs = _with_observation_pdescs(
-            galaxy_pdescs, observations)
+            galaxy_pdescs | lens_pdescs, observations)
         self._constants, _ = iterutils.merge_with_prefixes(
             [galaxy.constants() for galaxy in self._galaxies], self._prefixes)
         # The ids of the galaxies and of the observations in the extra
@@ -186,6 +202,11 @@ class ObservationGroup:
         labels = [
             f'observation{i}' if name is None else name
             for i, name in enumerate(observation_names)]
+        # The paths of the light of the planes through the lenses, if any
+        self._tracer = None
+        if self._lenses:
+            self._tracer = Tracer(
+                self._plane_layout(), self._lenses, self._cosmology)
         # (the origin of the frame of the parameters of the galaxies)
         frames = [observation.sky_frame() for observation in observations]
         first = first_on_sky(frames)
@@ -196,16 +217,72 @@ class ObservationGroup:
                 seen.append(tuple(self._seen(i, observation)))
         self._members = tuple(
             _Member(
-                observation, label, indices, self._galaxies_seen(indices),
-                frame_shift(
-                    self._galaxies, self._mappings, indices, frame,
-                    alignment))
+                observation, label, indices, self._galaxies_seen(
+                    indices, frame is not None, frame_shift(
+                        self._galaxies, self._mappings, indices, frame,
+                        alignment)))
             for observation, label, indices, frame, alignment in zip(
                 observations, labels, seen, frames, alignments(frames)))
         check_offsets(self._galaxies, frames, seen)
         warn_frames(self._galaxies, frames, seen)
         _warn_unused_masses(self._galaxies, observations, seen)
+        self._warn_idle_lenses()
         self._check_observations()
+
+    def _plane_layout(self) -> tuple[Plane, ...]:
+        """
+        Return the planes of the galaxies and the lenses, near to far (see
+        plane_layout), which it logs. Raise ValueError if a galaxy has no
+        redshift (or one of 0, which places it nowhere among them), or the
+        planes cannot be laid out.
+        """
+        if missing := [
+                self._galaxy_label(g)
+                for g, galaxy in enumerate(self._galaxies)
+                if not galaxy.redshift() > 0]:
+            raise ValueError(
+                f"with lenses, every galaxy needs a redshift above 0 (its "
+                f"option redshift), which places it among them; these have "
+                f"none: {missing}")
+        depth_items = () if self._depth is None else [
+            [self._galaxies[g].name() for g in members]
+            for _, members in self._depth.items()]
+        planes = plane_layout(
+            [(galaxy.name(), galaxy.redshift()) for galaxy in self._galaxies],
+            [(lens.name(), lens.redshift()) for lens in self._lenses],
+            depth_items)
+        for p, plane in enumerate(planes):
+            _log.info(
+                "plane %d at redshift %.6g: galaxies %s, lenses %s", p,
+                plane.redshift,
+                [self._galaxy_label(g) for g in plane.galaxies],
+                [self._lenses[i].name() for i in plane.lenses])
+        return planes
+
+    def _galaxy_label(self, index: int) -> str:
+        """Return the name of a galaxy in messages, or its index."""
+        name = self._galaxies[index].name()
+        return str(index) if name is None else repr(name)
+
+    def _warn_idle_lenses(self) -> None:
+        """
+        Warn (see warn) of each lens that bends the light of no galaxy
+        that an observation sees: of none behind it.
+        """
+        if self._tracer is None:
+            return
+        planes = self._tracer.planes()
+        plane_of = {
+            g: p for p, plane in enumerate(planes) for g in plane.galaxies}
+        farthest = max(
+            plane_of[g] for member in self._members for g in member.seen)
+        for p, plane in enumerate(planes):
+            for i in plane.lenses:
+                if p >= farthest:
+                    warn(
+                        f"lens {self._lenses[i].name()!r} bends the light of "
+                        f"no galaxy that an observation sees: none is behind "
+                        f"it (at redshift {self._lenses[i].redshift()})")
 
     def _check_observations(self) -> None:
         """
@@ -233,19 +310,67 @@ class ObservationGroup:
                 f"galaxies are {known}")
         return sorted(known.index(name) for name in names)
 
-    def _galaxies_seen(self, seen: tuple[int, ...]) -> SeenGalaxies:
+    def _galaxies_seen(
+            self, seen: tuple[int, ...], on_sky: bool, shift: FrameShift
+    ) -> SeenGalaxies:
         """
         Return the galaxies of the given indices as an observation that
-        sees them sees them (see seen_by): in the depth order of those of
-        them in it (a group of which it sees one galaxy is that galaxy).
+        sees them sees them (see seen_by), on the sky or not, which it
+        moves into its frame by the given shift: in their planes (see
+        SeenPlane), each in the depth order of those of them in it (a
+        group of which it sees one galaxy is that galaxy).
         """
-        order = None if self._depth is None else self._depth.seen(seen)
         return SeenGalaxies(
             tuple(self._galaxies[j] for j in seen),
             tuple(self._mappings[j] for j in seen),
             tuple(self._galaxy_labels[j] for j in seen),
-            order, self._sky_origin,
-            self._cosmology)
+            self._seen_planes(seen, on_sky), self._sky_origin,
+            self._cosmology, self._tracer, self._lens_mappings, shift)
+
+    def _seen_planes(
+            self, seen: tuple[int, ...], on_sky: bool
+    ) -> tuple[SeenPlane, ...]:
+        """
+        Return the planes of the galaxies of the given indices, near to far
+        (see SeenPlane), of an observation on the sky or not: without
+        lenses, or not on the sky (e.g. a profile of a galaxy, intrinsic
+        to it), one of all of them; with lenses, the image plane, of those
+        of the planes of the tracer up to its first with lenses, and each
+        plane behind it, those without the galaxies left out.
+        """
+        if self._tracer is None or not on_sky:
+            order = None if self._depth is None else self._depth.seen(seen)
+            return (SeenPlane(tuple(range(len(seen))), order, None),)
+        planes = self._tracer.planes()
+        first = next(p for p, plane in enumerate(planes) if plane.lenses)
+        # The galaxies seen of each plane of the tracer, by index, and of
+        # the image plane, by the planes of the tracer that it merges
+        members = [
+            [g for g in plane.galaxies if g in seen] for plane in planes]
+        drawn = [(members[:first + 1], None)] + [
+            ([galaxies], p) for p, galaxies in enumerate(members)
+            if p > first]
+        seen_planes = []
+        for merged, traced in drawn:
+            galaxies = sorted(g for plane in merged for g in plane)
+            if not galaxies:
+                continue
+            # (the planes by redshift, near to far, and the galaxies of
+            # each by the depth order, which leaves out those it does not
+            # place)
+            units = []
+            for plane in merged:
+                if len(plane) == 1:
+                    units.append(DepthUnit((galaxies.index(plane[0]),)))
+                elif plane and self._depth is not None:
+                    units += [
+                        unit._replace(galaxies=tuple(
+                            galaxies.index(plane[k]) for k in unit.galaxies))
+                        for unit in self._depth.seen(plane)]
+            seen_planes.append(SeenPlane(
+                tuple(seen.index(g) for g in galaxies), tuple(units) or None,
+                traced))
+        return tuple(seen_planes)
 
     def observed(self) -> tuple[int, ...]:
         """
@@ -336,7 +461,8 @@ class ObservationGroup:
     def plan(
             self,
             driver: Driver | None = None,
-            placement: Mapping[str, Driver] | None = None
+            placement: Mapping[str, Driver] | None = None,
+            reference: ParamValues | None = None
     ) -> 'GroupPlan':
         """
         Plan the evaluation of the group on devices (see GroupPlan): the
@@ -352,6 +478,11 @@ class ObservationGroup:
             Other drivers of some of them, by their labels (see
             galaxy_label and observation_label): e.g. {'halpha': gpu0,
             'hi': gpu1}.
+        reference : ParamValues, optional
+            The values of the parameters at which what is laid out once
+            for all evaluations is laid out (see ParamSpace.reference):
+            the grids of the planes behind lenses that observations see,
+            which need them.
 
         Returns
         -------
@@ -366,7 +497,8 @@ class ObservationGroup:
             Observation.plan), or a galaxy cannot plan its stage (see
             Galaxy.plan_stage).
         """
-        return GroupPlan(self, *place_drivers(self, driver, placement))
+        return GroupPlan(
+            self, *place_drivers(self, driver, placement), reference)
 
     def follows_observations(self, index: int) -> bool:
         """
@@ -437,12 +569,30 @@ class ObservationGroup:
         """
         return self._members[index].label
 
+    def lenses(self) -> tuple[Lens, ...]:
+        """Return the lenses."""
+        return self._lenses
+
+    def lens_mappings(self) -> tuple[dict[str, str], ...]:
+        """
+        Return the names of the parameters of each lens among those of
+        the group, by its own names (see Lens.pdescs).
+        """
+        return tuple(self._lens_mappings)
+
+    def tracer(self) -> Tracer | None:
+        """
+        Return the paths of the light of the planes of the galaxies and
+        the lenses through the lenses (see Tracer), if it has lenses.
+        """
+        return self._tracer
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """
-        Return the parameters of the galaxies, prefixed, and those of the
-        observations (see Observation.pdescs): those of their models (the
-        likelihoods, which compare them with the data, add their own; see
-        Likelihoods.pdescs).
+        Return the parameters of the galaxies and of the lenses, prefixed,
+        and those of the observations (see Observation.pdescs): those of
+        their models (the likelihoods, which compare them with the data,
+        add their own; see Likelihoods.pdescs).
         """
         return self._pdescs
 
@@ -515,7 +665,7 @@ class ObservationGroup:
         them: the centres and systemic velocities of what it sees moved
         into its frame (see the class).
         """
-        return self._members[index].shift.moved(params)
+        return self._members[index].galaxies.shift.moved(params)
 
     def frame_shifts(
             self, index: int, params: ParamValues
@@ -526,7 +676,7 @@ class ObservationGroup:
         (arcsec), and of the systemic velocities (km/s), at the values of
         the offsets of its frame (see SkyFrame).
         """
-        return self._members[index].shift.shifts(params)
+        return self._members[index].galaxies.shift.shifts(params)
 
     def orbit_components(self, index: int) -> tuple[tuple[int, int], ...]:
         """
@@ -552,7 +702,8 @@ class ObservationGroup:
         """
         Return the names of the parameters that the model of the
         observation of the given index reads: those of the galaxies it
-        sees and their separations (see DepthGroup), and its own.
+        sees and their separations (see DepthGroup), those of the lenses
+        that bend their light (in front of a plane of them), and its own.
         """
         member = self._members[index]
         return (
@@ -560,7 +711,48 @@ class ObservationGroup:
                   for name in self._mappings[g].values())
             + tuple(self._separations[g] for g in member.seen
                     if g in self._separations)
+            + tuple(name for i in self._bending(member.galaxies)
+                    for name in self._lens_mappings[i].values())
             + tuple(sorted(member.observation.pdescs())))
+
+    def _bending(self, seen: SeenGalaxies) -> tuple[int, ...]:
+        """
+        Return the lenses (by index) that bend the light of galaxies
+        an observation sees: those of the planes of the tracer in front of
+        the farthest plane it sees whose light they bend.
+        """
+        traced = [
+            plane.traced for plane in seen.planes if plane.traced is not None]
+        if not traced:
+            return ()
+        planes = self._tracer.planes()
+        return tuple(sorted(
+            i for p in range(max(traced)) for i in planes[p].lenses))
+
+
+def _check_names(
+        galaxies: Sequence[str | None],
+        observations: Sequence[str | None],
+        lenses: Sequence[str]
+) -> None:
+    """
+    Raise ValueError if names repeat among the lenses, or among the
+    galaxies, the observations and the lenses of a group (those of each of
+    the first two are checked apart; see item_prefixes): they name their
+    parameters, and the planes and outputs of the galaxies.
+    """
+    if len(set(lenses)) != len(lenses):
+        raise ValueError(f"the names of the lenses repeat: {list(lenses)}")
+    kinds = (
+        ('galaxies', set(galaxies) - {None}),
+        ('observations', set(observations) - {None}),
+        ('lenses', set(lenses)))
+    for k, (kind, names) in enumerate(kinds):
+        for other, other_names in kinds[k + 1:]:
+            if repeated := sorted(names & other_names):
+                raise ValueError(
+                    f"the {kind} and the {other} must have different names; "
+                    f"repeated: {repeated}")
 
 
 def _with_observation_pdescs(
@@ -569,9 +761,9 @@ def _with_observation_pdescs(
 ) -> dict[str, ParamDesc]:
     """
     Return the parameters of the galaxies of a group (and of their
-    separations) with those of its observations (e.g. their flux scales;
-    see Observation.pdescs). Raise ValueError if those of an observation
-    have the names of others.
+    separations) and of its lenses with those of its observations (e.g.
+    their flux scales; see Observation.pdescs). Raise ValueError if those
+    of an observation have the names of others.
     """
     pdescs = dict(pdescs)
     for observation in observations:
@@ -579,8 +771,8 @@ def _with_observation_pdescs(
         if repeated := sorted(own.keys() & pdescs.keys()):
             raise ValueError(
                 f"the parameters of the observations have the names of "
-                f"parameters of the galaxies: {repeated}; rename the "
-                f"observations")
+                f"parameters of the galaxies, the lenses or other "
+                f"observations: {repeated}; rename the observations")
         pdescs |= own
     return pdescs
 

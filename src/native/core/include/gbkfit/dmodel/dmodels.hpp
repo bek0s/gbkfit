@@ -685,39 +685,114 @@ dmodel_mmaps_gaussian(
     }
 }
 
-// The pixel (x, y) of channel z of an image-plane cube (nx by ny pixels),
-// lensed from a source-plane cube (sx by sy pixels): the bilinear
-// interpolation of the source at the position of the pixel on the source
-// plane, in the pixel coordinates of the source (source_x and source_y,
-// at index y * nx + x), and 0 outside the source.
-template<typename T> constexpr void
-dmodel_lens_resample(
-        int x, int y, int z,
-        int nx, int ny, int sx, int sy,
-        const T* source_x, const T* source_y,
-        const T* source, T* image)
+// The bilinear interpolation of a plane of a grid of sx by sy pixels at
+// the point (px, py), in the pixel coordinates of the grid: its pixels
+// (index[k], each of the plane) and their weights (weight[k]); a pixel
+// off the grid has the index -1, and the value that the grid has there
+// (see dmodel_lens_sample).
+template<typename T>
+struct LensSample
 {
-    const int i = index_2d_to_1d(x, y, nx);
-    const T px = source_x[i];
-    const T py = source_y[i];
+    long long index[4];
+    T weight[4];
+};
+
+template<typename T> constexpr LensSample<T>
+dmodel_lens_sample_at(T px, T py, int sx, int sy)
+{
+    // (a point far off the grid is moved to just off it, where it has
+    // the same value, so that its pixel is a valid int)
+    px = std::min(std::max(px, T{-2}), T(sx + 1));
+    py = std::min(std::max(py, T{-2}), T(sy + 1));
     const int x0 = static_cast<int>(std::floor(px));
     const int y0 = static_cast<int>(std::floor(py));
     const T fx = px - x0;
     const T fy = py - y0;
-    T value = 0;
-    for (int dy = 0; dy < 2; ++dy)
+    LensSample<T> sample{};
+    for (int k = 0; k < 4; ++k)
     {
-        for (int dx = 0; dx < 2; ++dx)
-        {
-            const int xs = x0 + dx;
-            const int ys = y0 + dy;
-            if (xs < 0 || ys < 0 || xs >= sx || ys >= sy)
-                continue;
-            const T w = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy);
-            value += w * source[index_3d_to_1d(xs, ys, z, sx, sy)];
-        }
+        const int dx = k % 2;
+        const int dy = k / 2;
+        const int xs = x0 + dx;
+        const int ys = y0 + dy;
+        sample.weight[k] = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy);
+        sample.index[k] = xs < 0 || ys < 0 || xs >= sx || ys >= sy
+                ? -1 : index_2d_to_1d<long long>(xs, ys, sx);
     }
-    image[index_3d_to_1d(x, y, z, nx, ny)] = value;
+    return sample;
+}
+
+// The value of a plane of a grid (of nplane pixels a plane) at a sample
+// of it (see dmodel_lens_sample_at), whose value off the grid is outside
+template<typename T> constexpr T
+dmodel_lens_sample(
+        const LensSample<T>& sample, const T* data, int plane,
+        long long nplane, T outside)
+{
+    T value = 0;
+    for (int k = 0; k < 4; ++k) {
+        value += sample.weight[k] * (sample.index[k] < 0
+                ? outside : data[plane * nplane + sample.index[k]]);
+    }
+    return value;
+}
+
+// The light that leaves a plane of the sky toward the viewer at the pixel
+// (x, y) of the image plane, in channel c of out (nz channels of nx by ny
+// pixels), from the light that the plane emits (emission) and that from
+// behind it (behind), which its transmission dims (back to front, the
+// composite of the planes of a lensed scene):
+//
+//     out[c] = E[c] + mean over s of T[c S + s] behind[c S + s],
+//
+// of S sub-channels of each channel of out (subchannels; 1 for none).
+// E and T are the emission (nz channels) and the transmission (nz S
+// channels) of the plane, on a grid of sx by sy pixels, at the position
+// of the pixel on the plane, in the pixel coordinates of the grid
+// (source_x and source_y, at index y * nx + x): their bilinear
+// interpolation there, of 0 light and a transmission of 1 off the grid
+// (no galaxy there). Without positions (null), the grid is the image
+// plane's and the pixel is its own (the plane of the image). A position
+// that is not a number (a ray not traced) takes neither: the light from
+// behind passes. A null emission is none, a null transmission is 1, and
+// a null behind is no light from behind (nz S channels of nx by ny
+// pixels). out can be behind without sub-channels: each pixel is read
+// before it is written.
+template<typename T> constexpr void
+dmodel_lens_composite(
+        int x, int y, int c,
+        int nx, int ny, int sx, int sy, int subchannels,
+        const T* source_x, const T* source_y,
+        const T* emission, const T* transmission, const T* behind,
+        T* out)
+{
+    const long long i = index_2d_to_1d<long long>(x, y, nx);
+    const long long nimage = 1LL * nx * ny;
+    const long long nplane = 1LL * sx * sy;
+    const T px = source_x ? source_x[i] : T(x);
+    const T py = source_y ? source_y[i] : T(y);
+    const bool traced = !std::isnan(px) && !std::isnan(py);
+    const LensSample<T> sample = traced
+            ? dmodel_lens_sample_at(px, py, sx, sy) : LensSample<T>{};
+
+    T value = 0;
+    if (emission && traced)
+        value = dmodel_lens_sample(sample, emission, c, nplane, T{0});
+    if (behind)
+    {
+        T passed = 0;
+        for (int s = 0; s < subchannels; ++s)
+        {
+            const int cs = c * subchannels + s;
+            const T t = transmission && traced
+                    ? dmodel_lens_sample(
+                            sample, transmission, cs, nplane, T{1})
+                    : T{1};
+            passed += t * behind[cs * nimage + i];
+        }
+        value += passed / subchannels;
+    }
+    out[c * nimage + i] = value;
 }
 
 // The weighted sum of the pixels of region r in channel z of a cube with

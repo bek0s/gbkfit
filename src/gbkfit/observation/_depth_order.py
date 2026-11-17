@@ -61,6 +61,13 @@ class DepthOrder:
             for name, members in self._items
             if name is not None for g in members[1:]}
 
+    def items(self) -> tuple[tuple[str | None, tuple[int, ...]], ...]:
+        """
+        Return its items, front to back: each the name of its group (None
+        for a galaxy alone) and the indices of its galaxies.
+        """
+        return self._items
+
     def separations(self) -> dict[int, str]:
         """
         Return the parameter of the separation of each galaxy of a group
@@ -81,7 +88,7 @@ class DepthOrder:
     def seen(self, seen: Sequence[int]) -> tuple[DepthUnit, ...]:
         """
         Return the order of the galaxies of the given indices, as an
-        observation that sees them sees it (see SeenGalaxies.order): of
+        observation that sees them sees it (see SeenPlane.order): of
         each item, the galaxies of it that it sees, by their positions
         among them (a group of which it sees one galaxy is that galaxy).
         """

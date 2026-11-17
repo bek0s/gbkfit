@@ -1,8 +1,8 @@
 """
-The numerical kernels of the masses of a lens (see the module masses):
+The numerical kernels of the pieces of a lens (see the module pieces):
 the deflections of the SIE, the EPL and the NFW halo along their major
-and minor axes, and that of an elliptical convergence, by a tanh-sinh
-quadrature.
+and minor axes, that of an elliptical convergence by a tanh-sinh
+quadrature, and that of a circular multipole of a power-law profile.
 """
 
 import math
@@ -10,10 +10,13 @@ from collections.abc import Callable
 
 import numpy as np
 
+from gbkfit.params import ModelEvaluationError
+
 
 __all__ = [
     'elliptical_deflection',
     'epl_deflection',
+    'multipole_deflection',
     'nfw_convergence',
     'nfw_round_deflection',
     'sie_deflection'
@@ -114,8 +117,8 @@ def nfw_round_deflection(
         r_s: float
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Return the deflection of a round NFW halo (see LensNFW) along u and v:
-    4 kappa_s r_s h(x) / x along the radius, with x = r / r_s and
+    Return the deflection of a round NFW halo (see LensNFW) along u and
+    v: 4 kappa_s r_s h(x) / x along the radius, with x = r / r_s and
     h(x) = ln(x / 2) + F(x).
     """
     r = np.hypot(u, v)
@@ -151,15 +154,17 @@ def elliptical_deflection(
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Return the deflection of an elliptical convergence kappa(xi) (a
-    function of xi; see the module masses) along its major (u) and minor
+    function of xi = sqrt(q u^2 + v^2 / q)) along its major (u) and minor
     (v) axes, by the integrals over the ellipses within each point (Keeton
     2001, with xi^2 = q xi_K^2): alpha_u = q u J_0 and alpha_v = q v J_1,
 
         J_n = integral over w from 0 to 1 of kappa(xi(w)) / d^(n + 1/2),
         d = 1 - (1 - q^2) w,   xi(w)^2 = q w (u^2 + v^2 / d);
 
-    0 at its centre. The pixels are integrated in chunks, to keep the
-    memory of the nodes at each pixel small.
+    0 at its centre. The tanh-sinh quadrature of 52 nodes has a relative
+    error below 1e-8 for the NFW halo from 1e-3 to 1e3 scale radii. The
+    points are integrated in chunks, to keep the memory of the nodes at
+    each point small.
     """
     shape = u.shape
     u, v = u.ravel(), v.ravel()
@@ -178,3 +183,76 @@ def elliptical_deflection(
     alpha_u[centre] = 0
     alpha_v[centre] = 0
     return alpha_u.reshape(shape), alpha_v.reshape(shape)
+
+
+def multipole_deflection(
+        x: np.ndarray,
+        y: np.ndarray,
+        theta_e: float,
+        t: float,
+        order: int,
+        a: float,
+        posa: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the deflection along x and y of a circular multipole of order
+    m, at positions x and y from its centre: that of the convergence
+
+        kappa = a / 2 * (theta_e / r)^t * cos(m (phi - phi_m)),
+
+    the deviation from its ellipse of a host of the radial slope t of its
+    convergence (1 for the SIE, slope - 1 for the EPL; e.g. order 4 for
+    disky or boxy isodensity contours), at the radius r and the angle
+    phi about its centre, with phi_m that of the position angle posa
+    (degrees, north through east): a maximum of the convergence for
+    a > 0. 0 at its centre.
+
+    Its potential is psi = R(r) cos(m (phi - phi_m)), the solution of
+    the Poisson equation (div grad psi = 2 kappa) that is a power of r:
+
+        R = 2 k r^(2 - t) / ((2 - t)^2 - m^2),   k = a / 2 * theta_e^t,
+
+    and for m = 1, where that power is also a solution of the Laplace
+    equation at t = 1, R = 2 k r ((r^(1 - t) - theta_e^(1 - t)) /
+    (1 - t)) / (3 - t): the power less the constant deflection
+    2 k theta_e^(1 - t) / ((1 - t)(3 - t)), which moves only the source,
+    and 2 k r ln(r / theta_e) / (3 - t) at t = 1 (the isothermal
+    multipole of e.g. Van de Vyvere et al. 2022, of t = 1).
+
+    Raises
+    ------
+    ModelEvaluationError
+        If (2 - t)^2 = m^2 for m > 1 (order 2 of the slope t = 0, a
+        uniform sheet), where no power is a solution.
+    """
+    if theta_e == 0 or a == 0:
+        return np.zeros_like(x), np.zeros_like(y)
+    m = order
+    r = np.hypot(x, y)
+    centre = r == 0
+    r = np.where(centre, 1, r)
+    cos_phi, sin_phi = x / r, y / r
+    # (the angle from +x of the position angle is 90 degrees more)
+    angle = m * (np.arctan2(y, x) - math.radians(posa + 90))
+    k = a / 2 * theta_e ** t
+    power = r ** (1 - t)
+    if m == 1:
+        e = 1 - t
+        log_r = np.log(r / theta_e)
+        # ((r^e - theta_e^e) / e, exact as e goes to 0)
+        g = log_r if e == 0 else theta_e ** e * np.expm1(e * log_r) / e
+        scale = 2 * k / (3 - t)
+        alpha_r = scale * (g + power) * np.cos(angle)
+        alpha_phi = -scale * g * np.sin(angle)
+    else:
+        denominator = (2 - t) ** 2 - m * m
+        if denominator == 0:
+            raise ModelEvaluationError(
+                f"a multipole of order {m} has no deflection about a host "
+                f"of the radial slope t = {t:g} of its convergence")
+        c = 2 * k / denominator
+        alpha_r = c * (2 - t) * power * np.cos(angle)
+        alpha_phi = -m * c * power * np.sin(angle)
+    alpha_x = alpha_r * cos_phi - alpha_phi * sin_phi
+    alpha_y = alpha_r * sin_phi + alpha_phi * cos_phi
+    return np.where(centre, 0, alpha_x), np.where(centre, 0, alpha_y)

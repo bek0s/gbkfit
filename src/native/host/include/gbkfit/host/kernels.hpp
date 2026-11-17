@@ -195,19 +195,21 @@ dmodel_dcube_convolve_z(
 }
 
 template<typename T> void
-dmodel_lens_resample(
-        int nx, int ny, int nz, int sx, int sy,
+dmodel_lens_composite(
+        int nx, int ny, int nz, int sx, int sy, int subchannels,
         const T* source_x, const T* source_y,
-        const T* source, T* image)
+        const T* emission, const T* transmission, const T* behind,
+        T* out)
 {
-    // Parallelization: per 3d position in the image cube
+    // Parallelization: per 3d position in out
     #pragma omp parallel for collapse(3)
     for (int z = 0; z < nz; ++z) {
     for (int y = 0; y < ny; ++y) {
     for (int x = 0; x < nx; ++x) {
 
-    gbkfit::dmodel_lens_resample(
-            x, y, z, nx, ny, sx, sy, source_x, source_y, source, image);
+    gbkfit::dmodel_lens_composite(
+            x, y, z, nx, ny, sx, sy, subchannels, source_x, source_y,
+            emission, transmission, behind, out);
 
     }
     }
@@ -394,6 +396,25 @@ gmodel_transfer_march(const TransferArgs<T>& a)
     gbkfit::gmodel_transfer_opacity_front(x, y, a);
 
     }
+    }
+    }
+    }
+}
+
+template<typename T> void
+gmodel_transfer_transmission(
+        int nx, int ny, int nrows, int nopacity,
+        const T* opacity_front, const T* ratios, const T* tau, T* out)
+{
+    // Parallelization: per 3d position in out
+    #pragma omp parallel for collapse(3)
+    for (int r = 0; r < nrows; ++r) {
+    for (int y = 0; y < ny; ++y) {
+    for (int x = 0; x < nx; ++x) {
+
+    gbkfit::gmodel_transfer_transmission(
+            x, y, r, nx, ny, nopacity, opacity_front, ratios, tau, out);
+
     }
     }
     }
@@ -592,8 +613,8 @@ struct Wrapper
     }
 
     static void
-    dmodel_lens_resample(auto... args) {
-        kernels::dmodel_lens_resample<T>(args...);
+    dmodel_lens_composite(auto... args) {
+        kernels::dmodel_lens_composite<T>(args...);
     }
 
     static void
@@ -712,6 +733,11 @@ struct Wrapper
             kernels::gmodel_transfer_march<T, true>(a);
         else
             kernels::gmodel_transfer_march<T, false>(a);
+    }
+
+    static void
+    gmodel_transfer_transmission(auto... args) {
+        kernels::gmodel_transfer_transmission<T>(args...);
     }
 
     static void

@@ -16,7 +16,9 @@ __all__ = [
 # components decide, and the option depth), and 12, of 2026-11-14 on (the
 # observable merged into the observation), 13, of 2026-11-16 on (no
 # emission 'stars': light in bands, and the option continuum of spectral
-# observations), and 14, of 2026-11-16 on (the vertical equilibrium of the
+# observations), 14, of 2026-11-16 on (the vertical equilibrium of the
 # dispersion of a thick disk is its option equilibrium, not a dispersion
-# trait); gbkfit.migration rewrites the older ones
-FORMAT_VERSION = 14
+# trait), and 15, of 2026-11-17 on (gravitational lenses are a section of
+# their own, not the foreground of an observation); gbkfit.migration
+# rewrites the older ones
+FORMAT_VERSION = 15

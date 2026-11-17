@@ -37,29 +37,25 @@ class FrameShift(NamedTuple):
     """
     How an observation moves what it sees into its frame (see
     ObservationGroup): the parameters of the centres (x and y) and of the
-    systemic velocities (v) of the components of the galaxies it sees
-    (and the centres of what it adds, e.g. the masses of its lens),
+    systemic velocities (v) of the components of the galaxies it sees,
     where the origin of the frame of the first observation is in its
-    frame (arcsec, x and y), the names of the parameters of the offsets
-    of its frame, of x, y and the velocity (None for those it does not
-    fit), and the parameters of the shifts (x and y) of what it adds that
-    is placed by its RA and Dec (e.g. shifted deflection maps), which the
-    offsets alone move.
+    frame (arcsec, x and y), and the names of the parameters of the
+    offsets of its frame, of x, y and the velocity (None for those it
+    does not fit).
     """
     x: tuple[str, ...]
     y: tuple[str, ...]
     v: tuple[str, ...]
     alignment: tuple[float, float]
     offsets: tuple[str | None, str | None, str | None]
-    shifted_x: tuple[str, ...]
-    shifted_y: tuple[str, ...]
 
     def shifts(self, params: ParamValues) -> tuple[float, float, float]:
         """
         Return the shifts of the centres (x and y) and of the systemic
         velocities, by the alignment and the offsets.
         """
-        offsets = self._offsets(params)
+        offsets = [
+            0.0 if name is None else params[name] for name in self.offsets]
         return (
             self.alignment[0] + offsets[0], self.alignment[1] + offsets[1],
             offsets[2])
@@ -67,25 +63,16 @@ class FrameShift(NamedTuple):
     def moved(self, params: ParamValues) -> ParamValues:
         """
         Return the parameters with the centres and the systemic velocities
-        moved by the alignment and the offsets, and the shifts by the
-        offsets (the parameters themselves without either).
+        moved by the alignment and the offsets (the parameters themselves
+        without either).
         """
         if self.alignment == (0, 0) and self.offsets == (None, None, None):
             return params
         moved = dict(params)
-        shift_x, shift_y, shift_v = self.shifts(params)
-        offset_x, offset_y, _ = self._offsets(params)
-        for names, shift in (
-                (self.x, shift_x), (self.y, shift_y), (self.v, shift_v),
-                (self.shifted_x, offset_x), (self.shifted_y, offset_y)):
+        for names, shift in zip((self.x, self.y, self.v), self.shifts(params)):
             for name in names:
                 moved[name] = params[name] + shift
         return moved
-
-    def _offsets(self, params: ParamValues) -> list[float]:
-        """Return the values of the offsets of x, y and the velocity."""
-        return [
-            0.0 if name is None else params[name] for name in self.offsets]
 
 
 def frame_shift(
@@ -111,16 +98,10 @@ def frame_shift(
                     'xyv', (placed.x, placed.y, placed.vsys)):
                 if name is not None and name not in names[key]:
                     names[key].append(name)
-    # (and the centres of what the observation adds, e.g. its lens)
-    for x, y in () if frame is None else frame.centre_params:
-        names['x'].append(x)
-        names['y'].append(y)
-    shifted = () if frame is None else frame.shift_params
     return FrameShift(
         tuple(names['x']), tuple(names['y']), tuple(names['v']),
         alignment,
-        (None, None, None) if frame is None else frame.offsets,
-        tuple(x for x, _ in shifted), tuple(y for _, y in shifted))
+        (None, None, None) if frame is None else frame.offsets)
 
 
 def first_on_sky(frames: Sequence[SkyFrame | None]) -> int | None:

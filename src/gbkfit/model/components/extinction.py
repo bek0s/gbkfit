@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from typing import Annotated, Any
 
 import numpy as np
+import numpy.typing as npt
 from annotated_types import Gt
 
 from gbkfit.config import (
@@ -46,34 +47,41 @@ class ExtinctionLaw(TypedSerializable, abc.ABC):
         """Return the wavelengths (um) where it is defined."""
 
     @abc.abstractmethod
-    def _ratio(self, wavelength: float) -> float:
-        """Return A(lambda) / A(V) at a wavelength (um) in its range."""
-
-    def ratio(self, wavelength: float) -> float:
+    def _ratio(self, wavelength: np.ndarray) -> np.ndarray:
         """
-        Return A(lambda) / A(V) at a rest wavelength.
+        Return A(lambda) / A(V) at each of the wavelengths (um) of an
+        array, all in its range.
+        """
+
+    def ratio(self, wavelength: npt.ArrayLike) -> np.ndarray:
+        """
+        Return A(lambda) / A(V) at rest wavelengths: one, or an array of
+        them at once (e.g. the channels of a cube).
 
         Parameters
         ----------
-        wavelength : float
-            The wavelength (um, in vacuum).
+        wavelength : array_like
+            The wavelengths (um, in vacuum).
 
         Returns
         -------
-        float
-            The ratio.
+        np.ndarray
+            The ratio at each, of the shape of wavelength (0-d for one).
 
         Raises
         ------
         ValueError
-            If the wavelength is outside its range.
+            If a wavelength is outside its range (or not a number).
         """
+        wavelength = np.asarray(wavelength, dtype=float)
         low, high = self.range()
-        if not low <= wavelength <= high:
+        outside = ~((wavelength >= low) & (wavelength <= high))
+        if outside.any():
             raise ValueError(
                 f"the extinction law {self.type()!r} is defined from {low} "
-                f"to {high} um; a wavelength is {wavelength:.6g} um")
-        return float(self._ratio(wavelength))
+                f"to {high} um; a wavelength is "
+                f"{wavelength[outside].flat[0]:.6g} um")
+        return np.asarray(self._ratio(wavelength), dtype=float)
 
 
 class ExtinctionCCM(ExtinctionLaw):
@@ -110,33 +118,35 @@ class ExtinctionCCM(ExtinctionLaw):
     def range(self) -> tuple[float, float]:
         return 0.1, 1 / 0.3
 
-    def _ratio(self, wavelength: float) -> float:
+    def _ratio(self, wavelength: np.ndarray) -> np.ndarray:
         x = 1 / wavelength
-        if x < 1.1:
-            # Infrared
-            a = 0.574 * x ** 1.61
-            b = -0.527 * x ** 1.61
-        elif x < 3.3:
-            # Optical and near infrared
-            y = x - 1.82
-            a = np.polyval([
-                0.32999, -0.77530, 0.01979, 0.72085, -0.02427, -0.50447,
-                0.17699, 1], y)
-            b = np.polyval([
-                -2.09002, 5.30260, -0.62251, -5.38434, 1.07233, 2.28305,
-                1.41338, 0], y)
-        elif x < 8:
-            # Ultraviolet
-            fa = fb = 0.0
-            if x >= 5.9:
-                fa = -0.04473 * (x - 5.9) ** 2 - 0.009779 * (x - 5.9) ** 3
-                fb = 0.2130 * (x - 5.9) ** 2 + 0.1207 * (x - 5.9) ** 3
-            a = 1.752 - 0.316 * x - 0.104 / ((x - 4.67) ** 2 + 0.341) + fa
-            b = -3.090 + 1.825 * x + 1.206 / ((x - 4.62) ** 2 + 0.263) + fb
-        else:
-            # Far ultraviolet
-            a = np.polyval([-0.070, 0.137, -0.628, -1.073], x - 8)
-            b = np.polyval([0.374, -0.420, 4.257, 13.670], x - 8)
+        a = np.empty_like(x)
+        b = np.empty_like(x)
+        # Infrared
+        on = x < 1.1
+        a[on] = 0.574 * x[on] ** 1.61
+        b[on] = -0.527 * x[on] ** 1.61
+        # Optical and near infrared
+        on = (x >= 1.1) & (x < 3.3)
+        y = x[on] - 1.82
+        a[on] = np.polyval([
+            0.32999, -0.77530, 0.01979, 0.72085, -0.02427, -0.50447,
+            0.17699, 1], y)
+        b[on] = np.polyval([
+            -2.09002, 5.30260, -0.62251, -5.38434, 1.07233, 2.28305,
+            1.41338, 0], y)
+        # Ultraviolet, with the terms beyond x = 5.9
+        on = (x >= 3.3) & (x < 8)
+        u = x[on]
+        far = np.maximum(u - 5.9, 0)
+        a[on] = 1.752 - 0.316 * u - 0.104 / ((u - 4.67) ** 2 + 0.341) \
+            + (-0.04473 * far ** 2 - 0.009779 * far ** 3)
+        b[on] = -3.090 + 1.825 * u + 1.206 / ((u - 4.62) ** 2 + 0.263) \
+            + (0.2130 * far ** 2 + 0.1207 * far ** 3)
+        # Far ultraviolet
+        on = x >= 8
+        a[on] = np.polyval([-0.070, 0.137, -0.628, -1.073], x[on] - 8)
+        b[on] = np.polyval([0.374, -0.420, 4.257, 13.670], x[on] - 8)
         return a + b / self._rv
 
 
@@ -174,12 +184,12 @@ class ExtinctionCalzetti(ExtinctionLaw):
     def range(self) -> tuple[float, float]:
         return 0.12, 2.2
 
-    def _ratio(self, wavelength: float) -> float:
+    def _ratio(self, wavelength: np.ndarray) -> np.ndarray:
         x = 1 / wavelength
-        if wavelength < 0.63:
-            k = 2.659 * np.polyval([0.011, -0.198, 1.509, -2.156], x)
-        else:
-            k = 2.659 * (-1.857 + 1.040 * x)
+        k = np.where(
+            wavelength < 0.63,
+            2.659 * np.polyval([0.011, -0.198, 1.509, -2.156], x),
+            2.659 * (-1.857 + 1.040 * x))
         return (k + self._rv) / self._rv
 
 
@@ -242,7 +252,7 @@ class ExtinctionTable(ExtinctionLaw):
     def range(self) -> tuple[float, float]:
         return self._wavelengths[0], self._wavelengths[-1]
 
-    def _ratio(self, wavelength: float) -> float:
+    def _ratio(self, wavelength: np.ndarray) -> np.ndarray:
         return np.interp(wavelength, self._wavelengths, self._ratios)
 
 

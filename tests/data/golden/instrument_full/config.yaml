@@ -1,6 +1,6 @@
 # instrument_full: A cube seen through a Moffat PSF whose alpha varies with velocity, an LSF whose sigma does, and a primary beam; oversampled, median filtered, with pixel weights of the azimuth in the disk, smoothed.
 # (written by make_golden.py; do not edit)
-version: 14
+version: 15
 driver: {type: host}
 galaxies:
 - components:
@@ -31,7 +31,6 @@ observations:
     error: observation0_spectra_e.fits
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  foreground: {lens: null}
   instrument:
     primary_beam: {type: gauss, fwhm: 8, x: 1, y: -0.5, frequency: null}
     psf:

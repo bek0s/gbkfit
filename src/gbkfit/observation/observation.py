@@ -7,7 +7,7 @@ SkyFrame).
 
 import abc
 from collections.abc import Mapping, Sequence
-from typing import NamedTuple, Self
+from typing import TYPE_CHECKING, NamedTuple, Self
 
 import astropy.units
 import numpy as np
@@ -20,17 +20,44 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectraData
 from gbkfit.io import Beam
+from gbkfit.lensing import Tracer
 from gbkfit.model import DataUnit, DepthUnit, Galaxy
-from gbkfit.params import ParamDesc
+from gbkfit.params import ParamDesc, ParamValues
 from .plan import FluxScale, ObservationPlan
+
+if TYPE_CHECKING:
+    from ._frames import FrameShift
 
 
 __all__ = [
     'Observation',
     'SeenGalaxies',
+    'SeenPlane',
     'SkyFrame',
     'observation_parser'
 ]
+
+
+class SeenPlane(NamedTuple):
+    """
+    A plane of the galaxies an observation sees (see SeenGalaxies), drawn
+    as one scene (see Scene): its galaxies, by their positions among those
+    the observation sees, their order along the line of sight, front to
+    back (in units of their positions among those of the plane, see
+    DepthUnit; None if not given), and the plane of the tracer of the
+    group whose rays draw them (see Tracer), or None for the image plane.
+
+    Without lenses, an observation sees one plane, of all the galaxies it
+    sees, in the depth order of the group. With lenses, the planes of the
+    tracer up to the first with lenses are one, the image plane, whose
+    light no lens bends: their galaxies by redshift, those of each in the
+    depth order. Each plane of the tracer behind it is a plane of its
+    own, whose light the lenses in front bend (see Tracer.lensed). The
+    planes without galaxies seen are left out.
+    """
+    galaxies: tuple[int, ...]
+    order: tuple[DepthUnit, ...] | None
+    traced: int | None
 
 
 class SeenGalaxies(NamedTuple):
@@ -38,18 +65,28 @@ class SeenGalaxies(NamedTuple):
     The galaxies an observation sees (see ObservationGroup): the
     galaxies, the mapping of the parameters of each to those of the
     observation group, their labels (the id 'galaxy' of their extra
-    outputs), their order along the line of sight, front to back (in
-    units, see DepthUnit; None if not given), the RA and Dec (degrees) of
-    the origin of the frame of their parameters (that of the first
-    observation on the sky; None without one), and their cosmology (see
-    ObservationGroup).
+    outputs), their planes, near to far (see SeenPlane), the RA and Dec
+    (degrees) of the origin of the frame of their parameters (that of the
+    first observation on the sky; None without one), their cosmology (see
+    ObservationGroup), the paths of the light of the planes of the group
+    through its lenses, if it has any (see Tracer), the mapping of the
+    parameters of each lens of the tracer to those of the group, and how
+    the observation moves what it sees into its frame (see FrameShift):
+    the rays of its pixels meet the lenses moved as the galaxies.
     """
     galaxies: tuple[Galaxy, ...]
     mappings: tuple[dict[str, str], ...]
     labels: tuple[str, ...]
-    order: tuple[DepthUnit, ...] | None
+    planes: tuple[SeenPlane, ...]
     sky_origin: tuple[float, float] | None
     cosmology: Cosmology
+    tracer: Tracer | None
+    lens_mappings: tuple[dict[str, str], ...]
+    shift: 'FrameShift'
+
+    def lensed(self) -> bool:
+        """Check whether the light of a plane it sees is bent by a lens."""
+        return any(plane.traced is not None for plane in self.planes)
 
 
 class SkyFrame(NamedTuple):
@@ -71,22 +108,10 @@ class SkyFrame(NamedTuple):
     velocity_frame : str or None
         The frame of rest of its velocities (FITS SPECSYS, see FRAMES), if
         known.
-    centre_params : tuple of tuple of str
-        The names of the parameters of the centres (x and y) of what the
-        observation adds to the galaxies it sees in the frame of the model
-        (e.g. the masses of its lens), which the frame moves as the
-        centres of their components (see ObservationGroup).
-    shift_params : tuple of tuple of str
-        The names of the parameters of the shifts (x and y) of what the
-        observation adds that is placed by its RA and Dec (e.g. shifted
-        deflection maps of its lens), which only the offsets of the frame
-        move: the RA and Dec place it in each frame.
     """
     origin: tuple[float, float]
     offsets: tuple[str | None, str | None, str | None]
     velocity_frame: str | None
-    centre_params: tuple[tuple[str, str], ...]
-    shift_params: tuple[tuple[str, str], ...]
 
 
 class Observation(TypedSerializable, abc.ABC):
@@ -292,22 +317,24 @@ class Observation(TypedSerializable, abc.ABC):
             If the data are not of the observation (see __init__).
         """
 
-    def same_plan(self, other: 'Observation') -> bool:
+    def same_plan(self, other: 'Observation', seen: SeenGalaxies) -> bool:
         """
         Check whether its plan is also that of another observation, the
         same one with other data (see with_dataset), which can then share
-        it (see GroupPlan.with_datasets): whether all that its plan takes
-        from its data is the same in the other.
+        it (see GroupPlan.with_datasets): whether all that its plan of the
+        galaxies it sees takes from its data is the same in the other.
 
         Here, the unit of their light (see data_unit) and the floating
         type of their models, which the data can choose (see dtype);
         kinds whose plans take more from their data compare that too (see
-        ObservationProfile).
+        ObservationProfile, and ObservationSky with planes behind lenses).
 
         Parameters
         ----------
         other : Observation
             The other observation.
+        seen : SeenGalaxies
+            The galaxies they see.
 
         Returns
         -------
@@ -361,7 +388,12 @@ class Observation(TypedSerializable, abc.ABC):
         """
 
     @abc.abstractmethod
-    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservationPlan:
+    def plan(
+            self,
+            driver: Driver,
+            seen: SeenGalaxies,
+            reference: ParamValues | None
+    ) -> ObservationPlan:
         """
         Plan the evaluation of its model (see ObservationGroup.plan).
 
@@ -371,11 +403,21 @@ class Observation(TypedSerializable, abc.ABC):
             The driver it is evaluated on.
         seen : SeenGalaxies
             The galaxies it sees.
+        reference : ParamValues, optional
+            The values of the parameters of the group at which what is
+            laid out once for all evaluations is laid out (see
+            ParamSpace.reference; e.g. the grids of the planes whose light
+            a lens bends); required when it sees such planes.
 
         Returns
         -------
         ObservationPlan
             The plan.
+
+        Raises
+        ------
+        ValueError
+            If it needs the reference values and has none.
         """
 
     @abc.abstractmethod

@@ -1,6 +1,6 @@
 # spiral_bar_flows: A gas disk rotating in its mass (a stellar disk and an NFW halo), with the flows of a spiral density wave of 3 arms (which the galaxy stage tabulates from the rotation), along a bar, and in two wedges; moment maps.
 # (written by make_golden.py; do not edit)
-version: 14
+version: 15
 driver: {type: host}
 galaxies:
 - components:
@@ -39,7 +39,6 @@ observations:
     moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}

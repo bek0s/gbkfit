@@ -14,20 +14,19 @@ from gbkfit.driver import Driver
 from gbkfit.grid import (
     Grid, GridData, SpectralAxis, grid_options, x_axis_rota)
 from gbkfit.instrument import Instrument
+from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from ..depth import Depth
-from ..foreground import Foreground
 from ..plan import FluxScale, ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube
-from ._cube_plan import CubePlan
+from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
 from ._options import (
     Rota, Rpix, Rval, Size, Step, warn_unsmoothed_weights)
-from .base import DType, ObservationSky, SkyOptions
+from .base import DType, ObservationSky, SkyOptions, unmasked_pixels
 
 if TYPE_CHECKING:
-    from gbkfit.model import Scene
     from ..noise import Noise
 
 
@@ -177,7 +176,7 @@ class ObservationSlitSpectra(ObservationSky):
             slit_width: _Width | None = None,
             sky_rval: Rval = (0, 0),
             smooth_weights: bool = False,
-            foreground: Foreground | None = None,
+            source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
@@ -215,7 +214,7 @@ class ObservationSlitSpectra(ObservationSky):
         self._slit_width = slit_width
         self._smooth_weights = smooth_weights
         super().__init__(
-            grid, foreground, instrument, galaxies, components, lines,
+            grid, source_grid, instrument, galaxies, components, lines,
             continuum, band, pixel_weights, flux_scale, offsets, dataset,
             oversampling, depth, dtype, fft_dtype, name, unit)
 
@@ -229,6 +228,10 @@ class ObservationSlitSpectra(ObservationSky):
 
     def sky_rval(self) -> tuple[float, float]:
         return self._sky_rval
+
+    def _measured_pixels(self) -> np.ndarray:
+        # (the cube of a slit is one pixel across it, see _plan)
+        return unmasked_pixels(self._dataset, (1, self._grid.size[0]))
 
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
@@ -267,7 +270,7 @@ class ObservationSlitSpectra(ObservationSky):
     def _check_options(self, options: SkyOptions) -> None:
         warn_unsmoothed_weights(self._smooth_weights, options.instrument)
 
-    def _plan(self, driver: Driver, scene: 'Scene') -> 'SlitSpectraPlan':
+    def _plan(self, driver: Driver, drawing: SkyDrawing) -> 'SlitSpectraPlan':
         options = self._sky_options
         # The cube of a slit is one pixel (the slit width) across the slit,
         # sampled as finely as the pixels along it (the model is the mean
@@ -287,7 +290,7 @@ class ObservationSlitSpectra(ObservationSky):
             smooth_weights=self._smooth_weights,
             dtype=options.dtype,
             fft_dtype=options.fft_dtype)
-        return SlitSpectraPlan(model_cube, driver, scene, options)
+        return SlitSpectraPlan(model_cube, driver, drawing, options)
 
 
 class SlitSpectraPlan(CubePlan):

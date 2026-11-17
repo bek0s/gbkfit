@@ -73,6 +73,16 @@ GModelWrapper<T>::gmodel_transfer_march(const TransferArgs<T>& a)
 }
 
 template<typename T> void
+GModelWrapper<T>::gmodel_transfer_transmission(
+        int nx, int ny, int nrows, int nopacity,
+        const T* opacity_front, const T* ratios, const T* tau, T* out)
+{
+    launch("gmodel_transfer_transmission", 1LL * nx * ny * nrows,
+            kernels::gmodel_transfer_transmission<T>,
+            nx, ny, nrows, nopacity, opacity_front, ratios, tau, out);
+}
+
+template<typename T> void
 GModelWrapper<T>::gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a)
 {
     launch("gmodel_disk_traits_evaluate", a.npoints,
@@ -90,6 +100,8 @@ GModelWrapper<T>::gmodel_disk_traits_evaluate(const DiskTraitsArgs<T>& a)
             int, int, int, T*);\
     template void GModelWrapper<T>::gmodel_transfer_march(\
             const TransferArgs<T>&);\
+    template void GModelWrapper<T>::gmodel_transfer_transmission(\
+            int, int, int, int, const T*, const T*, const T*, T*);\
     template void GModelWrapper<T>::gmodel_disk_traits_evaluate(\
             const DiskTraitsArgs<T>&);
 INSTANTIATE(float)

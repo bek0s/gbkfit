@@ -2,22 +2,31 @@
 The depth axis of the observations on the sky, along the line of sight
 (Depth), and the evaluation of what they see along it, which the
 components they see decide (see Scene.evaluation of gbkfit.model): on the
-plane of the sky, on a depth axis, or by radiative transfer along it.
-Along the depth axis, the viewer is in front of its first voxel.
+plane of the sky, on a depth axis, or by radiative transfer along it;
+and of the planes behind lenses, each on a grid of its own (see
+plan_scenes). Along the depth axis, the viewer is in front of its first
+voxel.
 """
 
+from collections.abc import Callable
 from typing import Annotated, Any, Literal, TypeAlias
 
+import astropy.units
 import numpy as np
+import scipy.constants
 from annotated_types import Ge, Gt, Le
 
 from gbkfit.config import Choices, Serializable, Unit, check_options, warn
 from gbkfit.driver import Driver
-from gbkfit.grid import Grid
+from gbkfit.grid import Grid, VelocityConvention
+from gbkfit.lensing import (
+    LensedPlane, LensedScene, SceneDrawing, SourceGrid, TracePlan)
 from gbkfit.model import (
     MAX_SUBCHANNELS, AdditiveScenePlan, Scene, SceneEvaluation, ScenePlan,
-    TransferScenePlan)
+    TransferScenePlan, View)
 from gbkfit.model.components.base import DepthAxis
+from gbkfit.params import ParamValues
+from ._scene import SeenScenes
 
 
 __all__ = [
@@ -244,3 +253,153 @@ def plan_scene(
                 scene, driver, grid,
                 [depth.axis(spatial, radius) for radius in radii], dtype,
                 depth.slab(), depth.subchannels(), smoothing)
+
+
+def plan_scenes(
+        scenes: SeenScenes,
+        depth: Depth,
+        source_grid: SourceGrid,
+        driver: Driver,
+        grid: Grid,
+        dtype: np.dtype,
+        smoothing: float | None,
+        footprint: Callable[[], np.ndarray],
+        reference: ParamValues | None
+) -> SceneDrawing:
+    """
+    Plan the evaluation of the scenes of an observation (see SeenScenes)
+    on the grid of an image (no spectral axis) or a spectral cube: its one
+    scene as it needs (see plan_scene), or with planes behind lenses, each
+    plane on a grid of its own (see SourceGrid), its light bent onto the
+    grid through the lenses in front (see LensedScene and TracePlan).
+
+    Parameters
+    ----------
+    scenes : SeenScenes
+        The scenes.
+    depth : Depth
+        The depth axis of the observation, for the scenes that need one.
+    source_grid : SourceGrid
+        How the grids of the planes behind lenses are laid out.
+    driver : Driver
+        The driver of the evaluation.
+    grid : Grid
+        The grid of the image or of the spectral cube.
+    dtype : np.dtype
+        The floating type of the evaluation.
+    smoothing : float or None
+        The dispersion (km/s) by which the instrument smooths the spectra
+        of the model; None for an image.
+    footprint : callable
+        Return the pixels of the grid whose light can reach the data (a
+        bool array of shape (ny, nx)), from which the rays through the
+        lenses are traced; called with planes behind lenses only.
+    reference : ParamValues, optional
+        The values of the parameters at which the grids of the planes
+        behind lenses are laid out (see ParamSpace.reference); required
+        with them.
+
+    Returns
+    -------
+    SceneDrawing
+        The plan: a ScenePlan, or a LensedScenePlan.
+
+    Raises
+    ------
+    ValueError
+        If there are planes behind lenses and no reference values, the
+        lenses have no deflection at their rays there (e.g. off a map), or
+        dust in front of planes behind lenses has an extinction law that
+        is not of the wavelengths at which the observation sees them (see
+        _check_dust_behind).
+    """
+    if not scenes.lensed():
+        return plan_scene(
+            scenes.scene(), depth, driver, grid, dtype, smoothing)
+    if reference is None:
+        raise ValueError(
+            "an observation that sees planes behind lenses lays out their "
+            "grids at reference values of the parameters (see "
+            "ParamSpace.reference): plan its group with them (see "
+            "ObservationGroup.plan)")
+    _check_dust_behind(scenes, grid)
+    seen = scenes.seen
+    trace = TracePlan(
+        seen.tracer, seen.lens_mappings,
+        [plane.traced for plane in scenes.planes if plane.traced is not None],
+        grid, footprint(), seen.sky_origin, seen.shift.alignment,
+        seen.shift.offsets[:2], reference, source_grid, driver, dtype)
+    lensed = LensedScene([
+        LensedPlane(scene, plane.galaxies, plane.traced)
+        for plane, scene in zip(scenes.planes, scenes.scenes)])
+
+    def planner(
+            scene: Scene, plane_grid: Grid, subchannels: int | None
+    ) -> ScenePlan:
+        # (with the sub-channels the plane takes, if given: one for a
+        # plane drawn on the sub-channels of one with line opacity)
+        plane_depth = depth if subchannels is None else Depth(
+            depth.extent(), depth.step(), depth.slab(), subchannels)
+        return plan_scene(
+            scene, plane_depth, driver, plane_grid, dtype, smoothing)
+    return lensed.plan(planner, trace, driver, grid, dtype)
+
+
+def _check_dust_behind(scenes: SeenScenes, grid: Grid) -> None:
+    """
+    Raise ValueError if the extinction law of the dust of a galaxy that
+    dims light from behind it (see Scene.behind) is not of the wavelengths
+    at which an observation of the scenes sees that light, on the grid of
+    an image (of the band of its view) or of a spectral cube (of its
+    channels, of an axis of a rest): as far as the redshift of the galaxy
+    tells, at its rest. Extinction laws are not extrapolated: the error
+    says to leave the galaxy out of the observation (e.g. the lens galaxy
+    of a joint fit of an observation in the optical and one at mm
+    wavelengths, at which its dust and its light are negligible).
+    """
+    observed = _observed_wavelengths(grid, scenes.view())
+    if observed is None:
+        return
+    seen = scenes.seen
+    for plane, scene in zip(scenes.planes, scenes.scenes):
+        if not scene.behind():
+            continue
+        for g in plane.galaxies:
+            galaxy = seen.galaxies[g]
+            rest = observed / (1 + galaxy.redshift())
+            for i in galaxy.absorbers():
+                law = galaxy.components()[i].opacity().law()
+                if law is None:
+                    continue
+                low, high = law.range()
+                if rest.min() < low or rest.max() > high:
+                    raise ValueError(
+                        f"the dust of galaxy {seen.labels[g]!r} dims the "
+                        f"light from behind it (of the planes behind lenses), "
+                        f"which the observation sees from {rest.min():.4g} to "
+                        f"{rest.max():.4g} um at the rest of the galaxy; its "
+                        f"extinction law ({law.type()!r}) is of {low:.4g} to "
+                        f"{high:.4g} um: leave the galaxy out of the galaxies "
+                        f"of the observation (e.g. at mm wavelengths, where "
+                        f"its dust and its light are negligible), or give "
+                        f"its dust a law of those wavelengths")
+
+
+def _observed_wavelengths(grid: Grid, view: View) -> np.ndarray | None:
+    """
+    Return the wavelengths (um, in vacuum) at which an observation sees
+    light on the grid of an image (that of the band of its view) or of a
+    spectral cube (the edges of its channels); None if they are not known
+    (a band, or a spectral axis, without them).
+    """
+    if grid.spectral_axis is None:
+        return None if view.band is None else np.array(
+            [view.band.wavelength().to_value(astropy.units.um)])
+    axis = grid.spectral_axis
+    convention = VelocityConvention.of(grid.coords)
+    if convention.rest() is None:
+        return None
+    step = grid.coords.step[axis]
+    edges = grid.zero()[axis] - step / 2 + step * np.arange(
+        grid.size[axis] + 1)
+    return scipy.constants.c / convention.frequency(edges) * 1e6

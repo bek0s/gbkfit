@@ -33,6 +33,9 @@ The data side (never imports the model)
                  (bins and apertures), slits, visibilities, radii
 The model
     model        galaxies: their components, mass, gravity, distance
+    lensing      gravitational lenses: their pieces, the planes of the
+                 galaxies and lenses by redshift, the rays through them,
+                 and the drawing of the planes behind lenses
 Observation and fitting
     observation  how the model gives the data of a dataset; mock data
     objective    the comparison of models with data (likelihoods)

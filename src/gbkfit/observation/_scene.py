@@ -1,59 +1,136 @@
 """
-The scene of an observation on the sky (see ObservationSky): the
+The scenes of an observation on the sky (see ObservationSky): the
 components whose light it sees, of the galaxies it sees (see
-SeenGalaxies), which decide how it is evaluated along the line of sight
-(make_scene; see gbkfit.model.Scene).
+SeenGalaxies), drawn in a scene for each of their planes (make_scenes;
+see gbkfit.model.Scene), which decide how each is evaluated along the
+line of sight.
 """
 
 from collections.abc import Sequence
+from typing import NamedTuple
 
 import gbkfit.units
 from gbkfit.config import check_name
 from gbkfit.model import (
     Component, DataUnit, DepthUnit, Galaxy, Scene, SceneEvaluation, View,
     check_data_unit, named_components)
-from .observation import SeenGalaxies
+from .observation import SeenGalaxies, SeenPlane
 
 
 __all__ = [
+    'SeenScenes',
     'check_component_names',
-    'make_scene'
+    'make_scenes'
 ]
 
 
-def make_scene(
+class SeenScenes(NamedTuple):
+    """
+    What an observation on the sky sees of the galaxies it sees (see
+    make_scenes): the galaxies, the planes it draws, near to far (see
+    SeenPlane), the scene of each, and the indices of the components of
+    each galaxy whose light it sees.
+    """
+    seen: SeenGalaxies
+    planes: tuple[SeenPlane, ...]
+    scenes: tuple[Scene, ...]
+    emitters: tuple[tuple[int, ...], ...]
+
+    def lensed(self) -> bool:
+        """
+        Check whether a lens bends the light of a plane it draws: it then
+        draws several.
+        """
+        return any(plane.traced is not None for plane in self.planes)
+
+    def scene(self) -> Scene:
+        """
+        Return the one scene of an observation whose light no lens bends
+        (see lensed): that of its one plane.
+
+        Raises
+        ------
+        ValueError
+            If a lens bends the light of a plane.
+        """
+        if self.lensed():
+            raise ValueError(
+                "the observation sees planes behind lenses, each a scene of "
+                "its own")
+        return self.scenes[0]
+
+    def view(self) -> View:
+        """Return what it sees of the light of the components."""
+        return self.scenes[0].view()
+
+    def data_unit(self) -> DataUnit | None:
+        """
+        Return the unit of its data, which the light of the components
+        takes (None without data).
+        """
+        return self.scenes[0].data_unit()
+
+    def components(self) -> list[tuple[int, int, Component]]:
+        """
+        Return the components whose light it sees, each with the index of
+        its galaxy (among those it sees) and its own index.
+        """
+        return [
+            (g, i, self.seen.galaxies[g].components()[i])
+            for g, emitters in enumerate(self.emitters) for i in emitters]
+
+    def orbit_emitters(self) -> tuple[tuple[int, int], ...]:
+        """
+        Return the components whose light it sees and whose stars move on
+        orbits whose weights are solved (see Scene.orbit_emitters), each
+        as the index of its galaxy (among those it sees) and its own
+        index.
+        """
+        return tuple(
+            (plane.galaxies[g], i)
+            for plane, scene in zip(self.planes, self.scenes)
+            for g, i in scene.orbit_emitters())
+
+
+def make_scenes(
         seen: SeenGalaxies,
         components: Sequence[str] | None,
         view: View,
         data_unit: DataUnit | None = None
-) -> Scene:
+) -> SeenScenes:
     """
-    Return the scene of an observation of the galaxies it sees (see
-    Scene), of what it sees (see View: its band, or its spectral axis with
-    its lines and continuum; see ObservationSky.view), and of the unit of
-    its data, if any (see ObservationSky.data_unit). The
-    names of the components it sees (all those whose emission the view
-    sees, if None; see Emission.seen_in) are qualified by the names of
-    their galaxies ('galaxy.component') when it sees several (see
+    Return the scenes of an observation of the galaxies it sees (see
+    SeenScenes): a scene of the galaxies of each of their planes (see
+    Scene and SeenPlane), of what it sees (see View: its band, or its
+    spectral axis with its lines and continuum; see ObservationSky.view),
+    and of the unit of its data, if any (see ObservationSky.data_unit).
+    The names of the components it sees (all those whose emission the
+    view sees, if None; see Emission.seen_in) are qualified by the names
+    of their galaxies ('galaxy.component') when it sees several (see
     named_components). A spectral view of the continuum sees the
     velocities of the light in bands of the components that move (e.g.
     the kinematics of stars).
+
+    It draws the planes whose galaxies emit what it sees, and those in
+    front of them with opacity, which dims their light: every plane but
+    the farthest has light from behind it (see Scene.behind).
 
     Raises
     ------
     ValueError
         If a name is unknown or repeats, a component does not emit what it
         sees, it sees nothing, a line is not one of the components it
-        sees, it sees several galaxies with opacity
-        (which radiative transfer marches one after the other, see
-        Scene.evaluation) that the order of the galaxies along the line of
-        sight does not all place (see ObservationGroup: depth_order), or
-        without data of light, it sees components of different units (its
-        model is then in the unit of its components), or with data
-        without a unit, a component whose light has one (see
-        check_data_unit).
+        sees, it sees none of the light of galaxies behind a lens (nor of
+        any behind them) and no other plane behind a lens, it sees several
+        galaxies with opacity in a plane (which radiative transfer marches
+        one after the other, see Scene.evaluation) that the order of the
+        galaxies along the line of sight does not all place (see
+        ObservationGroup: depth_order), or without data of light, it sees
+        components of different units (its model is then in the unit of
+        its components), or with data without a unit, a component whose
+        light has one (see check_data_unit).
     """
-    galaxies, order = seen.galaxies, seen.order
+    galaxies = seen.galaxies
     kind = "an image, which sees the components that emit in a band" \
         if not view.spectral else \
         "a spectral cube, which sees the components that emit lines" + (
@@ -76,23 +153,50 @@ def make_scene(
             except ValueError as e:
                 raise ValueError(
                     f"component {_label(galaxy, i)}: {e}") from e
-    scene = Scene(
-        galaxies, seen.mappings, seen.labels, [tuple(e) for e in emitters],
-        view, order, data_unit)
-    if len(galaxies) > 1 \
-            and scene.evaluation() is SceneEvaluation.TRANSFER:
-        _check_order(galaxies, order)
-    return scene
+    # The planes drawn, far to near, each with whether one is behind it
+    drawn = []
+    for plane in reversed(seen.planes):
+        behind = bool(drawn)
+        if any(emitters[g] for g in plane.galaxies) or behind and any(
+                galaxies[g].absorbers() for g in plane.galaxies):
+            drawn.append((plane, behind))
+    drawn_planes = [plane for plane, _ in drawn]
+    left = [
+        galaxies[g].name() for plane in seen.planes
+        if plane not in drawn_planes for g in plane.galaxies]
+    # (the one scene of an image without planes behind lenses takes the
+    # states of all the galaxies the observation sees)
+    if left and all(plane.traced is None for plane in drawn_planes):
+        raise ValueError(
+            f"the observation sees none of the light of the galaxies {left} "
+            f"behind a lens, nor any behind them: leave them out of its "
+            f"galaxies")
+    scenes = []
+    for plane, behind in reversed(drawn):
+        plane_galaxies = [galaxies[g] for g in plane.galaxies]
+        plane_emitters = [tuple(emitters[g]) for g in plane.galaxies]
+        scene = Scene(
+            plane_galaxies, [seen.mappings[g] for g in plane.galaxies],
+            [seen.labels[g] for g in plane.galaxies], plane_emitters, view,
+            plane.order, data_unit, behind,
+            lensed=plane.traced is not None)
+        if len(plane_galaxies) > 1 \
+                and scene.evaluation() is SceneEvaluation.TRANSFER:
+            _check_order(plane_galaxies, plane.order)
+        scenes.append(scene)
+    return SeenScenes(
+        seen, tuple(reversed(drawn_planes)), tuple(scenes),
+        tuple(tuple(e) for e in emitters))
 
 
 def _check_order(
         galaxies: Sequence[Galaxy], order: Sequence[DepthUnit] | None
 ) -> None:
     """
-    Raise ValueError unless the order of the galaxies along the line of
-    sight (in units, see ObservationGroup: depth_order) places every one
-    of them: radiative transfer marches galaxies with opacity one after
-    the other, front to back.
+    Raise ValueError unless the order of the galaxies of a plane along the
+    line of sight (in units, see ObservationGroup: depth_order) places
+    every one of them: radiative transfer marches galaxies with opacity
+    one after the other, front to back.
     """
     ordered = {g for unit in order or () for g in unit.galaxies}
     if missing := [
