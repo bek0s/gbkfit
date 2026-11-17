@@ -5,15 +5,14 @@ front, on the grid of the image.
 """
 
 import logging
-import math
-from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeAlias
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid, GridData
-from gbkfit.model import Extras, Scene, SceneEvaluation
+from gbkfit.model import DepthAxis, Extras, Scene
 from gbkfit.params import ParamValues
 from .trace_plan import TracePlan
 
@@ -73,13 +72,36 @@ class SceneDrawing(Protocol):
         """
 
 
-# How an observation plans the scene of a plane on a grid (e.g. along its
-# line of sight, see gbkfit.observation): the scene, the grid, and the
-# number of sub-channels of each channel that radiative transfer with line
-# opacity marches it at, or None for those of the observation (see Depth:
-# subchannels); e.g. 1 for a plane behind one with line opacity, which is
-# drawn on its sub-channels already
-ScenePlanner: TypeAlias = Callable[[Scene, Grid, int | None], SceneDrawing]
+class ScenePlanner(Protocol):
+    """
+    How an observation plans the scene of a plane on a grid (e.g. along
+    its line of sight, see gbkfit.observation): the depth axes it is
+    drawn on, and its plan on them.
+    """
+
+    def depth_axes(self, scene: Scene, grid: Grid) -> tuple[DepthAxis, ...]:
+        """
+        Return the depth axes on which a scene is drawn on a grid (of an
+        image or a spectral cube): none on the plane of the sky, one for
+        all its galaxies, or by radiative transfer one for each (see
+        Scene.evaluation).
+        """
+
+    def plan(
+            self,
+            scene: Scene,
+            grid: Grid,
+            axes: tuple[DepthAxis, ...],
+            subchannels: int | None
+    ) -> SceneDrawing:
+        """
+        Plan a scene on a grid, on its depth axes there (see depth_axes),
+        with the number of sub-channels of each channel that radiative
+        transfer with line opacity marches it at, or None for those of
+        the observation (see Depth: subchannels); e.g. 1 for a plane
+        behind one with line opacity, which is drawn on its sub-channels
+        already.
+        """
 
 
 class LensedPlane(NamedTuple):
@@ -253,13 +275,14 @@ class LensedScenePlan:
     image.
 
     It estimates the memory of the drawing of each plane before planning
-    it (its light and transmission, and a field on a depth axis), logs it,
-    and warns of more than MEMORY_WARNING. At each evaluation, until it
-    warns of it once, it sums the light of each plane behind lenses on
-    the border of its grid, on the device, and warns if it is more than
-    EDGE_FLUX_LIMIT of its light: rays that cross the plane beyond the
-    grid, which is fixed (e.g. as free lenses move them in a fit), see no
-    light there.
+    it (its light and transmission, and the fields on its depth axis:
+    that of its opacity, and those of the extra outputs when asked for),
+    logs it, and warns of more than MEMORY_WARNING held for sure. At
+    each evaluation, until it warns of it once, it sums the light of
+    each plane behind lenses on the border of its grid, on the device,
+    and warns if it is more than EDGE_FLUX_LIMIT of its light: rays that
+    cross the plane beyond the grid, which is fixed (e.g. as free lenses
+    move them in a fit), see no light there.
 
     Parameters
     ----------
@@ -313,9 +336,11 @@ class LensedScenePlan:
             per_channel = channels // image_channels
             plane_grid = grid if plane.plane is None else _plane_grid(
                 trace.grid(plane.plane), grid, per_channel)
-            _log_memory(label, plane.scene, plane_grid, channels, dtype)
-            plan = planner(
-                plane.scene, plane_grid, 1 if per_channel > 1 else None)
+            axes = planner.depth_axes(plane.scene, plane_grid)
+            _log_memory(label, plane.scene, plane_grid, channels, axes, dtype)
+            plan = planner.plan(
+                plane.scene, plane_grid, axes,
+                1 if per_channel > 1 else None)
             plane_shape = (channels,) + plane_grid.size[1::-1]
             transmission = plan.transmission()
             subchannels = 1
@@ -532,39 +557,46 @@ def _log_memory(
         scene: Scene,
         grid: Grid,
         channels: int,
+        axes: tuple[DepthAxis, ...],
         dtype: np.dtype
 ) -> None:
     """
     Log the memory of the drawing of a plane of a scene on a grid, of the
-    given channels, before it is planned, and warn if what it holds for
-    sure is more than MEMORY_WARNING: its light, and its transmission if
-    it has light from behind (of a row a channel; more with line
-    opacity), and if it is drawn on a depth axis, a field there (of the
-    voxels of the default depth axis, see Depth: the diagonal of the
-    grid, in its pixels) for each that it holds: one for its dust or line
-    opacity, which it holds for sure, and for its extra outputs, when
-    asked for.
+    given channels and on the given depth axes (see
+    ScenePlanner.depth_axes), before it is planned, and warn if what it
+    holds for sure is more than MEMORY_WARNING: its light, and its
+    transmission if it has light from behind (of a row a channel; more
+    with line opacity), and on a depth axis, a field there (of the
+    voxels of the longest) for its dust or line opacity. On a depth axis,
+    it also logs the fields that its extra outputs hold, when asked for
+    (see Scene.extra_fields).
     """
     size_x, size_y = grid.size[:2]
     itemsize = np.dtype(dtype).itemsize
     light = channels * size_x * size_y * itemsize \
         * (2 if scene.behind() else 1)
-    planes = 0 if scene.evaluation() is SceneEvaluation.PLANE \
-        else math.ceil(math.hypot(size_x, size_y))
+    planes = max((axis.size for axis in axes), default=0)
     field = planes * size_x * size_y * itemsize
-    held = light + (
-        field if scene.has_dust() or scene.line_opacity() else 0)
+    opacity = scene.has_dust() or scene.line_opacity()
+    held = light + (field if opacity else 0)
     message = (
         f"lensed scene, {label}: a grid of {size_x} x {size_y} pixels and "
-        f"{channels} channels: about {light / 2 ** 20:.0f} MiB of light")
+        f"{channels} channels: about {_mib(light)} of light")
     if planes:
+        extras = scene.extra_fields()
+        held_field = ' (one for its opacity)' if opacity else ''
         message += (
-            f", and {field / 2 ** 20:.0f} MiB for each field on a depth "
-            f"axis of about {planes} planes (its opacity, if any, and its "
-            f"extra outputs)")
+            f", and {_mib(field)} for each field on its depth axis of "
+            f"{planes} planes{held_field}; its extra outputs, when asked "
+            f"for, hold up to {extras} fields ({_mib(extras * field)})")
     _log.info(message)
     if held > MEMORY_WARNING:
         _log.warning(
             f"{message}: give its observation a mask of the pixels of its "
             f"data, or a source grid of a smaller extent or a coarser step "
             f"(see SourceGrid)")
+
+
+def _mib(size: int) -> str:
+    """Return a number of bytes in MiB, for humans."""
+    return f"{size / 2 ** 20:.0f} MiB"

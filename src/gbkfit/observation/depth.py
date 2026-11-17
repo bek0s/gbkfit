@@ -195,9 +195,44 @@ def check_scene(scene: Scene) -> None:
         AdditiveScenePlan.check(scene)
 
 
+def depth_axes(
+        scene: Scene, depth: Depth, grid: Grid
+) -> tuple[DepthAxis, ...]:
+    """
+    Return the depth axes on which a scene is evaluated on a grid, as it
+    needs (see Scene.evaluation): none on the plane of the sky; one on a
+    depth axis, for the largest of its galaxies (see Depth.axis); and by
+    radiative transfer, one for each galaxy.
+
+    Parameters
+    ----------
+    scene : Scene
+        The scene.
+    depth : Depth
+        The depth axis of the observation.
+    grid : Grid
+        The grid of the image or of the spectral cube.
+
+    Returns
+    -------
+    tuple of DepthAxis
+        The axes.
+    """
+    spatial = grid.spatial()
+    radii = scene.bounding_radii()
+    match scene.evaluation():
+        case SceneEvaluation.PLANE:
+            return ()
+        case SceneEvaluation.DEPTH:
+            return (depth.axis(spatial, max(radii)),)
+        case SceneEvaluation.TRANSFER:
+            return tuple(depth.axis(spatial, radius) for radius in radii)
+
+
 def plan_scene(
         scene: Scene,
         depth: Depth,
+        axes: tuple[DepthAxis, ...],
         driver: Driver,
         grid: Grid,
         dtype: np.dtype,
@@ -205,24 +240,26 @@ def plan_scene(
 ) -> ScenePlan:
     """
     Plan the evaluation of a scene as it needs (see Scene.evaluation), on
-    a driver and dtype, on the grid of an image (no spectral axis) or a
-    spectral cube, for an instrument that smooths the spectra of the model
-    by the given dispersion (km/s; None for an image), against which the
-    resolution of the light is checked:
+    its depth axes (see depth_axes), on a driver and dtype, on the grid of
+    an image (no spectral axis) or a spectral cube, for an instrument that
+    smooths the spectra of the model by the given dispersion (km/s; None
+    for an image), against which the resolution of the light is checked:
 
-    - on the plane of the sky, or on the depth axis of the scene, for the
-      largest of its galaxies (see Depth.axis): each galaxy adds its light
-      to the image or the spectral cube, dimmed by its own opacity (see
-      AdditiveScenePlan);
-    - by radiative transfer, each galaxy on a depth axis of its own (see
-      TransferScenePlan).
+    - on the plane of the sky, or on the depth axis of the scene: each
+      galaxy adds its light to the image or the spectral cube, dimmed by
+      its own opacity (see AdditiveScenePlan);
+    - by radiative transfer, each galaxy on its depth axis (see
+      TransferScenePlan), with the options slab and subchannels of the
+      depth axis of the observation.
 
     Parameters
     ----------
     scene : Scene
         The scene.
     depth : Depth
-        The depth axis of the observation, if the scene needs one.
+        The depth axis of the observation.
+    axes : tuple of DepthAxis
+        The depth axes of the scene on the grid (see depth_axes).
     driver : Driver
         The driver of the evaluation.
     grid : Grid
@@ -238,21 +275,62 @@ def plan_scene(
     ScenePlan
         The plan.
     """
-    spatial = grid.spatial()
-    radii = scene.bounding_radii()
     match scene.evaluation():
         case SceneEvaluation.PLANE:
             return AdditiveScenePlan(
                 scene, driver, grid, None, dtype, smoothing)
         case SceneEvaluation.DEPTH:
             return AdditiveScenePlan(
-                scene, driver, grid, depth.axis(spatial, max(radii)), dtype,
-                smoothing)
+                scene, driver, grid, axes[0], dtype, smoothing)
         case SceneEvaluation.TRANSFER:
             return TransferScenePlan(
-                scene, driver, grid,
-                [depth.axis(spatial, radius) for radius in radii], dtype,
-                depth.slab(), depth.subchannels(), smoothing)
+                scene, driver, grid, list(axes), dtype, depth.slab(),
+                depth.subchannels(), smoothing)
+
+
+class _PlanePlanner:
+    """
+    How an observation plans the scene of each plane of a lensed scene on
+    its grid (see ScenePlanner): on the depth axes of the observation
+    (see depth_axes and plan_scene), with the sub-channels the plane
+    takes, if given (one for a plane drawn on the sub-channels of one with
+    line opacity).
+    """
+
+    def __init__(
+            self,
+            depth: Depth,
+            driver: Driver,
+            dtype: np.dtype,
+            smoothing: float | None
+    ):
+        self._depth = depth
+        self._driver = driver
+        self._dtype = dtype
+        self._smoothing = smoothing
+
+    def depth_axes(self, scene: Scene, grid: Grid) -> tuple[DepthAxis, ...]:
+        """Return the depth axes of a scene on a grid (see depth_axes)."""
+        return depth_axes(scene, self._depth, grid)
+
+    def plan(
+            self,
+            scene: Scene,
+            grid: Grid,
+            axes: tuple[DepthAxis, ...],
+            subchannels: int | None
+    ) -> ScenePlan:
+        """
+        Plan a scene on a grid, on its depth axes there, with the given
+        sub-channels, if any (see plan_scene).
+        """
+        depth = self._depth
+        if subchannels is not None:
+            depth = Depth(
+                depth.extent(), depth.step(), depth.slab(), subchannels)
+        return plan_scene(
+            scene, depth, axes, self._driver, grid, self._dtype,
+            self._smoothing)
 
 
 def plan_scenes(
@@ -314,8 +392,10 @@ def plan_scenes(
         _check_dust_behind).
     """
     if not scenes.lensed():
+        scene = scenes.scene()
         return plan_scene(
-            scenes.scene(), depth, driver, grid, dtype, smoothing)
+            scene, depth, depth_axes(scene, depth, grid), driver, grid,
+            dtype, smoothing)
     if reference is None:
         raise ValueError(
             "an observation that sees planes behind lenses lays out their "
@@ -332,17 +412,9 @@ def plan_scenes(
     lensed = LensedScene([
         LensedPlane(scene, plane.galaxies, plane.traced)
         for plane, scene in zip(scenes.planes, scenes.scenes)])
-
-    def planner(
-            scene: Scene, plane_grid: Grid, subchannels: int | None
-    ) -> ScenePlan:
-        # (with the sub-channels the plane takes, if given: one for a
-        # plane drawn on the sub-channels of one with line opacity)
-        plane_depth = depth if subchannels is None else Depth(
-            depth.extent(), depth.step(), depth.slab(), subchannels)
-        return plan_scene(
-            scene, plane_depth, driver, plane_grid, dtype, smoothing)
-    return lensed.plan(planner, trace, driver, grid, dtype)
+    return lensed.plan(
+        _PlanePlanner(depth, driver, dtype, smoothing), trace, driver, grid,
+        dtype)
 
 
 def _check_dust_behind(scenes: SeenScenes, grid: Grid) -> None:

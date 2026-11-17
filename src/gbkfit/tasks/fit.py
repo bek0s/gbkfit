@@ -40,24 +40,27 @@ def fit(
         config: str,
         output_dir: str | None,
         output_dir_mode: Literal['terminate', 'overwrite', 'unique'],
-        evaluation_log: bool = True
+        evaluation_log: bool = True,
+        extra_outputs: bool = False
 ) -> None:
     """
     Fit the galaxies of a configuration to its data, and write the outputs
     as a run (see gbkfit.outputs): the configuration (config.yaml, kind
     'config'), the result in fit/ (see FitResult.write), the data and the
-    models and residuals at the best fit (see Setup.outputs), and
-    fit/restart.yaml ('restart_config'): the configuration with the free
-    parameters starting at the best fit, to fit again from there (e.g.
-    with another fitter). With a section 'workers' (e.g. {type: threads,
-    drivers: [names]}), the batches of points of the fitter are evaluated
-    at once on copies of the objective (see Workers), e.g. one per GPU. As
-    it fits, it shows its progress on the console, writes every report of
-    it to logs/progress.jsonl ('progress'), its log to logs/gbkfit.log
-    ('log'; see run_log), and the configuration at the best fit so far to
-    fit/best.yaml ('best_config'; see _progress), from which a stopped fit
-    can start again. In a project, it writes the sources of the
-    configuration too (setup.json, 'setup'; see write_setup).
+    models and residuals at the best fit (and the extra outputs of the
+    models, if asked for; see Setup.outputs), and fit/restart.yaml
+    ('restart_config'): the configuration with the free parameters
+    starting at the best fit, to fit again from there (e.g. with another
+    fitter), or to evaluate it with its extra outputs. With a section
+    'workers' (e.g. {type: threads, drivers: [names]}), the batches of
+    points of the fitter are evaluated at once on copies of the objective
+    (see Workers), e.g. one per GPU. As it fits, it shows its progress on
+    the console, writes every report of it to logs/progress.jsonl
+    ('progress'), its log to logs/gbkfit.log ('log'; see run_log), and the
+    configuration at the best fit so far to fit/best.yaml ('best_config';
+    see _progress), from which a stopped fit can start again. In a
+    project, it writes the sources of the configuration too (setup.json,
+    'setup'; see write_setup).
 
     With a section 'bootstrap' (see BootstrapOptions), the errors of the
     best fit are then bootstrapped too (see gbkfit.fitting.run_bootstrap),
@@ -88,6 +91,9 @@ def fit(
         What to do if the directory exists (see gbkfit.outputs.create).
     evaluation_log : bool, optional
         Whether to log the evaluations, to resume from (true by default).
+    extra_outputs : bool, optional
+        Whether to write the extra outputs of the models at the best fit
+        too (kind 'extra'; see eval_); False by default.
 
     Raises
     ------
@@ -108,10 +114,12 @@ def fit(
             bootstrap_log = gbkfit.fitting.SubFitLog(
                 run.filename(_BOOTSTRAP_LOG))
         with gbkfit.setup.load(file) as setup:
-            _fit(file.config, file.root, setup, run, log, bootstrap_log)
+            _fit(
+                file.config, file.root, setup, run, log, bootstrap_log,
+                extra_outputs)
 
 
-def resume(output_dir: str) -> None:
+def resume(output_dir: str, extra_outputs: bool = False) -> None:
     """
     Resume a fit that stopped or was killed, in its run: run it again from
     its configuration, answering the fitter from the log of its
@@ -125,6 +133,9 @@ def resume(output_dir: str) -> None:
     ----------
     output_dir : str
         The directory of the run of the fit.
+    extra_outputs : bool, optional
+        Whether to write the extra outputs of the models at the best fit
+        too (see fit); False by default.
 
     Raises
     ------
@@ -144,7 +155,9 @@ def resume(output_dir: str) -> None:
         output_dir, _BOOTSTRAP_LOG))
     with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run), \
             gbkfit.setup.load(file) as setup:
-        _fit(file.config, file.root, setup, run, log, bootstrap_log)
+        _fit(
+            file.config, file.root, setup, run, log, bootstrap_log,
+            extra_outputs)
 
 
 def bootstrap(output_dir: str, config: str) -> None:
@@ -298,11 +311,13 @@ def _fit(
         setup: Setup,
         run: gbkfit.outputs.RunWriter,
         log: gbkfit.fitting.EvaluationLog | None,
-        bootstrap_log: gbkfit.fitting.SubFitLog | None
+        bootstrap_log: gbkfit.fitting.SubFitLog | None,
+        extra_outputs: bool
 ) -> None:
     """
     Fit the setup of a configuration, and bootstrap it if it asks for it,
-    with the logs, if given, and write the outputs to its run (see fit).
+    with the logs, if given, and write the outputs to its run, with the
+    extra outputs of the models if asked for (see fit).
     """
     params = setup.params()
     _log.info("model-fitting started")
@@ -327,7 +342,7 @@ def _fit(
     _log.info(f"saving result under '{run.path}'...")
     result.write(run)
     gbkfit.outputs.write_outputs(run, setup.outputs(
-        setup.evaluate(result.best().free), data=True, extra=True))
+        setup.evaluate(result.best().free), data=True, extra=extra_outputs))
     _write_config(
         run, 'fit/restart.yaml', 'restart_config', cfg, root, params,
         result.best().elements)

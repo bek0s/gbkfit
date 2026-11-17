@@ -47,7 +47,7 @@ def data_grid(observation):
         spectral=spectral)
 
 
-def run_eval(mode, config, workdir, profile_iters=0):
+def run_eval(mode, config, workdir, profile_iters=0, extra_outputs=False):
     """
     Run the eval task on a configuration (or on a configuration file) in a
     new directory, and return its run (see gbkfit.outputs).
@@ -56,8 +56,8 @@ def run_eval(mode, config, workdir, profile_iters=0):
     if isinstance(config, dict):
         yaml.dump(config, workdir / 'config.yaml')
         config = 'config.yaml'
-    result = run_task(
-        workdir, 'eval', eval_options(mode, config, profile_iters))
+    result = run_task(workdir, 'eval', eval_options(
+        mode, config, profile_iters) | dict(extra_outputs=extra_outputs))
     if result.returncode != 0:
         pytest.fail(f"eval failed:\n{result.stderr[-3000:]}")
     return outputs.open(workdir / 'output')
@@ -68,6 +68,14 @@ def eval_options(mode, config, profile_iters=0):
     return dict(
         mode=mode, config=str(config), profile_iters=profile_iters,
         output_dir='output', output_dir_mode='unique')
+
+
+def with_free_parameters(config):
+    """Return a configuration with its posa and incl free."""
+    properties = config['params']['properties']
+    properties['posa'] = dict(value=properties['posa'], min=0, max=90)
+    properties['incl'] = dict(value=properties['incl'], min=0, max=90)
+    return config
 
 
 def array(run, kind, **ids):
@@ -96,7 +104,10 @@ def test_objective_residuals(tmp_path):
     # correlated noise or pixel weights). The data file has no
     # WCS, so its reference pixel is its centre, as in the model.
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    model = array(run_eval('model', config, tmp_path / 'model'), 'model')
+    model_run = run_eval('model', config, tmp_path / 'model')
+    model = array(model_run, 'model')
+    # (without extra outputs, unless asked for)
+    assert not model_run.products('extra')
     fits.writeto(tmp_path / 'data.fits', model + 1)
     observation = config['observations'][0]
     observation['dataset'] = dict(
@@ -105,7 +116,8 @@ def test_objective_residuals(tmp_path):
     config['likelihoods'] = dict(type='gauss', weights=0.5)
     # (a configuration of a fit evaluates too: its fitter is left)
     config['fitter'] = dict(type='scipy.least_squares')
-    run = run_eval('objective', config, tmp_path / 'objective')
+    run = run_eval(
+        'objective', config, tmp_path / 'objective', extra_outputs=True)
     np.testing.assert_allclose(array(run, 'residual'), 1, rtol=1e-5)
     np.testing.assert_allclose(array(run, 'wresidual'), 0.5, rtol=1e-5)
     assert not run.products('chi2_residual')
@@ -127,7 +139,8 @@ def test_objective_residuals(tmp_path):
 def test_profiling_writes_the_timings(tmp_path, mode):
     # The timings of the profiled evaluations only: model_eval once for
     # each of the 3, in both modes (objective mode times the chi-square)
-    config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
+    config = with_free_parameters(
+        yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml'))
     if mode == 'objective':
         model = array(run_eval('model', config, tmp_path / 'model'), 'model')
         fits.writeto(tmp_path / 'data.fits', model)
@@ -141,6 +154,42 @@ def test_profiling_writes_the_timings(tmp_path, mode):
     # (and the log of the run has the messages of the task)
     log = pathlib.Path(run.filename(run.product('log'))).read_text()
     assert 'running performance test...' in log
+
+
+def test_profiling_evaluates_at_new_values(tmp_path, monkeypatch):
+    # Each profiled evaluation evaluates the model again, as one of a fit
+    # at new values, rather than give the one the plan keeps of the last
+    # evaluation (see GroupPlan.model_d): its cache keeps a new model
+    # each time, after that of the outputs
+    import contextlib
+    import gbkfit.setup
+    from gbkfit.tasks.eval import eval_
+    config = with_free_parameters(
+        yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml'))
+    yaml.dump(config, tmp_path / 'config.yaml')
+    loaded = []
+    load = gbkfit.setup.load
+
+    @contextlib.contextmanager
+    def keep(file):
+        with load(file) as setup_:
+            loaded.append(setup_)
+            yield setup_
+    monkeypatch.setattr(gbkfit.setup, 'load', keep)
+    eval_(
+        'model', str(tmp_path / 'config.yaml'), 3,
+        str(tmp_path / 'output'), 'unique')
+    (setup_,) = loaded
+    cache = setup_.group_plan().stage_caches()['observation.observation0']
+    assert cache.version() == 1 + 3
+
+
+def test_profiling_needs_free_parameters(tmp_path):
+    # (the evaluations at the values of the last would time its cache)
+    result = run_task(tmp_path, 'eval', eval_options(
+        'model', REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml', 3))
+    assert result.returncode == 1
+    assert 'free parameters' in result.stderr
 
 
 def test_mock_data_and_their_configuration(tmp_path):

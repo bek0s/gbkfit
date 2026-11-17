@@ -15,7 +15,8 @@ from gbkfit.lensing import (
     Lens, LensedPlane, LensedScene, LensSheet, LensSIE, SourceGrid,
     TracePlan, Tracer, plane_layout)
 from gbkfit.model import (
-    AdditiveScenePlan, Extras, Scene, SceneEvaluation, View, galaxy_parser)
+    AdditiveScenePlan, DepthAxis, Extras, Scene, SceneEvaluation, View,
+    galaxy_parser)
 
 
 ORIGIN = (150.0, 2.0)
@@ -93,18 +94,29 @@ class StandInPlan:
         data += self._light.reshape(-1, 1, 1)
 
 
-def stand_in_planner(plans):
+class StandInPlanner:
     """
     A planner of the stand-ins, of each plane in turn (near to far): its
-    light and transmission; it keeps the plans.
+    light and transmission, on the plane of the sky; it keeps the plans
+    (made).
     """
-    made = []
 
-    def planner(scene, grid, subchannels):
-        light, transmission = plans[len(made)]
-        made.append(StandInPlan(grid, light, transmission, subchannels))
-        return made[-1]
-    return planner, made
+    def __init__(self, plans):
+        self._plans = plans
+        self.made = []
+
+    def depth_axes(self, scene, grid):
+        return ()
+
+    def plan(self, scene, grid, axes, subchannels):
+        light, transmission = self._plans[len(self.made)]
+        self.made.append(StandInPlan(grid, light, transmission, subchannels))
+        return self.made[-1]
+
+
+def stand_in_planner(plans):
+    planner = StandInPlanner(plans)
+    return planner, planner.made
 
 
 def composite(scene, planner, plan, grid):
@@ -228,10 +240,21 @@ def plan_scene(scene, driver, grid):
     return AdditiveScenePlan(scene, driver, grid, None, np.float64, None)
 
 
+class Planner:
+    """The planner of scenes on the plane of the sky (see plan_scene)."""
+
+    def __init__(self, driver):
+        self._driver = driver
+
+    def depth_axes(self, scene, grid):
+        return ()
+
+    def plan(self, scene, grid, axes, subchannels):
+        return plan_scene(scene, self._driver, grid)
+
+
 def planner_of(driver):
-    def planner(scene, grid, subchannels):
-        return plan_scene(scene, driver, grid)
-    return planner
+    return Planner(driver)
 
 
 def states(driver):
@@ -322,3 +345,51 @@ def test_the_memory_of_a_plane_is_estimated_and_warned_of(
             np.float64)
     assert 'plane1: a grid of 20 x 16 pixels and 1 channels' in caplog.text
     assert 'coarser step' in caplog.text
+
+
+class DepthPlanner(Planner):
+    """
+    A planner of scenes on a depth axis of 37 planes (drawn on the plane
+    of the sky, as thin disks are on any).
+    """
+
+    def depth_axes(self, scene, grid):
+        return (DepthAxis(37, 0.1, -1.8),)
+
+
+def test_the_memory_of_a_plane_is_that_of_its_depth_axis(driver, caplog):
+    # (the axis planned, and the fields its extra outputs would hold)
+    lensed = LensedScene([LensedPlane(scene_of([1], False), (1,), 1)])
+    with caplog.at_level(logging.INFO):
+        lensed.plan(
+            DepthPlanner(driver), trace_plan(driver, IMAGE), driver, IMAGE,
+            np.float64)
+    fields = scene_of([1], False).extra_fields()
+    assert 'plane1: a grid of 20 x 16 pixels' in caplog.text
+    assert 'on its depth axis of 37 planes;' in caplog.text
+    assert f'hold up to {fields} fields' in caplog.text
+
+
+def test_the_extra_outputs_of_a_scene_hold_fields_of_each_component():
+    from gbkfit.model._component_plans import galaxy_extra_fields
+    one = scene_of([1], False).extra_fields()
+    assert one == galaxy_extra_fields(1)
+    assert scene_of([0, 1], False).extra_fields() == 2 * one
+    # (a galaxy of several also has their totals)
+    assert galaxy_extra_fields(2) > 2 * one
+
+
+def test_observations_plan_planes_on_their_depth_axis():
+    from gbkfit.observation.depth import Depth, depth_axes
+    galaxy = galaxy_parser.load(dict(
+        name='arc', redshift=1.5, components=[dict(
+            type='thick_disk', loose=False, tilted=False,
+            rnodes=[0, 1, 2, 3], rptraits=dict(type='exponential'),
+            rhtraits=dict(type='sech2', zmax=1),
+            emission=dict(type='band'))]))
+    thick = Scene(
+        [galaxy], [{name: f'arc_{name}' for name in galaxy.pdescs()}],
+        ['arc'], [(0,)], View(spectral=False))
+    (axis,) = depth_axes(thick, Depth(extent=3.2, step=0.02), IMAGE)
+    assert (axis.size, axis.step) == (160, 0.02)
+    assert depth_axes(scene_of([1], False), Depth(), IMAGE) == ()

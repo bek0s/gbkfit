@@ -22,6 +22,7 @@ import scipy.constants
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid, VelocityConvention
 from gbkfit.params import ParamValues
+from ._component_plans import galaxy_extra_fields
 from ._galaxy_plan import GalaxyPlan
 from ._opacity import check_behind, opacity_cubes
 from ._transfer import (
@@ -295,6 +296,17 @@ class Scene:
     def has_dust(self) -> bool:
         """Check whether a component of its galaxies has dust."""
         return any(galaxy.absorbers() for galaxy in self._galaxies)
+
+    def extra_fields(self) -> int:
+        """
+        Return the most fields on its grid (on its depth axis, if it has
+        one) that the extra outputs of the components it draws hold, when
+        asked for (see galaxy_extra_fields): e.g. to estimate their
+        memory.
+        """
+        return sum(
+            galaxy_extra_fields(len(components))
+            for components in self._drawn())
 
     def bounding_radii(self) -> tuple[float, ...]:
         """

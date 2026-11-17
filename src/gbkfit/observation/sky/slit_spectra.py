@@ -39,15 +39,6 @@ __all__ = [
 _Width: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
 
 
-def _slit_extra(data: np.ndarray, grid: Grid) -> GridData:
-    """
-    Make an extra output on the low-resolution grid of ModelCube a slit
-    (the position along the slit and the velocity; the slit is one pixel
-    wide).
-    """
-    return GridData(data[:, 0, :], grid.coords.axes(0, 2), 1)
-
-
 def _slit_grid_options(grid: Grid, sizes: bool = True) -> dict[str, Any]:
     """
     Return the options of the grid of a slit (see grid_options) but its
@@ -309,9 +300,10 @@ class SlitSpectraPlan(CubePlan):
         return dict(
             spectra=noise.sigma(self._model_cube.grid(), recorded)[:, 0, :])
 
-    # The slit has no position on the sky, so the extra outputs of the
+    # Its model data are the slits of the low-resolution cubes; the slit
+    # has no position on the sky, so the extra outputs of the
     # high-resolution grid are plain arrays
-    _extra_lo = staticmethod(_slit_extra)
+    _extra_lo = None
     _extra_high_res = staticmethod(_model_cube.plain_extra)
 
     def _measure(self) -> ModelData:

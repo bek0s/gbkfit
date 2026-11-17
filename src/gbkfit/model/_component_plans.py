@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    'ComponentPlans'
+    'ComponentPlans',
+    'galaxy_extra_fields'
 ]
 
 
@@ -111,6 +112,27 @@ _TOTAL_EXTRAS = dict(
             axis=desc, whose="the components of the galaxy",
             weight="their brightness"), _KM_S)
     for axis, desc in _VECTOR_AXES.items()}
+
+
+def galaxy_extra_fields(ncomponents: int) -> int:
+    """
+    Return the most fields on the grid (on its depth axis, if it has one)
+    that the extra outputs of a galaxy of the given number of components
+    that it draws hold (see ComponentPlans.add_extras): one of each kind
+    for each component, and for several, one of each total.
+
+    Parameters
+    ----------
+    ncomponents : int
+        The number of the components that it draws.
+
+    Returns
+    -------
+    int
+        The number of fields.
+    """
+    totals = len(_TOTAL_EXTRAS) if ncomponents > 1 else 0
+    return ncomponents * len(_COMPONENT_EXTRAS) + totals
 
 
 def _total_vector(extras: list[dict[str, Any]]) -> dict[str, np.ndarray]:
@@ -337,12 +359,14 @@ class ComponentPlans:
         Add the extra outputs of each component (extras, by index: e.g.
         'bdata', see _COMPONENT_EXTRAS) to out_extra, with the id
         'component': its name, or its position if it has none (e.g.
-        'component0'); and their totals ('total_*', see _TOTAL_EXTRAS):
-        the given ones, the optical depth at V of all the absorbers
-        ('total_odata') and the velocity as a vector of the components
-        that move, weighted by their brightness ('total_vxdata' ...);
-        with the given position of the first voxel of the depth axis, if
-        not that of the axis (see extra).
+        'component0'); and their totals over several components
+        ('total_*', see _TOTAL_EXTRAS; the total of one would be its own
+        output): the given ones (of the light of several emitters), the
+        optical depth at V of the absorbers ('total_odata') and the
+        velocity as a vector of the emitters that move, weighted by their
+        brightness ('total_vxdata' ...); with the given position of the
+        first voxel of the depth axis, if not that of the axis (see
+        extra).
         """
         components = self._galaxy.components()
         for index, extra in extras.items():
@@ -352,10 +376,13 @@ class ComponentPlans:
                 out_extra.add(
                     key, self.extra(value, depth_zero, unit), title,
                     f"{description} {_ON_THE_GRID}", component=label)
-        if self.absorbers:
+        if len(self.absorbers) > 1:
             totals = dict(odata=sum(
                 extras[i]['odata'] for i in self.absorbers)) | totals
-        if movers := [extra for extra in extras.values() if 'vxdata' in extra]:
+        movers = [
+            extra for extra in extras.values()
+            if 'vxdata' in extra and 'bdata' in extra]
+        if len(movers) > 1:
             totals = totals | _total_vector(movers)
         for name, total in totals.items():
             title, description, unit = _TOTAL_EXTRAS[f'total_{name}']

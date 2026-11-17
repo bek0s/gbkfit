@@ -48,6 +48,22 @@ def test_eval_writes_a_run(tmp_path):
     run = outputs.open(tmp_path / 'output')
     assert (run.task, run.status) == ('eval', 'complete')
     assert run.product('model').shape == (12, 16)
+    # (with the extra outputs of the model only if asked for)
+    assert not run.products('extra')
+    result = run_cli(
+        tmp_path, 'eval', 'model', 'config.json', '--extra-outputs',
+        '--output-dir', 'extras')
+    assert result.returncode == 0, result.stderr
+    assert outputs.open(tmp_path / 'extras').product(
+        'extra', component='component0', name='bdata').shape == (12, 16)
+
+
+def test_a_bootstrap_writes_no_extra_outputs(tmp_path):
+    result = run_cli(
+        tmp_path, 'fit', 'later.yaml', '--bootstrap', 'fit',
+        '--extra-outputs')
+    assert result.returncode == 2
+    assert "--extra-outputs does not apply" in result.stderr
 
 
 def test_prep_writes_to_the_output_directory(tmp_path):

@@ -220,6 +220,9 @@ class PixelSpectraPlan(CubePlan):
             return None
         return dict(spectra=noise.sigma(self._model_cube.grid(), recorded))
 
+    # (its model data are the low-resolution cubes)
+    _extra_lo = None
+
     def _measure(self) -> ModelData:
         plan = self._model_cube_plan
         return dict(spectra=ModelItem(plan.cube(), weights=plan.weights()))

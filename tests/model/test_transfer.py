@@ -441,7 +441,7 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
         assert_same_model(other_cube, cube)
         assert names(other_extra) == names(extra)
         for name, ids in (
-                ('total_odata', {}), ('total_bdata', {}),
+                ('odata', dict(component='dust')), ('total_bdata', {}),
                 ('vdata', dict(component='gas')),
                 ('vdata', dict(component='outflow'))):
             value = extra.get(name, **ids).data
@@ -525,7 +525,8 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
     clear, _ = galaxies_model(driver, galaxies[:1], properties, **image)
     model, extra = galaxies_model(
         driver, galaxies, properties, order, **image)
-    tau = extra.get('total_odata', galaxy='front').data.sum(axis=0)
+    tau = extra.get('odata', galaxy='front', component='dust').data.sum(
+        axis=0)
     wavelength = LineCatalogue().band('sdss_r').wavelength().to_value('um')
     ratio = 3 - 2.5 * (wavelength / 1.5 - 0.2)
     expected = clear * np.exp(-ratio * tau) if dust_in_front else clear
@@ -802,7 +803,7 @@ def plan_galaxies(
     sub-channels of the march.
     """
     from gbkfit.model import DepthUnit, Scene
-    from gbkfit.observation.depth import Depth, plan_scene
+    from gbkfit.observation.depth import Depth, depth_axes, plan_scene
     loaded = galaxy_parser.load(galaxies)
     mappings = [
         {name: f'{galaxy.name()}_{name}' for name in galaxy.pdescs()}
@@ -810,8 +811,9 @@ def plan_galaxies(
     scene = Scene(
         loaded, mappings, [galaxy.name() for galaxy in loaded], emitters,
         view, [DepthUnit((g,)) for g in range(len(loaded))], None, behind)
+    depth = Depth(extent=120, subchannels=subchannels)
     plan = plan_scene(
-        scene, Depth(extent=120, subchannels=subchannels), driver, grid,
+        scene, depth, depth_axes(scene, depth, grid), driver, grid,
         np.dtype(np.float64), None if grid.spectral_axis is None else 20.0)
     return loaded, mappings, plan
 

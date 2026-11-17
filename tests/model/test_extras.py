@@ -23,9 +23,9 @@ PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=3, vsys=0,
     vpt_rt=2, vpt_vt=100, dpt_a=20)
 
-# A case of each observable with a PSF (so that the high-resolution grid
-# is padded): the observable, its galaxy, and the shape and spectral axis
-# of its low-resolution extra outputs
+# A case of each observable whose model data are the low-resolution
+# cube, with a PSF (so that the high-resolution grid is padded): the
+# observable, its galaxy, and the shape and spectral axis of its model
 CASES = dict(
     pixel_brightness=(
         dict(type='pixel_brightness', size=[16, 12], rval=[150, 2],
@@ -54,38 +54,60 @@ def flat_case(observable, galaxy):
         driver=dict(type='host'), observation=observable, galaxy=galaxy)
 
 
-@pytest.mark.parametrize('name', CASES)
-def test_dcube_extras_have_the_layout_of_the_data(evaluate_cases, name):
-    observable, galaxy, shape, spectral_axis = CASES[name]
-    case = flat_case(observable, galaxy)
-    properties = {
+# An observable whose model data are measured from the low-resolution
+# cube (its moments), without a PSF or oversampling
+MOMENTS = dict(
+    type='pixel_moments', size=[16, 12], step=[1, 1], rval=[150, 2],
+    spectral=dict(size=20, step=10, rval=0, convention='relativistic'),
+    flux_floor=1e-4)
+
+
+def galaxy_properties(name):
+    """The properties of the galaxy of a case, of its observable."""
+    return {
         k: v for k, v in PROPERTIES.items()
         if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
-    _, extra = evaluate_cases([case], properties)
-    dcube_lo = extra.get('dcube_lo')
-    assert isinstance(dcube_lo, GridData)
-    assert dcube_lo.data.shape == shape
-    assert dcube_lo.spectral_axis == spectral_axis
-    assert len(dcube_lo.coords.step) == len(shape)
-    # The high-resolution grid is on the sky, except across the slit
+
+
+@pytest.mark.parametrize('name', CASES)
+def test_a_model_that_is_its_cube_has_no_cube_extras_of_the_data(
+        evaluate_cases, name):
+    # Its model holds the low-resolution cube: the extras leave it out,
+    # but not the cube of the high-resolution grid (padded for the PSF),
+    # on the sky except across the slit
+    observable, galaxy, shape, spectral_axis = CASES[name]
+    case = flat_case(observable, galaxy)
+    data, extra = evaluate_cases([case], galaxy_properties(name))
+    (model,) = data[0].values()
+    assert model.data.shape == shape
+    assert not extra.find('dcube_lo')
     dcube_hi = extra.get('dcube_hi')
     if name == 'slit_spectra':
         assert isinstance(dcube_hi, np.ndarray)
     else:
         assert isinstance(dcube_hi, GridData)
         assert dcube_hi.spectral_axis == spectral_axis
-    # The PSF is an array of offsets, not on the grid
-    assert isinstance(extra.get('psf_hi'), np.ndarray)
+    # The PSF is an array of offsets, not on the grid; that of the
+    # high-resolution grid is another only with oversampling
+    assert isinstance(extra.get('psf_lo'), np.ndarray)
+    assert bool(extra.find('psf_hi')) == (name == 'pixel_brightness')
 
 
 def test_dcube_extras_have_the_coordinates_of_the_observable(evaluate_cases):
-    observable, galaxy, _, _ = CASES['pixel_spectra']
-    case = flat_case(observable, galaxy)
-    _, extra = evaluate_cases([case], PROPERTIES)
-    coords = extra.get('dcube_lo').coords
+    # (the cube of moments, which their model data are measured from; on
+    # a grid without oversampling and padding, the high-resolution cube
+    # is the same)
+    _, extra = evaluate_cases(
+        [flat_case(MOMENTS, dict(components=[LINE_DISK]))], PROPERTIES)
+    dcube_lo = extra.get('dcube_lo')
+    assert isinstance(dcube_lo, GridData)
+    assert dcube_lo.data.shape == (20, 12, 16)
+    assert dcube_lo.spectral_axis == 2
+    coords = dcube_lo.coords
     assert coords.step == (1, 1, 10)
     assert coords.rpix == (7.5, 5.5, 9.5)
     assert coords.rval == (150, 2, 0)
+    assert not extra.find('dcube_hi')
 
 
 @pytest.mark.parametrize('name', CASES)
@@ -95,10 +117,7 @@ def test_model_extras_are_on_the_sky(evaluate_cases, name):
     # no position on the sky
     observable, galaxy, _, _ = CASES[name]
     case = flat_case(observable, galaxy)
-    properties = {
-        k: v for k, v in PROPERTIES.items()
-        if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
-    _, extra = evaluate_cases([case], properties)
+    _, extra = evaluate_cases([case], galaxy_properties(name))
     bdata = extra.get('bdata', component='component0')
     if name == 'slit_spectra':
         assert isinstance(bdata, np.ndarray)
@@ -119,7 +138,7 @@ def test_extras_carry_their_units(evaluate_cases):
     observable, galaxy, _, _ = CASES['pixel_spectra']
     case = flat_case(observable, galaxy) | dict(unit='mJy/arcsec2')
     _, extra = evaluate_cases([case], PROPERTIES)
-    assert extra.get('dcube_lo').unit == u.mJy / u.arcsec ** 2
+    assert extra.get('dcube_hi').unit == u.mJy / u.arcsec ** 2
     assert extra.get('vdata', component='component0').unit == u.km / u.s
     assert extra.get('ddata', component='component0').unit == u.km / u.s
     assert extra.get('bdata', component='component0').unit is None
@@ -170,6 +189,51 @@ def test_extras_have_the_ids_of_their_scopes():
 def test_extras_of_a_model_have_titles_and_descriptions(evaluate_cases):
     observable, galaxy, _, _ = CASES['pixel_spectra']
     _, extras = evaluate_cases([flat_case(observable, galaxy)], PROPERTIES)
-    assert {x.name for x in extras} >= {
-        'dcube_lo', 'psf_lo', 'bdata', 'vdata', 'total_bdata'}
+    assert {x.name for x in extras} >= {'dcube_hi', 'psf_lo', 'bdata', 'vdata'}
     assert all(x.title and x.description for x in extras)
+
+
+THICK_DISK = LINE_DISK | dict(
+    type='thick_disk', rhtraits=dict(type='sech2', zmax=8))
+DUST = dict(
+    type='thick_disk', name='dust', loose=False, tilted=False,
+    rnodes=list(range(0, 8)), rptraits=dict(type='exponential'),
+    rhtraits=dict(type='sech2', zmax=8), opacity=dict(type='dust'))
+
+
+# The properties of a thick disk, and of one of dust
+THICK_PROPERTIES = PROPERTIES | dict(rht_s=1)
+DUST_PROPERTIES = dict(
+    xpos=0, ypos=0, posa=30, incl=45, rpt_a=0.5, rpt_s=3, rht_s=1)
+
+
+@pytest.mark.parametrize('emitters, dust', [
+    (1, False), (1, True), (2, False), (2, True)])
+def test_a_galaxy_has_totals_only_of_several_emitters(
+        evaluate_cases, emitters, dust):
+    # (a total of one would be its own light, again), and the light dimmed
+    # by its opacity only with dust (else it is the light)
+    names = [f'gas{i}' for i in range(emitters)]
+    components = [THICK_DISK | dict(name=name) for name in names]
+    properties = {
+        f'{name}_{key}': value
+        for name in names for key, value in THICK_PROPERTIES.items()}
+    if dust:
+        components.append(DUST)
+        properties |= {
+            f'dust_{key}': value for key, value in DUST_PROPERTIES.items()}
+    case = dict(
+        driver=dict(type='host'), observation=CASES['pixel_spectra'][0],
+        depth=dict(extent=8.0, step=0.5),
+        galaxy=dict(components=components))
+    _, extra = evaluate_cases([case], properties)
+    totals = {x.name for x in extra if x.name.startswith('total_')}
+    expected = set()
+    if emitters > 1:
+        expected = {
+            'total_bdata', 'total_vxdata', 'total_vydata', 'total_vzdata'}
+        if dust:
+            expected.add('total_obdata')
+    assert totals == expected
+    assert bool(extra.find('obdata', component='gas0')) == dust
+

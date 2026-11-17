@@ -331,15 +331,16 @@ class TransferPlan:
         (tau, of shape (nchannels * subchannels, ny, nx); required with
         line opacity, None without line opacity in front or in them).
 
-        The extra outputs of the components of each galaxy go to its item
-        of out_extra, with the totals of each galaxy, 'total_*' (see
-        ComponentPlans.add_extras; along the depth axis in the frame of
-        the galaxy, centred on its plane). Those of the march go to
-        march_extra (given with out_extra), of the shape of the output
-        (see _MARCH_EXTRAS): 'total_unabsorbed', the light of the emitters
-        without opacity (neither their own nor that in front), and with
-        line opacity, 'total_line_tau', the optical depth of their lines
-        at each channel (the mean of its sub-channels).
+        The extra outputs of the components of each galaxy go to its
+        item of out_extra, with the totals of each galaxy over several
+        components, 'total_*' (see ComponentPlans.add_extras; along the
+        depth axis in the frame of the galaxy, centred on its plane).
+        Those of the march go to march_extra (given with out_extra), of
+        the shape of the output (see _MARCH_EXTRAS): 'total_unabsorbed',
+        the light of the emitters without opacity (neither their own nor
+        that in front), and with line opacity, 'total_line_tau', the
+        optical depth of their lines at each channel (the mean of its
+        sub-channels).
 
         With extras, a warning says where zmax shapes a disk (see
         ComponentPlans.warn_truncation), and it returns how finely it
@@ -437,7 +438,7 @@ class TransferPlan:
                 if 'bdata' in extras[m].get(i, {})]
             plans.add_extras(
                 out_extra[m], extras[m],
-                dict(bdata=sum(bdata)) if bdata else {},
+                dict(bdata=sum(bdata)) if len(bdata) > 1 else {},
                 grids[m]['spat_zero'][2])
             if self._smoothing is not None:
                 light = max(light, plans.light_resolution(

@@ -570,7 +570,9 @@ class Driver(TypedSerializable, abc.ABC):
     process, and in several threads at once.
 
     Arrays on the device are DeviceArrays; the host side of a transfer is
-    a numpy array (in pinned memory for the cuda driver).
+    a numpy array: a buffer of mem_alloc_h or mem_alloc_s for transfers
+    that repeat (in pinned memory for the cuda driver), or a new array of
+    a copy (see mem_copy_d2h).
     """
 
     def dump(self) -> dict[str, Any]:
@@ -620,7 +622,8 @@ class Driver(TypedSerializable, abc.ABC):
     ) -> np.ndarray:
         """
         Copy a device array to the host (into h_dst, or a new array), and
-        return the host array.
+        return the host array. A new array is ordinary host memory, freed
+        with it; copies that repeat go into a buffer of mem_alloc_h.
         """
 
     @abc.abstractmethod

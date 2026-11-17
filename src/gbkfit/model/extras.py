@@ -53,6 +53,13 @@ class Extras:
     observation extras.scoped(observation=...), and the observation gives
     each of its galaxies a view scoped to it too.
 
+    Each output holds what no other output of the evaluation holds, as
+    they can be large (e.g. cubes of each component on a fine grid): a
+    part leaves out those that would be the same as another, e.g. the
+    total of a galaxy of one component (its own), its light dimmed by no
+    opacity, or the model cube of an observation whose model data are
+    that cube.
+
     Examples
     --------
     >>> extras = Extras()

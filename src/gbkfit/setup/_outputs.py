@@ -28,8 +28,8 @@ __all__ = [
 # The folders of the extra outputs by their ids, in this order (see
 # _extra_output)
 _EXTRA_FOLDERS = dict(
-    observation='observations', galaxy='galaxies', group='groups',
-    component='components')
+    observation='observations', plane='planes', galaxy='galaxies',
+    group='groups', component='components')
 
 
 def data_outputs(group_plan: GroupPlan) -> dict[str, Output]:
@@ -317,9 +317,11 @@ def _extra_output(extra: Extra) -> Output:
     Return an extra output of a model (kind 'extra', with its ids and its
     name as the id 'name'), in the folders of its ids (see
     _EXTRA_FOLDERS; e.g. observations/<observation>/galaxies/<galaxy>/
-    components/<component>/<name>), or in observations/<observation>/
-    extra/<name> if it is of the observation alone (e.g. the model cube;
-    its folder holds the other outputs of the observation by kind).
+    components/<component>/<name>, or observations/<observation>/planes/
+    <plane>/<name> of a plane behind lenses), or in observations/
+    <observation>/extra/<name> if it is of the observation alone (e.g.
+    the model cube; its folder holds the other outputs of the
+    observation by kind).
     """
     folders = []
     for key, folder in _EXTRA_FOLDERS.items():

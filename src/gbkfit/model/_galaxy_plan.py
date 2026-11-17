@@ -46,7 +46,6 @@ class GalaxyPlan:
     ):
         plans = ComponentPlans(galaxy, target, depth, emitters, cubes)
         self._plans = plans
-        self._depth = depth
         self._smoothing = target.smoothing
         # The cubes of opacity
         self._odata = None
@@ -71,11 +70,12 @@ class GalaxyPlan:
         The extra
         outputs of each component have its name, or its position, as the
         id 'component' (e.g. 'disk' or 'component0'), and their totals
-        none (see ComponentPlans.add_extras). With extra outputs, a
-        warning says where zmax shapes a disk (see
-        ComponentPlans.warn_truncation), and it returns how finely it
-        resolves the lines (see LineResolution: their light only); None
-        otherwise.
+        over several components none (see ComponentPlans.add_extras):
+        here of the light of several emitters, and with opacity of their
+        dimmed light. With extra outputs, a warning says where zmax
+        shapes a disk (see ComponentPlans.warn_truncation), and it
+        returns how finely it resolves the lines (see LineResolution:
+        their light only); None otherwise.
         """
         plans = self._plans
         driver = plans.driver
@@ -86,10 +86,11 @@ class GalaxyPlan:
         extras = {} if out_extra is not None else None
         bdata = None
         obdata = None
-        if out_extra is not None:
+        if out_extra is not None and len(plans.emitters) > 1:
             bdata = driver.mem_alloc_d(shape, dtype)
             driver.mem_fill(bdata, 0)
-            if self._depth is not None:
+            # (without opacity, the dimmed light is the light)
+            if odata is not None:
                 obdata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(obdata, 0)
         values = plans.params(params)

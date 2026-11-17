@@ -180,7 +180,7 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
         group = [image(driver, cone, components=[dust])]
         clear, _ = evaluate_cases(group, properties | dict(dust_rpt_a=0))
         dimmed, extra = evaluate_cases(group, properties)
-        tau = extra.get('total_odata').data.sum(axis=0)
+        tau = extra.get('odata', component='dust').data.sum(axis=0)
         clear, dimmed = (
             data[0]['brightness'].data for data in (clear, dimmed))
         visible = clear > 1e-3 * clear.max()

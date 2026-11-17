@@ -26,7 +26,10 @@ class DriverCuda(Driver):
     module. All its work (its memory, transfers and FFTs, and the kernels
     on its arrays) runs on its GPU, whatever the current CuPy device of
     the calling thread; drivers of several GPUs can work in several
-    threads at once. The host side of a transfer is in pinned memory.
+    threads at once. The host arrays it allocates for transfers
+    (mem_alloc_h, mem_alloc_s) are in pinned memory, which CuPy's pool
+    keeps once freed, for the next; a copy to a new host array
+    (mem_copy_d2h without one) is in pageable memory, freed with it.
 
     Parameters
     ----------
@@ -115,10 +118,14 @@ class DriverCuda(Driver):
             d_src: DeviceArray,
             h_dst: np.ndarray | None = None
     ) -> np.ndarray:
-        if h_dst is None:
-            h_dst = self.mem_alloc_h(d_src.shape, d_src.dtype)
-        if d_src is not h_dst:
-            with self._device:
+        with self._device:
+            if h_dst is None:
+                # A copy into a new array is not reused: pinned memory
+                # would stay in CuPy's pool after it (e.g. the gigabytes
+                # of the extra outputs of a fine grid), and allocating it
+                # takes longer than the copy it speeds up
+                return d_src.get()
+            if d_src is not h_dst:
                 d_src.get(out=h_dst)
         return h_dst
 

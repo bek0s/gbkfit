@@ -16,7 +16,7 @@ from gbkfit.params import ParamValues
 from .._scene import SeenScenes
 from ..depth import plan_scenes
 from ..weights import plan_weights
-from ._model_cube import ModelCube, cube_extra
+from ._model_cube import ExtraFunction, ModelCube, cube_extra
 from ..plan import HostModelData, ModelData, ModelItem, ObservationPlan
 
 if TYPE_CHECKING:
@@ -174,9 +174,11 @@ class CubePlan(ObservationPlan):
         return None
 
     # How the extra outputs of the low- and high-resolution cubes are made
-    # from their data and grids (see ModelCubePlan.evaluate)
-    _extra_lo = staticmethod(cube_extra)
-    _extra_high_res = staticmethod(cube_extra)
+    # from their data and grids (see ModelCubePlan.evaluate); kinds whose
+    # model data are the low-resolution cubes (their outputs hold them)
+    # have none of those (None)
+    _extra_lo: ExtraFunction | None = staticmethod(cube_extra)
+    _extra_high_res: ExtraFunction = staticmethod(cube_extra)
 
     @abc.abstractmethod
     def _measure(self) -> ModelData:

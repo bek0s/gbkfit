@@ -184,8 +184,9 @@ class _Parents(NamedTuple):
     """
     The arguments that the tasks share (see _make_parser): of every task
     (common), of the output of a task (output), of its results (results:
-    those of eval and fit, never overwritten by default), and of a
-    configuration (config).
+    those of eval and fit, never overwritten by default, and whether they
+    have the extra outputs of the models), and of a configuration
+    (config).
     """
     common: argparse.ArgumentParser
     output: argparse.ArgumentParser
@@ -210,6 +211,12 @@ def _make_parser() -> argparse.ArgumentParser:
     parser_results_output = _output_parser(
         'unique', None,
         'runs/<name of the setup> for a setup of a project, else output')
+    parser_results_output.add_argument(
+        '--extra-outputs', action='store_true',
+        help="also write the extra outputs of the models: what the "
+             "evaluation computes on the way to them, for diagnostics (e.g. "
+             "the light and velocities of each component on the grid of "
+             "the model, gigabytes for thick components on a fine grid)")
 
     parser_common_config = argparse.ArgumentParser(add_help=False)
     parser_common_config.add_argument(
@@ -244,8 +251,9 @@ def _add_eval(
     parser_eval.add_argument(
         '--profile', type=_number_range(int, 0, None), default=0,
         metavar='ITERS',
-        help="perform the evaluation ITERS times "
-             "and provide performance evaluation statistics")
+        help="time ITERS evaluations, each at new values of the free "
+             "parameters, as those of a fit, and give the statistics of "
+             "the times of their steps (timings.json)")
 
 
 def _add_prep(
@@ -653,8 +661,8 @@ def _run_eval(args: argparse.Namespace) -> None:
     """Run the eval task."""
     run('eval', dict(
         mode=args.mode, config=args.config, profile_iters=args.profile,
-        output_dir=args.output_dir, output_dir_mode=args.output_dir_mode),
-        args.lenient)
+        output_dir=args.output_dir, output_dir_mode=args.output_dir_mode,
+        extra_outputs=args.extra_outputs), args.lenient)
 
 
 def _run_prep(args: argparse.Namespace) -> None:
@@ -732,12 +740,18 @@ def _check_fit_arguments(
         parser.error(
             f"a fit resumed (--resume) or bootstrapped (--bootstrap) writes "
             f"into its own output directory; {ignored} do not apply")
+    if args.bootstrap is not None and args.extra_outputs:
+        parser.error(
+            "a bootstrap (--bootstrap) writes no models; --extra-outputs "
+            "does not apply")
 
 
 def _run_fit(args: argparse.Namespace) -> None:
     """Run the fit task (or resume a fit, or bootstrap one)."""
     if args.resume is not None:
-        run('resume', dict(output_dir=args.resume), args.lenient)
+        run('resume', dict(
+            output_dir=args.resume, extra_outputs=args.extra_outputs),
+            args.lenient)
     elif args.bootstrap is not None:
         run('bootstrap', dict(
             output_dir=args.bootstrap, config=args.config), args.lenient)
@@ -745,7 +759,8 @@ def _run_fit(args: argparse.Namespace) -> None:
         run('fit', dict(
             config=args.config, output_dir=args.output_dir,
             output_dir_mode=args.output_dir_mode,
-            evaluation_log=not args.no_evaluation_log), args.lenient)
+            evaluation_log=not args.no_evaluation_log,
+            extra_outputs=args.extra_outputs), args.lenient)
 
 
 def _run_plot(args: argparse.Namespace) -> None:

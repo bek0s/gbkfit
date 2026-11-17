@@ -162,7 +162,9 @@ def test_names_name_the_extra_outputs():
         [galaxy(components=[disk(THIN, name='disk')])],
         [observation(name='hi')])
     extra = extra_outputs(group_, ['disk_'])
-    assert {('bdata', 'hi', 'galaxy0', 'disk'), ('dcube_lo', 'hi')} <= extra
+    assert ('bdata', 'hi', 'galaxy0', 'disk') in extra
+    # (each is of the observation)
+    assert {ids[1] for ids in extra} == {'hi'}
 
 
 def test_galaxy_names_prefix_the_extra_outputs():

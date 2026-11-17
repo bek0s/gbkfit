@@ -255,6 +255,27 @@ def test_the_outputs_of_an_evaluation_are_its_own():
     np.testing.assert_array_equal(model.value.data, before)
 
 
+def test_the_extra_outputs_of_planes_behind_lenses_are_in_their_folders():
+    # (two planes have outputs of the same names, e.g. their light)
+    from gbkfit.model import Extra
+    from gbkfit.setup._outputs import _extra_output
+    paths = {
+        _extra_output(Extra(
+            name, dict(observation='image') | ids, np.zeros(2), 'T', 'D')
+        ).path
+        for name, ids in (
+            ('source_cube', dict(plane='plane1')),
+            ('source_cube', dict(plane='plane2')),
+            ('bdata', dict(plane='plane2', galaxy='arc', component='gas')),
+            ('dcube_hi', {}))}
+    assert paths == {
+        'observations/image/planes/plane1/source_cube.fits',
+        'observations/image/planes/plane2/source_cube.fits',
+        'observations/image/planes/plane2/galaxies/arc/components/gas/'
+        'bdata.fits',
+        'observations/image/extra/dcube_hi.fits'}
+
+
 def test_a_configuration_without_data_cannot_fit():
     loaded = gbkfit.load(dict(
         version=VERSION, galaxies=[GALAXY], observations=[observation()],

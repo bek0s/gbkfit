@@ -14,6 +14,8 @@ import threading
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
+import numpy as np
+
 from gbkfit.config import config_path
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
@@ -37,7 +39,8 @@ __all__ = [
 
 
 # The host arrays of an item of model data before its first copy to the
-# host (see GroupPlan.model_h): none, so the copy makes them
+# host (see GroupPlan.model_h): none, so the copy allocates them (see
+# _host_buffer)
 _NO_ITEM = ModelItem(None)
 
 
@@ -766,12 +769,26 @@ class GroupPlan:
             for i, driver in enumerate(self._observation_drivers):
                 h_model = self._h_model_data[i]
                 for key, d_item in self._d_model_data[i].items():
-                    # (into the arrays of the last copy, once there is one)
+                    # (into the buffers of the first copy, which the next
+                    # ones reuse)
                     h_item = h_model.get(key, _NO_ITEM)
                     h_model[key] = ModelItem._make(
                         None if d_array is None
-                        else driver.mem_copy_d2h(d_array, h_array)
+                        else driver.mem_copy_d2h(
+                            d_array, _host_buffer(driver, d_array, h_array))
                         for d_array, h_array in zip(d_item, h_item))
+
+
+def _host_buffer(
+        driver: Driver, d_array: DeviceArray, h_array: np.ndarray | None
+) -> np.ndarray:
+    """
+    Return the buffer on the host of the copies of a device array: the
+    given one, or else a new one for transfers (see Driver.mem_alloc_h).
+    """
+    if h_array is not None:
+        return h_array
+    return driver.mem_alloc_h(d_array.shape, d_array.dtype)
 
 
 def _alloc_pieces(

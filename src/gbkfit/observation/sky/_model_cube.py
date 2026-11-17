@@ -639,7 +639,7 @@ class ModelCubePlan:
     def evaluate(
             self,
             out_extra: Extras | None,
-            extra_lo: ExtraFunction,
+            extra_lo: ExtraFunction | None,
             extra_high_res: ExtraFunction,
             flux_scale: float | None = None,
             unit: gbkfit.units.AnyUnit | None = None
@@ -650,7 +650,13 @@ class ModelCubePlan:
         and high-resolution grids go to out_extra as extra_lo and
         extra_high_res make them from their data and grid (e.g.
         cube_extra or plain_extra), the cubes of the model with the unit
-        of its light, if given (and they take one: data on a grid).
+        of its light, if given (and they take one: data on a grid); with
+        extra_lo None, those of the low-resolution cubes are left out,
+        for an observation whose model data are those cubes (its outputs
+        hold them). So are those of the high-resolution grid that would
+        be those of the low-resolution one: of the cubes, without
+        oversampling and padding, and of the PSF and the LSF, without
+        oversampling.
         """
         self.record(flux_scale)
         self.smooth()
@@ -728,7 +734,7 @@ class ModelCubePlan:
     def _extras(
             self,
             out_extra: Extras,
-            extra_lo: ExtraFunction,
+            extra_lo: ExtraFunction | None,
             extra_high_res: ExtraFunction,
             unit: gbkfit.units.AnyUnit | None
     ) -> None:
@@ -763,10 +769,14 @@ class ModelCubePlan:
                 return value
             return value._replace(unit=unit)
 
-        add('dcube_lo', light(lo(cube_lo)))
-        add('dcube_hi', light(hi(cube_high_res)))
-        if has_weights:
-            add('wcube_lo', lo(weights_lo))
+        if extra_lo is not None:
+            add('dcube_lo', light(lo(cube_lo)))
+            if has_weights:
+                add('wcube_lo', lo(weights_lo))
+        # (without oversampling and padding, the cubes are one)
+        if cube_high_res is not cube_lo:
+            add('dcube_hi', light(hi(cube_high_res)))
+        if has_weights and weights_high_res is not weights_lo:
             add('wcube_hi', hi(weights_high_res))
         if self._varies:
             # The images of the PSF and the LSF of the channels, made again
@@ -778,12 +788,16 @@ class ModelCubePlan:
             if lsf_kernels is not None:
                 add('lsf_hi', lsf_kernels)
         else:
+            # (those of the high-resolution grid are those of the data
+            # without oversampling)
             if psf:
                 add('psf_lo', psf.asarray(step_lo[:2], rota=rota))
-                add('psf_hi', psf.asarray(step_high_res[:2], rota=rota))
+                if step_high_res[:2] != step_lo[:2]:
+                    add('psf_hi', psf.asarray(step_high_res[:2], rota=rota))
             if lsf:
                 add('lsf_lo', lsf.asarray(step_lo[2]))
-                add('lsf_hi', lsf.asarray(step_high_res[2]))
+                if step_high_res[2] != step_lo[2]:
+                    add('lsf_hi', lsf.asarray(step_high_res[2]))
             if psf or lsf:
                 # (made again: it is not kept)
                 add('pcube_hi', _kernel_cube(

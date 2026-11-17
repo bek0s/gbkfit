@@ -91,6 +91,8 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
         assert run.product(kind, solution='0')
     for kind in ('data', 'model', 'residual', 'wresidual'):
         assert run.product(kind, observation='observation0', item='spectra')
+    # (without the extra outputs of the model, unless asked for)
+    assert not run.products('extra')
     # A configuration that starts another fit at the best fit
     restart_file = pathlib.Path(run.filename(run.product('restart_config')))
     restart = yaml.load(restart_file)
@@ -157,9 +159,13 @@ def test_a_fit_resumes_from_its_output_directory(tmp_path):
         tmp_path, 'fit', config='fit.yaml', output_dir='fit',
         output_dir_mode='unique')
     first = read(tmp_path / 'fit', 'fit_result')
-    run_task(tmp_path, 'resume', output_dir='fit')
+    assert not outputs.open(tmp_path / 'fit').products('extra')
+    run_task(tmp_path, 'resume', output_dir='fit', extra_outputs=True)
     resumed = read(tmp_path / 'fit', 'fit_result')
     assert resumed['solutions'][0]['free'] == first['solutions'][0]['free']
+    # (with the extra outputs of the model at the best fit, asked for)
+    assert outputs.open(tmp_path / 'fit').products(
+        'extra', component='component0', name='bdata')
 
 
 @pytest.mark.slow

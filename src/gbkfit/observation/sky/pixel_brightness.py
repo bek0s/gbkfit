@@ -218,7 +218,8 @@ class PixelBrightnessPlan(CubePlan):
         return dict(
             brightness=noise.sigma(self._model_cube.grid(), recorded)[0])
 
-    _extra_lo = staticmethod(_image_extra)
+    # (its model data are the images of the low-resolution cubes)
+    _extra_lo = None
     _extra_high_res = staticmethod(_image_extra)
 
     def _measure(self) -> ModelData:

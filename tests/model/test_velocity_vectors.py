@@ -144,12 +144,31 @@ def test_a_flow_along_a_bar_is_in_the_plane(driver, evaluate_cases):
     assert np.mean(np.isclose(length[moves], 30, rtol=1e-4)) > 0.99
 
 
-def test_the_total_vector_of_one_component_is_its_own(
-        driver, evaluate_cases):
+def test_a_galaxy_of_one_component_has_no_totals(driver, evaluate_cases):
+    # (they would be the outputs of the component, again)
     component, values = COMPONENTS['thick_disk']
     _, extra = evaluate_cases([case(driver, component)], GEOMETRY | values)
+    assert extra.find('vxdata', component='component0')
+    assert not [x for x in extra if x.name.startswith('total_')]
+
+
+def test_the_totals_of_several_components_add_up_their_light(
+        driver, evaluate_cases):
+    # Two copies of a component, one twice as bright: their light adds
+    # up, and their velocity as a vector, weighted by it, is that of each
+    component, values = COMPONENTS['thick_disk']
+    pair = case(driver, component)
+    pair['galaxy']['components'] = [
+        component | dict(name=name) for name in ('a', 'b')]
+    properties = {
+        f'{name}_{key}': value * (2 if (name, key) == ('b', 'rpt_a') else 1)
+        for name in ('a', 'b') for key, value in (GEOMETRY | values).items()}
+    _, extra = evaluate_cases([pair], properties)
+    light = [extra.get('bdata', component=name).data for name in 'ab']
+    np.testing.assert_allclose(
+        extra.get('total_bdata').data, light[0] + light[1], rtol=1e-12)
     for axis in 'xyz':
-        own = extra.get(f'v{axis}data', component='component0').data
+        own = extra.get(f'v{axis}data', component='a').data
         total = extra.get(f'total_v{axis}data').data
         np.testing.assert_allclose(total, own, equal_nan=True, rtol=1e-6)
 

@@ -125,7 +125,7 @@ def face_on_optical_depth(
         dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=0,
         **dust_properties)
     _, extra = evaluate_cases([case], properties)
-    return extra.get('total_odata').data.sum(axis=0)
+    return extra.get('odata', component='dust').data.sum(axis=0)
 
 
 def test_dust_density_gives_the_face_on_optical_depth(
@@ -224,7 +224,7 @@ def image_and_optical_depth(driver, evaluate_cases, opacity, depth_step):
         dust_xpos=0, dust_ypos=0, dust_posa=30, dust_incl=60,
         dust_rpt_a=opacity, dust_rpt_s=4, dust_rht_s=1)
     data, extra = evaluate_cases([case], properties)
-    tau = extra.get('total_odata').data.sum(axis=0)
+    tau = extra.get('odata', component='dust').data.sum(axis=0)
     return data[0]['brightness'].data, tau
 
 
@@ -316,7 +316,7 @@ def test_dust_dims_a_thin_disk_in_front_of_its_plane(driver, evaluate_cases):
         properties | FACE_ON_DUST | dict(dust_rpt_a=0))
     dimmed, extra = evaluate_cases(
         [face_on_dust_case(driver, [stars])], properties | FACE_ON_DUST)
-    tau = extra.get('total_odata').data.sum(axis=0)
+    tau = extra.get('odata', component='dust').data.sum(axis=0)
     clear, dimmed = (data[0]['brightness'].data for data in (clear, dimmed))
     visible = clear > 1e-3 * clear.max()
     assert tau[visible].max() > 0.4
@@ -340,7 +340,7 @@ def test_dust_dims_a_point_in_front_of_its_depth(
         properties['nucleus_depth'] = depth
     data, extra = evaluate_cases(
         [face_on_dust_case(driver, [nucleus])], properties | FACE_ON_DUST)
-    tau = extra.get('total_odata').data.sum(axis=0)[12, 12]
+    tau = extra.get('odata', component='dust').data.sum(axis=0)[12, 12]
     assert data[0]['brightness'].data[12, 12] == pytest.approx(
         np.exp(-fraction * tau), rel=1e-5)
 
