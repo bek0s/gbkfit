@@ -400,19 +400,20 @@ def test_hu_sawicki_options(tmp_path):
 
 def test_palatini_corrections_of_the_density_gradient():
     # Of a thick exponential disk, rho = Sigma(R) exp(-|z| / hz) / (2 hz):
-    # v^2 = v_N^2 + 8 pi G alpha R drho/dR, and the forces the Newtonian
-    # ones minus 8 pi G alpha grad(rho), with drho/dR = -rho / rd and
-    # drho/dz = -sign(z) rho / hz; none with alpha = 0
+    # v^2 = v_N^2 - 8 pi G alpha R drho/dR, and the forces the Newtonian
+    # ones plus 8 pi G alpha grad(rho) (Toniato et al. 2020, eq. 64), with
+    # drho/dR = -rho / rd and drho/dz = -sign(z) rho / hz; none with
+    # alpha = 0
     disk = [dict(type='disk', name='stars', surface=dict(type='exponential'),
                  vertical=dict(type='exponential'))]
     galaxy_ = galaxy(mass=disk, distance=DISTANCE,
                      gravity=dict(type='palatini'))
     assert galaxy_parser.dump(galaxy_)['gravity'] == dict(type='palatini')
     params = PARAMS | dict(mass_stars_log_m=10, mass_stars_rd=3,
-                           mass_stars_hz=0.3, gravity_alpha=-0.5)
+                           mass_stars_hz=0.3, gravity_alpha=0.5)
     mass = galaxy_.plan_stage().mass(params)
     R, z = np.array([1.0, 5, 10]), np.array([0.2, -0.5, 1])
-    scale = 8 * np.pi * G * -0.5
+    scale = 8 * np.pi * G * 0.5
 
     def rho(z):
         sigma = 1e10 / (2 * np.pi * 9) * np.exp(-R / 3)
@@ -420,10 +421,10 @@ def test_palatini_corrections_of_the_density_gradient():
 
     newton = mass.model.vcirc2(R, mass.params, mass.context)
     np.testing.assert_allclose(
-        mass.field.vcirc2(R), newton - scale * R * rho(0) / 3, rtol=1e-7)
+        mass.field.vcirc2(R), newton + scale * R * rho(0) / 3, rtol=1e-7)
     force_R, force_z = mass.model.forces(R, z, mass.params, mass.context)
-    expected = (force_R + scale * rho(z) / 3,
-                force_z + scale * np.sign(z) * rho(z) / 0.3)
+    expected = (force_R - scale * rho(z) / 3,
+                force_z - scale * np.sign(z) * rho(z) / 0.3)
     np.testing.assert_allclose(mass.field.forces(R, z), expected, rtol=1e-7)
     bound = galaxy_.plan_functions().bind(params | dict(gravity_alpha=0))
     np.testing.assert_array_equal(bound['vcirc'](R), bound['vnewton'](R))

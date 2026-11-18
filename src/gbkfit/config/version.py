@@ -18,7 +18,8 @@ __all__ = [
 # emission 'stars': light in bands, and the option continuum of spectral
 # observations), 14, of 2026-11-16 on (the vertical equilibrium of the
 # dispersion of a thick disk is its option equilibrium, not a dispersion
-# trait), and 15, of 2026-11-17 on (gravitational lenses are a section of
-# their own, not the foreground of an observation); gbkfit.migration
-# rewrites the older ones
-FORMAT_VERSION = 15
+# trait), 15, of 2026-11-17 on (gravitational lenses are a section of
+# their own, not the foreground of an observation), and 16, of 2026-11-18
+# on (the alpha of Palatini f(R) gravity of the sign of f(R) = R + alpha
+# R^2); gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 16

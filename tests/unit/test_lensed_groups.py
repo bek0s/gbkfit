@@ -336,7 +336,6 @@ def test_two_lenses_of_the_mass_of_one_galaxy_are_refused():
     (dict(components=[], mass=[HALO]), "sie, epl or nfw"),
     (dict(gravity=dict(type='mond', interpolation='simple')),
      "relativistic theory"),
-    (dict(gravity=dict(type='palatini')), "Toniato"),
     (dict(mass=[HALO, dict(
         type='table', name='table', radii=dict(value=[1, 2], unit='kpc'),
         velocities=[100, 120])]), "do not say where their mass is"),
@@ -369,8 +368,10 @@ def test_a_mass_in_its_plane_needs_a_component_of_a_plane():
     mass_group(deflector(components=[spheroid], mass=[traced, HALO]))
 
 
-def test_hu_sawicki_gravity_bends_light_as_its_mass():
-    galaxy = deflector(gravity=dict(type='hu_sawicki'))
+@pytest.mark.parametrize('gravity', ['hu_sawicki', 'palatini'])
+def test_f_r_gravity_bends_light_as_its_mass(gravity):
+    # (Hu-Sawicki: Zhao, Li & Koyama 2011; Palatini: Toniato et al. 2020)
+    galaxy = deflector(gravity=dict(type=gravity))
     assert mass_group(galaxy).lensing_galaxies() == (0,)
 
 

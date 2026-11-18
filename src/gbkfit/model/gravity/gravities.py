@@ -655,7 +655,7 @@ class _GradientField(GravityField):
     -scale grad(w) of a field w, of the gradient of w at any points (R,
     z): in GravityHuSawicki, the fifth force of w = f_R / fbar_R (scale =
     c^2 |fbar_R| / 2, (km/s)^2, kpc^-1); in GravityPalatini, of the
-    density of the mass (scale = 8 pi G alpha, see _density_gradient); in
+    density of the mass (scale = -8 pi G alpha, see _density_gradient); in
     GravityMOND, the gravity of the phantom of QUMOND, of its potential
     (scale = 1, see _qumond).
     """
@@ -689,17 +689,19 @@ class _GradientField(GravityField):
 class GravityPalatini(Gravity):
     """
     Palatini f(R) gravity in its weak-field limit, of any f(R) = R + alpha
-    R^2 + O(R^3): Newtonian gravity, corrected where there is mass. The
-    Poisson equation of the potential of the motion is laplacian(Phi) = 4
-    pi G (rho + 2 alpha laplacian(rho)) (Toniato et al. 2020;
-    Hernandez-Arboleda et al. 2023, eq. 16), so Phi = Phi_N + 8 pi G alpha
-    rho, of the density rho of all the mass. Its correction is local:
-    where there is mass (in vacuum, it is Newtonian gravity).
-    Its squared circular velocity is v^2 = v_N^2 + 8 pi G alpha R
-    drho/dR, at z = 0 (their eq. 32), and its forces are the Newtonian
-    ones minus 8 pi G alpha grad(rho). Its parameter: 'gravity_alpha',
-    alpha (kpc^2; disks are stable for alpha < 0, which pulls inwards
-    where the density falls outwards).
+    R^2 + O(R^3): Newtonian gravity, corrected where there is mass. Its
+    metric is g = gbar / f'(R), of the metric gbar of general relativity
+    of the mass and f'(R) = 1 + 16 pi G alpha rho / c^2, so that the
+    potential of the motion is Phi = Phi_N - 8 pi G alpha rho, of the
+    density rho of all the mass, and laplacian(Phi) = 4 pi G (rho - 2
+    alpha laplacian(rho)) (Toniato, Rodrigues & Wojnar 2020, eqs. 32 and
+    64; Hernandez-Arboleda et al. 2023 write the opposite sign, eqs. 16
+    and 32, against their own metric, eq. 18). Its correction is local:
+    where there is mass (in vacuum, it is Newtonian gravity). Its squared
+    circular velocity is v^2 = v_N^2 - 8 pi G alpha R drho/dR, at z = 0,
+    and its forces are the Newtonian ones plus 8 pi G alpha grad(rho).
+    Its parameter: 'gravity_alpha', alpha (kpc^2; disks are stable for
+    alpha > 0, which pulls inwards where the density falls outwards).
 
     The gradient of the density is numerical: central differences of
     steps of 1e-4 of R and of |z| (relative truncation errors of about
@@ -709,13 +711,15 @@ class GravityPalatini(Gravity):
     of a vertical law Z, infinite for a thin disk), nor do tables, user
     components and halos that respond to their baryons; point masses
     have none away from the centre. It does not give the vertical
-    structure of self-gravitating sheets, the shares of the components
-    (those of the dark fraction are Newtonian), or the bending of light
-    (that of the metric of its photons is not yet checked against
-    Toniato et al. 2020). The Newtonian
-    circular velocities of the components remain in the rotation tables
-    and the functions of the galaxy (see DiskStage.state and
-    GalaxyFunctions).
+    structure of self-gravitating sheets, or the shares of the components
+    (those of the dark fraction are Newtonian). Its light bends as in
+    Newtonian gravity, by the mass laid out on the sky (see
+    MassModel.sky_mass): the potential of lensing, (Phi + Psi) / 2, is
+    Phi_N, as the terms of the density in Phi and Psi cancel (Toniato et
+    al. 2020, eqs. 32-33), inside the mass too (Toniato & Rodrigues 2021).
+    The Newtonian circular velocities of the components remain in the
+    rotation tables and the functions of the galaxy (see DiskStage.state
+    and GalaxyFunctions).
     """
 
     @staticmethod
@@ -755,7 +759,7 @@ class GravityPalatini(Gravity):
             else _no_gradient
         return _GradientField(
             _NewtonField(mass_model, params, context), gradient,
-            8 * np.pi * G * alpha)
+            -8 * np.pi * G * alpha)
 
     def check_mass_model(
             self, mass_model: MassModel, thick: Collection[str]
@@ -782,10 +786,7 @@ class GravityPalatini(Gravity):
             Capability.SHARES:
                 "the shares of the components that the dark fraction takes "
                 "are Newtonian, not those of Palatini f(R) gravity",
-            Capability.LENSING:
-                "the bending of light in Palatini f(R) gravity, by the "
-                "metric of its photons, is not yet checked against Toniato "
-                "et al. (2020)"}
+            Capability.LENSING: mass_model.projection_gaps()}
 
 
 def _density_gradient(

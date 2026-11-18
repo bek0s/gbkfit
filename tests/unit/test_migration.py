@@ -2020,3 +2020,70 @@ def test_lenses_that_cannot_be_one_stop_the_migration(
         params=dict(properties=properties))
     with pytest.raises(ConfigError, match=message):
         rewritten(config, 14, 15)
+
+
+def test_the_alpha_of_palatini_gravity_takes_the_sign_of_its_action():
+    # Version 16: the alpha of Palatini f(R) gravity is negated, as a
+    # number, an expression, or free (its bounds and prior turned around),
+    # and the expressions that read it read -alpha; of the galaxies of
+    # Palatini gravity alone; a prior that cannot be negated is by hand
+    config = dict(
+        galaxies=[
+            dict(name='a', gravity=dict(type='palatini')),
+            dict(name='b', gravity=dict(type='palatini')),
+            dict(name='c', gravity=dict(type='newton'))],
+        params=dict(
+            properties=dict(
+                a_gravity_alpha=dict(
+                    value=-0.5, min=-2, max=0.1,
+                    prior=dict(type='gauss_trunc', mean=-0.4, std=0.2,
+                               min=-2, max=0)),
+                b_gravity_alpha='a_gravity_alpha * 2',
+                c_gas_vsys=0),
+            derived=dict(x='a_gravity_alpha + b_gravity_alpha')))
+    changes = rewritten(config, 15, 16)
+    assert config['params'] == dict(
+        properties=dict(
+            a_gravity_alpha=dict(
+                value=0.5, min=-0.1, max=2,
+                prior=dict(type='gauss_trunc', mean=0.4, std=0.2,
+                           min=0, max=2)),
+            b_gravity_alpha='-((-a_gravity_alpha) * 2)',
+            c_gas_vsys=0),
+        derived=dict(x='(-a_gravity_alpha) + (-b_gravity_alpha)'))
+    assert not any(c.message.startswith('by hand') for c in changes)
+    config = dict(
+        galaxies=dict(gravity=dict(type='palatini')),
+        params=dict(properties=dict(gravity_alpha=dict(
+            value=1, max=3, prior=dict(type='log_uniform', min=1, max=3)))))
+    changes = rewritten(config, 15, 16)
+    assert config['params']['properties']['gravity_alpha'] == dict(
+        value=-1, min=-3, prior=dict(type='log_uniform', min=1, max=3))
+    assert [c.message for c in changes] == [
+        "by hand: negate its prior (Palatini f(R): alpha has the opposite "
+        "sign)"]
+
+
+def test_a_params_piece_of_palatini_gravity_is_negated_once(tmp_path):
+    # Of a project: the params piece that two setups name, of a galaxy
+    # piece of Palatini gravity, is negated once; the params of a setup
+    # with its galaxy in place too
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(dict(format=project.FORMAT, version=15),
+              tmp_path / 'study' / project.MARKER)
+    galaxy = dict(name='dwarf', gravity=dict(type='palatini'))
+    yaml.dump(galaxy, tmp_path / 'study' / 'galaxies' / 'dwarf.yaml')
+    yaml.dump(dict(properties=dict(dwarf_gravity_alpha=-0.3)),
+              tmp_path / 'study' / 'params' / 'dwarf.yaml')
+    for name in ('one', 'two'):
+        yaml.dump(dict(galaxies='dwarf', params='dwarf'),
+                  tmp_path / 'study' / 'setups' / f'{name}.yaml')
+    yaml.dump(dict(galaxies=[galaxy], params=dict(properties=dict(
+        dwarf_gravity_alpha=-0.2))),
+              tmp_path / 'study' / 'setups' / 'inline.yaml')
+    migration.migrate_project(study.path)
+    assert study.piece('params', 'dwarf') == dict(
+        properties=dict(dwarf_gravity_alpha=0.3))
+    inline = yaml.load(tmp_path / 'study' / 'setups' / 'inline.yaml')
+    assert inline['params'] == dict(properties=dict(
+        dwarf_gravity_alpha=0.2))
