@@ -1,23 +1,34 @@
 """
 Numpy references of the native kernels of the deflections of the layers
 of the mass of a galaxy on the sky (see gbkfit.lensing._layers): those
-of an elliptical layer and of bands of rings, written plainly.
+of an elliptical layer and of bands of rings, written plainly; thick, of
+the integral over the height of their sheets by adaptive quadrature (to
+1e-8, cut where the integrand bends), not the rule of the kernels.
 """
 
 import math
 from collections.abc import Callable
 
 import numpy as np
+import scipy.integrate
 
 from gbkfit.driver import Driver
 from gbkfit.lensing._layers import K, tanh_sinh_nodes, unit_deflection
-from gbkfit.model.mass import BandLayer, EllipticalLayer, LogTable, SkyMass
+from gbkfit.model.mass import (
+    BandLayer, EllipticalLayer, HeightProfile, SkyMass)
 
 
 # Below this eccentricity e (e^2 = 1 - q^2), a band bends by the series of
 # its integrals in e^2, of this many terms
 _SERIES_ECCENTRICITY = 0.1
 _SERIES_TERMS = 10
+
+# Below this d at the end of the integrals of a sheet, they are split
+# there, and beyond, of Gauss-Legendre nodes in ln d, this many per e-fold,
+# in panels of this many nodes at most (see gbkfit::lens_elliptical_slice)
+_LINE_D = 1e-4
+_LINE_DENSITY = 4
+_LINE_PANEL = 32
 
 _NODES, _ONE_MINUS_NODES, _WEIGHTS = tanh_sinh_nodes()
 
@@ -41,17 +52,155 @@ def layers_deflection(
 def elliptical_deflection(
         layer: EllipticalLayer, x: np.ndarray, y: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return the deflection of an elliptical layer (see _elliptical)."""
-    return _elliptical(
-        layer, np.asarray(x, dtype=float), np.asarray(y, dtype=float))
+    """
+    Return the deflection of an elliptical layer (see _elliptical): thin,
+    of its sheet; thick, the integral over the height of its sheet moved by
+    the height along its normal, times its shape at the height.
+    """
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    heights = layer.heights
+    if heights is None:
+        return _elliptical(layer, x, y)
+    shape = np.shape(x)
+    out = np.empty((2, x.size))
+    for i, (xx, yy) in enumerate(zip(x.ravel(), y.ravel())):
+        u, v = _frame(xx - layer.centre[0], yy - layer.centre[1], layer.posa)
+        nu, nv = _frame(*layer.normal, layer.posa)
+        sigma1, sigma2 = layer.stretch
+        cuts = [*_path_cuts(u, v, nu, nv, sigma2 / sigma1)]
+
+        def sheet(h, x0=xx, y0=yy):
+            return np.ravel(_elliptical(
+                layer, np.array([x0 - h * layer.normal[0]]),
+                np.array([y0 - h * layer.normal[1]]),
+                lambda R: knot_shape(heights, R, h)))
+        out[:, i] = _over_heights(sheet, heights, cuts)
+    return out[0].reshape(shape), out[1].reshape(shape)
 
 
 def band_deflection(
         layer: BandLayer, x: np.ndarray, y: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return the deflection of bands of rings (see _bands)."""
-    return _bands(
-        layer, np.asarray(x, dtype=float), np.asarray(y, dtype=float))
+    """
+    Return the deflection of bands of rings (see _bands): thin, of their
+    first coefficients; thick, of each, the integral over the height of
+    its sheet moved by the height along its normal, of its coefficients
+    times the shapes at its knots at the height.
+    """
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    heights = layer.heights
+    if heights is None:
+        return _bands(layer, x, y)
+    shape = np.shape(x)
+    out = np.zeros((2, x.size))
+    for k in range(len(layer.posa)):
+        sigma1, sigma2 = layer.stretch[k]
+        q = sigma2 / sigma1
+        below, above = layer.knots[k]
+        for i, (xx, yy) in enumerate(zip(x.ravel(), y.ravel())):
+            dx, dy = xx - layer.centres[k, 0], yy - layer.centres[k, 1]
+            u, v = _frame(dx, dy, layer.posa[k])
+            nu, nv = _frame(*layer.normals[k], layer.posa[k])
+            cuts = [*_path_cuts(u, v, nu, nv, q, sigma1 * layer.edges[k])]
+
+            def sheet(h, dx=dx, dy=dy, k=k, below=below, above=above):
+                shapes = height_shapes(heights, h)
+                density = shapes[below] * layer.density[k, 0] \
+                    + shapes[above] * layer.density[k, 1]
+                return np.ravel(_band_slice(
+                    np.array([dx - h * layer.normals[k, 0]]),
+                    np.array([dy - h * layer.normals[k, 1]]),
+                    layer.posa[k], sigma1, sigma2, *layer.edges[k], density))
+            out[:, i] += _over_heights(sheet, heights, cuts)
+    return out[0].reshape(shape), out[1].reshape(shape)
+
+
+def height_pdf(
+        heights: HeightProfile, term: int, h: float
+) -> np.ndarray:
+    """
+    Return the pdf of the height of a term of a vertical structure at
+    each of its knots at the height h (see HeightProfile): cubic between
+    the values of its table (4-point Lagrange, as LogTable, of the values),
+    and 0 above its top.
+    """
+    top = heights.tops[term]
+    tables = heights.pdfs[term]
+    n = tables.shape[-1]
+    height = abs(h)
+    if height > top:
+        return np.zeros(len(tables))
+    x = height / top * (n - 1)
+    index = min(max(int(x), 1), n - 3)
+    t = x - index
+    weights = (-t * (t - 1) * (t - 2) / 6, (t + 1) * (t - 1) * (t - 2) / 2,
+               -(t + 1) * t * (t - 2) / 2, (t + 1) * t * (t - 1) / 6)
+    return sum(w * tables[:, index + k - 1] for k, w in enumerate(weights))
+
+
+def height_shapes(heights: HeightProfile, h: float) -> np.ndarray:
+    """
+    Return the shape of a vertical structure at each of its knots at the
+    height h: the sum over its terms of their shares times their pdfs.
+    """
+    return sum(heights.shares[t] * height_pdf(heights, t, h)
+               for t in range(len(heights.tops)))
+
+
+def knot_shape(heights: HeightProfile, R: np.ndarray, h: float) -> np.ndarray:
+    """
+    Return the shape of a vertical structure at the radii R and the height
+    h: linear between its knots, held beyond the first and the last.
+    """
+    values = height_shapes(heights, h)
+    if len(values) == 1:
+        return np.full(np.shape(R), values[0])
+    return np.interp(R, heights.knots, values)
+
+
+def _path_cuts(
+        u: float, v: float, nu: float, nv: float, q: float,
+        edges: tuple[float, float] | None = None
+) -> list[float]:
+    """
+    Return the heights where the deflection of a sheet of a thick layer
+    at a point bends as the sheet moves along the normal (see
+    gbkfit::LensSheetPath): where the point meets its line of nodes, and
+    where the ellipse of the point crosses the edges (semi-major axes) of
+    a band.
+    """
+    a2 = q * q * nu * nu + nv * nv
+    if not a2 > 0:
+        return []
+    h0 = (q * q * u * nu + v * nv) / a2
+    a_min = abs(u * nv - v * nu) / math.sqrt(a2)
+    cuts = [h0]
+    for edge in edges if edges is not None else ():
+        if a_min < edge:
+            d = q * math.sqrt(edge * edge - a_min * a_min) / math.sqrt(a2)
+            cuts += [h0 - d, h0 + d]
+    return cuts
+
+
+def _over_heights(
+        sheet: Callable[[float], np.ndarray],
+        heights: HeightProfile,
+        cuts: list[float]
+) -> np.ndarray:
+    """
+    Return the integral over the height (from -top to top, of the highest
+    top of the terms of a vertical structure) of the deflection of a sheet
+    at the height, cut at its plane, the tops of its terms and the given
+    heights, by adaptive quadrature (to 1e-8).
+    """
+    top = float(np.max(heights.tops))
+    points = sorted({
+        c for c in [0.0, *heights.tops, *(-heights.tops), *cuts]
+        if -top < c < top})
+    value, _ = scipy.integrate.quad_vec(
+        sheet, -top, top, points=points, epsabs=0, epsrel=1e-8,
+        limit=2000)
+    return value
 
 
 def _frame(
@@ -78,81 +227,96 @@ def _sky(
 
 
 def _elliptical(
-        layer: EllipticalLayer, x: np.ndarray, y: np.ndarray
+        layer: EllipticalLayer,
+        x: np.ndarray,
+        y: np.ndarray,
+        factor: Callable[[np.ndarray], np.ndarray] | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Return the deflection of an elliptical layer (see EllipticalLayer):
-    of each slice, at the points from its centre moved by its height along
-    the normal, alpha_u = pi K u J_0 and alpha_v = pi K v J_1 along its
-    axes (Keeton 2001, with the semi-major axis a(w)^2 = w (u^2 + v^2 /
-    d)),
+    Return the deflection of the sheet of an elliptical layer (see
+    EllipticalLayer), times a factor of the radius (none without), at the
+    points from its centre: alpha_u = pi K u J_0 and alpha_v = pi K v J_1
+    along its axes (Keeton 2001, with the semi-major axis a(w)^2 = w (u^2
+    + v^2 / d)),
 
         J_n = int_0^w_end q Sigma_sky(a(w)) / d^(n + 1/2) dw,
         d = 1 - (1 - q^2) w,
 
     q Sigma_sky(a) = Sigma(a / sigma1) / sigma1^2, by the tanh-sinh
     quadrature of 52 nodes over [0, w_end], w_end the w of the end of its
-    tables (or 1, of a point within them).
+    table (1 - w_end exactly; 1, of a point within it), split at d =
+    _LINE_D below it, of Gauss-Legendre nodes in ln d beyond.
     """
     sigma1, sigma2 = layer.stretch
     q = sigma2 / sigma1
     e2 = 1 - q * q
     table = layer.sigma
     a_end = sigma1 * math.exp(
-        table.start + table.step * (table.values.shape[-1] - 1))
+        table.start + table.step * (len(table.values) - 1))
     shape = np.shape(x)
-    alpha_u, alpha_v = np.zeros(x.size), np.zeros(x.size)
-    for row, height in enumerate(layer.heights):
-        u, v = _frame(
-            x.ravel() - layer.centre[0] - height * layer.normal[0],
-            y.ravel() - layer.centre[1] - height * layer.normal[1],
-            layer.posa)
-        uu, vv = u * u, v * v
-        # (w_end: a(w) = a_end, the root in (0, 1] of the quadratic
-        # e2 u^2 w^2 - (u^2 + v^2 + e2 a_end^2) w + a_end^2)
-        b = uu + vv + e2 * a_end ** 2
-        root = np.sqrt(np.maximum(b * b - 4 * e2 * uu * a_end ** 2, 0))
+    u, v = _frame(x.ravel() - layer.centre[0], y.ravel() - layer.centre[1],
+                  layer.posa)
+    uu, vv = u * u, v * v
+    # (s_end = 1 - w_end: 0 within the table, else the root in (0, 1] of
+    # e2 u^2 s^2 + b s + c)
+    aa = a_end * a_end
+    c = q * q * (aa - uu) - vv
+    b = vv + (2 * q * q - 1) * uu + e2 * aa
+    with np.errstate(divide='ignore', invalid='ignore'):
+        s_end = np.where(c < 0, -2 * c / (b + np.sqrt(np.maximum(
+            b * b - 4 * e2 * uu * c, 0))), 0)
+    d_end = q * q + e2 * s_end
+    near = d_end < _LINE_D
+    s_top = np.where(near, (_LINE_D - q * q) / e2, s_end)
+    w_top = 1 - s_top
+
+    def weighted(dw, d, a):
+        # (the terms of J_0, of the weights dw in w)
         with np.errstate(divide='ignore', invalid='ignore'):
-            w_end = np.minimum(1, 2 * a_end ** 2 / (b + root))
-        w_end = np.where(b > 0, w_end, 1)
-        w = w_end[:, None] * _NODES
-        d = q * q + e2 * ((1 - w_end)[:, None]
-                          + w_end[:, None] * _ONE_MINUS_NODES)
-        a = np.sqrt(w * (uu[:, None] + vv[:, None] / d))
-        with np.errstate(divide='ignore', invalid='ignore'):
+            R = np.where(a > 0, a, 1) / sigma1
             sigma = np.where(
-                a > 0, _row(table, row)(np.where(a > 0, a, 1) / sigma1), 0)
-        weighted = w_end[:, None] * _WEIGHTS * sigma / sigma1 ** 2 \
-            / np.sqrt(d)
-        alpha_u += math.pi * K * u * weighted.sum(-1)
-        alpha_v += math.pi * K * v * (weighted / d).sum(-1)
-    alpha_x, alpha_y = _sky(alpha_u, alpha_v, layer.posa)
+                a > 0, table(R) * (1 if factor is None else factor(R)), 0)
+        return dw * sigma / sigma1 ** 2 / np.sqrt(d)
+    w = w_top[:, None] * _NODES
+    d = q * q + e2 * (s_top[:, None] + w_top[:, None] * _ONE_MINUS_NODES)
+    terms = weighted(w_top[:, None] * _WEIGHTS, d,
+                     np.sqrt(w * (uu[:, None] + vv[:, None] / d)))
+    j0, j1 = terms.sum(-1), (terms / d).sum(-1)
+    for i in np.flatnonzero(near):
+        top, length = math.log(_LINE_D), math.log(_LINE_D / d_end[i])
+        total = math.ceil(_LINE_DENSITY * length)
+        panels = -(-total // _LINE_PANEL)
+        nodes, weights = np.polynomial.legendre.leggauss(
+            max(-(-total // panels), 3))
+        width = length / panels
+        for panel in range(panels):
+            dd = np.exp(top - width * (panel + (nodes + 1) / 2))
+            ww = 1 - (dd - q * q) / e2
+            terms = weighted(width / 2 * weights * dd / e2, dd, np.sqrt(
+                ww * (uu[i] + vv[i] / dd)))
+            j0[i] += terms.sum()
+            j1[i] += (terms / dd).sum()
+    alpha_x, alpha_y = _sky(
+        math.pi * K * u * j0, math.pi * K * v * j1, layer.posa)
     return alpha_x.reshape(shape), alpha_y.reshape(shape)
-
-
-def _row(table: LogTable, row: int) -> LogTable:
-    """Return the table of one row of a table of several."""
-    return LogTable(table.start, table.step, table.values[row])
 
 
 def _bands(
         layer: BandLayer, x: np.ndarray, y: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Return the deflection of bands of rings (see BandLayer): the sum of
-    those of each band in each slice (see _band_slice).
+    Return the deflection of thin bands of rings (see BandLayer): the sum
+    of those of each band (see _band_slice).
     """
     shape = np.shape(x)
     alpha_x, alpha_y = np.zeros(x.size), np.zeros(x.size)
-    for row, height in enumerate(layer.heights):
-        for k in range(len(layer.posa)):
-            centre = layer.centres[k] + height * layer.normals[k]
-            ax, ay = _band_slice(
-                x.ravel() - centre[0], y.ravel() - centre[1],
-                layer.posa[k], *layer.stretch[k], *layer.edges[k],
-                layer.density[row, k])
-            alpha_x += ax
-            alpha_y += ay
+    for k in range(len(layer.posa)):
+        ax, ay = _band_slice(
+            x.ravel() - layer.centres[k, 0], y.ravel() - layer.centres[k, 1],
+            layer.posa[k], *layer.stretch[k], *layer.edges[k],
+            layer.density[k, 0])
+        alpha_x += ax
+        alpha_y += ay
     return alpha_x.reshape(shape), alpha_y.reshape(shape)
 
 
@@ -227,12 +391,18 @@ def _band_integrals(
 
     S1 = S(a1), S2 = S(a2) (J_1 as the difference of -S / e^2, without
     its cancellation; the logarithm as that of asin(e a / z), of a
-    change of its argument within (-pi, pi)).
+    change of its argument within (-pi, pi); S + i e a as z^2 / (S - i e
+    a) where that is larger, without their cancellation).
     """
     s1, s2 = _branch_root(z, e, a1), _branch_root(z, e, a2)
+
+    def plus(s, a):
+        larger = np.abs(s + 1j * e * a) >= np.abs(s - 1j * e * a)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return np.where(
+                larger, s + 1j * e * a, z * z / (s - 1j * e * a))
     j1 = (a2 * a2 - a1 * a1) / (s1 + s2)
-    j2 = z * z / (2 * e ** 3) * -1j * np.log(
-        (s2 + 1j * e * a2) / (s1 + 1j * e * a1)) \
+    j2 = z * z / (2 * e ** 3) * -1j * np.log(plus(s2, a2) / plus(s1, a1)) \
         - (a2 * s2 - a1 * s1) / (2 * e * e)
     j3 = (2 * z * z * j1 - (a2 * a2 * s2 - a1 * a1 * s1)) / (3 * e * e)
     return j1, j2, j3

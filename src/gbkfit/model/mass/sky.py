@@ -22,9 +22,12 @@ The elliptical layers and the bands are sheets of an axisymmetric
 surface density Sigma(R), R the radius in the plane of the sheet,
 stretched onto the sky by sigma1 along the position angle posa and by
 sigma2 across it (sigma1 >= sigma2): a face-on disk seen at the
-inclination i is stretched by 1 and cos(i). A thick layer is a sum of
-such sheets (slices) at heights h along the normal of its plane (a
-vector of the sky, of length sin(i)).
+inclination i is stretched by 1 and cos(i). A thick layer is the
+integral over the height h of such sheets, each moved by h along the
+normal of its plane (a vector of the sky, of length sin(i)), of the
+surface density Sigma(R) times the shape of its vertical structure at R
+and h (see HeightProfile): lensing integrates it at each point, to any
+inclination.
 """
 
 import dataclasses
@@ -46,6 +49,7 @@ if TYPE_CHECKING:
 __all__ = [
     'BandLayer',
     'EllipticalLayer',
+    'HeightProfile',
     'LinearBetweenKnots',
     'LogTable',
     'MassPlane',
@@ -79,25 +83,10 @@ _TABLE_SIZE = 11 * 64 + 1
 # it, and a ray outside one sees its mass, here negligible)
 _TAIL = 1e-16
 
-# The slices of a thick layer (see height_slices): Gauss-Legendre nodes
-# on each of the panels between these heights, in units of its scale
-# height, on either side of its plane: 84 slices, uniform to 3 scale
-# heights (a thin sheet seen near edge-on bends light sharply across it,
-# and the slices must be as close everywhere the layer has mass; a
-# geometric layout of 48 slices was 4 times further off at 85 degrees)
-_HEIGHT_PANELS = (
-    0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.5, 4,
-    5, 6, 8, 10, 12, 16, 24)
-_HEIGHT_NODES = 2
-
-# The most edge-on a thick layer is laid out in slices (see
-# check_slices): its median height times the tangent of its inclination
-# over its scale length. Measured on exponential disks (sech2 and
-# exponential in height, hz/rd 0.13 and 0.33, at z 0.35, rays 0.1 to 1
-# arcsec from the centre): at this ratio, the deflection near the centre
-# is off by about 1e-3 of itself (0.1 mas for a disk of 5e10 Msun), and
-# beyond, it grows as the square of the ratio
-_EDGE_ON_RATIO = 1.5
+# The values of the tables of the pdfs of the height of the terms of a
+# thick layer (see HeightProfile), evenly from 0 to their tops: cubic
+# between them, to about 1e-7 of an exponential pdf of 24 scale heights
+_HEIGHT_TABLE = 512
 
 # The largest angle (degrees) between the planes of the components that
 # place the mass in one plane (see SkyPlacement.plane): planes tied or
@@ -178,7 +167,8 @@ def _log(values: np.ndarray) -> np.ndarray:
 def _same(first: object, second: object) -> bool:
     """
     Check whether two layers of a kind have the same unit shape: every
-    field equal to the last bits but scale.
+    field equal to the last bits but scale (and those of their tables and
+    vertical structures).
     """
     if type(first) is not type(second):
         return False
@@ -186,13 +176,52 @@ def _same(first: object, second: object) -> bool:
         if field.name == 'scale':
             continue
         a, b = getattr(first, field.name), getattr(second, field.name)
-        if isinstance(a, LogTable):
-            if not (a.start == b.start and a.step == b.step
-                    and np.array_equal(a.values, b.values)):
+        if dataclasses.is_dataclass(a) or dataclasses.is_dataclass(b):
+            if not _same(a, b):
+                return False
+        elif a is None or b is None:
+            if a is not b:
                 return False
         elif not np.array_equal(a, b):
             return False
     return True
+
+
+@dataclasses.dataclass(frozen=True, eq=False)
+class HeightProfile:
+    """
+    The vertical structure of a thick layer: the sum of its terms (e.g.
+    those of the density of a disk component), each a pdf of the height
+    times its share, at its knots (radii in its plane), and linear in the
+    radius between them (held beyond the first and the last knots): the
+    shape of the layer, the density of its sheet at the height h per unit
+    of its surface density Sigma(R) (see the module). One knot of a shape
+    that is the same at every radius (e.g. a law).
+
+    Attributes
+    ----------
+    knots : np.ndarray
+        The radii of the knots (kpc, in its plane), increasing.
+    shares : np.ndarray
+        The share of each term at each knot: of shape (terms, knots).
+    pdfs : np.ndarray
+        The pdf of the height (1/kpc, even in the height) of each term at
+        each knot, at _HEIGHT_TABLE heights evenly from 0 to its top (cubic
+        between them, see gbkfit/lensing/layers.hpp): of shape (terms,
+        knots, _HEIGHT_TABLE).
+    tops : np.ndarray
+        The height (kpc) of each term above which its pdf is 0: where it
+        ends (e.g. the zmax of a density height trait), or where its tails
+        hold no mass that matters (e.g. of a law).
+    scales : np.ndarray
+        The scale height (kpc) of each term (see layer_scale), the
+        smallest of its knots.
+    """
+    knots: np.ndarray
+    shares: np.ndarray
+    pdfs: np.ndarray
+    tops: np.ndarray
+    scales: np.ndarray
 
 
 @dataclasses.dataclass(frozen=True, eq=False)
@@ -244,13 +273,13 @@ class RoundLayer:
 class EllipticalLayer:
     """
     An elliptical layer: a sheet of a smooth surface density Sigma(R) in
-    its plane, stretched onto the sky (see the module), in slices: scale
-    times the table of each slice (Msun/kpc^2 per unit scale, in its
-    plane), at its height along the normal of its plane, the slices
-    adding up. The surface density of the sky is Sigma(a / sigma1) /
-    (sigma1 sigma2) on the ellipse of the semi-major axis a (along posa)
-    and the axis ratio sigma2 / sigma1, and 0 beyond the last radius of
-    its tables.
+    its plane, stretched onto the sky (see the module), scale times its
+    table (Msun/kpc^2 per unit scale, in its plane); thin, or thick, of
+    its vertical structure, its sheets moved by their heights along the
+    normal of its plane. The surface density of the sky of a thin layer is
+    Sigma(a / sigma1) / (sigma1 sigma2) on the ellipse of the semi-major
+    axis a (along posa) and the axis ratio sigma2 / sigma1, and 0 beyond
+    the last radius of its table.
 
     Attributes
     ----------
@@ -264,10 +293,9 @@ class EllipticalLayer:
     stretch : tuple of float
         sigma1 and sigma2, sigma1 >= sigma2 >= 0 (see the module).
     sigma : LogTable
-        The surface density of each slice per unit scale (Msun/kpc^2): a
-        table of a row for each.
-    heights : np.ndarray
-        The height of each slice (kpc) along normal.
+        Its surface density per unit scale (Msun/kpc^2, in its plane).
+    heights : HeightProfile or None
+        Its vertical structure; None, thin.
     normal : tuple of float
         The vector of the sky (kpc per kpc of height) of the normal of its
         plane.
@@ -277,7 +305,7 @@ class EllipticalLayer:
     posa: float
     stretch: tuple[float, float]
     sigma: LogTable
-    heights: np.ndarray
+    heights: HeightProfile | None
     normal: tuple[float, float]
 
     def same_shape(self, other: 'SkyLayer') -> bool:
@@ -292,10 +320,13 @@ class BandLayer:
     the radius R within each band of radii (R_in <= R < R_out) and 0
     outside, each about its own centre, stretched onto the sky (see the
     module): the image of a ring of a disk, tilted and moved as the disk
-    draws it (homoeoid bands). In slices, as the elliptical layers: scale
-    times the quadratic of each band in each slice (Msun/kpc^2 per unit
-    scale, in its plane), at the height of the slice along the normal of
-    the band. The bands add up, overlapping or not.
+    draws it (homoeoid bands): scale times the quadratic of each band
+    (Msun/kpc^2 per unit scale, in its plane). The bands add up,
+    overlapping or not. Thick, of their vertical structure, each its
+    sheets moved by their heights along its normal: within a band, the
+    shapes at the knots below and above it times the quadratics of the two
+    rows of its coefficients (exact where the surface density is linear
+    within the band: its knots are edges of bands, see band_layer).
 
     Attributes
     ----------
@@ -311,10 +342,14 @@ class BandLayer:
         R_in and R_out (kpc, in its plane) of each band: of shape (bands,
         2).
     density : np.ndarray
-        The coefficients c0, c1, c2 of the surface density c0 + c1 R + c2
-        R^2 of each band in each slice: of shape (slices, bands, 3).
-    heights : np.ndarray
-        The height of each slice (kpc).
+        The coefficients c0, c1, c2 of the quadratics c0 + c1 R + c2 R^2 of
+        each band (of its surface density, in its first row; thick, of the
+        shapes at its two knots): of shape (bands, 2, 3).
+    knots : np.ndarray
+        The indices of the knots below and above each band of the knots of
+        its vertical structure (int): of shape (bands, 2); zeros, thin.
+    heights : HeightProfile or None
+        Their vertical structure; None, thin.
     normals : np.ndarray
         The vector of the sky of the normal of the plane of each band: of
         shape (bands, 2).
@@ -325,7 +360,8 @@ class BandLayer:
     stretch: np.ndarray
     edges: np.ndarray
     density: np.ndarray
-    heights: np.ndarray
+    knots: np.ndarray
+    heights: HeightProfile | None
     normals: np.ndarray
 
     def same_shape(self, other: 'SkyLayer') -> bool:
@@ -724,40 +760,10 @@ def spheroid_stretch(
     return posa, (1.0, ratio)
 
 
-def height_slices(scale: float) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Return the slices of a thick layer: Gauss-Legendre nodes on each of
-    the panels between the heights _HEIGHT_PANELS times its scale height,
-    on both sides of its plane (for a pdf of the height p, the layer is
-    the sum of its slices, each of the weight w p(h), see slice_weights).
-    Their number is fixed, so that the layer changes smoothly with its
-    parameters.
-
-    Parameters
-    ----------
-    scale : float
-        The scale height of the layer (kpc; e.g. see layer_scale).
-
-    Returns
-    -------
-    tuple of np.ndarray
-        The heights (kpc) of the slices and their widths (the weights of
-        the quadrature).
-    """
-    nodes, weights = np.polynomial.legendre.leggauss(_HEIGHT_NODES)
-    edges = scale * np.asarray(_HEIGHT_PANELS)
-    middle, half = (edges[1:] + edges[:-1]) / 2, np.diff(edges) / 2
-    heights = (middle[:, None] + half[:, None] * nodes).ravel()
-    widths = (half[:, None] * weights).ravel()
-    return (np.concatenate([-heights[::-1], heights]),
-            np.concatenate([widths[::-1], widths]))
-
-
 def layer_scale(z: np.ndarray, pdf: np.ndarray) -> float:
     """
-    Return the scale height of a vertical distribution for its slices
-    (see height_slices): its median height over ln 2 (the scale height of
-    an exponential profile).
+    Return the scale height of a vertical distribution: its median height
+    over ln 2 (the scale height of an exponential profile).
 
     Parameters
     ----------
@@ -776,117 +782,43 @@ def layer_scale(z: np.ndarray, pdf: np.ndarray) -> float:
     return float(np.interp(mass[-1] / 2, mass, z)) / math.log(2)
 
 
-def check_slices(layer: 'EllipticalLayer | BandLayer', label: str) -> None:
+def height_profile(
+        knots: npt.ArrayLike,
+        shares: npt.ArrayLike,
+        tops: Sequence[float],
+        pdfs: Callable[[np.ndarray], np.ndarray]
+) -> HeightProfile:
     """
-    Check that a thick layer (of slices) is not seen too close to edge-on
-    to be laid out in slices: its median height times the tangent of its
-    inclination (that of its band most edge-on, of those of mass) over its
-    scale length (its half-mass radius over 1.678, the scale length of an
-    exponential disk) at most _EDGE_ON_RATIO (see there).
+    Return the vertical structure of a thick layer (see HeightProfile).
 
     Parameters
     ----------
-    layer : EllipticalLayer or BandLayer
-        The layer (of a single slice, nothing to check).
-    label : str
-        What it is, for the message (e.g. "the mass disk 'gas'").
-
-    Raises
-    ------
-    ModelEvaluationError
-        If it is, saying the inclination it can be laid out to.
-    """
-    if len(layer.heights) < 2:
-        return
-    shape = _ellipse_shape if isinstance(layer, EllipticalLayer) \
-        else _bands_shape
-    slices, half, ratio = shape(layer)
-    if not slices.sum() > 0:
-        return
-    order = np.argsort(np.abs(layer.heights))
-    median = float(np.interp(
-        slices.sum() / 2, np.cumsum(slices[order]),
-        np.abs(layer.heights)[order]))
-    scale = half / 1.678
-    tangent = math.sqrt(max(1 - ratio ** 2, 0)) / max(ratio, 1e-300)
-    if median * tangent > _EDGE_ON_RATIO * scale:
-        limit = math.degrees(math.atan(_EDGE_ON_RATIO * scale / median))
-        raise ModelEvaluationError(
-            f"{label} is seen too close to edge-on (at "
-            f"{math.degrees(math.atan(tangent)):.1f} degrees) to be laid "
-            f"out on the sky in slices of its height: its median height "
-            f"({median:.3g} kpc) times the tangent of its inclination is "
-            f"{median * tangent / scale:.2g} times its scale length "
-            f"({scale:.3g} kpc), above {_EDGE_ON_RATIO}, where its "
-            f"deflection near its centre would be off by more than about "
-            f"1e-3 of itself; it is laid out to {limit:.1f} degrees")
-
-
-def _ellipse_shape(
-        layer: EllipticalLayer
-) -> tuple[np.ndarray, float, float]:
-    """
-    Return the mass of each slice of an elliptical layer (of a unit
-    scale), its half-mass radius (kpc, in its plane) and its axis ratio.
-    """
-    table = layer.sigma
-    log_radii = table.start + table.step * np.arange(table.values.shape[-1])
-    # (the mass of each slice in each step of ln R, trapezoidal)
-    steps = 2 * np.pi * np.exp(2 * log_radii) * table(np.exp(log_radii))
-    steps = (steps[:, 1:] + steps[:, :-1]) / 2 * table.step
-    cumulative = np.concatenate([[0], np.cumsum(steps.sum(axis=0))])
-    half = math.exp(np.interp(cumulative[-1] / 2, cumulative, log_radii))
-    return steps.sum(axis=1), half, layer.stretch[1] / layer.stretch[0]
-
-
-def _bands_shape(layer: BandLayer) -> tuple[np.ndarray, float, float]:
-    """
-    Return the mass of each slice of bands (of a unit scale), their
-    half-mass radius (kpc, in their planes) and the axis ratio of the
-    band most edge-on of those that hold mass (1e-3 of it, at least).
-    """
-    inner, outer = layer.edges[:, 0], layer.edges[:, 1]
-    powers = np.array([2, 3, 4])
-
-    def antiderivative(R: np.ndarray) -> np.ndarray:
-        # (of 2 pi R (c0 + c1 R + c2 R^2), by coefficient)
-        return 2 * np.pi * R[:, None] ** powers / powers
-    masses = np.sum(layer.density * (
-        antiderivative(outer) - antiderivative(inner)), axis=-1)
-    bands = masses.sum(axis=0)
-    cumulative = np.concatenate([[0], np.cumsum(bands)])
-    half = float(np.interp(
-        cumulative[-1] / 2, cumulative, np.concatenate([inner[:1], outer])))
-    held = bands >= 1e-3 * bands.sum()
-    ratios = layer.stretch[held, 1] / layer.stretch[held, 0]
-    return masses.sum(axis=1), half, float(ratios.min(initial=1.0))
-
-
-def slice_weights(pdfs: np.ndarray, widths: np.ndarray) -> np.ndarray:
-    """
-    Return the share of the surface density of each slice of a thick
-    layer: the pdf of the height at each slice times its width (see
-    height_slices), normalised to add up to 1 over the slices (so that the
-    layer has the surface density of its pdf, whatever its tail beyond the
-    slices).
-
-    Parameters
-    ----------
-    pdfs : np.ndarray
-        The pdf of the height at each slice: of shape (slices, ...), e.g.
-        at radii.
-    widths : np.ndarray
-        The widths of the slices (see height_slices).
+    knots : array_like
+        The radii of its knots (kpc, in its plane), increasing.
+    shares : array_like
+        The share of each term at each knot: of shape (terms, knots).
+    tops : Sequence of float
+        The height (kpc) of each term above which its pdf is 0.
+    pdfs : Callable
+        The pdf of the height (1/kpc) of every term at every knot, a
+        function of the heights z (kpc, from 0) that returns an array of
+        shape (terms, knots, len(z)).
 
     Returns
     -------
-    np.ndarray
-        The shares, of the shape of pdfs; 0 where the pdfs are.
+    HeightProfile
+        The vertical structure.
     """
-    weighted = pdfs * widths.reshape((-1,) + (1,) * (pdfs.ndim - 1))
-    total = weighted.sum(axis=0)
-    return np.divide(
-        weighted, total, out=np.zeros_like(weighted), where=total > 0)
+    tops = np.asarray(tops, dtype=float)
+    tables, scales = [], []
+    for term, top in enumerate(tops):
+        z = np.linspace(0, top, _HEIGHT_TABLE)
+        table = np.asarray(pdfs(z), dtype=float)[term]
+        tables.append(table)
+        scales.append(min(layer_scale(z, row) for row in table))
+    return HeightProfile(
+        np.asarray(knots, dtype=float), np.asarray(shares, dtype=float),
+        np.stack(tables), tops, np.array(scales))
 
 
 def round_layer(
@@ -930,7 +862,7 @@ def elliptical_layer(
         posa: float,
         stretch: tuple[float, float],
         sigma: Callable[[np.ndarray], np.ndarray],
-        heights: np.ndarray | None = None,
+        heights: HeightProfile | None = None,
         normal: tuple[float, float] = (0.0, 0.0)
 ) -> EllipticalLayer:
     """
@@ -948,13 +880,12 @@ def elliptical_layer(
     stretch : tuple of float
         sigma1 and sigma2 (see the module).
     sigma : Callable
-        The surface density of each slice per unit scale (Msun/kpc^2, in
-        its plane), a function of the radii R (kpc) that returns an array
-        of shape (slices, len(R)).
-    heights : np.ndarray, optional
-        The heights of the slices (kpc); one slice in its plane without.
+        Its surface density per unit scale (Msun/kpc^2, in its plane), a
+        function of the radii R (kpc).
+    heights : HeightProfile, optional
+        Its vertical structure; thin without.
     normal : tuple of float, optional
-        The normal of its plane (see the module); none without heights.
+        The normal of its plane (see the module); none thin.
 
     Returns
     -------
@@ -962,15 +893,14 @@ def elliptical_layer(
         The layer.
     """
     radii = table_radii()
-    values = np.atleast_2d(sigma(radii))
-    mass = np.abs(values).max(axis=0) * radii ** 2
+    values = np.asarray(sigma(radii), dtype=float)
+    mass = np.abs(values) * radii ** 2
     keep = max(4, int(np.flatnonzero(mass >= _TAIL * mass.max())[-1]) + 1) \
         if mass.max() > 0 else 4
     return EllipticalLayer(
         _point(centre), float(scale), float(posa),
         (float(stretch[0]), float(stretch[1])),
-        LogTable(_TABLE_START, _TABLE_STEP, _log(values[:, :keep])),
-        np.zeros(1) if heights is None else np.asarray(heights, dtype=float),
+        LogTable(_TABLE_START, _TABLE_STEP, _log(values[:keep])), heights,
         _point(normal))
 
 
@@ -980,15 +910,16 @@ def band_layer(
         geometry: Callable[[np.ndarray], tuple[
             np.ndarray, np.ndarray, np.ndarray, np.ndarray]],
         sigma: Callable[[np.ndarray], np.ndarray],
-        heights: np.ndarray | None = None
+        heights: HeightProfile | None = None
 ) -> BandLayer:
     """
-    Return the bands between consecutive radii (kpc, in their plane) of a
-    surface density of each slice per unit scale (Msun/kpc^2; a function
-    of the radii R, kpc, which returns an array of shape (slices,
-    len(R))) that is a quadratic in R within each band: its values at the
-    edges and the middle of each give its coefficients (exactly, for a
-    density linear, or a product of two linear functions, there).
+    Return the bands between consecutive radii (kpc, in their plane) and
+    the knots of their vertical structure within them (so that the shape
+    is linear within each band), of a surface density per unit scale
+    (Msun/kpc^2; a function of the radii R, kpc) that is a quadratic in R
+    within each band: its values at the edges and the middle of each give
+    its coefficients (exactly, for a density linear there, also times the
+    shape, linear between the knots).
 
     Parameters
     ----------
@@ -1002,9 +933,9 @@ def band_layer(
         their stretch ((bands, 2)) and the normals of their planes
         ((bands, 2)).
     sigma : Callable
-        The surface density of each slice (see above).
-    heights : np.ndarray, optional
-        The heights of the slices (kpc); one slice in its plane without.
+        The surface density (see above).
+    heights : HeightProfile, optional
+        Their vertical structure; thin without.
 
     Returns
     -------
@@ -1012,21 +943,41 @@ def band_layer(
         The bands.
     """
     edges = np.asarray(edges, dtype=float)
+    if heights is not None:
+        knots = heights.knots
+        edges = np.union1d(
+            edges, knots[(knots > edges[0]) & (knots < edges[-1])])
     inner, outer = edges[:-1], edges[1:]
     middle = (inner + outer) / 2
     centres, posa, stretch, normals = geometry(middle)
-    at = np.atleast_2d(sigma(np.concatenate([inner, middle, outer])))
-    s0, s1, s2 = np.split(at, 3, axis=-1)
+    radii = np.concatenate([inner, middle, outer])
+    at = np.asarray(sigma(radii), dtype=float)
+    below = np.zeros(len(middle), dtype=np.int32)
+    if heights is None or len(heights.knots) == 1:
+        parts = (at, np.zeros_like(at))
+    else:
+        # (the shapes at the knots around each band, linear between them)
+        knots = heights.knots
+        below = np.clip(np.searchsorted(knots, middle, side='right') - 1,
+                        0, len(knots) - 2).astype(np.int32)
+        k = np.tile(below, 3)
+        t = np.clip((radii - knots[k]) / (knots[k + 1] - knots[k]), 0, 1)
+        parts = (at * (1 - t), at * t)
     # (the quadratic through the values at R_in, R_mid and R_out)
     width = outer - inner
-    c2 = 2 * (s0 - 2 * s1 + s2) / width ** 2
-    slope = (s2 - s0) / width - c2 * (inner + outer)
-    c0 = s1 - slope * middle - c2 * middle ** 2
+    coefficients = []
+    for values in parts:
+        s0, s1, s2 = np.split(values, 3)
+        c2 = 2 * (s0 - 2 * s1 + s2) / width ** 2
+        slope = (s2 - s0) / width - c2 * (inner + outer)
+        c0 = s1 - slope * middle - c2 * middle ** 2
+        coefficients.append(np.stack([c0, slope, c2], axis=-1))
+    above = below + (heights is not None and len(heights.knots) > 1)
     return BandLayer(
         float(scale), np.asarray(centres, dtype=float),
         np.asarray(posa, dtype=float), np.asarray(stretch, dtype=float),
-        np.stack([inner, outer], axis=1), np.stack([c0, slope, c2], axis=-1),
-        np.zeros(1) if heights is None else np.asarray(heights, dtype=float),
+        np.stack([inner, outer], axis=1), np.stack(coefficients, axis=1),
+        np.stack([below, above], axis=1).astype(np.int32), heights,
         np.asarray(normals, dtype=float))
 
 

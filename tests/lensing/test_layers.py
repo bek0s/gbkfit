@@ -3,7 +3,8 @@ Tests of the deflections of the mass of galaxies laid out on the sky (see
 gbkfit.lensing._layers and gbkfit.model.mass.sky): the native kernels
 against their numpy references, the bands and ellipses against 2D brute
 force integrals, and analytic lenses made of mass components (a point,
-an isothermal sphere, an NFW halo, an inclined disk, a warped disk).
+an isothermal sphere, an NFW halo, an inclined disk, a warped disk); and
+thick layers to exactly edge-on against the integral over their height.
 """
 
 import math
@@ -17,8 +18,9 @@ from gbkfit.lensing._deflections import nfw_convergence, nfw_round_deflection
 from gbkfit.model.mass import (
     BandLayer, EllipticalLayer, Halo, LogTable, MassContext, MassDisk,
     MassModel, MassPoint, PointLayer, ProfileNFW, ProfilePseudoIsothermal,
-    RingGeometry, RoundLayer, SkyPlacement, SurfaceExponential, TracedDisk,
-    VerticalThin)
+    RingGeometry, RoundLayer, SkyPlacement, SurfaceExponential,
+    SurfaceNodewise, TracedDisk, VerticalComponent, VerticalExponential,
+    VerticalSech2, VerticalThin, sky)
 from gbkfit.model.mass.units import G
 from layer_references import (
     band_deflection, elliptical_deflection, keeton_deflection,
@@ -75,13 +77,13 @@ def _brute_force(
 
 
 def _band(q, density, centre=(0.3, -0.2), posa=35.0, sigma1=1.3,
-          edges=(0.7, 2.9), heights=(0.0,), normal=(0.0, 0.0)):
-    density = np.asarray(density, dtype=float)
+          edges=(0.7, 2.9)):
+    """A thin band."""
     return BandLayer(
         1.0, np.array([centre]), np.array([posa]),
         np.array([[sigma1, q * sigma1]]), np.array([edges]),
-        density.reshape(len(heights), 1, 3), np.asarray(heights),
-        np.array([normal]))
+        np.array([[density, (0.0, 0.0, 0.0)]], dtype=float),
+        np.zeros((1, 2), dtype=np.int32), None, np.zeros((1, 2)))
 
 
 @pytest.mark.parametrize('q', [0.05, 0.3, 0.7, 0.95, 0.999, 1.0])
@@ -153,14 +155,13 @@ def test_uniform_ellipse_against_brute_force(q):
         rtol=1e-12)
 
 
-def _elliptical(q, values, heights=(0.0,), normal=(0.0, 0.0), r_end=3.0):
-    n = len(np.atleast_2d(values)[0])
+def _elliptical(q, values, r_end=3.0):
+    """A thin elliptical layer of the table of the values to r_end."""
     step = math.log(10) / 64
-    start = math.log(r_end) - step * (n - 1)
+    start = math.log(r_end) - step * (len(values) - 1)
     return EllipticalLayer(
-        (0.1, 0.2), 1.0, 20.0, (1.0, q),
-        LogTable(start, step, np.atleast_2d(values)), np.asarray(heights),
-        normal)
+        (0.1, 0.2), 1.0, 20.0, (1.0, q), LogTable(start, step, values), None,
+        (0.0, 0.0))
 
 
 @pytest.mark.parametrize('q', [0.02, 0.2, 0.6, 0.95, 1.0])
@@ -175,8 +176,8 @@ def test_elliptical_against_one_band(q):
     ellipse = _elliptical(q, np.log(c[0] + c[1] * R + c[2] * R * R))
     band = BandLayer(
         1.0, np.array([[0.1, 0.2]]), np.array([20.0]), np.array([[1.0, q]]),
-        np.array([[0.0, 3.0]]), np.array([[c]]), np.zeros(1),
-        np.zeros((1, 2)))
+        np.array([[0.0, 3.0]]), np.array([[c, (0.0, 0.0, 0.0)]]),
+        np.zeros((1, 2), dtype=np.int32), None, np.zeros((1, 2)))
     x, y = _points(3000, 5, seed=2)
     reference = np.array(_layers.unit_deflection(band, x, y, HOST))
     np.testing.assert_allclose(
@@ -185,30 +186,31 @@ def test_elliptical_against_one_band(q):
 
 
 def test_host_against_numpy():
+    # (thin: the numpy references of the kernels, to the last digits)
     x, y = _points(500, 8, seed=5)
     rng = np.random.default_rng(6)
     n = 300
     R = np.exp(math.log(4) - math.log(10) / 64 * np.arange(n)[::-1])
-    tables = np.log(np.exp(-R / 1.3) * rng.uniform(0.5, 2, (5, 1)))
     ellipse = EllipticalLayer(
         (0.4, -0.3), 2.5, 140.0, (1.2, 0.3),
-        LogTable(math.log(R[0]), math.log(10) / 64, tables),
-        np.linspace(-0.5, 0.5, 5), (0.2, -0.4))
+        LogTable(math.log(R[0]), math.log(10) / 64, -R / 1.3), None,
+        (0.0, 0.0))
     np.testing.assert_allclose(
         np.array(_layers.unit_deflection(ellipse, x, y, HOST)),
         np.array(elliptical_deflection(ellipse, x, y)), rtol=1e-12,
         atol=1e-14 * K)
-    nb, ns = 9, 3
+    nb = 9
     edges = np.cumsum(rng.uniform(0.2, 0.8, nb + 1))
     bands = BandLayer(
         1.7, rng.uniform(-0.3, 0.3, (nb, 2)), rng.uniform(0, 180, nb),
         np.column_stack([np.ones(nb), rng.uniform(0.02, 1, nb)])
         * rng.uniform(0.8, 1.2, (nb, 1)),
         np.column_stack([edges[:-1], edges[1:]]),
-        rng.uniform(-0.1, 1, (ns, nb, 3)) * np.array([1, 0.3, 0.05]),
-        np.linspace(-0.3, 0.3, ns), rng.uniform(-0.5, 0.5, (nb, 2)))
+        np.stack([rng.uniform(-0.1, 1, (nb, 3)) * np.array([1, 0.3, 0.05]),
+                  np.zeros((nb, 3))], axis=1),
+        np.zeros((nb, 2), dtype=np.int32), None, np.zeros((nb, 2)))
     # (bands of eccentricities on both sides of the series)
-    bands.stretch[0, 1] = 0.999
+    bands.stretch[0, 1] = bands.stretch[0, 0] * 0.999
     bands.stretch[1, 1] = bands.stretch[1, 0] * 0.995
     np.testing.assert_allclose(
         np.array(_layers.unit_deflection(bands, x, y, HOST)),
@@ -343,6 +345,9 @@ class _Density:
     def height_cuts(self):
         return ()
 
+    def height_tops(self):
+        return ()
+
     def mass_per_unit(self):
         return None
 
@@ -423,6 +428,11 @@ def test_elliptical_nfw_lens_as_its_convergence_by_keeton(q):
         alpha, reference, rtol=0, atol=2e-7 * np.abs(reference).max())
 
 
+def _sech2(hz):
+    """The vertical structure of a sech2 law of the scale height hz."""
+    return VerticalSech2().height_profile(dict(hz=hz), _context())
+
+
 def _layers_of_every_kind():
     """Return a layer of each kind, thin and thick."""
     rng = np.random.default_rng(12)
@@ -430,27 +440,39 @@ def _layers_of_every_kind():
     R = np.exp(math.log(1e-3) + step * np.arange(400))
     thin = EllipticalLayer(
         (0.3, -0.2), 1.0, 30.0, (1.2, 0.5),
-        LogTable(math.log(1e-3), step, -R[None] / 2), np.zeros(1), (0, 0))
+        LogTable(math.log(1e-3), step, -R / 2), None, (0, 0))
     thick = EllipticalLayer(
-        (0.3, -0.2), 1.0, 30.0, (1.0, 0.1),
-        LogTable(math.log(1e-3), step, np.tile(-R / 2, (6, 1))),
-        np.linspace(-0.4, 0.4, 6), (0.4, 0.8))
+        (0.3, -0.2), 1.0, 30.0, (1.0, 0.1), thin.sigma, _sech2(0.3),
+        (0.4, 0.8))
     nb = 7
     edges = np.linspace(0, 6, nb + 1)
+    knots = np.linspace(0, 6, nb + 1)
+    flaring = sky.height_profile(
+        knots, np.ones((1, nb + 1)), [3.0],
+        lambda z: 1 / (2 * (0.2 + 0.05 * knots[None, :, None])
+                       * np.cosh(z / (0.2 + 0.05 * knots[None, :, None]))
+                       ** 2))
     bands = BandLayer(
         1.0, rng.uniform(-0.2, 0.2, (nb, 2)), rng.uniform(0, 180, nb),
         np.column_stack([np.ones(nb), rng.uniform(0.02, 1, nb)]),
         np.column_stack([edges[:-1], edges[1:]]),
-        rng.uniform(0, 1, (4, nb, 3)) * [1, 0.2, 0.02],
-        np.linspace(-0.3, 0.3, 4), rng.uniform(-0.5, 0.5, (nb, 2)))
+        rng.uniform(0, 1, (nb, 2, 3)) * [1, 0.2, 0.02],
+        np.column_stack([np.arange(nb), np.arange(1, nb + 1)]).astype(
+            np.int32), flaring, rng.uniform(-0.5, 0.5, (nb, 2)))
+    # (of one plane)
+    flat = BandLayer(
+        1.0, np.tile([0.1, -0.1], (nb, 1)), np.full(nb, 40.0),
+        np.tile([1.0, 0.05], (nb, 1)), bands.edges, bands.density,
+        bands.knots, flaring, np.tile([0.6, 0.7], (nb, 1)))
     point = PointLayer((0.1, 0.1), 1.0)
     round_ = RoundLayer((0.1, 0.1), 1.0, LogTable(
         math.log(1e-3), step, np.log(1 - np.exp(-R))))
-    return dict(
-        thin=thin, thick=thick, bands=bands, point=point, round=round_)
+    return dict(thin=thin, thick=thick, bands=bands, flat=flat, point=point,
+                round=round_)
 
 
-@pytest.mark.parametrize('kind', ['thin', 'thick', 'bands', 'point', 'round'])
+@pytest.mark.parametrize(
+    'kind', ['thin', 'thick', 'bands', 'flat', 'point', 'round'])
 def test_driver_against_host(driver, kind):
     # (the kernels of the driver, the rays and deflections on the host)
     # (to 1e-12 of the largest: the device rounds and fuses differently)
@@ -470,3 +492,143 @@ def test_elliptical_nfw_lens_on_the_driver(driver):
     np.testing.assert_allclose(
         np.array(LensNFW().deflection(points, params, driver)), reference,
         rtol=0, atol=1e-12 * np.abs(reference).max())
+
+
+# Thick layers, to exactly edge-on: the kernels against the integral over
+# the height of the numpy references of their sheets, by adaptive
+# quadrature (see layer_references); at most 1e-5 of the largest
+# deflection apart (0.02 mas of a disk of 5e10 Msun at z 0.35, rays
+# 0.1 to 20 arcsec from its centre)
+THICK_TOLERANCE = 1e-5
+
+
+def _rays(seed=0):
+    """Rays (kpc) near the centre of a disk (0.5-5 kpc) and far (10-100)."""
+    rng = np.random.default_rng(seed)
+    angle = rng.uniform(0, 2 * np.pi, 8)
+    radius = np.concatenate([rng.uniform(0.5, 5, 5), rng.uniform(10, 100, 3)])
+    return radius * np.cos(angle), radius * np.sin(angle)
+
+
+# Of a smooth layer whose shape changes with radius: the tanh-sinh
+# quadrature of its sheets does not resolve the bends of its shape at its
+# knots (some 5e-5 of each sheet, measured against adaptive quadrature),
+# which the quadrature of the height then integrates as noise
+KNOTS_TOLERANCE = 5e-5
+
+
+def _against_heights(layer, x, y, reference, tolerance=THICK_TOLERANCE):
+    alpha = np.array(_layers.unit_deflection(layer, x, y, HOST))
+    expected = np.array(reference(layer, x, y))
+    np.testing.assert_allclose(
+        alpha, expected, rtol=0, atol=tolerance * np.abs(expected).max())
+
+
+@pytest.mark.parametrize('incl, vertical', [
+    (60.0, VerticalSech2()), (89.0, VerticalSech2()), (90.0, VerticalSech2()),
+    (90.0, VerticalExponential())])
+def test_thick_elliptical_disk_to_edge_on(incl, vertical):
+    disk = MassDisk('disk', SurfaceExponential(), vertical)
+    placement = SkyPlacement((0.0, 0.0), disks={'gas': _Rings(
+        posa=30.0, incl=incl)})
+    (layer,) = MassModel(disk).sky_mass(
+        {'mass_disk_log_m': 0.0, 'mass_disk_rd': 3.0, 'mass_disk_hz': 0.4},
+        _context(), placement).layers()
+    _against_heights(layer, *_rays(), elliptical_deflection)
+
+
+@pytest.mark.parametrize('incl', [60.0, 90.0])
+def test_thick_bands_to_edge_on(incl):
+    # (a nodewise disk, of bands in the plane of the mass, linear between
+    # its nodes)
+    disk = MassDisk('disk', SurfaceNodewise([0, 2, 5, 9, 14]),
+                    VerticalSech2())
+    placement = SkyPlacement((0.0, 0.0), disks={'gas': _Rings(
+        posa=30.0, incl=incl)})
+    (layer,) = MassModel(disk).sky_mass(
+        {'mass_disk_log_sigma': np.array([8.0, 7.6, 7.0, 6.0]),
+         'mass_disk_hz': 0.5}, _context(), placement).layers()
+    _against_heights(layer, *_rays(1), band_deflection)
+
+
+class _ThickDensity:
+    """
+    A thick disk density at knots, of two terms of sech2 pdfs of their
+    own cuts, the first flaring (see mass.DiskDensity).
+    """
+
+    def __init__(self, knots):
+        self._knots = knots
+
+    def knots(self, rstep):
+        return self._knots
+
+    def thick(self):
+        return True
+
+    def surface_densities(self, R):
+        return np.stack([np.interp(R, self._knots, s, right=0) for s in (
+            1e8 * np.exp(-self._knots / 3), 3e7 * np.exp(-self._knots / 5))])
+
+    def height_pdfs(self, R, z):
+        h = np.stack([0.2 + 0.05 * np.asarray(R), 0.8 + 0 * np.asarray(R)])
+        cut = np.array([2.0, 4.0])[:, None, None]
+        h, z = h[:, :, None], np.asarray(z)[None, None, :]
+        pdf = 1 / (2 * h * np.cosh(z / h) ** 2) / np.tanh(cut / h)
+        return np.where(np.abs(z) <= cut, pdf, 0)
+
+    def height_cuts(self):
+        return (2.0, 4.0)
+
+    def height_tops(self):
+        return (2.0, 4.0)
+
+    def mass_per_unit(self):
+        return 1.0
+
+
+def test_thick_disk_in_the_layer_of_a_component():
+    # (an elliptical layer whose shape changes with radius, of terms of
+    # their own cuts; edge-on as the others, of the same quadrature of the
+    # height)
+    incl = 60.0
+    disk = MassDisk('disk', SurfaceExponential(), VerticalComponent('gas'))
+    density = _ThickDensity(np.linspace(0, 12, 13))
+    placement = SkyPlacement((0.0, 0.0), disks={'gas': _Rings(
+        posa=30.0, incl=incl)})
+    (layer,) = MassModel(disk).sky_mass(
+        {'mass_disk_log_m': 0.0, 'mass_disk_rd': 3.0},
+        _context(gas=density), placement).layers()
+    assert len(layer.heights.knots) == 13
+    _against_heights(
+        layer, *_rays(2), elliptical_deflection, KNOTS_TOLERANCE)
+
+
+def test_warped_thick_disk_through_edge_on():
+    # A traced disk in its own layer, of rings from 85 to 93 degrees, which
+    # turn and tilt: each band of its own plane, through edge-on
+    density = _ThickDensity(np.linspace(0, 8, 9))
+    rings = _Rings(posa=20.0, incl=85.0, dposa=2.0, dincl=1.0, tilt=0.02)
+    placement = SkyPlacement((0.0, 0.0), disks={'gas': rings})
+    (layer,) = MassModel(TracedDisk('traced', 'gas')).sky_mass(
+        {'mass_traced_upsilon': 1.0}, _context(gas=density),
+        placement).layers()
+    # (its bands from 0.08 to 0.009 in axis ratio, and back, edge-on)
+    ratio = layer.stretch[:, 1] / layer.stretch[:, 0]
+    assert ratio.min() < 0.01 and ratio[0] > 0.07 and ratio[-1] > 0.04
+    _against_heights(layer, *_rays(3), band_deflection)
+
+
+def test_thin_band_seen_edge_on_near_its_line():
+    # (q = cos(90 deg): S + i e a cancels near the line, where it takes
+    # z^2 / (S - i e a))
+    q = math.cos(math.radians(90.0))
+    layer = _band(q, (1.0, 0.2, -0.03), centre=(0.0, 0.0), posa=0.0)
+    u = np.concatenate([np.linspace(-0.01, 0.01, 21), [0.0, 1e-9]])
+    v = np.concatenate([np.full(21, -3e-7), [-6.6e-7, -1e-8]])
+    x, y = -v, u
+    alpha = np.array(_layers.unit_deflection(layer, x, y, HOST))
+    assert np.all(np.isfinite(alpha))
+    expected = np.array(band_deflection(layer, x, y))
+    np.testing.assert_allclose(
+        alpha, expected, rtol=1e-9, atol=1e-12 * np.abs(expected).max())

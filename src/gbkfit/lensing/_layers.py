@@ -14,7 +14,20 @@ elliptical layer by the integrals over the ellipses within each point
 (Keeton 2001; see elliptical_convergence, which the elliptical shapes of
 lenses use too), and a band of rings in closed form (see _bands): the
 last two by the native kernels of a driver (float64; the points and their
-deflections on the host, copied to and from its device).
+deflections on the host, copied to and from its device). A thick layer
+bends light as the integral over the height of its sheets, each moved by
+its height along the normal of its plane, times the shape of its
+vertical structure (see model.mass.HeightProfile), by a quadrature of each
+point (see gbkfit::lens_height_rule): cut at the plane of the layer, the
+tops of its terms and the height where the point meets its line of nodes
+(where the deflection of a sheet changes sharply as it moves, on a scale
+that vanishes seen edge-on), and the edges of a band, each part graded
+from its cut in the logarithm of the distance to it, of Gauss-Legendre
+nodes (5 per e-fold): within 1e-5 of the largest deflection of an
+exponential disk at any inclination (0.02 mas of 5e10 Msun at z 0.35, rd
+3 kpc, sech2 or exponential, hz 0.4 or 1 kpc, rays 0.1 to 20 arcsec from
+its centre), warped through edge-on too; its nodes change in number with
+the point and the parameters, in steps of about 1e-3 mas.
 """
 
 import dataclasses
@@ -26,12 +39,14 @@ import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model.mass import (
-    BandLayer, EllipticalLayer, LogTable, PointLayer, RoundLayer, SkyLayer)
+    BandLayer, EllipticalLayer, HeightProfile, LogTable, PointLayer,
+    RoundLayer, SkyLayer)
 
 
 __all__ = [
     'SheetFrame',
     'elliptical_convergence',
+    'gauss_legendre',
     'tanh_sinh_nodes',
     'unit_deflection'
 ]
@@ -58,16 +73,34 @@ def tanh_sinh_nodes(
 _NODES, _ONE_MINUS_NODES, _WEIGHTS = tanh_sinh_nodes()
 
 
+def gauss_legendre(n: int) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the Gauss-Legendre rules of 1 to n nodes over [-1, 1], one
+    after the other (that of m nodes at the offset m (m - 1) / 2): their
+    nodes and their weights.
+    """
+    rules = [np.polynomial.legendre.leggauss(m) for m in range(1, n + 1)]
+    return (np.concatenate([nodes for nodes, _ in rules]),
+            np.concatenate([weights for _, weights in rules]))
+
+
+# The rules of the quadrature of the height of thick layers (see
+# gbkfit::lens_height_rule): of at most this many nodes a part, more than
+# any of them needs (some 60, of a log-graded part 1e5 times its scale
+# long)
+_GAUSS_NODES, _GAUSS_WEIGHTS = gauss_legendre(64)
+
+
 @dataclasses.dataclass(frozen=True)
 class SheetFrame:
     """
-    Where elliptical sheets are on the sky (e.g. the slices of an
-    elliptical layer, see EllipticalLayer), in a unit of length or of
-    angle, the same for all: an axisymmetric profile f(R), R the radius
-    in the plane of a sheet, stretched by sigma1 along the position angle
-    of its major axis and sigma2 across (so f(a / sigma1) / (sigma1
-    sigma2) on the ellipse of the semi-major axis a), about a centre moved
-    by the height of the sheet along a normal.
+    Where an elliptical sheet is on the sky, in a unit of length or of
+    angle: an axisymmetric profile f(R), R the radius in the plane of the
+    sheet, stretched by sigma1 along the position angle of its major axis
+    and sigma2 across (so f(a / sigma1) / (sigma1 sigma2) on the ellipse
+    of the semi-major axis a), about its centre; or the sheets of a thick
+    layer (see EllipticalLayer), each about the centre moved by its height
+    along a normal, of their vertical structure.
 
     Attributes
     ----------
@@ -78,16 +111,16 @@ class SheetFrame:
         axis.
     stretch : tuple of float
         sigma1 and sigma2, sigma1 >= sigma2 >= 0.
-    heights : np.ndarray
-        The height of each sheet along the normal.
-    normal : tuple of float
+    normal : tuple of float, optional
         The vector of the sky of the normal (per unit of height).
+    heights : HeightProfile, optional
+        The vertical structure of the sheets; one sheet without.
     """
     centre: tuple[float, float]
     posa: float
     stretch: tuple[float, float]
-    heights: np.ndarray
-    normal: tuple[float, float]
+    normal: tuple[float, float] = (0.0, 0.0)
+    heights: HeightProfile | None = None
 
 
 def unit_deflection(
@@ -128,11 +161,10 @@ def unit_deflection(
             # (of the convergence pi K Sigma, per kpc)
             table = layer.sigma
             kappa = LogTable(
-                table.start, table.step,
-                np.atleast_2d(table.values) + math.log(math.pi * K))
+                table.start, table.step, table.values + math.log(math.pi * K))
             return elliptical_convergence(SheetFrame(
-                layer.centre, layer.posa, layer.stretch, layer.heights,
-                layer.normal), kappa, x, y, driver)
+                layer.centre, layer.posa, layer.stretch, layer.normal,
+                layer.heights), kappa, x, y, driver)
         case BandLayer():
             alpha_x, alpha_y = _bands(layer, x, y, driver)
             return 2 * math.pi * K * alpha_x, 2 * math.pi * K * alpha_y
@@ -147,12 +179,13 @@ def elliptical_convergence(
         driver: Driver
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Return the deflection of a convergence laid out in elliptical sheets,
-    (1 / pi) int kappa(t') (t - t') / |t - t'|^2 d^2 t', by the integrals
-    over the ellipses within each point (Keeton 2001): of each sheet, at
-    the points from its centre moved by its height along the normal,
-    alpha_u = u J_0 and alpha_v = v J_1 along its axes, with the
-    semi-major axis a(w)^2 = w (u^2 + v^2 / d),
+    Return the deflection of a convergence laid out in an elliptical
+    sheet, (1 / pi) int kappa(t') (t - t') / |t - t'|^2 d^2 t', by the
+    integrals over the ellipses within each point (Keeton 2001): alpha_u
+    = u J_0 and alpha_v = v J_1 along its axes, of the points from its
+    centre (and of a thick layer, the integral over the height of those of
+    its sheets, see the module), with the semi-major axis a(w)^2 = w (u^2
+    + v^2 / d),
 
         J_n = int_0^w_end q kappa_sky(a(w)) / d^(n + 1/2) dw,
         d = 1 - (1 - q^2) w,
@@ -168,11 +201,12 @@ def elliptical_convergence(
     frame : SheetFrame
         Where the sheets are.
     kappa : LogTable
-        The convergence of each sheet (a row of the table for each), of
-        the radius in its plane: dimensionless, of points in angles (the
-        deflection then in their unit), or per unit of length, of points
-        in lengths (the deflection then in radians; e.g. pi K Sigma of a
-        surface density Sigma, see the module).
+        The convergence, of the radius in the plane (of a thick layer, its
+        surface density times the shape of its vertical structure):
+        dimensionless, of points in angles (the deflection then in their
+        unit), or per unit of length, of points in lengths (the deflection
+        then in radians; e.g. pi K Sigma of a surface density Sigma, see
+        the module).
     x, y : np.ndarray
         The points.
     driver : Driver
@@ -201,9 +235,9 @@ def elliptical_convergence(
     ) -> None:
         kernels.elliptical_deflection(
             x_d, y_d, (math.sin(p), math.cos(p), q, sigma1), frame.centre,
-            frame.normal,
-            *_on_device(driver, np.atleast_2d(kappa.values)), kappa.start,
-            kappa.step, *_on_device(driver, frame.heights, nodes),
+            frame.normal, *_on_device(driver, kappa.values), kappa.start,
+            kappa.step, *_on_device(driver, nodes),
+            *_heights_on_device(driver, frame.heights),
             alpha_x_d, alpha_y_d)
     return _native(driver, call, x, y)
 
@@ -232,9 +266,9 @@ def _bands(
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Return the deflection over 2 pi K of bands of rings (see BandLayer):
-    the sum of those of each band in each slice, at the points from its
-    centre moved by the height of the slice along its normal. A thin
-    homoeoid of the semi-major axis a and the mass dm bends nothing inside
+    the sum of those of each band (of a thick band, the integral over the
+    height of those of its sheets, see the module). A thin homoeoid of
+    the semi-major axis a and the mass dm bends nothing inside
     it, and outside, alpha* = alpha_u - i alpha_v = K dm / S(a), S(a) =
     sqrt(z^2 - e^2 a^2), z = u + i v, e^2 = 1 - q^2 (S on the branch of z
     at infinity, cut on the segment between its foci). Of a band, dm = 2
@@ -259,7 +293,8 @@ def _bands(
     frames = np.column_stack([
         np.sin(p), np.cos(p), layer.stretch[:, 1] / sigma1,
         sigma1 * layer.edges[:, 0], sigma1 * layer.edges[:, 1]])
-    coefficients = layer.density / sigma1[:, None] ** np.array([2, 3, 4])
+    coefficients = layer.density \
+        / sigma1[:, None, None] ** np.array([2, 3, 4])
 
     def call(
             kernels: type, x_d: DeviceArray, y_d: DeviceArray,
@@ -267,8 +302,11 @@ def _bands(
     ) -> None:
         kernels.band_deflection(
             x_d, y_d, *_on_device(
-                driver, layer.centres, frames, layer.normals, coefficients,
-                layer.heights), alpha_x_d, alpha_y_d)
+                driver, layer.centres, frames, layer.normals, coefficients),
+            driver.mem_copy_h2d(np.ascontiguousarray(
+                layer.knots, dtype=np.int32)),
+            *_heights_on_device(driver, layer.heights),
+            alpha_x_d, alpha_y_d)
     return _native(driver, call, x, y)
 
 
@@ -292,6 +330,24 @@ def _native(
          alpha_x_d, alpha_y_d)
     return (driver.mem_copy_d2h(alpha_x_d).reshape(shape),
             driver.mem_copy_d2h(alpha_y_d).reshape(shape))
+
+
+def _heights_on_device(
+        driver: Driver, heights: HeightProfile | None
+) -> list[DeviceArray]:
+    """
+    Return the arrays of the vertical structure of a layer for the native
+    kernels (see gbkfit::LensHeights), on the device of a driver: its
+    knots, shares, pdfs, tops and scales, and the rules of the quadrature
+    of the height; empty, of no terms, of a thin layer.
+    """
+    if heights is None:
+        return _on_device(
+            driver, np.zeros(0), np.zeros((0, 0)), np.zeros((0, 0, 4)),
+            np.zeros(0), np.zeros(0), _GAUSS_NODES, _GAUSS_WEIGHTS)
+    return _on_device(
+        driver, heights.knots, heights.shares, heights.pdfs, heights.tops,
+        heights.scales, _GAUSS_NODES, _GAUSS_WEIGHTS)
 
 
 def _on_device(driver: Driver, *arrays: np.ndarray) -> list[DeviceArray]:

@@ -568,8 +568,7 @@ class LensNFW(LensPiece):
         radii = np.exp(start + _NFW_TABLE_STEP * np.arange(
             max(4, math.ceil((end - start) / _NFW_TABLE_STEP) + 1)))
         frame = SheetFrame(
-            (0.0, 0.0), params['posa'], (1 / math.sqrt(q), math.sqrt(q)),
-            np.zeros(1), (0.0, 0.0))
+            (0.0, 0.0), params['posa'], (1 / math.sqrt(q), math.sqrt(q)))
         kappa = LogTable(start, _NFW_TABLE_STEP, np.log(
             kappa_s * nfw_convergence(radii / r_s)))
         return elliptical_convergence(frame, kappa, x, y, driver)

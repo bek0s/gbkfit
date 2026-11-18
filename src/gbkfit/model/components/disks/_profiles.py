@@ -678,6 +678,15 @@ class NodalDiskDensity:
             trait.zmax() * self._kpc_per_arcsec
             for trait in self._disk.traits('rht')}))
 
+    def height_tops(self) -> tuple[float, ...]:
+        """
+        Return the height (kpc) where each density height trait ends, its
+        zmax, in the order of the terms (see height_pdfs).
+        """
+        return tuple(
+            trait.zmax() * self._kpc_per_arcsec
+            for trait in self._disk.traits('rht'))
+
     def mass_per_unit(self) -> float | None:
         """
         Return the mass surface density (Msun/kpc^2) of one unit of the

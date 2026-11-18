@@ -16,9 +16,8 @@ from gbkfit.config import check_name, check_options
 from gbkfit.params import ParamDesc, ParamValues
 from .base import DiskDensity, MassComponent, MassContext, forces_in_plane
 from .sky import (
-    LinearBetweenKnots, SkyLayer, SkyPlacement, band_layer, check_slices,
-    elliptical_layer, fixed_geometry, height_slices, layer_scale,
-    plane_stretch, ring_geometry, slice_weights)
+    LinearBetweenKnots, SkyLayer, SkyPlacement, band_layer, elliptical_layer,
+    fixed_geometry, height_profile, plane_stretch, ring_geometry)
 from .surfaces import DiskSurface, SurfaceComponent, disk_surface_parser
 from .vertical import DiskVertical, VerticalComponent, disk_vertical_parser
 
@@ -28,12 +27,6 @@ __all__ = [
     'TracedDisk'
 ]
 
-
-# The heights at which the scale height of the slices of a disk in the
-# layer of a component is measured (see sky.layer_scale): this many, from
-# its plane to where the pdfs of the height of the component end (their
-# largest zmax)
-_LAYER_SCALE_HEIGHTS = 513
 
 # The composite Gauss-Legendre quadratures of the enclosed masses of
 # disks: the nodes of each panel, the largest widths of the panels in ln R
@@ -88,21 +81,18 @@ class MassDisk(MassComponent):
     (exact for its density, linear between the subnodes, but for the
     geometry of each band, that of its middle); a disk of a law lies in
     the plane of the mass at its centre, as bands (nodewise) or an
-    elliptical layer (on tables, to about 1e-7). A thick disk is a sum of
-    84 thin slices in height (see sky.height_slices), uniform to 3 scale
-    heights; seen near edge-on, each slice is a thin sheet that bends
-    light sharply across it, and slices fixed in number fall behind: a
-    thick disk is laid out up to the inclination where its median height
-    times its tangent is 1.5 times its scale length (see
-    sky.check_slices), and refused beyond. Measured on exponential disks
-    of 5e10 Msun (rd 3 kpc; sech2 or exponential, hz 0.4 or 1 kpc; laid
-    out to 87.3, 83.2, 86.5 and 81.2 degrees) at z 0.35, at 0.1 to 1
-    arcsec from the centre: within 0.08 mas of the converged deflection
-    (8e-4 of it) at those limits, and 0.005 to 0.03 mas 3 degrees below
-    (thin, they would be off by tens of mas). Its slices make a thick disk
-    slow to deflect: some 1.2 s (elliptical) to 2.6 s (50 bands) for 1e5
-    rays on the host, against 17 and 28 ms thin (and 0.44 s and 2.6 s on
-    a laptop GPU, of a low float64 rate).
+    elliptical layer (on tables, to about 1e-7). A thick disk is its
+    surface density times the shape of its vertical structure (see
+    sky.HeightProfile), which lensing integrates over the height at each
+    ray, to any inclination, exactly edge-on too (see gbkfit.lensing): to
+    1e-5 of the largest deflection (0.02 mas of an exponential disk of
+    5e10 Msun at z 0.35), or about 5e-5 of a shape that changes with
+    radius laid out as an elliptical layer (a disk of a law in the layer
+    of a component: the quadrature of its sheets does not resolve the
+    bends of its shape at the knots). A thick disk takes some 0.5 s
+    (elliptical) and 1.1 to 1.6 s (50 bands) for 1e5 rays on the host,
+    against 20 and 35 ms thin; 0.3 s and 0.9 s on a laptop GPU of a low
+    float64 rate (rays in the order of a grid; scattered, 2 s of bands).
 
     Parameters
     ----------
@@ -351,24 +341,11 @@ class MassDisk(MassComponent):
         # its ring there (exactly, but for the geometry of each band, that
         # of its middle). Of a law: in the plane of the mass at its centre,
         # bands (of one linear between nodes, exactly) or elliptical (of a
-        # smooth one, on tables, whose cubic smooths the bends of the shape
-        # of the layer of a component at its subnodes). Thick, in slices
-        # (see sky.height_slices)
-        layer = self._sky_layer(params, context, placement)
-        check_slices(layer, f"the mass disk {self.name()!r}")
-        return (layer,)
-
-    def _sky_layer(
-            self,
-            params: ParamValues,
-            context: MassContext,
-            placement: SkyPlacement
-    ) -> SkyLayer:
-        """Return its layer on the sky (see sky_layers)."""
+        # smooth one, on tables). Thick, of its vertical structure
         surface = self._surface
         component = surface.followed_component()
         if component is not None:
-            return self._ring_bands(component, params, context, placement)
+            return (self._ring_bands(component, params, context, placement),)
         plane = placement.plane()
         posa, stretch, normal = plane_stretch(plane)
         scale, unit = 1.0, params
@@ -376,18 +353,17 @@ class MassDisk(MassComponent):
             # (its mass, which scales it alone)
             scale, unit = 10.0 ** params['log_m'], dict(params) | dict(
                 log_m=0.0)
-        heights, shares, knots = self._slices(params, context)
+        heights = self._vertical.height_profile(params, context)
 
         def sigma(R: np.ndarray) -> np.ndarray:
-            return surface.surface_density(R, unit, context) * shares(R)
+            return surface.surface_density(R, unit, context)
         if isinstance(surface, LinearBetweenKnots):
-            edges = surface.linear_knots()
-            return band_layer(
-                scale, _with_knots(edges, knots),
+            return (band_layer(
+                scale, surface.linear_knots(),
                 fixed_geometry(placement.centre, posa, stretch, normal),
-                sigma, heights)
-        return elliptical_layer(
-            placement.centre, scale, posa, stretch, sigma, heights, normal)
+                sigma, heights),)
+        return (elliptical_layer(
+            placement.centre, scale, posa, stretch, sigma, heights, normal),)
 
     def _ring_bands(
             self,
@@ -402,7 +378,8 @@ class MassDisk(MassComponent):
         the subnodes of the component and linear between them; in its own
         layer, of each term of the component, its surface density times
         the pdf of its height, so linear between the subnodes at each
-        height (as TracedDisk.density).
+        height (as TracedDisk.density): the shape of the unnormalised sum
+        of the terms at each subnode, of a surface density of 1.
         """
         surface = self._surface
         density = context.density(component)
@@ -413,65 +390,18 @@ class MassDisk(MassComponent):
         vertical = self._vertical
         if vertical.followed_component() == component \
                 and not vertical.thin(context):
-            z = np.linspace(
-                0, max(density.height_cuts()), _LAYER_SCALE_HEIGHTS)
-            heights, widths = height_slices(layer_scale(z, np.einsum(
-                'tk,tkz->z', terms, density.height_pdfs(knots, z))))
-            columns = np.einsum(
-                'tk,tkz->zk', terms, density.height_pdfs(knots, heights))
-            values = np.sum(terms, axis=0) * slice_weights(columns, widths)
+            heights = height_profile(
+                knots, terms, density.height_tops(),
+                lambda z: density.height_pdfs(knots, z))
             return band_layer(
                 scale, knots, geometry,
-                lambda R: np.stack([
-                    np.interp(R, knots, row, left=0, right=0)
-                    for row in values]), heights)
+                lambda R: ((R >= knots[0]) & (R <= knots[-1])).astype(float),
+                heights)
         total = np.sum(terms, axis=0)
-        heights, shares, layer_knots = self._slices(params, context)
         return band_layer(
-            scale, _with_knots(knots, layer_knots), geometry,
-            lambda R: np.interp(R, knots, total, left=0, right=0) * shares(R),
-            heights)
-
-    def _slices(
-            self, params: ParamValues, context: MassContext
-    ) -> tuple[np.ndarray | None, Callable[[np.ndarray], np.ndarray],
-               np.ndarray]:
-        """
-        Return the slices of its vertical structure (but in the layer of
-        the component it follows, see _ring_bands): their heights (kpc;
-        None if thin, of one slice in its plane), the share of each of the
-        surface density at radii (a function of the radii R, kpc, which
-        returns an array of shape (slices, len(R))), and the radii where
-        the shares bend (kpc). Of a law, the same shares at every radius;
-        of the layer of a component, its shapes at its subnodes, linear
-        between them.
-        """
-        vertical = self._vertical
-        if vertical.thin(context):
-            return None, lambda R: np.ones((1, len(R))), np.empty(0)
-        if (law := vertical.law()) is not None:
-            heights, widths = height_slices(params['hz'])
-            shares = slice_weights(law.pdf(heights, params['hz']), widths)
-            return heights, lambda R: np.outer(shares, np.ones(len(R))), \
-                np.empty(0)
-        knots = vertical.knots(context)
-        z = np.linspace(
-            0, max(vertical.height_cuts(context)), _LAYER_SCALE_HEIGHTS)
-        heights, widths = height_slices(layer_scale(
-            z, vertical.shapes(knots, z, context).mean(axis=0)))
-        shares = slice_weights(
-            vertical.shapes(knots, heights, context).T, widths)
-        return heights, lambda R: np.stack([
-            np.interp(R, knots, row) for row in shares]), knots
-
-
-def _with_knots(edges: np.ndarray, knots: np.ndarray) -> np.ndarray:
-    """
-    Return the edges of bands (kpc) with the knots within them (where the
-    shares of the slices of a layer bend, see MassDisk._slices).
-    """
-    inside = knots[(knots > edges[0]) & (knots < edges[-1])]
-    return np.union1d(edges, inside)
+            scale, knots, geometry,
+            lambda R: np.interp(R, knots, total, left=0, right=0),
+            vertical.height_profile(params, context))
 
 
 class TracedDisk(MassDisk):

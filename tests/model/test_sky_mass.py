@@ -1,9 +1,9 @@
 """
 Tests of the mass of galaxies laid out on the sky (see
 gbkfit.model.mass.sky): the layers of each mass component against direct
-integrals of its density (projected masses, lines of sight), the slices
-of thick disks, the bands of traced disks, the placement and its errors,
-and the unit shapes that a change of a scale keeps.
+integrals of its density (projected masses, lines of sight), the vertical
+structures of thick disks, the bands of traced disks, the placement and
+its errors, and the unit shapes that a change of a scale keeps.
 """
 
 import math
@@ -60,8 +60,8 @@ def _layers(component, params, context=None, placement=None):
 
 def _sky_density(layer, x, y):
     """
-    Return the surface density of the sky (Msun/kpc^2) of an elliptical
-    layer or of bands at points (kpc), times its scale.
+    Return the surface density of the sky (Msun/kpc^2) of a thin
+    elliptical layer or of thin bands at points (kpc), times its scale.
     """
     x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
     total = np.zeros(x.shape)
@@ -70,31 +70,25 @@ def _sky_density(layer, x, y):
         p = np.radians(posa)
         return (-dx * np.sin(p) + dy * np.cos(p),
                 -dx * np.cos(p) - dy * np.sin(p))
+    assert layer.heights is None
     if isinstance(layer, EllipticalLayer):
         sigma1, sigma2 = layer.stretch
         table = layer.sigma
-        for row, height in enumerate(layer.heights):
-            u, v = principal(
-                x - layer.centre[0] - height * layer.normal[0],
-                y - layer.centre[1] - height * layer.normal[1], layer.posa)
-            R = np.hypot(u, v / (sigma2 / sigma1)) / sigma1
-            values = sky.LogTable(
-                table.start, table.step, table.values[row])(R)
-            end = np.exp(table.start + table.step * (
-                table.values.shape[-1] - 1))
-            total += np.where(R <= end, values, 0) / (sigma1 * sigma2)
+        u, v = principal(
+            x - layer.centre[0], y - layer.centre[1], layer.posa)
+        R = np.hypot(u, v / (sigma2 / sigma1)) / sigma1
+        end = np.exp(table.start + table.step * (len(table.values) - 1))
+        total += np.where(R <= end, table(R), 0) / (sigma1 * sigma2)
     else:
-        for row, height in enumerate(layer.heights):
-            for k in range(len(layer.posa)):
-                sigma1, sigma2 = layer.stretch[k]
-                centre = layer.centres[k] + height * layer.normals[k]
-                u, v = principal(
-                    x - centre[0], y - centre[1], layer.posa[k])
-                R = np.hypot(u, v / (sigma2 / sigma1)) / sigma1
-                c0, c1, c2 = layer.density[row, k]
-                inside = (R >= layer.edges[k, 0]) & (R < layer.edges[k, 1])
-                total += np.where(inside, c0 + c1 * R + c2 * R * R, 0) \
-                    / (sigma1 * sigma2)
+        for k in range(len(layer.posa)):
+            sigma1, sigma2 = layer.stretch[k]
+            centre = layer.centres[k]
+            u, v = principal(x - centre[0], y - centre[1], layer.posa[k])
+            R = np.hypot(u, v / (sigma2 / sigma1)) / sigma1
+            c0, c1, c2 = layer.density[k, 0]
+            inside = (R >= layer.edges[k, 0]) & (R < layer.edges[k, 1])
+            total += np.where(inside, c0 + c1 * R + c2 * R * R, 0) \
+                / (sigma1 * sigma2)
     return layer.scale * total
 
 
@@ -237,27 +231,39 @@ def test_thin_disk_inclined():
     assert layer.stretch == pytest.approx((1.0, math.cos(math.radians(50))))
     assert layer.posa == 30.0 and layer.scale == 1e10
     # (its mass: that of its table, to the tail it drops)
-    R = sky.table_radii()[:layer.sigma.values.shape[1]]
+    R = sky.table_radii()[:len(layer.sigma.values)]
     mass = scipy.integrate.trapezoid(
-        2 * np.pi * R ** 2 * layer.sigma(R)[0], np.log(R))
+        2 * np.pi * R ** 2 * layer.sigma(R), np.log(R))
     assert layer.scale * mass == pytest.approx(1e10, rel=1e-6)
 
 
-def test_thick_disk_slices():
-    # A sech2 disk in slices: of its surface density at every radius, and
-    # of the moments of its pdf of the height
+def test_thick_disk_profile():
+    # A sech2 disk: its surface density, and its pdf of the height to where
+    # its tails hold 1e-10 of its mass (tanh(top / hz) = 1 - 1e-10), at one
+    # knot, of the scale height of sech2
     disk = MassDisk('disk', SurfaceExponential(), VerticalSech2())
     (layer,) = _layers(disk, dict(log_m=10.0, rd=3.0, hz=0.4))
-    assert len(layer.heights) == 84
     R = np.array([0.1, 1.0, 5.0, 20.0])
-    shares = layer.sigma(R) / np.exp(-R / 3.0) * (2 * np.pi * 9.0)
-    np.testing.assert_allclose(shares.sum(axis=0), 1, rtol=1e-6)
-    z2 = np.sum(shares[:, 1] * layer.heights ** 2)
-    assert z2 == pytest.approx(np.pi ** 2 / 12 * 0.4 ** 2, rel=1e-4)
+    np.testing.assert_allclose(
+        layer.sigma(R), np.exp(-R / 3.0) / (2 * np.pi * 9.0), rtol=1e-6)
+    heights = layer.heights
+    np.testing.assert_array_equal(heights.knots, [0.0])
+    np.testing.assert_array_equal(heights.shares, [[1.0]])
+    assert heights.tops[0] == pytest.approx(
+        0.4 * np.arctanh(1 - 1e-10), abs=0.01 * 0.4)
+    z = np.linspace(0, heights.tops[0], heights.pdfs.shape[-1])
+    np.testing.assert_allclose(
+        heights.pdfs[0, 0], 1 / (2 * 0.4 * np.cosh(z / 0.4) ** 2),
+        rtol=1e-14)
+    # (of its table, which grades the quadrature of its height)
+    assert heights.scales[0] == pytest.approx(
+        0.4 * np.arctanh(0.5) / np.log(2), rel=1e-3)
     p = np.radians(30.0)
     i = np.radians(50.0)
     assert layer.normal == pytest.approx(
         (np.sin(i) * np.cos(p), np.sin(i) * np.sin(p)))
+    thin = MassDisk('disk', SurfaceExponential(), VerticalThin())
+    assert _layers(thin, dict(log_m=10.0, rd=3.0))[0].heights is None
 
 
 def test_nodewise_disk_as_bands():
@@ -308,6 +314,9 @@ class _DiskDensity:
     def height_cuts(self):
         return (self._cut,)
 
+    def height_tops(self):
+        return (self._cut,) * len(self._sigmas)
+
     def mass_per_unit(self):
         return 2.0
 
@@ -325,14 +334,17 @@ def test_traced_thin_disk_as_bands_on_its_rings():
     np.testing.assert_allclose(
         layer.stretch[:, 1], np.cos(np.radians(30 + 4 * (knots[:-1] + 0.5))))
     np.testing.assert_allclose(
-        layer.density[0, :, 0] + layer.density[0, :, 1] * knots[:-1],
+        layer.density[:, 0, 0] + layer.density[:, 0, 1] * knots[:-1],
         100 * (1 - knots[:-1] / 10), atol=1e-12)
+    assert layer.heights is None
 
 
-def test_traced_thick_disk_slices_of_each_term():
+def test_traced_thick_disk_profile_of_each_term():
     # In its own layer: each term its surface density times the pdf of its
-    # height at each knot, linear between them; the slices add up to its
-    # surface density
+    # height at each knot, linear between them: bands between the knots, of
+    # a surface density of 1 times the shapes at their two knots, the sums
+    # of the terms (unnormalised: their columns add up to its surface
+    # density)
     knots = np.linspace(0, 10, 21)
     sigmas = [100 * np.exp(-knots / 3), 30 * np.exp(-knots / 5)]
     heights = [0.2 + 0.05 * knots, 0.8 + 0 * knots]
@@ -340,28 +352,32 @@ def test_traced_thick_disk_slices_of_each_term():
     placement = SkyPlacement((0.0, 0.0), disks={'gas': _Rings(incl=60.0)})
     (layer,) = _layers(TracedDisk('stars', 'gas'), dict(upsilon=1.0),
                        _context(gas=density), placement)
-    assert len(layer.heights) == 84
-    R = knots[:-1]
-    at_knots = layer.density[:, :, 0] + layer.density[:, :, 1] * R
-    np.testing.assert_allclose(
-        at_knots.sum(axis=0), sigmas[0][:-1] + sigmas[1][:-1], rtol=1e-12)
-    # (the shares: the pdfs at the slices, times their widths, of the
-    # scale height of the mean pdf of the layer)
-    z = np.linspace(0, 4.0, 513)
-    scale = sky.layer_scale(z, np.einsum(
-        'tk,tkz->z', np.array(sigmas), density.height_pdfs(knots, z)))
-    _, widths = sky.height_slices(scale)
-    pdfs = np.einsum('tk,tkz->zk', np.array(sigmas)[:, :-1],
-                     density.height_pdfs(R, layer.heights))
-    np.testing.assert_allclose(
-        at_knots, pdfs * widths[:, None] / (pdfs * widths[:, None]).sum(0)
-        * at_knots.sum(0), rtol=1e-10)
+    profile = layer.heights
+    np.testing.assert_array_equal(profile.knots, knots)
+    np.testing.assert_array_equal(profile.shares, sigmas)
+    np.testing.assert_array_equal(profile.tops, [4.0, 4.0])
+    z = np.linspace(0, 4.0, profile.pdfs.shape[-1])
+    np.testing.assert_array_equal(profile.pdfs, density.height_pdfs(knots, z))
+    np.testing.assert_array_equal(layer.edges[:, 0], knots[:-1])
+    np.testing.assert_array_equal(
+        layer.knots, np.column_stack([np.arange(20), np.arange(1, 21)]))
+    # (at each edge, the shape of its knot alone)
+    inner, outer = layer.edges[:, 0], layer.edges[:, 1]
+    below, above = layer.density[:, 0], layer.density[:, 1]
+
+    def at(c, R):
+        return c[:, 0] + c[:, 1] * R + c[:, 2] * R * R
+    np.testing.assert_allclose(at(below, inner), 1, rtol=1e-12)
+    np.testing.assert_allclose(at(below, outer), 0, atol=1e-12)
+    np.testing.assert_allclose(at(above, inner), 0, atol=1e-12)
+    np.testing.assert_allclose(at(above, outer), 1, rtol=1e-12)
 
 
 def test_traced_disk_in_another_layer_is_quadratic():
     # Its surface density, linear between its knots, times the shape of
     # the layer of another component, linear between those knots: bands
-    # at both, of quadratics, exactly
+    # at both, each of its surface density times the shapes at the knots
+    # of the layer around it, quadratics, exactly
     knots = np.linspace(0, 10, 6)
     other = np.array([0.0, 2.5, 7.0, 12.0])
     density = _DiskDensity(knots, 50 * (1 - knots / 10))
@@ -374,19 +390,16 @@ def test_traced_disk_in_another_layer_is_quadratic():
     np.testing.assert_allclose(
         layer.edges[:, 0], np.union1d(knots, other[(other > 0)
                                                    & (other < 10)])[:-1])
-    vertical = VerticalComponent('hi')
-    z = np.linspace(0, 3.0, 513)
-    heights, widths = sky.height_slices(sky.layer_scale(z, vertical.shapes(
-        other, z, _context(hi=layer_density)).mean(axis=0)))
-    shares = sky.slice_weights(vertical.shapes(
-        other, heights, _context(hi=layer_density)).T, widths)
+    np.testing.assert_array_equal(layer.heights.knots, other)
     for R in (0.7, 2.6, 6.1, 9.3):
         k = np.searchsorted(layer.edges[:, 1], R)
-        c = layer.density[:, k]
-        expected = np.interp(R, knots, 50 * (1 - knots / 10)) * np.array(
-            [np.interp(R, other, row) for row in shares])
+        below, above = layer.knots[k]
+        t = (R - other[below]) / (other[above] - other[below])
+        sigma = np.interp(R, knots, 50 * (1 - knots / 10))
+        c = layer.density[k]
+        values = c[:, 0] + c[:, 1] * R + c[:, 2] * R * R
         np.testing.assert_allclose(
-            c[:, 0] + c[:, 1] * R + c[:, 2] * R * R, expected, rtol=1e-10)
+            values, sigma * np.array([1 - t, t]), rtol=1e-10)
 
 
 def test_traced_spheroid_terms():
@@ -488,37 +501,23 @@ def test_layer_scale():
         == pytest.approx(0.4 * np.arctanh(0.5) / np.log(2), rel=1e-5)
 
 
-@pytest.mark.parametrize('incl', [70.0, 85.0, 89.0])
-def test_thick_disks_too_edge_on_are_refused(incl):
-    # (hz 0.4 and rd 3: the median height 0.22 kpc, limit atan(1.5 x 3 /
-    # 0.22) = 87.2 degrees; thin, any inclination)
+@pytest.mark.parametrize('incl', [70.0, 89.0, 90.0])
+def test_thick_disks_are_laid_out_edge_on_too(incl):
+    # (of the normal of their plane, of length sin(i); seen edge-on, of
+    # the stretch 0 across it)
     thick = MassDisk('disk', SurfaceExponential(), VerticalSech2())
-    params = dict(log_m=10.0, rd=3.0, hz=0.4)
-    placement = _plane(incl=incl)
-    if incl < 87:
-        _layers(thick, params, placement=placement)
-    else:
-        with pytest.raises(ModelEvaluationError, match=r"laid out to 87\.\d"):
-            _layers(thick, params, placement=placement)
-    thin = MassDisk('disk', SurfaceExponential(), VerticalThin())
-    _layers(thin, dict(log_m=10.0, rd=3.0), placement=placement)
-
-
-def test_thick_traced_disks_too_edge_on_are_refused():
-    # (bands: of the inclination of the band most edge-on that holds mass)
+    (layer,) = _layers(thick, dict(log_m=10.0, rd=3.0, hz=0.4),
+                       placement=_plane(incl=incl))
+    assert np.hypot(*layer.normal) == pytest.approx(np.sin(np.radians(incl)))
+    assert layer.stretch[1] == pytest.approx(
+        np.cos(np.radians(incl)), abs=1e-15)
     knots = np.linspace(0, 10, 21)
     density = _DiskDensity(
         knots, 100 * np.exp(-knots / 3), [0.3 + 0 * knots], cut=4.0)
-    for incl, refused in ((60.0, False), (89.0, True)):
-        placement = SkyPlacement(
-            (0.0, 0.0), disks={'gas': _Rings(incl=incl)})
-        if refused:
-            with pytest.raises(ModelEvaluationError, match="edge-on"):
-                _layers(TracedDisk('stars', 'gas'), dict(upsilon=1.0),
-                        _context(gas=density), placement)
-        else:
-            _layers(TracedDisk('stars', 'gas'), dict(upsilon=1.0),
-                    _context(gas=density), placement)
+    placement = SkyPlacement((0.0, 0.0), disks={'gas': _Rings(incl=incl)})
+    (bands,) = _layers(TracedDisk('stars', 'gas'), dict(upsilon=1.0),
+                       _context(gas=density), placement)
+    assert bands.heights is not None
 
 
 def test_planes():

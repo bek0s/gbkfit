@@ -22,6 +22,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from . import _disk_forces, _disk_gravity
 from .base import DiskDensity, MassContext
+from .sky import HeightProfile, height_profile
 
 
 __all__ = [
@@ -35,6 +36,14 @@ __all__ = [
     'VerticalThin',
     'disk_vertical_parser'
 ]
+
+
+# The pdf of a law on the sky, for lenses (see VerticalLaw.height_profile),
+# ends where its tails hold this share of its mass, found on heights this
+# far apart and to this far (in scale heights)
+_PROFILE_TAILS = 1e-10
+_PROFILE_STEP = 0.01
+_PROFILE_EXTENT = 60
 
 
 class DiskVertical(TypedSerializable, abc.ABC):
@@ -196,6 +205,17 @@ class DiskVertical(TypedSerializable, abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def height_profile(
+            self, params: ParamValues, context: MassContext
+    ) -> HeightProfile | None:
+        """
+        Return the vertical structure of a disk of it laid out on the sky
+        (see sky.HeightProfile), in the context of its galaxy (see
+        MassContext); None if the disk is thin.
+        """
+        pass
+
 
 class VerticalLaw(DiskVertical, abc.ABC):
     """
@@ -236,6 +256,18 @@ class VerticalLaw(DiskVertical, abc.ABC):
 
     def law(self) -> Self:
         return self
+
+    def height_profile(
+            self, params: ParamValues, context: MassContext
+    ) -> HeightProfile | None:
+        # (its pdf, to where its tails hold _PROFILE_TAILS of its mass)
+        hz = params['hz']
+        z = hz * np.arange(0, _PROFILE_EXTENT + _PROFILE_STEP / 2,
+                           _PROFILE_STEP)
+        top = float(z[np.argmax(self.within(z, hz) >= 1 - _PROFILE_TAILS)])
+        return height_profile(
+            [0.0], [[1.0]], [top],
+            lambda heights: self.pdf(heights, hz)[None, None])
 
     def _thick_vcirc2(
             self,
@@ -335,6 +367,11 @@ class VerticalThin(VerticalLaw):
             context: MassContext
     ) -> np.ndarray:
         return np.ones(np.broadcast(np.asarray(R), np.asarray(h)).shape)
+
+    def height_profile(
+            self, params: ParamValues, context: MassContext
+    ) -> HeightProfile | None:
+        return None
 
     @staticmethod
     def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
@@ -603,6 +640,18 @@ class VerticalComponent(DiskVertical):
         in the context of its galaxy (see MassContext).
         """
         return context.density(self._component).knots(self._rstep)
+
+    def height_profile(
+            self, params: ParamValues, context: MassContext
+    ) -> HeightProfile | None:
+        # (each term of the component, of its share of the shape at the
+        # subnodes with density)
+        if self.thin(context):
+            return None
+        density, knots, sigmas, total = self._shape_knots(context)
+        return height_profile(
+            knots, sigmas / total, density.height_tops(),
+            lambda z: density.height_pdfs(knots, z))
 
     def height_cuts(self, context: MassContext) -> tuple[float, ...]:
         # (those of the density height traits of the component)

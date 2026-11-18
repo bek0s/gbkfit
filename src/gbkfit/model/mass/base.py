@@ -122,6 +122,14 @@ class DiskDensity(ComponentDensity, Protocol):
         """
         ...
 
+    def height_tops(self) -> tuple[float, ...]:
+        """
+        Return the height (kpc, above its plane) where the pdf of the
+        height of each of its terms ends (e.g. the zmax of its density
+        height trait), in the order of its terms.
+        """
+        ...
+
 
 class SpheroidDensity:
     """
