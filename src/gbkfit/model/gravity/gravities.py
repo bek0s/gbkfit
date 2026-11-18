@@ -24,7 +24,8 @@ from gbkfit.config import (
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .._capabilities import Capability
-from ..mass import MassContext, MassModel, forces_in_plane
+from ..mass import (
+    MassContext, MassModel, forces_in_plane, height_potential)
 from ..mass.units import G
 from ._field_grid import FieldGradient
 from ._qumond import phantom_gradient
@@ -121,6 +122,16 @@ class GravityField(abc.ABC):
         points (R, z) (kpc), if its gravity gives it (see Gravity.gives).
         """
 
+    def height_potential(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
+        """
+        Return the height potential Phi(R, z) - Phi(R, 0) ((km/s)^2) at
+        the radii R and the heights z (kpc, increasing from 0), if its
+        gravity gives its forces off the plane: an array of shape (len(R),
+        len(z)); by default, of its vertical force (see
+        mass.height_potential).
+        """
+        return height_potential(self.vertical_force, R, z)
+
 
 class Gravity(TypedSerializable, abc.ABC):
     """
@@ -161,6 +172,14 @@ class Gravity(TypedSerializable, abc.ABC):
         Return the field of a mass model, at the values of the parameters
         of its galaxy (those of the gravity among them), in its context.
         """
+
+    def additive(self) -> bool:
+        """
+        Check whether its field is the sum of the fields of the components
+        of the mass (as in Newtonian gravity), whose parts can then be
+        computed apart (see GalaxyStage); not here.
+        """
+        return False
 
     def check_mass_model(
             self, mass_model: MassModel, thick: Collection[str]
@@ -217,6 +236,9 @@ class GravityNewton(Gravity):
     ) -> GravityField:
         return _NewtonField(mass_model, params, context)
 
+    def additive(self) -> bool:
+        return True
+
     def gives(self, mass_model: MassModel) -> dict[Capability, str | None]:
         # (the potential of the mass, wherever it gives its forces)
         forces = _forces_of_components(mass_model)
@@ -251,6 +273,11 @@ class _NewtonField(GravityField):
             self, R: npt.ArrayLike, z: npt.ArrayLike
     ) -> np.ndarray:
         return self._mass_model.vertical_force(
+            R, z, self._params, self._context)
+
+    def height_potential(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
+        # (that of each component, e.g. of a table, see MassModel)
+        return self._mass_model.height_potential(
             R, z, self._params, self._context)
 
 
@@ -685,6 +712,43 @@ class _GradientField(GravityField):
     ) -> np.ndarray:
         return self.forces(R, z)[1]
 
+    def height_potential(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
+        # (the Newtonian one, as its field gives it, and of -scale grad w)
+        return self._newton.height_potential(R, z) + height_potential(
+            lambda r, h: -self._scale * self._gradient(r, h)[1], R, z)
+
+
+class _PalatiniField(_GradientField):
+    """
+    The field of a mass model in Palatini f(R) gravity (see
+    GravityPalatini), of its Newtonian field and its density: of the
+    numerical gradient of the density (none without a correction, where
+    the density is not evaluated), and of its potential Phi_N - 8 pi G
+    alpha rho, its height potential exactly, of the density itself (the
+    integral of its numerical gradient would be off by its truncation,
+    and noisy by its rounding: about 1e-11, above the tolerance of the
+    layers that the mass follows, see GalaxyStage._balance).
+    """
+
+    def __init__(
+            self,
+            newton: GravityField,
+            density: Callable[[np.ndarray, np.ndarray], np.ndarray],
+            alpha: float
+    ):
+        super().__init__(
+            newton, _density_gradient(density) if alpha != 0
+            else _no_gradient, -8 * np.pi * G * alpha)
+        self._density = density
+
+    def height_potential(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
+        potential = self._newton.height_potential(R, z)
+        if self._scale == 0:
+            return potential
+        R, z = np.broadcast_arrays(np.asarray(R, dtype=float)[:, None], z)
+        return potential + self._scale * (
+            self._density(R, z) - self._density(R, np.zeros_like(z)))
+
 
 class GravityPalatini(Gravity):
     """
@@ -754,12 +818,8 @@ class GravityPalatini(Gravity):
                     f"components: {e}") from e
 
         alpha = float(params['gravity_alpha'])
-        # (none without a correction: the density is not evaluated)
-        gradient = _density_gradient(density) if alpha != 0 \
-            else _no_gradient
-        return _GradientField(
-            _NewtonField(mass_model, params, context), gradient,
-            -8 * np.pi * G * alpha)
+        return _PalatiniField(
+            _NewtonField(mass_model, params, context), density, alpha)
 
     def check_mass_model(
             self, mass_model: MassModel, thick: Collection[str]

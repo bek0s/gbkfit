@@ -74,6 +74,7 @@ import scipy.special
 from ._disk_gravity import (
     _KEY_RESOLUTION, HeightGrid, _Geometry, _Panels, _height_grid,
     _thick_kernel, check_pdfs, height_grid)
+from .base import height_integral
 from .units import G
 
 
@@ -81,8 +82,10 @@ __all__ = [
     'Axis',
     'DiskForce',
     'ExponentialForce',
+    'TabulatedPotential',
     'disk_force',
-    'exponential_force'
+    'exponential_force',
+    'tabulated_potential'
 ]
 
 
@@ -606,6 +609,192 @@ def disk_force(
         _sheet_weights(geometry.knots_key, geometry.radii_key, degree, axis),
         _radial_weights(geometry.knots_key, degree), geometry, R, z, near,
         axis, height_grid(cuts, geometry.scale))
+
+
+
+@dataclasses.dataclass(frozen=True)
+class _PotentialMaps:
+    """
+    The height potential of a thick disk of outer radius 1, whose pdfs of
+    the height are linear between nodes (see TabulatedPotential), at given
+    radii and heights, per G: as linear maps of its density at its
+    density points and the nodes (sheets, of shape (radii * heights,
+    points * nodes)) and of its density at the nodes at each radius
+    (slab, of shape (heights, nodes): the pull of the slab, the same at
+    every radius), with the mean polynomials of its surface density at
+    each radius (means, of shape (radii, points), see _mean_basis).
+    """
+    sheets: np.ndarray
+    slab: np.ndarray
+    means: np.ndarray
+
+
+@functools.lru_cache(maxsize=4)
+def _potential_maps(
+        knots_key: bytes,
+        radii_key: bytes,
+        heights_key: bytes,
+        nodes_key: bytes,
+        grid_key: bytes,
+        degree: int
+) -> _PotentialMaps:
+    heights = np.frombuffer(heights_key) / _KEY_RESOLUTION
+    nodes = np.frombuffer(nodes_key) / _KEY_RESOLUTION
+    grid = _height_grid(grid_key)
+    weights = _sheet_weights(knots_key, radii_key, degree, 'z')
+    fine, integral = height_integral(heights)
+    # (the heights of the force are those of every radius: one plan)
+    plan = _thick_plan(
+        np.round(fine * _KEY_RESOLUTION).tobytes(), True, grid_key)
+    # The sheets: the map of the tables C at the heights of the grid to
+    # the force at the fine heights, of the hats of the nodes there, and
+    # integrated to the heights (sheets of the hats, of shape (heights,
+    # len(_ZETAS), nodes)); then of the density at the density points by
+    # the weights of each radius
+    nzetas, ngrid = len(_ZETAS), len(grid.nodes)
+    hats = _hats(grid.nodes, nodes)
+    rows = plan.sheets.tocoo()
+    per_zeta = scipy.sparse.csr_array(
+        (rows.data, (rows.row * nzetas + rows.col // ngrid,
+                     rows.col % ngrid)),
+        shape=(len(fine) * nzetas, ngrid))
+    sheets_of_hats = (integral @ (per_zeta @ hats).reshape(
+        len(fine), -1)).reshape(len(heights), nzetas, len(nodes))
+    sheets = np.einsum(
+        'hzl,rzp->rhpl', sheets_of_hats, weights.weights, optimize=True)
+    # The slab: -4 pi int_0^z rho(h) dh of the hats, integrated
+    per_interval = np.einsum(
+        'iq,iql->il', plan.weights, _hats(plan.nodes, nodes))
+    column = np.vstack((np.zeros(len(nodes)), np.cumsum(per_interval, 0)))
+    slab = integral @ (-4 * np.pi * column[plan.order])
+    return _PotentialMaps(
+        sheets.reshape(len(sheets) * len(heights), -1), slab, weights.means)
+
+
+def _hats(z: np.ndarray, nodes: np.ndarray) -> np.ndarray:
+    """
+    Return the hat functions of the nodes (increasing from 0) at the
+    heights z (any shape): 1 at their node, linear to 0 at the nodes on
+    either side, and 0 beyond the last node; an array of the shape of z
+    and len(nodes).
+    """
+    return np.stack([
+        np.interp(z, nodes, unit, right=0.0) for unit in np.eye(len(nodes))],
+        axis=-1)
+
+
+class TabulatedPotential:
+    """
+    The height potential Phi(R, z) - Phi(R, 0) of a thick disk at given
+    radii and heights (build it with tabulated_potential), whose pdfs of
+    the height are linear between nodes and 0 beyond the last (a table,
+    e.g. of the vertical equilibrium 'galaxy'): the integral of its
+    vertical force (see DiskForce) on the heights of a height potential
+    (see base.height_potential), as linear maps of its density at the
+    radii of its density points (radii) and the nodes, and at the nodes at
+    each radius. It takes the pdfs at the nodes but the last, where they
+    jump to 0, and in the middle of the last interval (heights), of which
+    the values at the last node from below follow (the pdfs are linear
+    there). The maps depend on its geometry alone, relative
+    to its outer radius (cached: e.g. once in a fit, whatever the
+    distance), and give the potential of a density in a product of
+    matrices: e.g. 15 ms where the integral of its force takes 600 ms, for
+    the layer of a gas disk of 50 subnodes, and the same to 6e-10 of the
+    largest (the heights rounded in the keys of the caches, where the pdf
+    is steepest: in a layer 0.04 kpc thick; measured 2026-11-18).
+    """
+
+    def __init__(
+            self,
+            maps: _PotentialMaps,
+            geometry: _Geometry,
+            R: np.ndarray,
+            nodes: np.ndarray
+    ):
+        self._maps = maps
+        self._scale = geometry.scale
+        self._inverse = geometry.inverse
+        self._R = R
+        self.radii = geometry.points
+        self.heights = np.append(nodes[:-1], (nodes[-2] + nodes[-1]) / 2)
+
+    def __call__(
+            self,
+            sigmas: np.ndarray,
+            pdfs: np.ndarray,
+            pdfs_at: Callable[[np.ndarray, np.ndarray], np.ndarray]
+    ) -> np.ndarray:
+        """
+        Return the height potential ((km/s)^2) of a thick disk of the
+        density sum_i sigmas[i] pdfs[i] (see DiskForce.thick), at its
+        radii and heights: an array of shape (radii, heights).
+
+        Parameters
+        ----------
+        sigmas : np.ndarray
+            The surface densities (Msun/kpc^2) of its terms at the density
+            points: an array of shape (n, len(radii)).
+        pdfs : np.ndarray
+            The pdf of the height (1/kpc) of each term at the density
+            points and its heights: an array of shape (n, len(radii),
+            len(heights)).
+        pdfs_at : callable
+            The pdfs of the height of the terms at the radii R and the
+            heights z (kpc) of two arrays: an array that broadcasts to the
+            shape (n, len(R), len(z)).
+        """
+        maps = self._maps
+        rows = self._inverse
+        nheights = maps.slab.shape[0]
+        density = np.einsum('ti,til->il', sigmas, _at_nodes(pdfs))
+        sheets = (maps.sheets @ density.ravel()).reshape(-1, nheights)
+        # (of the slab: the mean surface densities of the terms, times
+        # their pdfs at the nodes, at each radius)
+        at = np.broadcast_to(
+            pdfs_at(self._R, self.heights),
+            (len(sigmas), len(self._R), len(self.heights)))
+        slab = np.einsum(
+            'jt,tjl->jl', maps.means[rows] @ sigmas.T, _at_nodes(at))
+        return G * self._scale ** 2 * (sheets[rows] + slab @ maps.slab.T)
+
+
+def _at_nodes(pdfs: np.ndarray) -> np.ndarray:
+    """
+    Return pdfs at the heights of a TabulatedPotential (along their last
+    axis) at its nodes: the last from below, of those in the middle of the
+    last interval and at the node before.
+    """
+    top = 2 * pdfs[..., -1] - pdfs[..., -2]
+    return np.concatenate((pdfs[..., :-1], top[..., None]), axis=-1)
+
+
+def tabulated_potential(
+        knots: np.ndarray,
+        R: np.ndarray,
+        z: np.ndarray,
+        nodes: np.ndarray,
+        degree: int = 1,
+        cuts: npt.ArrayLike = ()
+) -> TabulatedPotential:
+    """
+    Return the height potential of a thick disk at the radii R and the
+    heights z (kpc; z increasing from 0, within 5 outer radii of its
+    plane), whose pdfs of the height are linear between the nodes (kpc,
+    increasing from 0) and 0 beyond the last (see TabulatedPotential): of
+    a density as that of disk_force (the knots, the degree and the cuts,
+    which hold the nodes).
+    """
+    R = np.asarray(R, dtype=float)
+    geometry = _Geometry.from_knots(knots, R, degree)
+    scale = geometry.scale
+
+    def key(x: np.ndarray) -> bytes:
+        return np.round(np.asarray(x) / scale * _KEY_RESOLUTION).tobytes()
+    maps = _potential_maps(
+        geometry.knots_key, geometry.radii_key, key(z), key(nodes),
+        height_grid(cuts, scale).key, degree)
+    return TabulatedPotential(
+        maps, geometry, R, np.asarray(nodes, dtype=float))
 
 
 # The tables C of the sheets of an exponential disk of M = rd = 1 (see

@@ -672,11 +672,26 @@ class NodalDiskDensity:
     def height_cuts(self) -> tuple[float, ...]:
         """
         Return the heights (kpc) where its density height traits end:
-        their zmax, beyond which they are 0.
+        their zmax, beyond which they are 0; and those of its table, if
+        any (see height_nodes), where it bends.
         """
+        nodes = self.height_nodes()
         return tuple(sorted({
             trait.zmax() * self._kpc_per_arcsec
-            for trait in self._disk.traits('rht')}))
+            for trait in self._disk.traits('rht')}
+            | set(() if nodes is None else nodes[1:])))
+
+    def height_nodes(self) -> np.ndarray | None:
+        """
+        Return the heights (kpc) of its table, if its thickness is the
+        vertical equilibrium 'galaxy' (its one density height trait,
+        linear between them and 0 beyond the last, see
+        traits.RHTraitEquilibrium); None otherwise.
+        """
+        height = self._disk.height_equilibrium()
+        if height is None or height.gravity() != 'galaxy':
+            return None
+        return height.heights() * self._kpc_per_arcsec
 
     def height_tops(self) -> tuple[float, ...]:
         """

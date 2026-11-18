@@ -20,7 +20,8 @@ from gbkfit.driver import Driver
 from gbkfit.params import (
     ModelEvaluationError, ParamValues, ParamView, StageCache)
 from ._capabilities import Capability
-from .components.base import GalaxyMass, Placed
+from ._fixed_point import fixed_point
+from .components.base import Balanced, GalaxyMass, Placed
 from .extras import Extras
 from .mass import MassContext
 from .mass.sky import (
@@ -28,6 +29,7 @@ from .mass.sky import (
 
 if TYPE_CHECKING:
     from .galaxy import Galaxy
+    from .mass import MassModel
     from .components.base import ComponentStage, ComponentState
     from .mass.sky import SkyMass
 
@@ -53,6 +55,20 @@ _MAX_TILT = 20.0
 # that the mass moves, holds up or follows: one centre, that of the mass;
 # centres tied or fixed at the same values are equal to the last bits
 _CENTRE_TOLERANCE = 1e-9
+
+# The largest change of the pdf of a balanced layer in its last pass,
+# relative to its peak, at which the layers have settled (see
+# GalaxyStage._balance). A stop at a tolerance leaves steps of up to
+# about 0.6 of it in the model, where the number of passes changes with
+# the parameters: a forward difference of a fitter (steps of 1.5e-8)
+# across one is off by 0.6 tolerance / 1.5e-8, 4e-5 at 1e-12, which
+# costs 1-2 passes more than 1e-10 (measured 2026-11-18)
+_BALANCE_TOLERANCE = 1e-12
+
+# The passes after which the layers have not settled: 8-17 settle them
+# in Newtonian gravity, about 60 where they barely do (measured
+# 2026-11-18, the local term of Palatini f(R) gravity near collapse)
+_BALANCE_PASSES = 100
 
 
 @dataclasses.dataclass(frozen=True)
@@ -128,6 +144,13 @@ class GalaxyStage:
        equations of a spheroid), and its state (see ComponentStage.state):
        e.g. the rotation of a disk in the gravity of the mass, or the
        dispersion of its vertical equilibrium.
+
+    Where the mass follows the layers of components whose thickness is
+    their vertical equilibrium in its field (balanced, see Balanced: e.g.
+    a gas disk of the equilibrium 'galaxy' that a traced disk follows),
+    the field sets the layers that the mass takes: the mass and its field
+    are one part (3 and 4), the fixed point of the layers, which those
+    components then draw (see _balance).
 
     Each part reads the values of the parameters it declares alone: the
     scale those of the distance, the mass those of the mass, the field
@@ -218,6 +241,13 @@ class GalaxyStage:
             if stage is not None:
                 self._stages[i] = stage
                 self._labels[i] = label
+        # The components whose layers the mass follows and its field sets
+        # (see _balance), and the mass components that take those layers
+        self._balanced = tuple(
+            i for i, stage in self._stages.items()
+            if isinstance(stage, Balanced) and stage.balanced())
+        self._coupled = () if mass_model is None else _coupled(
+            mass_model, {components[i].name() for i in self._balanced})
         # The components that the mass follows, and the parts of those
         # where the mass is that say where they are, by index (see
         # Galaxy.placed)
@@ -245,11 +275,17 @@ class GalaxyStage:
             self._scale_cache = StageCache(galaxy.distance().pdescs())
         if mass_model is not None:
             scale = () if self._scale_cache is None else (self._scale_cache,)
-            self._mass_cache = StageCache(
-                mass_model.pdescs(),
-                (*scale, *(lights[i] for i in self._followed)))
-            self._field_cache = StageCache(
-                galaxy.gravity().pdescs(), (self._mass_cache,))
+            followed_lights = tuple(lights[i] for i in self._followed)
+            if self._balanced:
+                # (the mass with its field, which sets the layers it takes)
+                self._mass_cache = StageCache(
+                    (*mass_model.pdescs(), *galaxy.gravity().pdescs()),
+                    (*scale, *followed_lights))
+            else:
+                self._mass_cache = StageCache(
+                    mass_model.pdescs(), (*scale, *followed_lights))
+                self._field_cache = StageCache(
+                    galaxy.gravity().pdescs(), (self._mass_cache,))
         # (a sky of the same layers is not new, see the class)
         self._sky_cache: StageCache[SkyMass] | None = None
         if sky_mass:
@@ -261,7 +297,10 @@ class GalaxyStage:
                     mappings[i][p] for i, stage in self._placed.items()
                     for p in stage.placement_params()),
                 (self._mass_cache,), _same_sky)
-        field = () if self._field_cache is None else (self._field_cache,)
+        # (what the components take of the mass: its field)
+        field = () if mass_model is None else (
+            self._mass_cache if self._field_cache is None
+            else self._field_cache,)
         self._parts: dict[int, _ComponentParts] = {}
         for i, stage in self._stages.items():
             groundwork = StageCache((), (lights[i], *field))
@@ -273,7 +312,8 @@ class GalaxyStage:
     def caches(self) -> dict[str, StageCache[Any]]:
         """
         Return the caches of its parts (see evaluate), by name: 'scale', if
-        it has a distance, 'mass' and 'field', if it has mass, 'sky', with
+        it has a distance, 'mass' and 'field', if it has mass ('mass'
+        alone, the mass with its field, with balanced layers), 'sky', with
         the sky part, and '{component}.light', '{component}.groundwork' and
         '{component}.state' of each component that takes part, by its name,
         or its position (e.g. 'component0').
@@ -282,7 +322,9 @@ class GalaxyStage:
         if self._scale_cache is not None:
             caches |= dict(scale=self._scale_cache)
         if self._mass_cache is not None:
-            caches |= dict(mass=self._mass_cache, field=self._field_cache)
+            caches |= dict(mass=self._mass_cache)
+        if self._field_cache is not None:
+            caches |= dict(field=self._field_cache)
         if self._sky_cache is not None:
             caches |= dict(sky=self._sky_cache)
         for i, parts in self._parts.items():
@@ -361,8 +403,9 @@ class GalaxyStage:
                 else self._scale_cache.evaluate(params, self._scale)
             built = self._mass_cache.evaluate(params, functools.partial(
                 self._mass, scale=scale, lights=lights))
-            mass = self._field_cache.evaluate(
-                params, functools.partial(self._field, mass=built))
+            mass = built if self._field_cache is None \
+                else self._field_cache.evaluate(
+                    params, functools.partial(self._field, mass=built))
             self._check_frames(params, out_extra is not None)
             if self._sky_cache is not None:
                 sky = self._sky_cache.evaluate(params, functools.partial(
@@ -399,6 +442,8 @@ class GalaxyStage:
         scale = None if self._scale_cache is None \
             else self._scale(self._scale_cache.view(params))
         built = self._mass(self._mass_cache.view(params), scale, lights)
+        if self._field_cache is None:
+            return built
         return self._field(self._field_cache.view(params), built)
 
     def sky_mass(self, params: ParamValues) -> 'SkyMass':
@@ -493,7 +538,9 @@ class GalaxyStage:
         Return the mass of the galaxy as it is built, without its field (see
         _field), of the values of the parameters of its mass, the length of
         an arcsec in it (kpc, see _scale; None without a distance), and the
-        light of each component that it follows (see _light), by its index.
+        light of each component that it follows (see _light), by its index;
+        with balanced layers, of those of its gravity too, with its field
+        and the layers (see _balance).
         """
         galaxy = self._galaxy
         components = galaxy.components()
@@ -518,7 +565,117 @@ class GalaxyStage:
                 components[i].name(): self._stages[i].density(
                     lights[i] | thicknesses[i], scale)
                 for i in self._followed})
-        return GalaxyMass(mass_model, view, context, None)
+        built = GalaxyMass(mass_model, view, context, None)
+        return self._balance(built, scale, lights) if self._balanced \
+            else built
+
+    def _balance(
+            self,
+            built: GalaxyMass,
+            scale: float,
+            lights: dict[int, ParamValues]
+    ) -> GalaxyMass:
+        """
+        Return the mass of the galaxy with its field, where the layers that
+        it follows and its field sets (of the balanced components, see
+        Balanced) are their vertical equilibrium in the field: the fixed
+        point of their unknowns (see BalancedLayer and fixed_point), from
+        uniform layers every time (so that the mass is a function of the
+        parameters alone), to _BALANCE_TOLERANCE of the peaks of their
+        pdfs. The mass is that as it is built (see _mass), with the
+        densities of the layers of the light of their components (by
+        index), in a galaxy of the given length of an arcsec (kpc). Where
+        the field adds up (Newtonian gravity, see Gravity.additive), that
+        of the mass that does not take the layers is computed once, and
+        each pass computes that of the rest (e.g. a table, see
+        TabulatedPotential); otherwise, each pass computes the field.
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the layers do not settle in _BALANCE_PASSES passes, or a
+            layer has no solution (see BalancedLayer.unknown).
+        """
+        model = built.model
+        gravity = self._galaxy.gravity()
+        names = {i: self._labels[i] for i in self._balanced}
+        layers = {i: self._stages[i].layer(lights[i], scale) for i in names}
+        grids = {i: layer.grid() for i, layer in layers.items()}
+        ends = np.cumsum([0] + [
+            len(R) * len(z) for R, z in grids.values()])
+
+        def split(x: np.ndarray) -> dict[int, np.ndarray]:
+            return {
+                i: x[start:end].reshape(len(grids[i][0]), -1)
+                for i, start, end in zip(layers, ends[:-1], ends[1:])}
+
+        def mass_of(x: np.ndarray) -> GalaxyMass:
+            tables = {
+                i: layers[i].values(unknown)
+                for i, unknown in split(x).items()}
+            context = dataclasses.replace(
+                built.context, densities=built.context.densities | {
+                    names[i]: self._stages[i].density(
+                        lights[i] | tables[i], scale) for i in tables})
+            return GalaxyMass(model, built.params, context, None, {
+                names[i]: table for i, table in tables.items()})
+
+        if gravity.additive():
+            # (that of the mass that does not take the layers, the same
+            # in every pass)
+            fixed = [c.name() for c in model.components()
+                     if c.name() not in self._coupled]
+            start = mass_of(np.zeros(ends[-1])).context
+            with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
+                pinned = {
+                    i: model.height_potential(
+                        *grid, built.params, start, fixed)
+                    for i, grid in grids.items()}
+
+            def potentials(mass: GalaxyMass) -> dict[int, np.ndarray]:
+                return {
+                    i: pinned[i] + model.height_potential(
+                        *grid, mass.params, mass.context, self._coupled)
+                    for i, grid in grids.items()}
+        else:
+            def potentials(mass: GalaxyMass) -> dict[int, np.ndarray]:
+                field = gravity.field(model, mass.params, mass.context)
+                return {
+                    i: field.height_potential(*grid)
+                    for i, grid in grids.items()}
+
+        def g(x: np.ndarray) -> np.ndarray:
+            with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
+                found = potentials(mass_of(x))
+            return np.concatenate([
+                layers[i].unknown(potential).ravel()
+                for i, potential in found.items()])
+
+        def changes(x: np.ndarray, mapped: np.ndarray) -> tuple:
+            # (the largest of the layers: its size, radius and name)
+            new = split(mapped)
+            return max(
+                (*layers[i].change(unknown, new[i]), names[i])
+                for i, unknown in split(x).items())
+
+        result = fixed_point(
+            g, np.zeros(ends[-1]), lambda x, mapped: changes(x, mapped)[0],
+            _BALANCE_TOLERANCE, _BALANCE_PASSES)
+        if not result.settled:
+            size, radius, name = changes(result.x, g(result.x))
+            why = (
+                "its change grows: there is no equilibrium near (e.g. the "
+                "local term of Palatini f(R) gravity collapses a layer)"
+                if result.growing else
+                f"the pdf of {name!r} still changes by {size:.1g} of its "
+                f"peak at R = {radius:g} arcsec")
+            raise ModelEvaluationError(
+                f"the vertical equilibrium of the layers of "
+                f"{', '.join(map(repr, names.values()))}, which the mass "
+                f"follows, did not settle in {result.passes} passes: {why}")
+        mass = mass_of(result.x)
+        return dataclasses.replace(
+            mass, field=gravity.field(model, mass.params, mass.context))
 
     def _field(self, view: ParamView, mass: GalaxyMass) -> GalaxyMass:
         """
@@ -679,6 +836,25 @@ class _SkyPlacements:
         (kpc), of the disks and the spheroids added.
         """
         return SkyPlacement(centre, self._disks, self._spheroids)
+
+
+def _coupled(mass_model: 'MassModel', layers: set[str]) -> tuple[str, ...]:
+    """
+    Return the names of the mass components that take the layers of the
+    components of the given names (see GalaxyStage._balance): those that
+    follow them, and those that respond to those (e.g. a halo contracted
+    by a disk that follows one).
+    """
+    coupled = {
+        component.name() for component in mass_model.components()
+        if component.followed_layer() in layers}
+    while more := {
+            component.name() for component in mass_model.components()
+            if coupled & set(component.responds_to())} - coupled:
+        coupled |= more
+    return tuple(
+        component.name() for component in mass_model.components()
+        if component.name() in coupled)
 
 
 def _same_sky(new: 'SkyMass', last: 'SkyMass') -> bool:

@@ -325,6 +325,16 @@ class MassDisk(MassComponent):
     ) -> np.ndarray:
         return self._surface.force('z', R, z, self._vertical, params, context)
 
+    def height_potential(
+            self,
+            R: np.ndarray,
+            z: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return self._surface.height_potential(
+            R, z, self._vertical, params, context)
+
     def takes_mass_plane(self) -> bool:
         # (a disk of the surface density of a component lies on its rings)
         return self._surface.followed_component() is None

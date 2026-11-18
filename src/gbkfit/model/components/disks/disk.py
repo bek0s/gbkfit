@@ -295,14 +295,6 @@ class Disk(Component, abc.ABC):
                 f"rotation, which is not that of a galaxy of mass (a disk "
                 f"pulls 2.5-3 times harder where it dominates): give it the "
                 f"equilibrium 'galaxy' or 'sheet'")
-        height = self.height_equilibrium()
-        if links.layer and height is not None and height.gravity() == 'galaxy':
-            raise ValueError(
-                f"a mass disk follows the layer of the component{label}, "
-                f"whose thickness is its equilibrium in the force of the "
-                f"mass: a mass that takes the thickness that its own force "
-                f"sets is not supported yet; give the mass disk a vertical "
-                f"structure of its own, or the disk the equilibrium 'sheet'")
         if links.mass and gravity == 'sheet' \
                 and not self._disk.galaxy_fluid(links.followers):
             raise ValueError(

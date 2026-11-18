@@ -21,7 +21,7 @@ from gbkfit.config import (
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from . import _disk_forces, _disk_gravity
-from .base import DiskDensity, MassContext
+from .base import DiskDensity, MassContext, height_potential
 from .sky import HeightProfile, height_profile
 
 
@@ -129,6 +129,26 @@ class DiskVertical(TypedSerializable, abc.ABC):
                 axis, knots, R, z, sigma, params, context)
         force = _disk_forces.disk_force(axis, knots, R, z)
         return force.thin(sigma(force.radii)).reshape(R.shape)
+
+    def height_potential(
+            self,
+            knots: np.ndarray,
+            R: np.ndarray,
+            z: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the height potential ((km/s)^2) at the radii R and the
+        heights z (kpc, see MassComponent.height_potential) of a disk of
+        its vertical structure and the surface density sigma on rings
+        between the knots (see vcirc2); by default, of its vertical force
+        (see force).
+        """
+        return height_potential(
+            lambda r, h: self.force('z', knots, r, h, sigma, params, context),
+            R, z)
 
     @abc.abstractmethod
     def _thick_vcirc2(
@@ -694,6 +714,30 @@ class VerticalComponent(DiskVertical):
             sigma(force.radii)[None],
             self.shapes(force.radii, force.heights, context)[None],
             lambda r, h: self.shapes(r, h, context)[None]).reshape(R.shape)
+
+    def height_potential(
+            self,
+            knots: np.ndarray,
+            R: np.ndarray,
+            z: np.ndarray,
+            sigma: Callable[[np.ndarray], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        nodes = None if self.thin(context) \
+            else context.density(self._component).height_nodes()
+        if nodes is None:
+            return super().height_potential(
+                knots, R, z, sigma, params, context)
+        # (of a table, its shape linear between its nodes too, as its
+        # force: see TabulatedPotential)
+        potential = _disk_forces.tabulated_potential(
+            np.union1d(knots, self.knots(context)), R, z, nodes, degree=2,
+            cuts=self.height_cuts(context))
+        return potential(
+            sigma(potential.radii)[None],
+            self.shapes(potential.radii, potential.heights, context)[None],
+            lambda r, h: self.shapes(r, h, context)[None])
 
     def shapes(
             self, R: np.ndarray, z: np.ndarray, context: MassContext

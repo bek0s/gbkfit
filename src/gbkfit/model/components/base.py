@@ -6,6 +6,7 @@ the cubes of opacity, the fields of radiative transfer).
 
 import abc
 import dataclasses
+from collections.abc import Mapping
 from typing import (
     TYPE_CHECKING, Any, ClassVar, NamedTuple, Protocol, TypedDict,
     runtime_checkable)
@@ -32,6 +33,8 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    'Balanced',
+    'BalancedLayer',
     'Component',
     'ComponentLinks',
     'ComponentPart',
@@ -508,14 +511,18 @@ class GalaxyMass:
     parameters of the mass and the gravity of the galaxy, the context of
     the mass (with the length of an arcsec in the galaxy, kpc; None
     without a distance, which only what takes it needs, see
-    Capability.DISTANCE), and the field of the mass in the gravity of the
+    Capability.DISTANCE), the field of the mass in the gravity of the
     galaxy (see Gravity; None while the mass is built, see
-    ComponentStage.thickness).
+    ComponentStage.thickness), and the values of the parameters of the
+    layers that the field sets and the mass follows, by the names of
+    their components (see Balanced; none without them).
     """
     model: 'MassModel'
     params: ParamValues
     context: 'MassContext'
     field: 'GravityField'
+    layers: Mapping[str, ParamValues] = dataclasses.field(
+        default_factory=dict)
 
 
 class ComponentStage(abc.ABC):
@@ -606,6 +613,76 @@ class ComponentStage(abc.ABC):
         outputs, if wanted, go to out_extra (with the id of the component).
         """
         return None
+
+
+class BalancedLayer(Protocol):
+    """
+    The layer of a component in one evaluation, whose thickness is its
+    vertical equilibrium in the field of the mass of its galaxy, while
+    the mass follows it (see Balanced): of its height potential
+    Phi(R, z) - Phi(R, 0) at the points of a grid (see grid), through a
+    dimensionless unknown, e.g. that divided by the square of the vertical
+    dispersion (see unknown), which a sum of such unknowns keeps a layer.
+    """
+
+    def grid(self) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Return the radii and the heights (kpc, increasing from 0) of the
+        grid of its height potential.
+        """
+
+    def unknown(self, potential: np.ndarray) -> np.ndarray:
+        """
+        Return its unknown of its height potential ((km/s)^2, an array of
+        the shape of its grid): finite everywhere, the same as of a
+        uniform layer where it has no light.
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the potential gives no layer where it has light.
+        """
+
+    def change(self, unknown: np.ndarray, new: np.ndarray) -> tuple[
+            float, float]:
+        """
+        Return the change of its layer from an unknown to a new one: the
+        largest change of the pdf of its height at a radius, relative to
+        its peak there, and that radius (arcsec).
+        """
+
+    def values(self, unknown: np.ndarray) -> ParamValues:
+        """
+        Return the values of the parameters of its thickness, of an
+        unknown, by name: those that its density takes (see
+        ComponentStage.density) and its state draws.
+        """
+
+
+@runtime_checkable
+class Balanced(Protocol):
+    """
+    The part of a component in the stage of its galaxy (see
+    ComponentStage) whose thickness can be its vertical equilibrium in
+    the field of the mass of the galaxy while the mass follows it (e.g.
+    the vertical equilibrium 'galaxy' of a disk that a mass disk
+    follows): the galaxy solves the two together (see GalaxyStage).
+    """
+
+    def balanced(self) -> bool:
+        """
+        Check whether its thickness is its vertical equilibrium in the
+        field of the mass while the mass follows it.
+        """
+
+    def layer(
+            self, values: ParamValues, kpc_per_arcsec: float
+    ) -> BalancedLayer:
+        """
+        Return its layer (see BalancedLayer) at the values of the
+        parameters of its light (see values), in a galaxy of the given
+        length of an arcsec (kpc).
+        """
 
 
 @runtime_checkable

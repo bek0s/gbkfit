@@ -373,6 +373,27 @@ class MassModel(Serializable):
             lambda component, own, ctx: component.vertical_force(
                 R, z, own, ctx), params, context).values())
 
+    def height_potential(
+            self,
+            R: np.ndarray,
+            z: np.ndarray,
+            params: ParamValues,
+            context: MassContext,
+            names: Collection[str] | None = None
+    ) -> np.ndarray:
+        """
+        Return its height potential at the radii R and the heights z (see
+        MassComponent.height_potential): of all its components, or of
+        those of the given names.
+        """
+        components = self._components if names is None \
+            else [self.component(name) for name in names]
+        return sum((
+            component.height_potential(
+                R, z, self.component_params(component.name(), params),
+                self._context(component, params, context))
+            for component in components), np.zeros((len(R), len(z))))
+
     def potential(
             self,
             R: npt.ArrayLike,

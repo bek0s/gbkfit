@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 import numpy.typing as npt
+import scipy.integrate
 
 from .._capabilities import Capability, Need
 from gbkfit.config import TypedSerializable, check_name, check_options
@@ -28,8 +29,15 @@ __all__ = [
     'MassContext',
     'MassSpherical',
     'SpheroidDensity',
-    'forces_in_plane'
+    'forces_in_plane',
+    'height_integral',
+    'height_potential'
 ]
+
+
+# The steps of the trapezoid rule between two heights of a height
+# potential (see height_potential)
+_HEIGHT_STEPS = 4
 
 
 def forces_in_plane(
@@ -56,6 +64,39 @@ def forces_in_plane(
     force_R = -np.divide(
         vcirc2(R), R, out=np.zeros_like(R), where=R > 0)
     return force_R, np.zeros_like(R)
+
+
+def height_integral(z: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the heights at which a height potential takes its vertical
+    force (see height_potential), _HEIGHT_STEPS between two of the heights
+    z (increasing from 0), and the matrix of the trapezoid rule that
+    takes it to the potential at z: Phi(z) - Phi(0) = -int_0^z F_z dz' =
+    matrix @ F_z (an array of shape (len(z), len(fine))).
+    """
+    steps = np.arange(_HEIGHT_STEPS * (len(z) - 1) + 1) / _HEIGHT_STEPS
+    fine = np.interp(steps, np.arange(len(z)), z)
+    rows = -scipy.integrate.cumulative_trapezoid(
+        np.eye(len(fine)), fine, axis=0, initial=0)
+    return fine, rows[::_HEIGHT_STEPS]
+
+
+def height_potential(
+        force: Callable[[np.ndarray, np.ndarray], np.ndarray],
+        R: np.ndarray,
+        z: np.ndarray
+) -> np.ndarray:
+    """
+    Return the height potential Phi(R, z) - Phi(R, 0) ((km/s)^2) at the
+    radii R and the heights z (kpc, increasing from 0) of a vertical force
+    ((km/s)^2/kpc, a function of R and z of two arrays broadcast
+    together): -int_0^z F_z dz', by the trapezoid rule on heights
+    _HEIGHT_STEPS times finer (see height_integral); an array of shape
+    (len(R), len(z)).
+    """
+    fine, matrix = height_integral(z)
+    return force(*np.broadcast_arrays(
+        np.asarray(R, dtype=float)[:, None], fine)) @ matrix.T
 
 
 class ComponentDensity(Protocol):
@@ -117,8 +158,19 @@ class DiskDensity(ComponentDensity, Protocol):
         """
         Return the heights (kpc, above its plane) where the pdfs of the
         height of its terms end (e.g. the zmax of its density height
-        traits, beyond which they are 0), at which the quadratures over
-        the heights of its gravity split their panels.
+        traits, beyond which they are 0, and the heights of a table, see
+        height_nodes), at which the quadratures over the heights of its
+        gravity split their panels.
+        """
+        ...
+
+    def height_nodes(self) -> np.ndarray | None:
+        """
+        Return the heights (kpc, above its plane, increasing from 0)
+        between which the pdfs of the height of all its terms are linear,
+        and beyond the last 0 (a table, e.g. of the vertical equilibrium
+        'galaxy'), which its gravity takes as a linear map of the pdfs
+        there (see _disk_forces.TabulatedPotential); None if they are not.
         """
         ...
 
@@ -539,6 +591,28 @@ class MassComponent(TypedSerializable, abc.ABC):
             forces there (see gives_forces).
         """
         return self.forces(R, z, params, context)[1]
+
+    def height_potential(
+            self,
+            R: np.ndarray,
+            z: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return its height potential Phi(R, z) - Phi(R, 0) ((km/s)^2) at
+        the radii R and the heights z (kpc, increasing from 0): an array
+        of shape (len(R), len(z)) (see vcirc2 for the other arguments); by
+        default, of its vertical force (see height_potential).
+
+        Raises
+        ------
+        NotImplementedError
+            If the component does not give its forces off its plane (see
+            gives_forces).
+        """
+        return height_potential(
+            lambda r, h: self.vertical_force(r, h, params, context), R, z)
 
     def potential(
             self,

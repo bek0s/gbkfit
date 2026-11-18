@@ -13,7 +13,9 @@ import scipy.integrate
 
 from gbkfit.config import ConfigError
 from gbkfit.grid import SpectralAxis
-from gbkfit.model import Extras, galaxy_parser
+from gbkfit.model import Extras, _galaxy_stage, galaxy_parser
+from gbkfit.model.mass import height_potential
+from gbkfit.params import ModelEvaluationError
 
 
 # The gravitational constant (kpc (km/s)^2 / Msun)
@@ -557,9 +559,6 @@ def test_a_thick_disk_draws_its_profile_in_the_force_of_the_mass(
 @pytest.mark.parametrize('disk, info, message', [
     (THIN | dict(rhtraits=dict(type='equilibrium', gravity='galaxy')),
      FOLLOWED, "a thin disk takes 'sheet' or 'rotation'"),
-    (unbalanced(DISK, dict(type='uniform')) | dict(name='gas', rhtraits=dict(
-        type='equilibrium', gravity='galaxy', zmax=4)), FOLLOWED,
-     "not supported yet"),
     (unbalanced(DISK, dict(type='uniform')) | dict(rhtraits=dict(
         type='equilibrium', gravity='galaxy', zmax=4)), {},
      "needs the mass of its galaxy")])
@@ -567,3 +566,101 @@ def test_the_galaxy_equilibrium_of_the_thickness_is_checked(
         disk, info, message):
     with pytest.raises((ConfigError, ValueError), match=message):
         galaxy(disk, **info)
+
+
+# A thick gas disk in the vertical equilibrium 'galaxy' that a mass disk
+# follows (its mass): nearly uniform (a scale length of 1000 arcsec), its
+# layer about 0.12 arcsec thick, 1/80 of the disk (z0 below)
+LAYERED = unbalanced(DISK, dict(type='uniform')) | dict(
+    name='gas', rhtraits=dict(type='equilibrium', gravity='galaxy', zmax=1.4))
+LAYERED_PARAMS = {
+    f'gas_{key}': value for key, value in PROPERTIES.items()
+    if key != 'rht_s'} | dict(
+    gas_rpt_s=1000, gas_dpt_a=9, distance=10, mass_gas_upsilon=1e9)
+
+
+def layer_table(mass):
+    """The pdf of the layer of 'gas' that the mass takes, at its subnodes."""
+    return np.stack(list(mass.layers['gas'].values())[:65], axis=1)
+
+
+def test_the_mass_in_the_galaxy_layer_of_a_thick_disk_is_its_sheet():
+    # A mass disk in the layer of a thick disk whose thickness is its
+    # equilibrium in the field of that mass alone (solved together): where
+    # the layer is thin against the disk, the isothermal sheet of its
+    # surface density, sech^2(z / z0) / (2 z0), z0 = sigma^2 / (pi G
+    # Sigma), of the rms height pi z0 / sqrt(12): here 0.9% thicker (the
+    # edge of the disk, and the steps of the table)
+    balanced = galaxy(LAYERED, **FOLLOWED)
+    extra = Extras()
+    balanced.plan_stage().evaluate(LAYERED_PARAMS, extra)
+    table = extra.get('equilibrium', component='gas')
+    radii = np.asarray(table['radius'])
+    inner = (radii >= 2) & (radii <= 8)
+    z0 = 9 ** 2 / (np.pi * G * 1e9 * np.exp(-radii / 1000)) / KPC_PER_ARCSEC
+    np.testing.assert_allclose(
+        np.asarray(table['height'])[inner],
+        (np.pi / np.sqrt(12) * z0)[inner], rtol=2e-2)
+
+
+def test_the_galaxy_layer_that_the_mass_follows_is_its_equilibrium():
+    # The layer that the mass takes is the equilibrium in the field of
+    # that mass: one more pass, of the integral of its force (not of the
+    # matrix of its table, see TabulatedPotential), gives it again, to the
+    # rounding of the heights of the matrix (6e-10)
+    balanced = galaxy(LAYERED, mass=FOLLOWED['mass'] + [
+        dict(type='point', name='bh')], distance=dict(type='parameter'))
+    mass = balanced.plan_stage().mass(LAYERED_PARAMS | dict(
+        mass_bh_log_m=8))
+    kpc = mass.context.kpc_per_arcsec
+    radii = np.asarray(balanced.components()[0].constants()['subrnodes'])
+    z = np.linspace(0, 1.4, 65)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        potential = height_potential(
+            mass.field.vertical_force, radii * kpc, z * kpc)
+    pdf = np.exp(-potential / 9 ** 2)
+    pdf[0] = pdf[1]
+    pdf /= 2 * scipy.integrate.trapezoid(pdf, z, axis=1)[:, None]
+    change = np.max(np.abs(layer_table(mass) - pdf), axis=1) \
+        / np.max(pdf, axis=1)
+    assert np.max(change) < 3e-9
+
+
+def test_the_galaxy_layer_that_the_mass_follows_in_any_gravity():
+    # In a gravity whose field does not add up (Palatini f(R)), each pass
+    # takes the field of the mass: its layer is the equilibrium in that
+    # field, of the potential Phi_N - 8 pi G alpha rho; of alpha where
+    # 8 pi G alpha rho / sigma^2 is about -1 at the midplane, where
+    # repeating the passes would not settle
+    alpha = -1e-5
+    balanced = galaxy(LAYERED, **FOLLOWED, gravity=dict(type='palatini'))
+    mass = balanced.plan_stage().mass(
+        LAYERED_PARAMS | dict(gravity_alpha=alpha))
+    kpc = mass.context.kpc_per_arcsec
+    radii = np.asarray(balanced.components()[0].constants()['subrnodes'])
+    R, z = radii * kpc, np.linspace(0, 1.4, 65) * kpc
+
+    def density(r, h):
+        return mass.model.density(r, h, mass.params, mass.context)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        newton = height_potential(
+            lambda r, h: mass.model.vertical_force(
+                r, h, mass.params, mass.context), R, z)
+    Rz, zz = np.broadcast_arrays(R[:, None], z)
+    potential = newton - 8 * np.pi * G * alpha * (
+        density(Rz, zz) - density(Rz, 0 * zz))
+    pdf = np.exp(-potential / 9 ** 2)
+    pdf[0] = pdf[1]
+    pdf /= 2 * scipy.integrate.trapezoid(pdf, z / kpc, axis=1)[:, None]
+    change = np.max(np.abs(layer_table(mass) - pdf), axis=1) \
+        / np.max(pdf, axis=1)
+    assert np.max(change) < 3e-9
+
+
+def test_galaxy_layers_that_do_not_settle_are_an_error(monkeypatch):
+    monkeypatch.setattr(_galaxy_stage, '_BALANCE_PASSES', 2)
+    stage = galaxy(LAYERED, **FOLLOWED).plan_stage()
+    with pytest.raises(
+            ModelEvaluationError, match="'gas', which the mass follows, "
+            "did not settle in 2 passes: the pdf of 'gas' still changes"):
+        stage.mass(LAYERED_PARAMS)

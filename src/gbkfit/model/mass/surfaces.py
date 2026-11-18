@@ -27,7 +27,7 @@ from gbkfit.config import (
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from . import _disk_forces, _disk_gravity, _numerics
-from .base import ComponentDensity, MassContext
+from .base import ComponentDensity, MassContext, height_potential
 from .units import G
 from .vertical import DiskVertical, VerticalComponent, VerticalLaw
 
@@ -255,6 +255,24 @@ class DiskSurface(TypedSerializable, abc.ABC):
         for the other arguments).
         """
         pass
+
+    def height_potential(
+            self,
+            R: np.ndarray,
+            z: np.ndarray,
+            vertical: DiskVertical,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the height potential ((km/s)^2) of the disk of this surface
+        density and the vertical structure at the radii R and the heights
+        z (kpc, see MassComponent.height_potential); by default, of its
+        vertical force (see force).
+        """
+        return height_potential(
+            lambda r, h: self.force('z', r, h, vertical, params, context),
+            R, z)
 
 
 class SurfaceExponential(DiskSurface):
@@ -630,6 +648,19 @@ class SurfaceNodewise(DiskSurface):
             lambda radii: self.surface_density(radii, params, context),
             params, context)
 
+    def height_potential(
+            self,
+            R: np.ndarray,
+            z: np.ndarray,
+            vertical: DiskVertical,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return vertical.height_potential(
+            self._nodes, R, z,
+            lambda radii: self.surface_density(radii, params, context),
+            params, context)
+
 
 class SurfaceComponent(DiskSurface):
     """
@@ -785,6 +816,36 @@ class SurfaceComponent(DiskSurface):
             axis, knots, R, z,
             lambda radii: self.surface_density(radii, params, context),
             params, context)
+
+    def height_potential(
+            self,
+            R: np.ndarray,
+            z: np.ndarray,
+            vertical: DiskVertical,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        density = context.density(self._component)
+        knots = density.knots(self._rstep)
+        if not self._own_layer(vertical, context):
+            return vertical.height_potential(
+                knots, R, z,
+                lambda radii: self.surface_density(radii, params, context),
+                params, context)
+        nodes = density.height_nodes()
+        if nodes is None:
+            return super().height_potential(
+                R, z, vertical, params, context)
+        # (in the thick layer of the same component, a table: each term,
+        # as its force, see TabulatedPotential)
+        potential = _disk_forces.tabulated_potential(
+            np.union1d(knots, vertical.knots(context)), R, z, nodes,
+            cuts=vertical.height_cuts(context))
+        return potential(
+            self._upsilon(density, params)
+            * density.surface_densities(potential.radii),
+            density.height_pdfs(potential.radii, potential.heights),
+            density.height_pdfs)
 
     def _own_layer(
             self, vertical: DiskVertical, context: MassContext) -> bool:

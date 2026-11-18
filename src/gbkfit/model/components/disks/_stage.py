@@ -269,6 +269,9 @@ class DiskStage(ComponentStage):
         self._disk = disk
         self._label = label
         self._followed = followed = links.followed
+        height = disk.height_equilibrium()
+        self._balanced = links.layer and height is not None \
+            and height.gravity() == 'galaxy'
         self._fluid = disk.galaxy_fluid(links.followers)
         self._mass_per_unit = mass_per_unit
         self._images = None if not disk.image_params() \
@@ -291,13 +294,37 @@ class DiskStage(ComponentStage):
         _height_scales; by the names of their parameters, see
         NodalDisk.height_params), in the mass of its galaxy as it is built:
         of the surface density of its fluid, which does not take them
-        ('rotation' is of a galaxy without mass, and the mass does not
-        follow the layer of a disk of 'galaxy', see MassLinks).
+        ('rotation' is of a galaxy without mass, and the layer of 'galaxy'
+        that the mass follows is solved with the field, see Balanced).
         """
         height = self._disk.height_equilibrium()
         if not self._disk.height_params() or height.gravity() != 'sheet':
             return {}
         return self._heights(values, mass, None)
+
+    def balanced(self) -> bool:
+        """
+        Check whether the thickness of its disk is the vertical
+        equilibrium 'galaxy', and a mass disk follows its layer (see
+        Balanced).
+        """
+        return self._balanced
+
+    def layer(
+            self, values: ParamValues, kpc_per_arcsec: float
+    ) -> '_GalaxyLayer':
+        """
+        Return the vertical equilibrium 'galaxy' of the thickness of its
+        disk (see _GalaxyLayer), at the values of its parameters, in a
+        galaxy of the given length of an arcsec (kpc).
+        """
+        disk = self._disk
+        radii = np.asarray(disk.subrnodes())
+        return _GalaxyLayer(
+            disk.height_equilibrium().heights(), disk.height_params(),
+            radii, dispersion(
+                disk, self._plan, values, radii, direction='ver'),
+            self._lit(values, radii), kpc_per_arcsec)
 
     def light_params(self) -> tuple[str, ...]:
         """
@@ -675,51 +702,24 @@ class DiskStage(ComponentStage):
     ) -> ParamValues:
         """
         Return the table of the vertical equilibrium 'galaxy' of the
-        thickness of its disk at its subnodes (see
-        traits.RHTraitEquilibrium): its pdf and its cumulative half at its
-        heights, normalised over [-zmax, zmax] as the kernels take them
-        (linear between the heights), by the names of their parameters,
-        from the values of its parameters and the mass of the galaxy: of
-        its vertical dispersion at its midplane sigma_z and the vertical
-        force F_z of the mass, exp(-(Phi(z) - Phi(0)) / sigma_z^2), Phi(z)
-        - Phi(0) = -int_0^z F_z (on heights four times finer). At the
-        centre, where a point mass makes the force infinite, the table of
-        the next subnode.
+        thickness of its disk at its subnodes (see _GalaxyLayer), by the
+        names of its parameters, from the values of its parameters and the
+        mass of the galaxy: of the height potential of its field, or if
+        the mass follows it, the table that the mass takes, which its
+        galaxy solves with the field (see Balanced).
 
         Raises
         ------
         ModelEvaluationError
-            If the dispersion is not positive, or the force or the surface
-            density gives no table, at a radius where the disk has light.
+            If the dispersion is not positive, or the force gives no
+            table, at a radius where the disk has light.
         """
-        disk = self._disk
-        trait = disk.height_equilibrium()
-        radii = np.asarray(disk.subrnodes())
-        z = trait.heights()
-        kpc = mass.context.kpc_per_arcsec
-        sigma = dispersion(disk, self._plan, values, radii, direction='ver')
+        if self._balanced:
+            return mass.layers[self._label]
+        layer = self.layer(values, mass.context.kpc_per_arcsec)
         with np.errstate(divide='ignore', over='ignore', invalid='ignore'):
-            fine = np.linspace(0, trait.zmax(), 4 * (len(z) - 1) + 1)
-            R, h = np.broadcast_arrays(radii[:, None], fine)
-            # ((km/s)^2 per arcsec)
-            force = mass.field.vertical_force(R * kpc, h * kpc) * kpc
-            potential = -scipy.integrate.cumulative_trapezoid(
-                force, fine, initial=0, axis=1)
-            pdf = np.exp(-potential / sigma[:, None] ** 2)[:, ::4]
-            if radii[0] == 0:
-                pdf[0] = pdf[1]
-            pdf = pdf / (2 * scipy.integrate.trapezoid(pdf, z, axis=1))[
-                :, None]
-        solved = np.isfinite(pdf).all(axis=1) & (sigma > 0)
-        _check_solved(
-            solved, self._lit(values, radii),
-            radii, "the vertical equilibrium 'galaxy' of the thickness",
-            "its vertical dispersion is not positive, or the force of the "
-            "mass gives no profile")
-        # (no light there: any table the kernels can draw, a uniform one)
-        pdf[~solved] = 1 / (2 * trait.zmax())
-        half = scipy.integrate.cumulative_trapezoid(pdf, z, initial=0, axis=1)
-        return dict(zip(disk.height_params(), [*pdf.T, *half.T]))
+            potential = mass.field.height_potential(*layer.grid())
+        return layer.values(layer.unknown(potential))
 
     def _height_table(
             self, values: ParamValues, tables: ParamValues
@@ -957,6 +957,113 @@ def _rotation(
         "it is not finite (no circular orbit, e.g. at a jump of the "
         "surface density of a thin disk)")
     return np.sqrt(np.where(finite, np.maximum(v2, 0), 0))
+
+
+class _GalaxyLayer:
+    """
+    The vertical equilibrium 'galaxy' of the thickness of a disk at its
+    subnodes in one evaluation (see traits.RHTraitEquilibrium and
+    BalancedLayer): of its vertical dispersion at its midplane sigma_z and
+    the height potential of the mass Phi(R, z) - Phi(R, 0) at its subnodes
+    and the heights of its table, its unknown u = (Phi(R, z) - Phi(R, 0))
+    / sigma_z^2, and the table exp(-u), normalised over [-zmax, zmax] as
+    the kernels take it (linear between its heights). At the centre,
+    where a point mass makes the force infinite, that of the next
+    subnode; where the disk has no light and the potential no table,
+    uniform (u = 0).
+
+    Parameters
+    ----------
+    heights : np.ndarray
+        The heights of its table (arcsec).
+    names : tuple of str
+        The names of the parameters of its table: its pdf and its
+        cumulative half at each height (see NodalDisk.height_params).
+    radii : np.ndarray
+        The subnodes of the disk (arcsec).
+    sigma : np.ndarray
+        Its vertical dispersion at the subnodes (km/s).
+    lit : callable
+        The mask of the subnodes where the disk has light (asked only
+        where the potential gives no table).
+    kpc_per_arcsec : float
+        The length of an arcsec in its galaxy.
+    """
+
+    def __init__(
+            self,
+            heights: np.ndarray,
+            names: tuple[str, ...],
+            radii: np.ndarray,
+            sigma: np.ndarray,
+            lit: Callable[[], np.ndarray],
+            kpc_per_arcsec: float
+    ):
+        self._heights = heights
+        self._names = names
+        self._radii = radii
+        self._sigma = sigma
+        self._lit = lit
+        self._kpc_per_arcsec = kpc_per_arcsec
+
+    def grid(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return its subnodes and the heights of its table (kpc)."""
+        return (self._radii * self._kpc_per_arcsec,
+                self._heights * self._kpc_per_arcsec)
+
+    def unknown(self, potential: np.ndarray) -> np.ndarray:
+        """
+        Return its unknown u of the height potential ((km/s)^2) at its
+        grid (see the class).
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the dispersion is not positive, or the potential gives no
+            table, at a radius where the disk has light.
+        """
+        with np.errstate(divide='ignore', invalid='ignore'):
+            unknown = potential / self._sigma[:, None] ** 2
+        if self._radii[0] == 0:
+            unknown[0] = unknown[1]
+        solved = np.isfinite(unknown).all(axis=1) & (self._sigma > 0)
+        _check_solved(
+            solved, self._lit, self._radii,
+            "the vertical equilibrium 'galaxy' of the thickness",
+            "its vertical dispersion is not positive, or the force of the "
+            "mass gives no profile")
+        # (no light there: any table the kernels can draw, a uniform one)
+        unknown[~solved] = 0.0
+        return unknown
+
+    def change(
+            self, unknown: np.ndarray, new: np.ndarray
+    ) -> tuple[float, float]:
+        """
+        Return the largest change of its table from an unknown to a new
+        one at a subnode, relative to its peak there, and that subnode
+        (arcsec).
+        """
+        old, pdf = self._pdfs(unknown), self._pdfs(new)
+        changes = np.max(np.abs(pdf - old), axis=1) / np.max(pdf, axis=1)
+        worst = np.argmax(changes)
+        return float(changes[worst]), float(self._radii[worst])
+
+    def values(self, unknown: np.ndarray) -> ParamValues:
+        """
+        Return its table of an unknown: its pdf and its cumulative half at
+        its heights, by the names of their parameters.
+        """
+        pdf = self._pdfs(unknown)
+        half = scipy.integrate.cumulative_trapezoid(
+            pdf, self._heights, initial=0, axis=1)
+        return dict(zip(self._names, [*pdf.T, *half.T]))
+
+    def _pdfs(self, unknown: np.ndarray) -> np.ndarray:
+        """Return the pdf of its table at its heights, of an unknown."""
+        pdf = np.exp(-unknown)
+        return pdf / (2 * scipy.integrate.trapezoid(
+            pdf, self._heights, axis=1))[:, None]
 
 
 def _check_solved(

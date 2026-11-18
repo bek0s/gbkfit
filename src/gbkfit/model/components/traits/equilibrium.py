@@ -148,8 +148,10 @@ class RHTraitEquilibrium(RHTrait):
       z) - Phi(R, 0) = -int_0^z F_z dz' (Olling 1995; Bacchini et al.
       2019), tabulated at RHT_TABLE_NHEIGHTS heights from 0 to zmax,
       linear between them. It needs the forces of the gravity off the
-      plane; no mass disk follows its layer (not yet: the mass would take
-      the thickness that its own force sets).
+      plane. A mass disk can follow its layer: the mass then takes the
+      thickness that its own field sets, and the galaxy solves the two
+      together (the fixed point of the layers and the field, see
+      GalaxyStage).
     - 'sheet': the isothermal sheet of the surface density Sigma of its
       fluid, sech^2(z / z0) / (2 z0), z0 = sigma_z^2 / (pi G Sigma)
       (Burkert et al. 2010); in Newtonian gravity.
