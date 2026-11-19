@@ -219,8 +219,10 @@ export function Params({ draft, field, colours, types, defs }: ParamsProps) {
                         {setting.kind !== 'tied' && setting.kind !== 'other' && p.unit && <span> {unitText(p.unit)}</span>}
                       </span>
                     )}
-                    <span className="gp-st" data-kind={setting.kind}>
-                      {setting.kind === 'other' ? 'set' : setting.kind}
+                    {/* (how a fit takes it, said of those it does not keep
+                    fixed: most are) */}
+                    <span className="gp-st" data-kind={setting.kind} title={setting.kind === 'fixed' ? 'Fixed' : undefined}>
+                      {setting.kind === 'fixed' ? '' : setting.kind === 'other' ? 'set' : setting.kind}
                     </span>
                     <Reach param={p} setting={setting} />
                   </div>

@@ -1,6 +1,7 @@
 // The parameters of a part of a galaxy, as numbers: each its short name
 // and its value (tinted if a fit frees it, outlined if tied to an
-// expression, marked if it has a value per ring), in a line or a line each
+// expression, marked if it has a value per ring: a small line of its
+// values along the rings, if they differ), in a line or a line each
 // with its title. A click opens it to set (see ParamField): its value,
 // whether a fit frees it and in what range, or its tie.
 import { Popover } from '@mantine/core';
@@ -32,7 +33,7 @@ export function valueText(setting: Setting): string {
   return low === high ? significant(low, 4) : `${significant(low, 3)}…${significant(high, 3)}`;
 }
 
-// (bare: without its name, where what it is is said, e.g. in its tile)
+// (bare: without its name, where what it is is said, e.g. in its line)
 export function NumberChip({ ctx, param, rings, limit, bare }: { ctx: NumbersContext; param: Param; rings: number[] | null; limit?: number; bare?: boolean }) {
   const { draft, options, params } = ctx;
   const setting = settingOf(draft.state?.properties ?? {}, param);
@@ -50,13 +51,29 @@ export function NumberChip({ ctx, param, rings, limit, bare }: { ctx: NumbersCon
           {!bare && <i>{label}</i>}
           {valueText(setting)}
           {unit && <span className="gm-unit">{unit}</span>}
-          {param.size > 1 && <RingMark />}
+          {param.size > 1 && <RingValues setting={setting} />}
         </button>
       </Popover.Target>
       <Popover.Dropdown>
         <ParamEditor ctx={ctx} param={param} rings={rings} limit={limit} />
       </Popover.Dropdown>
     </Popover>
+  );
+}
+
+// The values of a parameter along its rings, as a small line, low to high
+// (the mark of a value per ring, if they are all the same or tied)
+function RingValues({ setting }: { setting: Setting }) {
+  const values = setting.kind === 'fixed' || setting.kind === 'free' ? setting.values.filter(Number.isFinite) : [];
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  if (values.length < 2 || !(high > low)) return <RingMark />;
+  const x = (i: number) => 1 + (i / (values.length - 1)) * 24;
+  const y = (v: number) => 8.5 - ((v - low) / (high - low)) * 7;
+  return (
+    <svg className="gm-rspark" viewBox="0 0 26 10" aria-label={`From ${significant(values[0], 3)} to ${significant(values[values.length - 1], 3)} along the rings`}>
+      <polyline points={values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')} />
+    </svg>
   );
 }
 

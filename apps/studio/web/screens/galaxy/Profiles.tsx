@@ -5,7 +5,8 @@
 // density (each relative to its peak, on a logarithmic axis: densities of
 // different units, e.g. of gas and of starlight, side by side), and their
 // orientation (their position angle and inclination). Each curve is in
-// the colour of its component, and its dash says its direction. The
+// the colour of its component, and its dash says its direction (the key
+// gives the two apart). The
 // library gives them (see its GalaxyFunctions): of a disk along its
 // radius, of a cone from its apex, of a spheroid from its axis.
 import type { GalaxyRender } from '../../api/queries';
@@ -44,13 +45,16 @@ export function Profiles({
   quantity,
   options,
   colours,
+  massColours,
   rings,
 }: {
   render: GalaxyRender | undefined;
   quantity: ProfileQuantity;
   options: Options;
-  // The colour of each component, by name, and the rings to mark
+  // The colour of each component and of each part of the mass, by name,
+  // and the rings to mark
   colours: Map<string, string>;
+  massColours: Map<string, string>;
   rings: number[] | null;
 }) {
   const components = componentsOf(options);
@@ -67,12 +71,12 @@ export function Profiles({
       // (a dispersion along directions: the isotropic one is not given)
       const direction = parsed.direction ?? (quantity === 'dispersion' ? null : 'tan');
       const word = direction ? DIRECTIONS[direction]?.word ?? direction : 'isotropic';
-      curves.push({ name, label: `${nameOf(parsed.component)} · ${word}`, colour: colourOf(parsed.component), values: all[name], dash: direction ? DIRECTIONS[direction]?.dash : undefined });
+      curves.push({ name, label: `${nameOf(parsed.component)} · ${word}`, group: nameOf(parsed.component), meaning: word, colour: colourOf(parsed.component), values: all[name], dash: direction ? DIRECTIONS[direction]?.dash : undefined });
     }
     if (quantity === 'speed') {
       if (all.vcirc) curves.push({ name: 'vcirc', label: 'circular speed of the mass', colour: 'muted', values: all.vcirc, width: 1.4 });
       for (const name of Object.keys(all).filter((n) => n.startsWith('vcirc_'))) {
-        curves.push({ name, label: `mass · ${name.slice(6)}`, colour: 'faint', values: all[name], dash: '2 3', width: 1.2 });
+        curves.push({ name, label: `mass · ${name.slice(6)}`, colour: massColours.get(name.slice(6)) ?? 'faint', values: all[name], dash: '2 3', width: 1.2 });
       }
     }
   } else if (quantity === 'density') {
@@ -83,7 +87,7 @@ export function Profiles({
       if (parsed === null) continue;
       const peak = Math.max(0, ...all[name].filter((v): v is number => v !== null && Number.isFinite(v)));
       if (peak <= 0) continue;
-      curves.push({ name, label: nameOf(parsed.component), colour: colourOf(parsed.component), values: all[name].map((v) => (v === null ? null : v / peak)) });
+      curves.push({ name, label: nameOf(parsed.component), group: nameOf(parsed.component), colour: colourOf(parsed.component), values: all[name].map((v) => (v === null ? null : v / peak)) });
     }
   } else {
     // (the position angle, and the inclination dashed, of each component)
@@ -92,7 +96,8 @@ export function Profiles({
       const parsed = parse(name, 'orientation');
       if (parsed === null) continue;
       const incl = parsed.direction === 'incl';
-      curves.push({ name, label: `${nameOf(parsed.component)} · ${incl ? 'inclination' : 'position angle'}`, colour: colourOf(parsed.component), values: all[name], dash: incl ? '5 3' : undefined });
+      const meaning = incl ? 'inclination' : 'position angle';
+      curves.push({ name, label: `${nameOf(parsed.component)} · ${meaning}`, group: nameOf(parsed.component), meaning, colour: colourOf(parsed.component), values: all[name], dash: incl ? '5 3' : undefined });
     }
   }
   const empty: Record<ProfileQuantity, string> = {

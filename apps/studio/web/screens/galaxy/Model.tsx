@@ -1,15 +1,16 @@
 // The model of a galaxy, as its sheet shows it: the galaxy as a whole (its
-// distance, redshift and gravity, in a strip, and the parts of its mass,
-// a line each, under them, in reach however long the components are),
-// and its components, each one line (its name, its type, its extent and
-// its parts in a few words) and one open at a time. An open component is
-// in sections in the order of its configuration (its geometry, its
-// traits, its light, its physics), each part a group under its title and
-// its keys in the configuration, with what adds to it, and each single
-// setting a line of its own. Every line of the card is what it is, then
-// its value, in one column for the whole card; a parameter is a line of
-// its own, under what owns it. A group folds to one line: what it has, in
-// a few words. A problem shows where it is, and the count of them at the
+// distance and redshift, on one line), the parts of its mass (under its
+// gravity, a row each, in reach however long the components are), and its
+// components, a row each (its name, its type, its extent and its parts in
+// a few words). Rows open, as many as wanted, and stay open as the page
+// is reloaded. An open component is in sections in the order of its
+// configuration (its geometry, its traits, its light, its physics), each
+// part a group under its title and its keys in the configuration, with
+// what adds to it, and each single setting a line of its own. Every line
+// of the card is what it is, then its value, in one column for the whole
+// card; a parameter is a line of its own, under what owns it. A group
+// folds to one line: what it has, in a few words; which are open is
+// remembered. A problem shows where it is, and the count of them at the
 // foot goes to each in turn.
 import { Popover } from '@mantine/core';
 import { Fragment, useCallback, useRef, useState, type ReactNode } from 'react';
@@ -19,6 +20,7 @@ import { significant } from '../../components/format';
 import { Close } from '../../components/ui/basics';
 import { Expand } from '../../components/ui/motion';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
+import { useRemembered } from '../../shell/remember';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { DirectionMark, RingMark } from './Marks';
 import { freeCount, NumberChip, NumberRows, paramText, type NumbersContext } from './Numbers';
@@ -27,8 +29,16 @@ import { ownedBy, settingOf, type Param } from './params';
 import { memberOf, propertiesOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
 import { extentOf, familyOfOption, HEAD_OPTIONS, nameBase, optionTitle, partsOfType, referencesOf, settingsOfType, withReferencesRenamed, type ComponentTypes, type PartInfo } from './types';
 
-// What is open in the sheet: a component or a part of the mass
-export type Open = { kind: 'component' | 'mass'; index: number } | null;
+// A row open in the sheet: a component or a part of the mass
+export type OpenItem = { kind: 'component' | 'mass'; index: number };
+
+// The rows open, as one is opened (last), closed, or removed (those after
+// it, of its kind, a place back) or copied (those after it a place on)
+const isOpenIn = (open: OpenItem[], kind: OpenItem['kind'], index: number) => open.some((o) => o.kind === kind && o.index === index);
+const opened = (open: OpenItem[], kind: OpenItem['kind'], index: number): OpenItem[] => [...open.filter((o) => !(o.kind === kind && o.index === index)), { kind, index }];
+const closed = (open: OpenItem[], kind: OpenItem['kind'], index: number): OpenItem[] => open.filter((o) => !(o.kind === kind && o.index === index));
+const shifted = (open: OpenItem[], kind: OpenItem['kind'], from: number, by: 1 | -1): OpenItem[] => open.map((o) => (o.kind === kind && o.index >= from ? { kind, index: o.index + by } : o));
+const removedRow = (open: OpenItem[], kind: OpenItem['kind'], index: number) => shifted(closed(open, kind, index), kind, index + 1, -1);
 
 interface Ctx extends NumbersContext {
   defs: Defs | undefined;
@@ -44,17 +54,22 @@ interface Ctx extends NumbersContext {
   keep: (row: HTMLElement) => void;
 }
 
-// The groups of the cards of the components that are open, by the name of
-// the component and the key of the group (e.g. 'vptraits'): all folded at
-// first, and kept as the cards close and open
+// The groups of the rows that are open, by the name of their owner (a
+// component, or a part of the mass: see massFolds) and the key of the
+// group (e.g. 'vptraits'): all folded at first, and kept as the rows close
+// and open, and as the page is reloaded (in this browser, for the galaxy)
 interface Folds {
-  isOpen: (component: string, group: string) => boolean;
-  set: (component: string, groups: string[], open: boolean) => void;
+  isOpen: (owner: string, group: string) => boolean;
+  set: (owner: string, groups: string[], open: boolean) => void;
   rename: (from: string, to: string) => void;
 }
 
-function useFolds(): Folds {
-  const [open, setOpen] = useState<Record<string, string[]>>({});
+// The owner of the groups of a part of the mass, among the folds (apart
+// from those of a component of the same name)
+const massFolds = (name: string) => `mass:${name}`;
+
+function useFolds(project: string, galaxy: string): Folds {
+  const [open, setOpen] = useRemembered<Record<string, string[]>>(`galaxy-folds:${project}/${galaxy}`, {});
   return {
     isOpen: (component, group) => open[component]?.includes(group) ?? false,
     set: (component, groups, on) =>
@@ -93,26 +108,31 @@ export const inPlace = (owner: Path): Path => owner;
 export interface ModelProps {
   draft: GalaxyDraft;
   project: string;
+  // The name of the galaxy (what the sheet remembers is its own)
+  galaxy: string;
   field: number;
+  // The colours of the components and of the parts of the mass (tokens)
   colours: string[];
-  open: Open;
-  onOpen: (open: Open) => void;
+  massColours: string[];
+  open: OpenItem[];
+  onOpen: (open: OpenItem[]) => void;
   isolated: string | null;
   onIsolate: (name: string | null) => void;
 }
 
-export function Model({ draft, project, field, colours, open, onOpen, isolated, onIsolate }: ModelProps) {
+export function Model({ draft, project, galaxy, field, colours, massColours, open, onOpen, isolated, onIsolate }: ModelProps) {
   const types = useComponentTypes().data as ComponentTypes | undefined;
   const options = draft.state?.options ?? {};
   const components = componentsOf(options);
   const mass = asList(options.mass);
   const set = (path: Path, value: unknown, how?: EditHow) => draft.edit((s) => ({ ...s, options: setAt(s.options, path, value) }), how);
-  const folds = useFolds();
+  const folds = useFolds(project, galaxy);
   const { room, keep } = useKeptInPlace();
   const ctx: Ctx = { draft, options, params: draft.params, field, defs: draft.defs, types, project, problems: draft.problems, set, kpcPerArcsec: kpcPerArcsecOf(draft), folds, keep };
-  const colourOf = (name: unknown) => {
-    const at = components.findIndex((c, i) => componentName(c, i) === name);
-    return at < 0 ? 'var(--faint)' : `var(--${colours[at]})`;
+  // (a row opened or closed, kept where it is under the pointer)
+  const toggle = (kind: OpenItem['kind'], index: number, row: HTMLElement) => {
+    keep(row);
+    onOpen(isOpenIn(open, kind, index) ? closed(open, kind, index) : opened(open, kind, index));
   };
 
   const addComponent = (type: string) => {
@@ -127,15 +147,14 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
       },
       { moved: inPlace },
     );
-    onOpen({ kind: 'component', index: components.length });
+    onOpen(opened(open, 'component', components.length));
   };
 
   const addMass = (type: string) => {
     const refs = referencesOf(draft.defs, 'mass_component', type);
-    // (one that follows a component: the first of its kind, e.g. a traced
-    // disk the first disk; else the first)
-    const kin = components.filter((c) => nameBase(String(c.type)) === nameBase(type));
-    const follow = kin[0] ?? components[0];
+    // (one that follows a component: the first it can follow; else the
+    // first)
+    const follow = followable(components, type)[0] ?? components[0];
     const extra = Object.fromEntries(Object.entries(refs).filter(([, what]) => what === 'components').map(([key]) => [key, follow ? componentName(follow, components.indexOf(follow)) : undefined]));
     draft.edit((s) => {
       let next = s.options;
@@ -146,7 +165,7 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
       const item = startOf(draft.defs, 'mass_component', type, [], { ...extra, name: freshName(names, base) });
       return { ...s, options: setAt(next, ['mass'], [...asList(next.mass), item]) };
     });
-    onOpen({ kind: 'mass', index: mass.length });
+    onOpen(opened(open, 'mass', mass.length));
   };
 
   const componentTypes = Object.keys(types ?? {}).map((type) => ({ value: type, ...titled(draft.defs, 'component', type) }));
@@ -160,7 +179,7 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
     const problem = placed[turn % placed.length];
     setTurn(turn + 1);
     const [section, index] = problem.path as [string, number];
-    onOpen({ kind: section === 'mass' ? 'mass' : 'component', index });
+    onOpen(opened(open, section === 'mass' ? 'mass' : 'component', index));
     // (once it is open)
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
@@ -169,15 +188,17 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
       }),
     );
   };
+  const problemCount = `${draft.problems.length} ${draft.problems.length === 1 ? 'problem' : 'problems'}`;
 
   return (
     <div className="gm">
-      <Strip ctx={ctx} hasMass={mass.length > 0} />
+      <GalaxyLine ctx={ctx} />
 
       <div className="gm-sec">
         <span className="gm-over">
           Mass<b>{mass.length}</b>
         </span>
+        <Gravity ctx={ctx} hasMass={mass.length > 0} />
         <DropMenu
           label="Add a part of the mass"
           width={320}
@@ -189,21 +210,18 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
       {mass.length === 0 ? (
         <p className="gm-empty">No mass: the motions are as the traits give them.</p>
       ) : (
-        <div className="gm-mass">
+        <div className="gm-rows">
           {mass.map((item, i) => (
             <MassRow
               key={i}
               ctx={ctx}
               index={i}
               item={item}
-              colourOf={colourOf}
-              names={components.map(componentName)}
-              open={open?.kind === 'mass' && open.index === i}
-              onToggle={(row) => {
-                keep(row);
-                onOpen(open?.kind === 'mass' && open.index === i ? null : { kind: 'mass', index: i });
-              }}
-              onRemoved={() => onOpen(null)}
+              colour={massColours[i]}
+              components={components}
+              open={isOpenIn(open, 'mass', i)}
+              onToggle={(row) => toggle('mass', i, row)}
+              onRemoved={() => onOpen(removedRow(open, 'mass', i))}
             />
           ))}
         </div>
@@ -221,49 +239,50 @@ export function Model({ draft, project, field, colours, open, onOpen, isolated, 
           target={<button className="gm-add">+ Add</button>}
         />
       </div>
-      {components.length === 0 && (
+      {components.length === 0 ? (
         <p className="gm-empty">No components: nothing emits light.</p>
+      ) : (
+        <div className="gm-rows">
+          {components.map((component, i) => (
+            <ComponentCard
+              key={i}
+              ctx={ctx}
+              index={i}
+              component={component}
+              colour={colours[i]}
+              open={isOpenIn(open, 'component', i)}
+              onToggle={(row) => toggle('component', i, row)}
+              isolated={isolated === componentName(component, i)}
+              onIsolate={(on) => onIsolate(on ? componentName(component, i) : null)}
+              onDuplicated={() => onOpen(opened(shifted(open, 'component', i + 1, 1), 'component', i + 1))}
+              onRemoved={() => onOpen(removedRow(open, 'component', i))}
+            />
+          ))}
+        </div>
       )}
-      {components.map((component, i) => (
-        <ComponentCard
-          key={i}
-          ctx={ctx}
-          index={i}
-          component={component}
-          colour={colours[i]}
-          open={open?.kind === 'component' && open.index === i}
-          onToggle={(row) => {
-            keep(row);
-            onOpen(open?.kind === 'component' && open.index === i ? null : { kind: 'component', index: i });
-          }}
-          isolated={isolated === componentName(component, i)}
-          onIsolate={(on) => onIsolate(on ? componentName(component, i) : null)}
-          onOpen={onOpen}
-        />
-      ))}
 
-      <div className="gm-problems" data-bad={draft.problems.length > 0 || undefined}>
-        {draft.problems.length === 0 ? (
-          <span>No problems: the library builds the galaxy.</span>
-        ) : (
-          <span>
-            {placed.length > 0 ? (
-              <button className="gm-link" onClick={goToProblem} title="Open where the next one is">
-                {draft.problems.length} {draft.problems.length === 1 ? 'problem' : 'problems'}
-              </button>
-            ) : (
-              `${draft.problems.length} ${draft.problems.length === 1 ? 'problem' : 'problems'}`
-            )}
-            {placed.length > 0 && ', shown where they are'}
-          </span>
-        )}
-        {general.map((p, i) => (
-          <p key={i} className="gm-why">
-            {problemText(p.message)}
-          </p>
-        ))}
-        {draft.describeError && <p className="gm-why">{draft.describeError.message}</p>}
-      </div>
+      {(draft.problems.length > 0 || draft.describeError) && (
+        <div className="gm-problems">
+          {draft.problems.length > 0 && (
+            <span>
+              {placed.length > 0 ? (
+                <button className="gm-link" onClick={goToProblem} title="Open where the next one is">
+                  {problemCount}
+                </button>
+              ) : (
+                problemCount
+              )}
+              {placed.length > 0 && ', shown where they are'}
+            </span>
+          )}
+          {general.map((p, i) => (
+            <p key={i} className="gm-why">
+              {problemText(p.message)}
+            </p>
+          ))}
+          {draft.describeError && <p className="gm-why">{draft.describeError.message}</p>}
+        </div>
+      )}
       <div ref={room} aria-hidden />
     </div>
   );
@@ -338,111 +357,91 @@ function titled(defs: Defs | undefined, family: string, type: string): { label: 
 // ---------------------------------------------------------------------
 // The galaxy as a whole
 
-// The galaxy as a whole: its distance, redshift and gravity, each a tile.
-// A click on the tile of the distance or the gravity opens the menu of
-// their types; their numbers are chips in the tile, each opening to set;
-// the redshift is typed in its tile.
-function Strip({ ctx, hasMass }: { ctx: Ctx; hasMass: boolean }) {
-  const { defs, options, params, draft, set, project } = ctx;
-  const distance = isObject(options.distance) ? options.distance : null;
-  const gravity = isObject(options.gravity) ? options.gravity : null;
-  const distanceParam = params.find((p) => p.owner.length === 1 && p.owner[0] === 'distance');
-  const setting = distanceParam ? settingOf(draft.state?.properties ?? {}, distanceParam) : null;
-  const scale = ctx.kpcPerArcsec === null ? null : `1″ = ${significant(ctx.kpcPerArcsec * 1000, 3)} pc`;
-  const distanceType = String(distance?.type ?? '');
-  const gravityType = String(gravity?.type ?? 'newton');
-  const z = typeof options.redshift === 'number' ? options.redshift : 0;
-  const gravityParams = ownedBy(params, ['gravity']);
-  const gravityRest = restOf(defs, memberOf(defs, 'gravity', gravity?.type), new Set(['type']));
-  const typeEntries = (family: string, current: string, onChange: (type: string) => void, none?: string): MenuEntry[] => [
+// The menu of the types of a family (e.g. of the distance), the current
+// marked; a first choice of none, if given
+function typeEntries(defs: Defs | undefined, family: string, current: string, onChange: (type: string) => void, none?: string): MenuEntry[] {
+  return [
     ...(none ? [{ label: none, current: current === '', onClick: () => onChange('') }] : []),
     ...typesOf(defs, family).map((t) => ({ label: t.label, description: t.description, current: t.value === current, onClick: () => t.value !== current && onChange(t.value) })),
   ];
-  let distanceValue: ReactNode = <span className="gm-tv">None</span>;
-  let distanceNote = 'angles only';
-  if (distance && distanceParam && setting) {
-    distanceValue = <NumberChip ctx={ctx} param={distanceParam} rings={null} bare />;
-    distanceNote = scale ?? '';
-  } else if (distance) {
-    distanceValue = <span className="gm-tv">{titled(defs, 'distance', distanceType).label}</span>;
-    distanceNote = scale ?? 'of its redshift';
-  }
+}
+
+// The galaxy as a whole, on one line: its distance (its kind a menu, its
+// number a chip that opens to set, and the length of an arcsec there) and
+// its redshift, typed in place
+function GalaxyLine({ ctx }: { ctx: Ctx }) {
+  const { defs, options, params, set } = ctx;
+  const distance = isObject(options.distance) ? options.distance : null;
+  const distanceParam = params.find((p) => p.owner.length === 1 && p.owner[0] === 'distance');
+  const distanceType = String(distance?.type ?? '');
+  const z = typeof options.redshift === 'number' ? options.redshift : 0;
+  const scale = ctx.kpcPerArcsec === null ? null : `1″ = ${significant(ctx.kpcPerArcsec * 1000, 3)} pc`;
+  let value: ReactNode = <span className="gm-gnote">none: angles only</span>;
+  if (distance && distanceParam) value = <NumberChip ctx={ctx} param={distanceParam} rings={null} bare />;
+  else if (distance) value = <span className="gm-gv">{titled(defs, 'distance', distanceType).label.toLowerCase()}</span>;
   return (
-    <div className="gm-strip">
-      <TypeTile
-        label="Distance"
-        menu="The distance of the galaxy"
-        entries={typeEntries('distance', distanceType, (type) => set(['distance'], type === '' ? undefined : retyped(defs, 'distance', distance, type)), 'None')}
-        note={distanceNote}
-      >
-        {distanceValue}
-      </TypeTile>
-      <div className="gm-tile gm-tile-z">
-        <span className="gm-tl">Redshift</span>
+    <div className="gm-galaxy">
+      <span className="gm-gitem">
+        <DropMenu
+          label="The distance of the galaxy"
+          width={300}
+          entries={typeEntries(defs, 'distance', distanceType, (type) => set(['distance'], type === '' ? undefined : retyped(defs, 'distance', distance, type)), 'None')}
+          target={
+            <button className="gm-glabel" title="The distance of the galaxy: click to change its kind">
+              Distance
+            </button>
+          }
+        />
+        {value}
+        {scale && <span className="gm-gnote">{scale}</span>}
+      </span>
+      <span className="gm-gitem" title="The redshift of the galaxy: of its lines, and the dimming of its light">
+        <span className="gm-glabel-text">Redshift</span>
         <NumberText value={z} label="The redshift of the galaxy" onCommit={(value) => set(['redshift'], value > 0 ? value : undefined)} bare />
-        <span className="gm-tc">its lines and dimming</span>
-      </div>
-      <TypeTile
-        label="Gravity"
-        menu="The gravity of the galaxy"
-        entries={typeEntries('gravity', gravityType, (type) => set(['gravity'], type === 'newton' ? undefined : retyped(defs, 'gravity', gravity, type)))}
-        note={hasMass ? 'of the mass below' : 'with mass only'}
-      >
-        <span className="gm-tv">{titled(defs, 'gravity', gravityType).label}</span>
-        {gravityParams.map((p) => (
-          <NumberChip key={p.name} ctx={ctx} param={p} rings={null} />
-        ))}
-        {gravityRest && defs && gravity && (
-          <Popover position="bottom-start" offset={4} width={340} shadow="md" withinPortal trapFocus={false} classNames={{ dropdown: 'gm-pop' }}>
-            <Popover.Target>
-              <button className="gm-opt" title="Its other options">
-                options
-              </button>
-            </Popover.Target>
-            <Popover.Dropdown>
-              <div className="gm-popbody">
-                <SchemaForm defs={defs} node={gravityRest} project={project} value={omit(gravity, 'type')} onChange={(next) => set(['gravity'], { type: gravity.type, ...next })} />
-              </div>
-            </Popover.Dropdown>
-          </Popover>
-        )}
-      </TypeTile>
+      </span>
     </div>
   );
 }
 
-// A tile of the strip of a choice of types (the distance, the gravity): a
-// click opens the menu of its types; its value, and the chips of its
-// numbers, which open on their own
-function TypeTile({ label, menu, entries, note, children }: { label: string; menu: string; entries: MenuEntry[]; note: string; children: ReactNode }) {
+// The gravity of the galaxy, in the head of its mass (how its mass moves
+// what it holds): its kind, a menu; its numbers, chips; its other options
+// behind "options"
+function Gravity({ ctx, hasMass }: { ctx: Ctx; hasMass: boolean }) {
+  const { defs, params, options, set, project } = ctx;
+  const gravity = isObject(options.gravity) ? options.gravity : null;
+  const gravityType = String(gravity?.type ?? 'newton');
+  const gravityParams = ownedBy(params, ['gravity']);
+  const rest = restOf(defs, memberOf(defs, 'gravity', gravity?.type), new Set(['type']));
   return (
-    <DropMenu
-      label={menu}
-      width={300}
-      entries={entries}
-      target={
-        <div
-          className="gm-tile"
-          role="button"
-          tabIndex={0}
-          title={`The ${label.toLowerCase()}: click to change its kind`}
-          onKeyDown={(event) => event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ') && (event.preventDefault(), event.currentTarget.click())}
-        >
-          <span className="gm-tl">
-            {label}
-            <span className="gm-caret" aria-hidden>
-              ▾
-            </span>
-          </span>
-          {/* (the chips and what they open are their own, not the menu's;
-          the value in words is the tile's) */}
-          <span className="gm-tvs" onClick={(event) => event.target !== event.currentTarget && !(event.target as HTMLElement).classList.contains('gm-tv') && event.stopPropagation()}>
-            {children}
-          </span>
-          <span className="gm-tc">{note || ' '}</span>
-        </div>
-      }
-    />
+    <span className="gm-gravity" data-idle={!hasMass || undefined}>
+      <DropMenu
+        label="The gravity of the galaxy"
+        width={300}
+        entries={typeEntries(defs, 'gravity', gravityType, (type) => set(['gravity'], type === 'newton' ? undefined : retyped(defs, 'gravity', gravity, type)))}
+        target={
+          <button className="gm-ty" title={hasMass ? 'The gravity of the mass' : 'The gravity of the mass (it has none yet)'}>
+            {titled(defs, 'gravity', gravityType).label}
+          </button>
+        }
+      />
+      {gravityParams.map((p) => (
+        <NumberChip key={p.name} ctx={ctx} param={p} rings={null} />
+      ))}
+      {rest && defs && gravity && (
+        <Popover position="bottom-start" offset={4} width={340} shadow="md" withinPortal trapFocus={false} classNames={{ dropdown: 'gm-pop' }}>
+          <Popover.Target>
+            <button className="gm-opt" title="Its other options">
+              options
+            </button>
+          </Popover.Target>
+          <Popover.Dropdown>
+            <div className="gm-popbody">
+              <SchemaForm defs={defs} node={rest} project={project} value={omit(gravity, 'type')} onChange={(next) => set(['gravity'], { type: gravity.type, ...next })} />
+            </div>
+          </Popover.Dropdown>
+        </Popover>
+      )}
+    </span>
   );
 }
 
@@ -458,7 +457,8 @@ function ComponentCard({
   onToggle,
   isolated,
   onIsolate,
-  onOpen,
+  onDuplicated,
+  onRemoved,
 }: {
   ctx: Ctx;
   index: number;
@@ -468,7 +468,10 @@ function ComponentCard({
   onToggle: (row: HTMLElement) => void;
   isolated: boolean;
   onIsolate: (on: boolean) => void;
-  onOpen: (open: Open) => void;
+  // (what the sheet does as it is copied (the copy after it, open) or
+  // removed)
+  onDuplicated: () => void;
+  onRemoved: () => void;
 }) {
   const { defs, types, problems, draft, options, params, set } = ctx;
   const [renaming, setRenaming] = useState(false);
@@ -516,15 +519,15 @@ function ComponentCard({
       // (those after it, a place on)
       { moved: (owner) => (owner[0] === 'components' && typeof owner[1] === 'number' && owner[1] > index ? ['components', owner[1] + 1, ...owner.slice(2)] : owner) },
     );
-    onOpen({ kind: 'component', index: index + 1 });
+    onDuplicated();
   };
   const remove = () => {
     if (isolated) onIsolate(false);
     set(base, undefined, { moved: removedFrom(['components'], index) });
-    onOpen(null);
+    onRemoved();
   };
   return (
-    <div className="gm-comp" data-open={open || undefined} data-bad={own.length > 0 || undefined} data-at={`components/${index}`}>
+    <div className="gm-row gm-comp" data-open={open || undefined} data-bad={own.length > 0 || undefined} data-at={`components/${index}`}>
       <div
         className="gm-crow"
         role="button"
@@ -550,7 +553,8 @@ function ComponentCard({
           )}
           <span>{typeTitle}</span>
         </span>
-        <span className="gm-cext">{extentOf(component, radii)}</span>
+        {/* (open, its rings say it) */}
+        <span className="gm-cext">{open ? '' : extentOf(component, radii)}</span>
         <span className="gm-cmenu" onClick={(event) => event.stopPropagation()}>
           <DropMenu
             label={`The component ${componentName(component, index)}`}
@@ -580,8 +584,9 @@ function ComponentCard({
   );
 }
 
-// A component in a few words: its parts, each its items' types (a height
-// after its trait, a direction after its speed), and the lines it emits
+// A component in a few words: its parts, each its title and its items'
+// types (a height after its trait, a direction after its speed), and the
+// lines it emits
 function glanceOf(ctx: Ctx, component: Options, parts: PartInfo[]): ReactNode {
   const { defs } = ctx;
   const words: ReactNode[] = [];
@@ -589,6 +594,7 @@ function glanceOf(ctx: Ctx, component: Options, parts: PartInfo[]): ReactNode {
     const value = component[part.option];
     if (value === undefined || value === null || part.family === null) continue;
     const items = asList(value);
+    if (items.length === 0) continue;
     const heights = part.heights ? (Array.isArray(component[part.heights.option]) ? (component[part.heights.option] as unknown[]) : [component[part.heights.option]]) : [];
     const text = items.map((item, i) => {
       const height = heights.length === 1 ? (i === items.length - 1 ? heights[0] : undefined) : heights[i];
@@ -607,9 +613,15 @@ function glanceOf(ctx: Ctx, component: Options, parts: PartInfo[]): ReactNode {
         </span>
       );
     });
-    words.push(<span key={part.option}>{text}</span>);
+    words.push(
+      <span key={part.option} className="gm-glance">
+        {/* (the light says what it is: e.g. "emission lines") */}
+        {part.family !== 'emission' && <span className="gm-pw">{part.title.toLowerCase()}</span>}
+        {text}
+      </span>,
+    );
   }
-  return words.flatMap((word, i) => (i ? [<span key={`s${i}`}> · </span>, word] : [word]));
+  return words;
 }
 
 // ---------------------------------------------------------------------
@@ -639,7 +651,7 @@ const MOTION_OPTIONS = ['norbits', 'turns', 'seed'];
 // The parts of the light of a component, and of its physics (single
 // settings of how it holds itself up and what it is made of)
 const LIGHT_PARTS = ['emission', 'opacity'];
-const PHYSICS_PARTS = ['pressure_support', 'clouds', 'rhtraits'];
+const PHYSICS_PARTS = ['pressure_support', 'clouds', 'rhtraits', 'equilibrium'];
 // The parameters of a component that place it (see its frame): its
 // centre, systemic velocity, orientation and the wall of a cone
 const FRAME_PARAMS = ['xpos', 'ypos', 'vsys', 'posa', 'incl', 'wall'];
@@ -657,8 +669,9 @@ function isOfKey(param: Param, key: string): boolean {
 }
 
 // The section of a part: its lists of traits in the traits, its light in
-// the light, its pressure support, clouds and vertical equilibrium (of a
-// thin disk) in the physics; the others (its rings, the profile and shape
+// the light, its pressure support, clouds and vertical equilibrium (the
+// heights of a thin disk, the dispersion of a thick one) in the physics;
+// the others (its rings, the profile and shape
 // of a spheroid) in the geometry
 function sectionOf(part: PartInfo): Section {
   if (LIGHT_PARTS.includes(part.option)) return 'light';
@@ -675,10 +688,11 @@ function subtitleOf(part: PartInfo, section: Section): string {
 }
 
 // The keys of a part in the configuration, as its subtitle shows them;
-// none if they only say its title again (e.g. 'opacity')
+// none if they only say its title again (e.g. 'opacity', or 'equilibrium'
+// of 'Equilibrium dispersion')
 function keysOf(title: string, keys: string[]): string | null {
-  const plain = (text: string) => text.toLowerCase().replace(/_/g, ' ');
-  return keys.length === 1 && plain(keys[0]) === plain(title) ? null : keys.join(' · ');
+  const plain = (text: string) => ` ${text.toLowerCase().replace(/_/g, ' ')} `;
+  return keys.length === 1 && plain(title).includes(plain(keys[0])) ? null : keys.join(' · ');
 }
 
 // A group of the card: its subtitle (its keys and what adds to it), its
@@ -759,13 +773,15 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
     return value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0);
   };
   const problemsOf = (options: string[]) => problems.filter((p) => options.some((option) => startsWith(p.path, [...base, option])));
-  // (its own parameters: those that place it, its frame, and of a spheroid
-  // that moves by the Jeans equations or orbits, those of its motion)
+  // (its own parameters: those that place it, its frame; of a spheroid
+  // that moves by the Jeans equations or orbits, the others those of its
+  // motion; of others, those of its light, e.g. the flux of a point)
   const own = ownedBy(params, base, true);
   const placing = (p: Param) => FRAME_PARAMS.some((key) => isOfKey(p, key));
   const moves = String(component.type).endsWith('_spheroid');
-  const frame = moves ? own.filter(placing) : own;
+  const frame = own.filter(placing);
   const motion = moves ? own.filter((p) => !placing(p)) : [];
+  const shining = moves ? [] : own.filter((p) => !placing(p));
   // (its settings, each where it acts; the others with its frame)
   const pick = (keys: string[]) => keys.filter((key) => settings.includes(key));
   const ringOptions = pick(RING_OPTIONS);
@@ -882,6 +898,7 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
       );
     } else groups[section].push(<SingleLine key={part.option} ctx={ctx} part={part} path={path} rings={rings} problems={own} />);
   }
+  if (shining.length > 0) groups.light.unshift(<NumberRows key="own" ctx={ctx} owned={shining} rings={rings} depth={0} />);
   if (settings.includes('fluid')) groups.physics.push(<FluidLine key="fluid" ctx={ctx} component={component} base={base} />);
   if (others.length > 0) {
     groups.geometry.push(
@@ -1574,17 +1591,24 @@ function ObjectItem({ ctx, part, path, onRemove }: { ctx: Ctx; part: PartInfo; p
 // ---------------------------------------------------------------------
 // A part of the mass
 
-// A part of the mass: a row of its name and, in a few words, its type,
-// what it follows and its numbers, which opens it; open, a line each, as
-// in the card of a component: what it follows, its parts of a type (e.g.
-// the profile of a halo), its parameters, its options, and those that
-// need a form in the same columns
+// The components a part of the mass can follow (e.g. a traced disk, a
+// disk; a traced spheroid, a spheroid): those of its kind, the last word
+// of their types
+function followable(components: Options[], type: unknown): Options[] {
+  return components.filter((c) => nameBase(String(c.type)) === nameBase(String(type)));
+}
+
+// A part of the mass: a row as that of a component (its name and type, and
+// under them, closed, what it follows and its numbers in a few words),
+// which opens it; open, a line each, as in the card of a component: what
+// it follows, its parts of a type (e.g. the profile of a halo), and its
+// parameters and its options, each a group that folds
 function MassRow({
   ctx,
   index,
   item,
-  colourOf,
-  names,
+  colour,
+  components,
   open,
   onToggle,
   onRemoved,
@@ -1592,8 +1616,9 @@ function MassRow({
   ctx: Ctx;
   index: number;
   item: Options;
-  colourOf: (name: unknown) => string;
-  names: string[];
+  // Its colour (a token: of the component it follows, if it does)
+  colour: string;
+  components: Options[];
   open: boolean;
   onToggle: (row: HTMLElement) => void;
   onRemoved: () => void;
@@ -1605,7 +1630,6 @@ function MassRow({
   const follows = Object.entries(refs).filter(([, what]) => what === 'components').map(([key]) => key);
   const followed = follows.map((key) => item[key]).find((name) => typeof name === 'string');
   const own = problems.filter((p) => startsWith(p.path, path));
-  const owned = ownedBy(params, path);
   const member = memberOf(defs, 'mass_component', item.type);
   // (its options, each where it goes: the components it follows; its parts
   // of a type, e.g. the profile of a halo, a line each as a single setting
@@ -1620,6 +1644,8 @@ function MassRow({
   const simple = keys.filter((key) => !typed.includes(key) && lineable(properties[key]));
   const others = keys.filter((key) => !typed.includes(key) && !simple.includes(key));
   const form = others.length > 0 ? restOf(defs, member, new Set(Object.keys(properties).filter((key) => !others.includes(key)))) : null;
+  // (its own parameters: not those of its parts of a type, under them)
+  const owned = ownedBy(params, path).filter((p) => !typed.some((key) => startsWith(p.owner, [...path, key])));
   const partOf = (key: string): PartInfo => ({
     option: key,
     title: typeof properties[key].title === 'string' ? properties[key].title : key,
@@ -1636,40 +1662,65 @@ function MassRow({
   const within = (key: string) => own.filter((p) => startsWith(p.path, [...path, key]));
   const general = own.filter((p) => !typed.some((key) => startsWith(p.path, [...path, key])));
   const typeTitle = titled(defs, 'mass_component', String(item.type)).label;
-  // (in a few words: its type, or the types of what it is made of, e.g. the
-  // profile of a halo; what it follows; its numbers)
+  const name = String(item.name ?? '');
+  // (in a few words: the types of what it is made of, e.g. the profile of a
+  // halo; what it follows; its numbers)
   const inner = Object.entries(item)
     .filter(([key, value]) => key !== 'type' && isObject(value) && typeof value.type === 'string')
     .map(([key, value]) => titled(defs, familyOfOption(defs, 'mass_component', item.type, key) ?? '', String((value as Options).type)).label);
-  const words = [inner.length ? inner.join(' · ') : typeTitle, followed ? `follows ${String(followed)}` : null, ...owned.slice(0, 3).map((p) => paramText(ctx, p))].filter(Boolean);
+  const words = [...inner, followed ? `follows ${String(followed)}` : null, ...owned.slice(0, 3).map((p) => paramText(ctx, p))].filter(Boolean);
+  // (the components it can follow; the one it follows, if not of them)
+  const choices = followable(components, item.type).map((c) => componentName(c, components.indexOf(c)));
+  // (its groups that fold, as they are made: what folds or opens them all)
+  const owner = massFolds(name);
+  const foldKeys: string[] = [];
+  const foldOf = (key: string): Fold => {
+    foldKeys.push(key);
+    const isOpen = ctx.folds.isOpen(owner, key);
+    return {
+      open: isOpen,
+      toggle: (row, all) => {
+        ctx.keep(row);
+        ctx.folds.set(owner, all ? foldKeys : [key], !isOpen);
+      },
+      show: () => ctx.folds.set(owner, [key], true),
+    };
+  };
+  const setOptions = simple.filter((key) => item[key] !== undefined).map((key) => optionText(item, key));
+  const formOptions = others.filter((key) => item[key] !== undefined).map((key) => optionText(item, key));
   // (what refers to it by name, e.g. a halo that responds to it, with it)
-  const rename = (name: string) => {
+  const rename = (next: string) => {
     setRenaming(false);
-    if (!name) return;
+    if (!next) return;
     const old = item.name;
+    // (its open groups with it)
+    ctx.folds.rename(owner, massFolds(next));
     ctx.draft.edit(
       (s) => {
-        const named = setAt(s.options, [...path, 'name'], name);
-        return { ...s, options: typeof old === 'string' ? withReferencesRenamed(defs, named, 'mass', old, name) : named };
+        const named = setAt(s.options, [...path, 'name'], next);
+        return { ...s, options: typeof old === 'string' ? withReferencesRenamed(defs, named, 'mass', old, next) : named };
       },
       { moved: inPlace },
     );
   };
   return (
-    <div className="gm-mrow" data-open={open || undefined} data-bad={own.length > 0 || undefined} data-at={`mass/${index}`}>
-      <div className="gm-mhead" role="button" tabIndex={0} aria-expanded={open} onClick={(event) => !renaming && onToggle(event.currentTarget)} onKeyDown={(event) => event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ') && (event.preventDefault(), onToggle(event.currentTarget))}>
-        <span className="gm-dot" style={{ background: followed ? colourOf(followed) : 'var(--faint)' }} />
-        {renaming ? (
-          <span onClick={(event) => event.stopPropagation()}>
-            <NameText value={String(item.name ?? '')} required onCommit={rename} onCancel={() => setRenaming(false)} autoFocus />
-          </span>
-        ) : (
-          <b>{String(item.name ?? '')}</b>
-        )}
-        <span className="gm-msum">{words.join(' · ')}</span>
+    <div className="gm-row gm-mrow" data-open={open || undefined} data-bad={own.length > 0 || undefined} data-at={`mass/${index}`}>
+      <div className="gm-crow" role="button" tabIndex={0} aria-expanded={open} onClick={(event) => !renaming && onToggle(event.currentTarget)} onKeyDown={(event) => event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ') && (event.preventDefault(), onToggle(event.currentTarget))}>
+        <span className="gm-dot" style={{ background: `var(--${colour})` }} />
+        <span className="gm-cname">
+          {renaming ? (
+            <span onClick={(event) => event.stopPropagation()}>
+              <NameText value={name} required onCommit={rename} onCancel={() => setRenaming(false)} autoFocus />
+            </span>
+          ) : (
+            name
+          )}
+          <span>{typeTitle}</span>
+        </span>
+        <span className="gm-cext" />
         <span className="gm-cmenu" onClick={(event) => event.stopPropagation()}>
           <DropMenu
-            label={`The mass ${String(item.name ?? '')}`}
+            label={`The mass ${name}`}
             width={240}
             at="end"
             // (its rename gives the focus to the field of its name)
@@ -1691,39 +1742,63 @@ function MassRow({
             }
           />
         </span>
+        {!open && words.length > 0 && <span className="gm-csum">{words.join(' · ')}</span>}
       </div>
       <Expand open={open}>
-        <div className="gm-mbody">
+        <div className="gm-cbody gm-mbody">
           {follows.map((key) => (
-            <div key={key} className="gm-oline">
+            <div key={key} className="gm-single">
               <span className="gm-cell-head">
                 <span className="gm-oline-label">Follows</span>
                 <code className="gm-key">{key}</code>
               </span>
               <span className="gm-cell-nums">
-                <TypePick items={names.map((name) => ({ value: name, label: name }))} value={String(item[key] ?? '')} text={String(item[key] ?? '')} label="The component it follows" onChange={(name) => set([...path, key], name)} />
+                {choices.length > 0 || typeof item[key] === 'string' ? (
+                  <TypePick
+                    items={[...(typeof item[key] === 'string' && !choices.includes(item[key]) ? [item[key]] : []), ...choices].map((choice) => ({ value: choice, label: choice }))}
+                    value={String(item[key] ?? '')}
+                    text={typeof item[key] === 'string' ? item[key] : undefined}
+                    label="The component it follows"
+                    onChange={(choice) => set([...path, key], choice)}
+                    quiet
+                  />
+                ) : (
+                  <span className="gm-note">no component of its kind to follow</span>
+                )}
               </span>
             </div>
           ))}
           {typed.map((key) => (
             <SingleLine key={key} ctx={ctx} part={partOf(key)} path={[...path, key]} rings={null} problems={within(key)} />
           ))}
-          <NumberRows ctx={ctx} owned={owned} rings={null} depth={0} />
-          {simple.map((key) => (
-            <OptionLine key={key} ctx={ctx} owner={item} family="mass_component" base={path} option={key} />
-          ))}
-          {form && defs && (
-            <div className="gm-oform">
-              <SchemaForm
-                defs={defs}
-                node={form}
-                project={project}
-                value={Object.fromEntries(others.filter((key) => item[key] !== undefined).map((key) => [key, item[key]]))}
-                onChange={(next) => set(path, { ...omitKeys(item, new Set(others)), ...next }, { moved: inPlace })}
-              />
+          {owned.length > 0 && (
+            <Group title="Parameters" fold={foldOf('parameters')} summary={owned.map((p) => paramText(ctx, p)).join(' · ')} free={freeCount(ctx, owned)}>
+              <NumberRows ctx={ctx} owned={owned} rings={null} depth={0} />
+            </Group>
+          )}
+          {(simple.length > 0 || form) && (
+            <Group title="Options" keys={[...simple, ...others].join(' · ')} fold={foldOf('options')} summary={[...setOptions, ...formOptions].join(' · ') || 'as by default'}>
+              {simple.map((key) => (
+                <OptionLine key={key} ctx={ctx} owner={item} family="mass_component" base={path} option={key} />
+              ))}
+              {form && defs && (
+                <div className="gm-oform">
+                  <SchemaForm
+                    defs={defs}
+                    node={form}
+                    project={project}
+                    value={Object.fromEntries(others.filter((key) => item[key] !== undefined).map((key) => [key, item[key]]))}
+                    onChange={(next) => set(path, { ...omitKeys(item, new Set(others)), ...next }, { moved: inPlace })}
+                  />
+                </div>
+              )}
+            </Group>
+          )}
+          {general.length > 0 && (
+            <div className="gm-why-top">
+              <Problems list={general} />
             </div>
           )}
-          <Problems list={general} />
         </div>
       </Expand>
     </div>
@@ -1931,7 +2006,9 @@ function LinesLine({ emission, onChange }: { emission: Options; onChange: (emiss
   return (
     <>
       {lines.length === 0 ? (
-        <span className="gm-note">one line, at the velocity of the data</span>
+        <span className="gm-note" title="One line, at the velocity of the spectral axis of the data, whatever it is">
+          the line of the data
+        </span>
       ) : (
         lines.map((line, i) => (
           <span key={i} className="gm-line" title={`${rests.get(lineName(line)) ?? 'A line of the configuration'}${i === 0 ? ' · its flux from the density' : ' · a ratio of flux to the first'}`}>

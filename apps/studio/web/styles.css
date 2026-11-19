@@ -760,8 +760,8 @@ h2 { margin: 0; font: var(--text-heading); }
 .gv-mini button { min-width: 28px; height: 26px; padding: 0 9px; border: 0; border-right: 1px solid var(--line); background: none; color: var(--fg2); font: var(--text-label); }
 .gv-mini button:last-child { border-right: 0; }
 .gv-mini button:hover { background: var(--sel); color: var(--accent-text); }
-.gv-add { height: 26px; padding: 0 8px; border: 1px dashed var(--line2); border-radius: 5px; background: none; color: var(--muted); font: var(--text-label); }
-.gv-add:hover { color: var(--fg); border-color: var(--muted); }
+.gv-add { height: 26px; padding: 0 8px; border: 0; border-radius: 5px; background: none; color: var(--muted); font: var(--text-label); }
+.gv-add:hover { color: var(--fg); background: var(--panel2); }
 .gv-seen { width: 220px; }
 .gv-status { margin-left: auto; font: var(--text-data-small); color: var(--muted); }
 .gv-empty { display: grid; place-items: center; min-height: 0; padding: 14px; }
@@ -818,28 +818,45 @@ h2 { margin: 0; font: var(--text-heading); }
 .dockview-theme-studio .dv-tabs-and-actions-container { border-bottom: 1px solid var(--line); }
 .dockview-theme-studio .dv-tab { padding: 0; }
 .dockview-theme-studio .dv-tab:focus-within, .dockview-theme-studio .dv-tab:focus { outline: none; }
-.gv-head { display: flex; align-items: center; gap: 6px; width: 100%; height: 100%; padding: 0 6px 0 8px; cursor: grab; }
+.gv-head { display: flex; align-items: center; gap: 6px; width: 100%; height: 100%; padding: 0 6px 0 8px; cursor: grab; container-type: inline-size; container-name: gv-head; }
 .gv-pick { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 7px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--fg); font: var(--text-label); font-weight: 600; white-space: nowrap; }
 .gv-pick small { font-weight: 400; color: var(--muted); }
 .gv-pick::after { content: "\25BE"; color: var(--faint); font-weight: 400; }
 .gv-pick:hover, .gv-pick[aria-expanded="true"] { border-color: var(--line2); background: var(--raise); }
-.gv-switches { margin-left: auto; display: flex; gap: 3px; overflow: hidden; }
+/* (its switches at its right, before its tools; narrow, a menu of them) */
+.gv-tail { margin-left: auto; display: flex; align-items: center; min-width: 0; }
+.gv-switches { display: flex; gap: 3px; overflow: hidden; }
 .gv-switches button { height: 22px; padding: 0 7px; border: 0; border-radius: 4px; background: none; color: var(--muted); font: var(--text-caption); white-space: nowrap; }
 .gv-switches button:hover { color: var(--fg); }
 .gv-switches button[data-on] { background: var(--sel); color: var(--accent-text); font-weight: 600; }
-.gv-x { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--faint); font: 14px/1 var(--sans); }
+.gv-switch-menu { display: none; height: 22px; padding: 0 7px; border: 0; border-radius: 4px; background: var(--sel); color: var(--accent-text); font: var(--text-caption); font-weight: 600; white-space: nowrap; }
+.gv-switch-menu::after { content: " \25BE"; font-weight: 400; font-size: 10px; }
+@container gv-head (max-width: 430px) {
+  .gv-switches { display: none; }
+  .gv-switch-menu { display: inline-block; }
+}
+/* (what maximises and closes it, as the head is pointed at; kept when it
+   is maximised) */
+.gv-x { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--faint); font: 14px/1 var(--sans); opacity: 0; transition: opacity .1s; }
+.gv-head:hover .gv-x, .gv-head:focus-within .gv-x, .gv-head[data-max] .gv-x { opacity: 1; }
 .gv-x:hover { background: var(--panel2); color: var(--fg); }
 .gv-body { position: relative; height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 8px; overflow: hidden; }
 .gv-body > * { flex: 1; min-height: 0; }
 .gv-note { margin: auto; text-align: center; }
 .gx-plot { position: relative; min-width: 0; min-height: 0; height: 100%; }
 .gx-plot svg { display: block; touch-action: none; }
+/* (a plot of curves: its area, and its key under it) */
+.gx-plot:has(> .gx-plot-area) { display: flex; flex-direction: column; gap: 6px; }
+.gx-plot-area { position: relative; flex: 1; min-height: 0; }
+.gx-unit { font-style: italic; }
+.gx-key { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 14px; padding: 0 4px 0 44px; font: var(--text-caption); color: var(--fg2); }
+.gx-key span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.gx-key i { width: 8px; height: 8px; border-radius: 50%; }
+.gx-key svg { flex: none; width: 22px; height: 8px; }
+.gx-key-meaning { color: var(--muted); }
 .gx-pv-frame { fill: none; stroke: var(--line2); }
 .gx-pv-model { fill: none; stroke: var(--fg); stroke-width: 1.4; stroke-dasharray: 5 3; opacity: .85; }
 .gx-pv-cursor { stroke: var(--fg2); stroke-width: 1; opacity: .6; }
-.gx-legend-box { position: absolute; right: 8px; top: 6px; display: grid; gap: 3px; max-width: 60%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 5px; background: color-mix(in srgb, var(--panel) 88%, transparent); pointer-events: none; }
-.gx-legend-box span { display: flex; align-items: center; gap: 7px; font: var(--text-caption); color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gx-legend-box svg { flex: none; width: 22px; height: 8px; }
 .gx-slices { display: flex; align-items: center; justify-content: center; gap: 12px; height: 100%; }
 .gx-slices figure { margin: 0; display: grid; gap: 5px; justify-items: center; }
 .gx-slices canvas { border-radius: 3px; image-rendering: auto; }
@@ -888,11 +905,13 @@ h2 { margin: 0; font: var(--text-heading); }
 .gp-v span { color: var(--faint); }
 .gp-type { width: 100%; height: 24px; padding: 0 6px; border: 1.5px solid var(--accent); border-radius: 4px; background: var(--field); color: var(--fg); font: var(--text-data); text-align: right; outline: none; }
 .gp-st { padding: 1px 0; border: 1px solid var(--line2); border-radius: 999px; color: var(--muted); font: var(--text-caption); text-align: center; }
-.gp-st[data-kind="free"] { background: var(--sel); border-color: transparent; color: var(--accent-text); }
+.gp-st[data-kind="free"] { background: color-mix(in srgb, var(--accent) 10%, transparent); border-color: transparent; color: var(--fg); }
+.gp-st[data-kind="free"]::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 5px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
 .gp-st[data-kind="tied"] { border-style: dashed; color: var(--fg2); }
+.gp-st[data-kind="fixed"] { border-color: transparent; }
 .gp-range { position: relative; height: 18px; }
 .gp-range::before { content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 3px; border-radius: 2px; background: var(--accent); opacity: .45; }
-.gp-range[data-none]::before { background: none; border-top: 1px dashed var(--line); opacity: 1; }
+.gp-range[data-none]::before { display: none; }
 .gp-range i { position: absolute; top: 4px; width: 2px; height: 11px; margin-left: -1px; background: var(--fg); }
 .gp-spark { width: 62px; height: 18px; }
 .gp-spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.4; }
@@ -900,28 +919,29 @@ h2 { margin: 0; font: var(--text-heading); }
 .gp-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font: var(--text-caption); color: var(--faint); }
 .sheet-layout[data-side="right"] > .gm-sheet { border-right: 0; border-left: 1px solid var(--line); }
 .gm { display: grid; gap: 0; padding: 14px 14px 32px; min-width: 0; }
-.gm-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
-.gm-tile { display: grid; align-content: start; gap: 2px; min-width: 0; padding: 7px 10px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--raise); color: var(--fg); text-align: left; }
-.gm-tile[role="button"] { cursor: pointer; }
-.gm-tile[role="button"]:hover, .gm-tile[aria-expanded="true"] { border-color: var(--line2); }
-.gm-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.gm-tl { display: flex; align-items: center; gap: 4px; font: var(--text-caption); color: var(--muted); }
-.gm-caret { font-size: 9px; color: var(--faint); }
-.gm-tile:hover .gm-caret, .gm-tile[aria-expanded="true"] .gm-caret { color: var(--fg2); }
-.gm-tvs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; min-width: 0; min-height: 22px; }
-.gm-tvs .gm-num { margin-left: -6px; }
-.gm-tvs .gm-tv + .gm-num { margin-left: 0; }
-.gm-tv { font: var(--text-data); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gm-tvs .gm-num:not([data-kind="free"]) { font-weight: 600; }
-.gm-numtext.gm-numtext-bare { justify-self: start; margin-left: -6px; border-color: transparent; background: none; font: var(--text-data); font-weight: 600; }
+/* (the galaxy as a whole, on one line: its distance and its redshift,
+   each a label and its value, unboxed) */
+.gm-galaxy { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 22px; margin: 0 0 4px; min-height: 28px; }
+.gm-gitem { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.gm-glabel, .gm-glabel-text { font: var(--text-label); color: var(--muted); white-space: nowrap; }
+.gm-glabel { display: inline-flex; align-items: center; gap: 3px; padding: 2px 4px; margin-left: -4px; border: 0; border-radius: 4px; background: none; cursor: pointer; }
+.gm-glabel::after { content: "\25BE"; color: var(--faint); font-size: 10px; }
+.gm-glabel:hover, .gm-glabel[aria-expanded="true"] { background: var(--panel2); color: var(--fg); }
+.gm-gitem .gm-num { font-weight: 600; margin-left: -4px; }
+.gm-gv { font: var(--text-data); font-weight: 600; color: var(--fg); white-space: nowrap; }
+.gm-gnote { font: var(--text-caption); color: var(--faint); white-space: nowrap; }
+.gm-numtext.gm-numtext-bare { justify-self: start; margin-left: -4px; border-color: transparent; background: none; font: var(--text-data); font-weight: 600; }
 .gm-numtext-bare:hover { border-color: var(--line2); }
 .gm-numtext-bare:focus-within { border-color: var(--accent); background: var(--field); }
 .gm-numtext.gm-numtext-bare input { width: 11ch; text-align: left; font-weight: 600; }
-.gm-tc { font: var(--text-caption); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gm-popbody { display: grid; gap: 10px; }
 .gm-popline { display: flex; align-items: center; gap: 8px; }
 .gm-popbody .schema-row { grid-template-columns: 110px minmax(0, 1fr); }
-.gm-sec { display: flex; align-items: center; justify-content: space-between; margin: 14px 0 7px; }
+.gm-sec { display: flex; align-items: center; gap: 10px; margin: 16px 0 7px; }
+.gm-sec > .gm-add { margin-left: auto; }
+/* (the gravity of the mass, in its head; quiet without mass) */
+.gm-gravity { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; min-width: 0; }
+.gm-gravity[data-idle] .gm-ty { color: var(--faint); font-weight: 400; }
 .gm-over { font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--muted); }
 .gm-over b { margin-left: 7px; color: var(--faint); font-weight: 400; }
 .gm-add { padding: 2px 4px; border: 0; border-radius: 5px; background: none; color: var(--accent-text); font: var(--text-label); font-weight: 600; }
@@ -936,17 +956,24 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-spacer { flex: 1; }
 .gm-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; }
 
-/* (a component: its line, which opens it; open, its parts) */
-.gm-comp { margin-bottom: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--raise); overflow: hidden; }
-.gm-comp[data-open] { border-color: var(--line2); box-shadow: 0 1px 0 var(--shadow); }
-.gm-comp[data-bad] { border-color: var(--err-fill); }
-.gm-comp[data-bad] .gm-crow .gm-dot { box-shadow: 0 0 0 2px var(--err-fill); }
+/* (a list of rows, of the mass or of the components: one box, its rows
+   divided; a row, its line, which opens it; open, its body, lifted) */
+.gm-rows { border: 1px solid var(--line); border-radius: 8px; background: var(--raise); overflow: hidden; }
+.gm-row + .gm-row { border-top: 1px solid var(--line); }
+.gm-row[data-open] { background: color-mix(in srgb, var(--fg) 2.5%, var(--raise)); }
+.gm-row[data-open] + .gm-row, .gm-row + .gm-row[data-open] { border-top-color: var(--line2); }
+.gm-row[data-bad] { box-shadow: inset 3px 0 0 var(--err-fill); }
+.gm-row[data-bad] > .gm-crow .gm-dot { box-shadow: 0 0 0 2px var(--err-fill); }
 .gm-crow { width: 100%; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto; align-items: center; column-gap: 9px; row-gap: 2px; padding: 8px 6px 8px 11px; color: var(--fg); cursor: pointer; outline-offset: -2px; }
 .gm-crow:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
 .gm-cname { display: flex; align-items: baseline; gap: 8px; min-width: 0; font: var(--text-body); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gm-cname span { font-weight: 400; color: var(--muted); font-size: 0.92em; }
 .gm-cext { font: var(--text-data-small); color: var(--faint); white-space: nowrap; }
-.gm-csum { grid-column: 2 / 5; font: var(--text-caption); color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* (closed, its parts in a few words, each after its title, faint; at most
+   two lines) */
+.gm-csum { grid-column: 2 / 5; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font: var(--text-caption); color: var(--fg2); }
+.gm-glance { margin-right: 10px; white-space: nowrap; }
+.gm-pw { margin-right: 5px; color: var(--faint); }
 .gm-dir { margin-left: 5px; font: var(--text-data-small); color: var(--muted); white-space: nowrap; }
 .gm-dir .gm-dmark { margin-right: 3px; vertical-align: -1px; }
 /* (content that opens and closes by its height: see ui/motion.tsx) */
@@ -957,7 +984,7 @@ h2 { margin: 0; font: var(--text-heading); }
 @keyframes ui-expand-out { to { grid-template-rows: 0fr; opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .ui-expand, .ui-expand[data-closing] { animation: none; } }
 .gm-more { width: 24px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--faint); font: 15px/1 var(--sans); opacity: 0; }
-.gm-crow:hover .gm-more, .gm-mhead:hover .gm-more, .gm-comp[data-open] .gm-more, .gm-more:focus-visible, .gm-more[aria-expanded="true"] { opacity: 1; }
+.gm-crow:hover .gm-more, .gm-row[data-open] > .gm-crow .gm-more, .gm-more:focus-visible, .gm-more[aria-expanded="true"] { opacity: 1; }
 .gm-more:hover, .gm-more[aria-expanded="true"] { background: var(--panel2); color: var(--fg); }
 /* (what changes a line, shown as it is pointed at: its other options, what
    removes it, what adds to it) */
@@ -984,6 +1011,7 @@ h2 { margin: 0; font: var(--text-heading); }
    groups, past their marks that fold them) */
 .gm-csec > .gm-single > .gm-cell-head, .gm-csec > .gm-oline > .gm-cell-head, .gm-csec > .gm-why { padding-left: 16px; }
 .gm-csec > .gm-prow > .gm-cell-head { padding-left: 30px; }
+.gm-csec > .gm-prow[data-depth="0"] > .gm-cell-head { padding-left: 16px; }
 /* (a group: its subtitle, which folds it, with its keys and what adds to
    it, and its lines under it, under its title; folded, what it has in a
    few words in the column of the values, and how many of its numbers are
@@ -1002,7 +1030,7 @@ h2 { margin: 0; font: var(--text-heading); }
 @media (prefers-reduced-motion: reduce) { .gm-fold svg { transition: none; } }
 .gm-sum { grid-column: 3 / -1; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .gm-sum-text { flex: 1; min-width: 0; overflow: hidden; color: var(--fg2); font: var(--text-data-small); text-overflow: ellipsis; white-space: nowrap; }
-.gm-free { flex: none; height: 18px; padding: 0 7px; border-radius: 999px; background: var(--sel); color: var(--accent-text); font: var(--text-data-small); line-height: 18px; white-space: nowrap; }
+.gm-free { flex: none; height: 18px; padding: 0 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--fg2); font: var(--text-data-small); line-height: 18px; white-space: nowrap; }
 .gm-group > .gm-why { padding-left: 16px; }
 .gm-sub-title, .gm-oline-label { font: var(--text-label); font-weight: 500; color: var(--fg); }
 .gm-key { min-width: 0; font: var(--text-data-small); font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1038,18 +1066,28 @@ h2 { margin: 0; font: var(--text-heading); }
 /* (the marks of a value per ring and of a direction, see Marks.tsx) */
 .gm-rmark { flex: none; width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.2; }
 .gm-num .gm-rmark { align-self: center; margin-left: 3px; opacity: .85; }
+.gm-rspark { flex: none; align-self: center; width: 26px; height: 10px; margin-left: 4px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; opacity: .8; }
 .gm-dmark { flex: none; width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .gm-dmark .gm-mark-dot { fill: currentColor; stroke: none; }
 /* (a line of a trait: its type, direction, numbers and tools in the
    columns of the card) */
 .gm-trait { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; min-height: 24px; min-width: 0; }
-.gm-cbody .gm-trait { display: grid; grid-template-columns: subgrid; gap: 0; }
+.gm-cbody .gm-trait { display: grid; grid-template-columns: subgrid; gap: 0; align-items: start; }
 .gm-cbody .gm-span .gm-trait { display: flex; gap: 5px 6px; }
 .gm-cell-type { grid-column: 1; }
 .gm-cell-dir { grid-column: 2; }
 .gm-cell-head { grid-column: 1 / 3; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .gm-cell-nums { grid-column: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; min-height: 24px; }
+/* (what starts the column of the values, its text on the edge of the
+   column, its box, as it is pointed at, past it) */
+.gm-cell-nums > .gm-ty:first-child { margin-left: -8px; }
+.gm-cell-nums > .gm-num:first-child, .gm-cell-nums > .gm-numtext:first-child { margin-left: -7px; }
 .gm-cell-tools { display: flex; align-items: center; gap: 2px; min-height: 24px; margin-left: auto; }
+.gm-cell-tools:empty { display: none; }
+/* (of a line of an option, e.g. the radii: over its right end, as it is
+   pointed at, taking no room from its value) */
+.gm-oline { position: relative; }
+.gm-oline > .gm-cell-nums > .gm-cell-tools { position: absolute; right: 0; top: 0; }
 .gm-span { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; min-width: 0; min-height: 24px; }
 .gm-height .gm-cell-head { padding-left: 6px; }
 .gm-toggle { height: 22px; padding: 0 9px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--muted); font: var(--text-caption); white-space: nowrap; cursor: pointer; }
@@ -1066,15 +1104,16 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-times { font: var(--text-caption); color: var(--faint); }
 .gm-word { font: var(--text-label); color: var(--muted); }
 .gm-note { font: var(--text-caption); color: var(--faint); }
-.gm-ty { height: 22px; padding: 0 7px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel); color: var(--fg); font: var(--text-label); font-weight: 600; white-space: nowrap; cursor: pointer; }
+.gm-ty { height: 22px; padding: 0 7px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--fg); font: var(--text-label); font-weight: 600; white-space: nowrap; cursor: pointer; }
 .gm-ty::after { content: " \25BE"; color: var(--faint); font-weight: 400; font-size: 10px; }
-.gm-ty:hover, .gm-ty[aria-expanded="true"] { border-color: var(--muted); }
+.gm-ty:hover, .gm-ty[aria-expanded="true"] { border-color: var(--line2); background: var(--panel); }
 .gm-num { display: inline-flex; align-items: baseline; gap: 3px; height: 22px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--fg); font: var(--text-data); line-height: 20px; white-space: nowrap; cursor: pointer; }
 .gm-num i { font-style: normal; color: var(--faint); margin-right: 2px; }
 .gm-num .gm-unit { color: var(--faint); font-size: 0.92em; }
 .gm-num:hover, .gm-num[aria-expanded="true"] { border-color: var(--line2); background: var(--panel); }
-.gm-num[data-kind="free"] { background: var(--sel); color: var(--accent-text); }
-.gm-num[data-kind="free"] i, .gm-num[data-kind="free"] .gm-unit { color: var(--accent-text); opacity: .75; }
+/* (free in a fit: a faint tint of the accent, and the accent at its edge) */
+.gm-num[data-kind="free"] { background: color-mix(in srgb, var(--accent) 8%, transparent); box-shadow: inset 2px 0 0 var(--accent); border-radius: 2px 5px 5px 2px; }
+.gm-num[data-kind="free"]:hover, .gm-num[data-kind="free"][aria-expanded="true"] { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); }
 /* (tied to an expression: outlined, the expression after its name) */
 .gm-num[data-kind="tied"] { border: 1px dashed var(--line2); color: var(--fg2); }
 .gm-num[data-kind="other"] { color: var(--faint); }
@@ -1105,24 +1144,14 @@ h2 { margin: 0; font: var(--text-heading); }
 .gm-why { margin: 2px 0 0; color: var(--err); font: var(--text-caption); white-space: pre-wrap; }
 .gm-why-top { padding: 8px 0 0; }
 
-/* (the mass: a row each, which opens it) */
-.gm-mass { border: 1px solid var(--line); border-radius: 8px; background: var(--raise); overflow: hidden; }
-.gm-mrow + .gm-mrow { border-top: 1px solid var(--line); }
-.gm-mrow[data-bad] { box-shadow: inset 3px 0 0 var(--err-fill); }
-.gm-mhead { width: 100%; display: grid; grid-template-columns: 12px auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 6px 6px 6px 11px; color: var(--fg); font: var(--text-label); cursor: pointer; outline-offset: -2px; }
-.gm-mhead:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
-.gm-mhead b { font-weight: 600; }
-.gm-msum { color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* (open, its options and parameters a line each, in columns as those of
-   a card: what each is, and its value) */
-.gm-mbody { display: grid; grid-template-columns: max-content max-content minmax(0, 1fr); column-gap: 8px; row-gap: 2px; padding: 0 11px 9px 32px; }
-.gm-mbody > * { grid-column: 1 / -1; }
+/* (an open part of the mass: as the body of a card, its lines under its
+   name) */
+.gm-cbody.gm-mbody { padding-top: 4px; }
+.gm-mbody > .gm-single:first-child { margin-top: 4px; }
 
-/* (the problems: none, or how many, and those of the galaxy as a whole) */
-.gm-problems { display: grid; gap: 4px; margin-top: 14px; font: var(--text-label); color: var(--ok); }
-.gm-problems > span::before { content: "\2713"; margin-right: 7px; font-weight: 600; }
-.gm-problems[data-bad] { color: var(--err); }
-.gm-problems[data-bad] > span::before { content: "!"; }
+/* (the problems, if any: how many, and those of the galaxy as a whole) */
+.gm-problems { display: grid; gap: 4px; margin-top: 14px; font: var(--text-label); color: var(--err); }
+.gm-problems > span::before { content: "!"; margin-right: 7px; font-weight: 600; }
 .gm-problems .gm-link { padding: 0; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .gm-problems .gm-link:hover { background: none; text-decoration-thickness: 2px; }
 

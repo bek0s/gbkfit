@@ -16,7 +16,7 @@ import { useRemembered } from '../../shell/remember';
 import { useStudio } from '../../studio';
 import { useUnsaved } from '../editing';
 import { useGalaxyDraft } from './draft';
-import { kpcPerArcsecOf, Model, type Open } from './Model';
+import { kpcPerArcsecOf, Model, type OpenItem } from './Model';
 import { Params } from './Params';
 import { useComponentTypes } from '../../api/queries';
 import type { ComponentTypes } from './types';
@@ -24,8 +24,29 @@ import { asList, componentName, componentsOf, ringRadii, type Options } from './
 import { forRender } from './params';
 import { Views } from './Views';
 
-// The colours of the components, in turn (tokens)
-const COLOURS = ['cat1', 'cat2', 'cat3', 'cat4', 'cat5', 'cat6'];
+// The colours of the components, in turn (tokens): the first colour of a
+// theme is of the hue of its accent, which marks what is chosen, free or
+// to act on; it comes last, so that a component of that colour is rare
+const COLOURS = ['cat2', 'cat3', 'cat4', 'cat5', 'cat6', 'cat1'];
+
+// The component a part of the mass follows, if any (e.g. of a traced disk;
+// of a disk of the mass, by its surface or its heights)
+function followedOf(item: Options): string | null {
+  for (const where of [item, item.surface, item.vertical]) {
+    if (typeof where === 'object' && where !== null && typeof (where as Options).component === 'string') return (where as Options).component as string;
+  }
+  return null;
+}
+
+// The colour of each part of the mass: that of the component it follows,
+// else the colours after those of the components, in turn
+function massColoursOf(mass: Options[], components: Options[], colours: string[]): string[] {
+  let next = components.length;
+  return mass.map((item) => {
+    const at = components.findIndex((c, i) => componentName(c, i) === followedOf(item));
+    return at >= 0 ? colours[at] : COLOURS[next++ % COLOURS.length];
+  });
+}
 
 // The field of the view: this times the largest radius of the galaxy, as
 // the server renders it (its half-width, arcsec)
@@ -39,7 +60,9 @@ export function GalaxyScreen({ name }: { name: string }) {
   const draft = useGalaxyDraft(project ?? '.', name);
   const head = useBlockHead(project ?? '', 'galaxies', name);
   useUnsaved(draft.dirty);
-  const [open, setOpen] = useState<Open>({ kind: 'component', index: 0 });
+  // (the components and parts of the mass open in the sheet, in the order
+  // they were opened, remembered for the galaxy)
+  const [open, setOpen] = useRemembered<OpenItem[]>(`galaxy-open:${project}/${name}`, [{ kind: 'component', index: 0 }]);
   const [isolated, setIsolated] = useState<string | null>(null);
   // (the tab of the sheet: the model, or the list of the parameters)
   const [tab, setTab] = useRemembered<'model' | 'params'>('galaxy-sheet-tab', 'model');
@@ -47,6 +70,8 @@ export function GalaxyScreen({ name }: { name: string }) {
   const options = useMemo(() => draft.state?.options ?? {}, [draft.state]);
   const components = componentsOf(options);
   const colours = components.map((_, i) => COLOURS[i % COLOURS.length]);
+  const mass = asList(options.mass);
+  const massColours = massColoursOf(mass, components, colours);
 
   // (the render follows the state the library has described, as it settles)
   const [rendered] = useDebouncedValue(draft.consistent, 60);
@@ -90,8 +115,8 @@ export function GalaxyScreen({ name }: { name: string }) {
   const radii = components.flatMap((c) => (typeof c.rmax === 'number' ? [c.rmax] : ringRadii(c.rnodes).slice(-1)));
   const field = Math.max(...radii, 0) * MARGIN || 20;
 
-  // (the rings of the component open, marked on the profiles)
-  const openComponent = open?.kind === 'component' && open.index < components.length ? open.index : null;
+  // (the rings of the component opened last, marked on the profiles)
+  const openComponent = open.filter((o) => o.kind === 'component' && o.index < components.length).at(-1)?.index ?? null;
   const rings = openComponent === null ? null : ringRadii(components[openComponent]?.rnodes);
 
   return (
@@ -151,7 +176,7 @@ export function GalaxyScreen({ name }: { name: string }) {
               </div>
               <div className="gm-scroll">
                 {tab === 'model' ? (
-                  <Model draft={draft} project={project} field={field} colours={colours} open={open} onOpen={setOpen} isolated={isolated} onIsolate={setIsolated} />
+                  <Model draft={draft} project={project} galaxy={name} field={field} colours={colours} massColours={massColours} open={open} onOpen={setOpen} isolated={isolated} onIsolate={setIsolated} />
                 ) : (
                   <Params draft={draft} field={field} colours={colours} types={types} defs={draft.defs} />
                 )}
@@ -168,6 +193,7 @@ export function GalaxyScreen({ name }: { name: string }) {
               why={!something(options) ? 'empty' : draft.problems.length > 0 ? 'problems' : 'waiting'}
               properties={renderProperties}
               components={renderedComponents.map((c, i) => ({ name: componentName(c, i), colour: COLOURS[i % COLOURS.length] }))}
+              mass={mass.map((m, i) => ({ name: String(m.name ?? ''), colour: massColours[i] }))}
               isolated={isolated}
               options={options}
               params={draft.params}

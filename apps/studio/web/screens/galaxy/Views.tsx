@@ -46,6 +46,8 @@ interface ViewsData {
   properties: Record<string, unknown>;
   why: 'empty' | 'problems' | 'waiting';
   components: { name: string; colour: string }[];
+  // The parts of the mass and their colours
+  mass: { name: string; colour: string }[];
   isolated: string | null;
   observations: string[];
   seenBy: string | null;
@@ -160,13 +162,14 @@ export function Views(props: ViewsProps) {
           <span className="gv-lab">seen by</span>
           <div className="gv-seen">
             <Choice
-              items={[{ value: '', label: 'nothing: the galaxy itself' }, ...observations.map((name) => ({ value: name, label: name }))]}
+              items={[{ value: '', label: 'no observation' }, ...observations.map((name) => ({ value: name, label: name }))]}
               value={seen ?? ''}
               onChange={(next) => onSeenBy(next === '' ? null : next)}
               label="The observation that the views of what it sees take"
             />
           </div>
-          <span className="gv-status">{fetching > 0 ? 'rendering…' : galaxy ? 'rendered' : ''}</span>
+          {/* (said only while it renders) */}
+          <span className="gv-status">{fetching > 0 ? 'rendering…' : ''}</span>
         </div>
         {galaxy === undefined ? (
           <div className="gv-empty">{props.why === 'waiting' ? <div className="gx-map-wait" /> : <EmptyNote why={props.why} />}</div>
@@ -194,28 +197,27 @@ function EmptyNote({ why }: { why: 'empty' | 'problems' }) {
   );
 }
 
-// The title of a view, and what it is under it
+// The title of a view, and what it is under it: only what sees it, of a
+// view through an observation (the others show the galaxy itself, and
+// their switches say what of it)
 function titleOf(kind: ViewKind, seenBy: string | null = null): { title: string; small: string } {
   switch (kind.kind) {
     case 'seen':
       return { title: 'As observed', small: seenBy ? `by ${seenBy}` : 'by no observation' };
     case 'map':
-      return {
-        title: kind.orientation === 'sky' ? 'As seen' : kind.orientation === 'face-on' ? 'Face-on' : 'Edge-on',
-        small: `${kind.quantity}, the galaxy itself`,
-      };
+      return { title: kind.orientation === 'sky' ? 'As seen' : kind.orientation === 'face-on' ? 'Face-on' : 'Edge-on', small: '' };
     case 'profiles':
-      return { title: 'Profiles', small: 'along the radius' };
+      return { title: 'Profiles', small: '' };
     case 'mass':
-      return { title: 'Mass model', small: 'circular speeds of each part' };
+      return { title: 'Mass model', small: '' };
     case 'slices':
-      return { title: 'Slices of the light', small: '3d, along z' };
+      return { title: 'Slices of the light', small: '' };
     case '3d':
-      return { title: 'In 3d', small: 'the light, to turn' };
+      return { title: 'In 3d', small: '' };
     case 'pv':
-      return { title: 'Position–velocity', small: `along its ${kind.axis} axis` };
+      return { title: 'Position–velocity', small: '' };
     case 'extra':
-      return { title: kind.title, small: 'an output of the library' };
+      return { title: kind.title, small: '' };
   }
 }
 
@@ -256,7 +258,8 @@ function extraLabel(extra: GalaxyExtraInfo): string {
 }
 
 // The head of a view: what it shows (a menu), the switches of its kind
-// (e.g. light, velocity, dispersion) and what maximises it
+// (e.g. light, velocity, dispersion; when the head is narrow, a menu of
+// them) and, as it is pointed at, what maximises and closes it
 function ViewHead(props: IDockviewPanelHeaderProps<{ view: ViewKind }>) {
   const data = useViews();
   const kind = props.params.view;
@@ -268,39 +271,47 @@ function ViewHead(props: IDockviewPanelHeaderProps<{ view: ViewKind }>) {
     setPreference(LAYOUT_KEY, props.containerApi.toJSON());
   };
   const { title, small } = titleOf(kind, data.seenBy);
-  let switches: ReactNode = null;
+  // (the choices of its kind: their labels, which is on, what each makes)
+  let choices: { label: string; on: boolean; kind: ViewKind }[] = [];
   if (kind.kind === 'map') {
-    switches = (['light', 'velocity', 'dispersion'] as Quantity[]).map((q) => (
-      <button key={q} data-on={kind.quantity === q || undefined} onClick={() => choose({ ...kind, quantity: q })}>
-        {q[0].toUpperCase() + q.slice(1)}
-      </button>
-    ));
+    choices = (['light', 'velocity', 'dispersion'] as Quantity[]).map((q) => ({ label: q[0].toUpperCase() + q.slice(1), on: kind.quantity === q, kind: { ...kind, quantity: q } }));
   } else if (kind.kind === 'pv') {
-    switches = (['major', 'minor'] as const).map((axis) => (
-      <button key={axis} data-on={kind.axis === axis || undefined} onClick={() => choose({ ...kind, axis })}>
-        {axis === 'major' ? 'Major axis' : 'Minor axis'}
-      </button>
-    ));
+    choices = (['major', 'minor'] as const).map((axis) => ({ label: axis === 'major' ? 'Major axis' : 'Minor axis', on: kind.axis === axis, kind: { ...kind, axis } }));
   } else if (kind.kind === 'profiles') {
-    switches = PROFILE_QUANTITIES.map((q) => (
-      <button key={q.value} data-on={kind.quantity === q.value || undefined} onClick={() => choose({ ...kind, quantity: q.value })}>
-        {q.label}
-      </button>
-    ));
+    choices = PROFILE_QUANTITIES.map((q) => ({ label: q.label, on: kind.quantity === q.value, kind: { ...kind, quantity: q.value } }));
   }
+  const switches: ReactNode =
+    choices.length > 0 ? (
+      <>
+        <span className="gv-switches">
+          {choices.map((c) => (
+            <button key={c.label} data-on={c.on || undefined} onClick={() => choose(c.kind)}>
+              {c.label}
+            </button>
+          ))}
+        </span>
+        <DropMenu
+          label="What of it the view shows"
+          width={200}
+          at="end"
+          entries={choices.map((c) => ({ label: c.label, current: c.on, onClick: () => choose(c.kind) }))}
+          target={<button className="gv-switch-menu">{choices.find((c) => c.on)?.label}</button>}
+        />
+      </>
+    ) : null;
   return (
-    <div className="gv-head" onPointerDown={(event) => (event.target as HTMLElement).closest('button') && event.stopPropagation()}>
+    <div className="gv-head" data-max={props.api.isMaximized() || undefined} onPointerDown={(event) => (event.target as HTMLElement).closest('button') && event.stopPropagation()}>
       <DropMenu
         label="What the view shows"
         width={340}
         entries={viewEntries(kind, data, choose)}
         target={
           <button className="gv-pick">
-            {title} <small>{small}</small>
+            {title} {small && <small>{small}</small>}
           </button>
         }
       />
-      <span className="gv-switches">{switches}</span>
+      <span className="gv-tail">{switches}</span>
       <button className="gv-x" title={props.api.isMaximized() ? 'Back to the views' : 'Maximise it'} onClick={() => (props.api.isMaximized() ? props.api.exitMaximized() : props.api.maximize())}>
         ⤢
       </button>
@@ -320,6 +331,7 @@ function ViewBody(props: IDockviewPanelProps<{ view: ViewKind }>) {
 
 function ViewContent({ kind, data, galaxy }: { kind: ViewKind; data: ViewsData; galaxy: Options }) {
   const colours = new Map(data.components.map((c) => [c.name, c.colour]));
+  const massColours = new Map(data.mass.map((m) => [m.name, m.colour]));
   // (a galaxy without components, of mass alone, emits no light: its
   // curves only)
   if (componentsOf(galaxy).length === 0 && kind.kind !== 'profiles' && kind.kind !== 'mass') {
@@ -342,10 +354,10 @@ function ViewContent({ kind, data, galaxy }: { kind: ViewKind; data: ViewsData; 
     case 'map':
       return <RenderMap project={data.project} galaxy={galaxy} properties={data.properties} orientation={kind.orientation} quantity={kind.quantity} isolated={data.isolated} />;
     case 'profiles':
-      return <Profiles render={data.render} quantity={kind.quantity} options={data.options} colours={colours} rings={data.rings} />;
+      return <Profiles render={data.render} quantity={kind.quantity} options={data.options} colours={colours} massColours={massColours} rings={data.rings} />;
     case 'mass':
       return data.render ? (
-        <CurvePlot curves={massCurves(data.render, colours)} radius={data.render.curves.radius ?? []} rings={data.rings} unit="km/s" empty="No circular speeds: the galaxy has no mass." />
+        <CurvePlot curves={massCurves(data.render, colours, massColours)} radius={data.render.curves.radius ?? []} rings={data.rings} unit="km/s" empty="No circular speeds: the galaxy has no mass." />
       ) : (
         <div className="gx-map-wait" />
       );

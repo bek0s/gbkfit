@@ -1,8 +1,9 @@
 // Curves of a galaxy along its radius (see the server's /views/galaxy),
 // drawn on one plot that fills its place: each its label, colour and dash,
-// a legend over the plot's top right, and a readout of every curve at the
-// radius under the pointer; the rings of a component marked on the axis
-// of radii. What the curves are is up to the views (see Profiles): the
+// the unit at the top of the axis of values, a key under the plot (of
+// curves of components, their colours and, apart, what their dashes
+// mean; of others, each), and a readout of every curve at the radius under
+// the pointer; the rings of a component marked on the axis of radii. What the curves are is up to the views (see Profiles): the
 // speeds, dispersions and densities of the components, their orientation
 // along their rings, the circular speeds of the mass.
 import { useElementSize } from '@mantine/hooks';
@@ -10,17 +11,18 @@ import { useState } from 'react';
 import type { GalaxyRender } from '../../api/queries';
 import { significant } from '../../components/format';
 
-const PAD = { left: 44, right: 14, top: 10, bottom: 22 };
+const PAD = { left: 44, right: 14, top: 20, bottom: 22 };
 
 // The most decades of a logarithmic axis, below its highest value
 const LOG_DECADES = 5;
 
-// The colours of the mass components, in turn (tokens)
-const MASS_COLOURS = ['cat2', 'cat3', 'cat4', 'cat5', 'cat6', 'cat1'];
-
 export interface Curve {
   name: string;
   label: string;
+  // Of a curve of a component: the component (its colour in the key) and
+  // what the curve is of it (its dash in the key, e.g. 'radial')
+  group?: string;
+  meaning?: string;
   // A token of its colour (e.g. 'cat1'), its dash and width
   colour: string;
   values: (number | null)[];
@@ -31,16 +33,17 @@ export interface Curve {
 }
 
 // The circular speeds of the mass of a render: in all (and in Newtonian
-// gravity, if it differs), of each mass component, with the rotation of
-// its components over them (each in the colour of its component)
-export function massCurves(render: GalaxyRender, colours: Map<string, string>): Curve[] {
+// gravity, if it differs), of each mass component (in its colour: see
+// massColours), with the rotation of its components over them (each in
+// the colour of its component)
+export function massCurves(render: GalaxyRender, colours: Map<string, string>, massColours: Map<string, string>): Curve[] {
   const curves: Curve[] = [];
   const names = Object.keys(render.curves);
   const own = (name: string, family: string) => (name === family ? '' : name.slice(family.length + 1));
   const masses = names.filter((n) => n.startsWith('vcirc_'));
   // (of one mass component, its curve is that of all)
-  for (const [i, name] of (masses.length > 1 ? masses : []).entries()) {
-    curves.push({ name, label: own(name, 'vcirc'), colour: MASS_COLOURS[i % MASS_COLOURS.length], values: render.curves[name], dash: '5 4' });
+  for (const name of masses.length > 1 ? masses : []) {
+    curves.push({ name, label: own(name, 'vcirc'), colour: massColours.get(own(name, 'vcirc')) ?? 'muted', values: render.curves[name], dash: '5 4' });
   }
   if (render.curves.vnewton && differs(render.curves.vnewton, render.curves.vcirc)) {
     curves.push({ name: 'vnewton', label: 'Newtonian', colour: 'muted', values: render.curves.vnewton, dash: '2 3' });
@@ -92,6 +95,10 @@ export function CurvePlot({
   log?: boolean;
 }) {
   const { ref, width, height } = useElementSize();
+  const keyed = curves.filter((c) => c.group !== undefined);
+  const groups = [...new Map(keyed.map((c) => [c.group!, c.colour])).entries()];
+  const meanings = [...new Map(keyed.filter((c) => c.meaning !== undefined).map((c) => [c.meaning!, c])).values()];
+  const loose = curves.filter((c) => c.group === undefined);
   const [at, setAt] = useState<number | null>(null);
   const radiusOf = (c: Curve) => c.radius ?? radius;
   let high = 0;
@@ -133,76 +140,103 @@ export function CurvePlot({
   // (each curve read at the radius of its nearest point)
   const read = at === null ? [] : curves.map((c) => ({ c, i: nearest(radiusOf(c), at) })).filter(({ c, i }) => i !== null && c.values[i] !== null && (!log || (c.values[i] as number) > 0));
   return (
-    <div className="gx-plot" ref={ref}>
-      {empty ? (
-        <p className="note gx-curves-empty">{emptyText}</p>
-      ) : (
-        width > 0 &&
-        height > 0 && (
-          <svg
-            width={width}
-            height={height}
-            onPointerMove={(event) => {
-              const box = event.currentTarget.getBoundingClientRect();
-              const r = ((event.clientX - box.left - PAD.left) / plotW) * rmax;
-              setAt(r >= 0 && r <= rmax ? r : null);
-            }}
-            onPointerLeave={() => setAt(null)}
-          >
-            {yTicks.map((t) => (
-              <g key={t}>
-                <line className={t === 0 || (log && t === yTicks[0]) ? 'gx-axis' : 'gx-grid'} x1={PAD.left} x2={PAD.left + plotW} y1={y(t)} y2={y(t)} />
-                <text className="gx-tick" x={PAD.left - 6} y={y(t) + 3.5} textAnchor="end">
-                  {significant(t, 3)}
+    <div className="gx-plot">
+      <div className="gx-plot-area" ref={ref}>
+        {empty ? (
+          <p className="note gx-curves-empty">{emptyText}</p>
+        ) : (
+          width > 0 &&
+          height > 0 && (
+            <svg
+              width={width}
+              height={height}
+              onPointerMove={(event) => {
+                const box = event.currentTarget.getBoundingClientRect();
+                const r = ((event.clientX - box.left - PAD.left) / plotW) * rmax;
+                setAt(r >= 0 && r <= rmax ? r : null);
+              }}
+              onPointerLeave={() => setAt(null)}
+            >
+              {unit && (
+                <text className="gx-tick gx-unit" x={PAD.left - 6} y={PAD.top - 8} textAnchor="end">
+                  {unit}
                 </text>
-              </g>
+              )}
+              {yTicks.map((t) => (
+                <g key={t}>
+                  <line className={t === 0 || (log && t === yTicks[0]) ? 'gx-axis' : 'gx-grid'} x1={PAD.left} x2={PAD.left + plotW} y1={y(t)} y2={y(t)} />
+                  <text className="gx-tick" x={PAD.left - 6} y={y(t) + 3.5} textAnchor="end">
+                    {significant(t, 3)}
+                  </text>
+                </g>
+              ))}
+              {ticks(0, rmax, Math.max(2, Math.floor(plotW / 70))).map((t) => (
+                <text key={t} className="gx-tick" x={x(t)} y={height - 6} textAnchor={x(t) > width - PAD.right - 12 ? 'end' : 'middle'}>
+                  {significant(t, 3)}″
+                </text>
+              ))}
+              {rings?.map((r, i) => (r <= rmax ? <line key={i} className="gx-ring" x1={x(r)} x2={x(r)} y1={PAD.top + plotH} y2={PAD.top + plotH - 5} /> : null))}
+              {curves.map((c) => (
+                <path key={c.name} d={path(c)} fill="none" stroke={`var(--${c.colour})`} strokeWidth={c.width ?? 1.8} strokeDasharray={c.dash} strokeLinejoin="round" />
+              ))}
+              {at !== null && (
+                <g className="gx-cursor">
+                  <line x1={x(at)} x2={x(at)} y1={PAD.top} y2={PAD.top + plotH} />
+                  {read.map(({ c, i }) => (
+                    <circle key={c.name} cx={x(radiusOf(c)[i!] as number)} cy={y(c.values[i!] as number)} r={3} style={{ fill: `var(--${c.colour})` }} />
+                  ))}
+                </g>
+              )}
+            </svg>
+          )
+        )}
+        {at !== null && read.length > 0 && (
+          <div className="gx-curves-read" style={{ left: Math.min(width - 190, Math.max(0, x(at) + 10)) }}>
+            <b>{significant(at, 3)}″</b>
+            {read.map(({ c, i }) => (
+              <span key={c.name}>
+                <i style={{ background: `var(--${c.colour})` }} />
+                {c.label}
+                <em>{significant(c.values[i!] as number, 4)}</em>
+              </span>
             ))}
-            {ticks(0, rmax, Math.max(2, Math.floor(plotW / 70))).map((t) => (
-              <text key={t} className="gx-tick" x={x(t)} y={height - 6} textAnchor={x(t) > width - PAD.right - 12 ? 'end' : 'middle'}>
-                {significant(t, 3)}″
-              </text>
-            ))}
-            {rings?.map((r, i) => (r <= rmax ? <line key={i} className="gx-ring" x1={x(r)} x2={x(r)} y1={PAD.top + plotH} y2={PAD.top + plotH - 5} /> : null))}
-            {curves.map((c) => (
-              <path key={c.name} d={path(c)} fill="none" stroke={`var(--${c.colour})`} strokeWidth={c.width ?? 1.8} strokeDasharray={c.dash} strokeLinejoin="round" />
-            ))}
-            {at !== null && (
-              <g className="gx-cursor">
-                <line x1={x(at)} x2={x(at)} y1={PAD.top} y2={PAD.top + plotH} />
-                {read.map(({ c, i }) => (
-                  <circle key={c.name} cx={x(radiusOf(c)[i!] as number)} cy={y(c.values[i!] as number)} r={3} style={{ fill: `var(--${c.colour})` }} />
-                ))}
-              </g>
-            )}
-          </svg>
-        )
-      )}
+            <small>{unit}</small>
+          </div>
+        )}
+      </div>
       {!empty && (
-        <div className="gx-legend-box">
-          {curves.map((c) => (
+        <div className="gx-key">
+          {groups.map(([group, colour]) => (
+            <span key={`g-${group}`}>
+              <i style={{ background: `var(--${colour})` }} />
+              {group}
+            </span>
+          ))}
+          {meanings.length > 0 &&
+            meanings.map((c) => (
+              <span key={`m-${c.meaning}`} className="gx-key-meaning">
+                <KeyLine colour="muted" dash={c.dash} width={c.width} />
+                {c.meaning}
+              </span>
+            ))}
+          {loose.map((c) => (
             <span key={c.name}>
-              <svg viewBox="0 0 22 8" aria-hidden="true">
-                <line x1="1" x2="21" y1="4" y2="4" stroke={`var(--${c.colour})`} strokeWidth={Math.min(c.width ?? 1.8, 2.4)} strokeDasharray={c.dash} />
-              </svg>
+              <KeyLine colour={c.colour} dash={c.dash} width={c.width} />
               {c.label}
             </span>
           ))}
-        </div>
-      )}
-      {at !== null && read.length > 0 && (
-        <div className="gx-curves-read" style={{ left: Math.min(width - 190, Math.max(0, x(at) + 10)) }}>
-          <b>{significant(at, 3)}″</b>
-          {read.map(({ c, i }) => (
-            <span key={c.name}>
-              <i style={{ background: `var(--${c.colour})` }} />
-              {c.label}
-              <em>{significant(c.values[i!] as number, 4)}</em>
-            </span>
-          ))}
-          <small>{unit}</small>
         </div>
       )}
     </div>
+  );
+}
+
+// A line of the key: of a colour, dash and width
+function KeyLine({ colour, dash, width }: { colour: string; dash?: string; width?: number }) {
+  return (
+    <svg viewBox="0 0 22 8" aria-hidden="true">
+      <line x1="1" x2="21" y1="4" y2="4" stroke={`var(--${colour})`} strokeWidth={Math.min(width ?? 1.8, 2.4)} strokeDasharray={dash} />
+    </svg>
   );
 }
 
