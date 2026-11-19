@@ -135,8 +135,8 @@ class Observation(TypedSerializable, abc.ABC):
     keys : Sequence of str
         The names of its data items (e.g. 'spectra').
     galaxies : Sequence of str, optional
-        The names of the galaxies it sees; required only when there are
-        several (see ObservationGroup).
+        The names of the galaxies it sees (see ObservationGroup); by
+        default, all of them.
     dataset : Dataset, optional
         The data, of its kind.
     noise : Noise, optional

@@ -120,13 +120,18 @@ def test_observations_of_one_galaxy_share_its_parameters():
     assert not any(name.startswith('galaxy') for name in group_.pdescs())
 
 
+def test_an_observation_sees_every_galaxy_unless_it_names_some():
+    group_ = group(
+        [galaxy('hi'), galaxy('ha')], [observation(), observation(['ha'])])
+    assert group_.seen_galaxies(0) == (0, 1)
+    assert group_.seen_galaxies(1) == (1,)
+
+
 @pytest.mark.parametrize('galaxies, observations, message', [
     ([galaxy('hi'), galaxy()], [observation(['hi'])],
      "the galaxies need names when there are several"),
     ([galaxy('hi'), galaxy('hi')], [observation(['hi'])],
      "the names of the galaxies must be unique"),
-    ([galaxy('hi'), galaxy('ha')], [observation()],
-     "observation 0 must name the galaxies it sees"),
     ([galaxy('hi')], [observation(['ha'])],
      r"observation 0 refers to unknown galaxies \['ha'\]"),
     ([galaxy('hi')], [observation(['hi'], name='hi')],

@@ -135,9 +135,8 @@ class ObservationGroup:
     ValueError
         If there are no galaxies or no observations, several galaxies
         without names, names repeat (of the galaxies, the lenses and the
-        observations), an observation does not name the galaxies it sees
-        (when there are several) or names unknown ones, depth_order names
-        unknown galaxies or repeats them, has a group of fewer than two
+        observations), an observation names unknown galaxies, depth_order
+        names unknown galaxies or repeats them, has a group of fewer than two
         galaxies, or of the name of a galaxy or an observation, every
         observation of a galaxy has offsets of position or of velocity,
         or with lenses, a galaxy has no redshift, the planes cannot be
@@ -363,14 +362,14 @@ class ObservationGroup:
                 member.observation.check(member.galaxies)
 
     def _seen(self, i: int, observation: Observation) -> list[int]:
-        """Return the indices of the galaxies that observation i sees."""
+        """
+        Return the indices of the galaxies that observation i sees: those
+        it names, or else all of them (an observation sees what is in its
+        field; it names galaxies to see fewer).
+        """
         names = observation.galaxies()
         if names is None:
-            if len(self._galaxies) > 1:
-                raise ValueError(
-                    f"observation {i} must name the galaxies it sees; there "
-                    f"are {len(self._galaxies)} galaxies")
-            return [0]
+            return list(range(len(self._galaxies)))
         known = [galaxy.name() for galaxy in self._galaxies]
         if unknown := [name for name in names if name not in known]:
             raise ValueError(
