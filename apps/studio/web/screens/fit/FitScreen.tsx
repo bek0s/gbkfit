@@ -45,7 +45,7 @@ function useSetupDraft(path: string) {
 export type SetupDraft = ReturnType<typeof useSetupDraft>;
 
 export function FitScreen({ name }: { name: string }) {
-  const { project } = useStudio();
+  const { project, go } = useStudio();
   const root = project ?? '.';
   const path = joinPath(root, `setups/${name}.yaml`);
   const draft = useSetupDraft(path);
@@ -97,7 +97,10 @@ export function FitScreen({ name }: { name: string }) {
       <div className="screen-head">
         <div>
           <div className="eyebrow">
-            Fit · {observations} {observations === 1 ? 'observation' : 'observations'} · {fitterText}
+            <button className="fx-eyebrow-link" title="All the fits of the project" onClick={() => go({ kind: 'section', key: 'fit' })}>
+              Fit
+            </button>{' '}
+            · {observations} {observations === 1 ? 'observation' : 'observations'} · {fitterText}
           </div>
           {head.title}
         </div>

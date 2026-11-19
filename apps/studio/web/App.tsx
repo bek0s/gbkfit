@@ -12,6 +12,7 @@ import { Home } from './screens/Home';
 import { ObservationScreen } from './screens/observation/ObservationScreen';
 import { CompareScreen } from './screens/compare/CompareScreen';
 import { FitScreen } from './screens/fit/FitScreen';
+import { FitsOverview } from './screens/fit/FitsOverview';
 import { LensScreen } from './screens/lens/LensScreen';
 import { Pending } from './screens/Pending';
 import { ResponseScreen } from './screens/Response';
@@ -102,6 +103,7 @@ function ScreenView({ screen }: { screen: Screen }) {
     case 'home':
       return <Home />;
     case 'section':
+      if (screen.key === 'fit') return <FitsOverview />;
       return <EmptySection section={screen.key} />;
     case 'block':
       if (screen.folder === 'datasets') return <Dataset key={address(screen)} name={screen.name} />;

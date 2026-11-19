@@ -1589,3 +1589,14 @@ h2 { margin: 0; font: var(--text-heading); }
 .fx-two-cards { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 .fx-curves { height: 280px; padding: 0 12px 10px; display: flex; }
 .fx-curves > * { flex: 1; min-width: 0; }
+/* (the fits of the project) */
+.fx-overview .fx-scroll { padding-top: 6px; }
+.fx-fits { width: 100%; border-collapse: collapse; }
+.fx-fits th { padding: 6px 10px; text-align: left; font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--line); }
+.fx-fits th.fx-num, .fx-fits td.fx-num { text-align: right; font: var(--text-data-small); }
+.fx-fits td { padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--fg2); vertical-align: middle; }
+.fx-fit-row { cursor: pointer; }
+.fx-fit-row:hover td { background: var(--panel2); }
+.fx-fit-name { font: var(--text-data); color: var(--fg); white-space: nowrap; }
+.fx-eyebrow-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.fx-eyebrow-link:hover { text-decoration: underline; }
