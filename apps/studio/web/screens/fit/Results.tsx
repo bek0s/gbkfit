@@ -13,6 +13,7 @@ import { SHOWN, type Colours, type Shown } from '../../components/observedMaps';
 import { Button } from '../../components/ui/basics';
 import { Segments } from '../../components/ui/inputs';
 import { isObject } from '../galaxy/options';
+import { PosteriorCard } from './Posterior';
 
 interface Product {
   kind: string;
@@ -51,6 +52,7 @@ export function ResultView({ run, products, onStarts }: { run: string; products:
   if (text.error) return <p className="error">{text.error.message}</p>;
   if (!result) return <p className="ob-text">Reading the result…</p>;
   const best = result.solutions[0];
+  const posterior = products.find((p) => p.kind === 'posterior');
   return (
     <div className="fx-view-grid">
       {!result.success && (
@@ -62,6 +64,7 @@ export function ResultView({ run, products, onStarts }: { run: string; products:
       {best && <Merits result={result} best={best} />}
       <Maps run={run} products={products} />
       {best && <BestParams result={result} best={best} onStarts={onStarts} />}
+      {best && posterior && <PosteriorCard path={`${run}/${posterior.path}`} free={Object.keys(best.free)} />}
     </div>
   );
 }

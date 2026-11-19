@@ -1580,3 +1580,9 @@ h2 { margin: 0; font: var(--text-heading); }
 .fx-trace-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
 .fx-trace-dot { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
 .fx-trace-read { display: block; min-height: 18px; font: var(--text-data-small); color: var(--muted); }
+/* (the posterior of a run: a corner plot) */
+.fx-corner { padding: 4px 14px 12px; }
+.fx-corner text { font: var(--text-data-small); fill: var(--muted); }
+.fx-corner .fx-corner-value { fill: var(--fg2); }
+.fx-cell { fill: none; stroke: var(--line); }
+.fx-bar { fill: var(--accent); opacity: 0.85; }
