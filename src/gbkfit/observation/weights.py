@@ -49,6 +49,8 @@ class WeightTrait(TypedSerializable, abc.ABC):
     measured from its major axis (as that of the polar traits).
     """
 
+    config_titles = dict(axis='Axis')
+
     @abc.abstractmethod
     def weight(self, theta: np.ndarray) -> np.ndarray:
         """Return the weight at each azimuth (radians)."""
@@ -67,6 +69,8 @@ class WeightAzimuthPower(WeightTrait):
         The axis near which the weight is less: 'minor' (the default) or
         'major'.
     """
+
+    config_titles = dict(power='Power')
 
     @staticmethod
     def type() -> str:
@@ -104,6 +108,8 @@ class WeightAzimuthRange(WeightTrait):
     weight : float, optional
         The weight within the angle; 0 by default.
     """
+
+    config_titles = dict(half_width='Angle from axis', weight='Weight')
 
     @staticmethod
     def type() -> str:
@@ -167,6 +173,8 @@ class Weights(Serializable):
     ValueError
         If there are no weight functions.
     """
+
+    config_titles = dict(component='Disk', traits='Weight functions')
 
     def dump(self) -> dict[str, Any]:
         return dict(

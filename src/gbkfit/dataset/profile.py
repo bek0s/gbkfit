@@ -96,6 +96,9 @@ class DatasetProfile(Dataset):
     # rotation curve closer than the beam that measured them)
     block_axes = ('the radii',)
 
+    config_titles = dict(
+        radius='Radius column', assumed_distance='Assumed distance')
+
     config_constructors = ('from_file',)
 
     @staticmethod

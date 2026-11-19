@@ -5,7 +5,7 @@ of the cube of the model at the baselines of each channel.
 
 import logging
 from collections.abc import Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias
 
 import astropy.units
 import numpy as np
@@ -21,6 +21,7 @@ from gbkfit.model import (
     Band, DataUnit, Extras, LightUnit, SceneState)
 from gbkfit.params import ParamValues
 from ..depth import Depth
+from ..noise import Noise
 from ..plan import HostModelData, ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube
@@ -29,10 +30,6 @@ from ._data_units import flux_data_unit
 from ._options import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
 from .base import DType, ObservationSky, SkyOptions
-
-if TYPE_CHECKING:
-    from ..noise import Noise
-
 
 __all__ = [
     'ObservationVisibilities'
@@ -154,6 +151,10 @@ class ObservationVisibilities(ObservationSky):
     # The axes of the cube of the model: x, y and the spectral axis
     spectral_axis = 2
 
+    config_titles = dict(
+        fov='Field of view', coverage='UV coverage', transform='Transform',
+        eps='Tolerance')
+
     @staticmethod
     def type() -> str:
         return 'visibilities'
@@ -223,6 +224,7 @@ class ObservationVisibilities(ObservationSky):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             dataset: Dataset | None = None,
+            noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
             dtype: DType | None = None,
@@ -267,7 +269,7 @@ class ObservationVisibilities(ObservationSky):
         super().__init__(
             grid, source_grid, instrument, galaxies, components, lines,
             continuum, band, pixel_weights, flux_scale, offsets, dataset,
-            oversampling, depth, dtype, fft_dtype, name, unit)
+            noise, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def fov(self) -> tuple[float, float]:
         """Return the field of the cube on the sky (arcsec)."""

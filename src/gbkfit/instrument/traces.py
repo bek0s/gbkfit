@@ -96,6 +96,10 @@ class TracePolynomial(Trace):
         If wave is not a wavelength, or dx or dy has no coefficients.
     """
 
+    config_titles = dict(
+        wave='Reference wavelength', dx='Coefficients along x',
+        dy='Coefficients along y')
+
     @staticmethod
     def type() -> str:
         return 'polynomial'
@@ -174,6 +178,11 @@ class TraceGrismConf(Trace):
         If a polynomial has no terms, or a polynomial of the place has a
         number of coefficients that is not (n + 1)(n + 2) / 2.
     """
+
+    config_titles = dict(
+        displ='DISPL coefficients', dispx='DISPX coefficients',
+        dispy='DISPY coefficients', origin='Detector origin',
+        file='File', order='Diffraction order')
 
     config_constructors = ('__init__', 'from_file')
 
@@ -382,6 +391,8 @@ class TraceTable(Trace):
         If there are fewer than 4 nodes along an axis, they are not
         ascending, or the offsets are not finite or not of their shape.
     """
+
+    config_titles = dict(file='File')
 
     config_constructors = ('from_file',)
 

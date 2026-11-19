@@ -20,6 +20,7 @@ from gbkfit.grid import make_grid
 from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, Reference, SceneState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
+from .noise import Noise, noise_parser
 from .plan import HostModelData, ModelData, ModelItem, ObservationPlan
 from .observation import Observation, SeenGalaxies
 
@@ -99,7 +100,7 @@ class ObservationProfile(Observation):
         The inclination (degrees) at which its rotation velocities were
         deprojected: its parameter '{name}_incl' is then the inclination
         of the galaxy (degrees), and its name is required.
-    galaxies, dataset, name
+    galaxies, dataset, noise, name
         See Observation.
 
     Raises
@@ -114,6 +115,11 @@ class ObservationProfile(Observation):
         above 0 and at most 90, or it has no name or no rotation
         velocities, or see Observation.
     """
+
+    config_titles = dict(
+        functions='Functions', radii='Radii',
+        assumed_distance='Assumed distance',
+        inclination='Deprojection inclination')
 
     @staticmethod
     def type() -> str:
@@ -151,6 +157,10 @@ class ObservationProfile(Observation):
             info['galaxies'] = list(self._galaxies)
         if self._inclination is not None:
             info['inclination'] = self._inclination
+        if self._noise is not None:
+            info['noise'] = noise_parser.dump(
+                self._noise, prefix=prefix, dump_path=dump_path,
+                overwrite=overwrite)
         if self._dataset is not None:
             # (the form of the data is that of a profile: no type)
             dataset = self._dataset.dump(prefix, dump_path, overwrite)
@@ -176,6 +186,7 @@ class ObservationProfile(Observation):
             Annotated[float, Gt(0), Le(90), Unit('deg')] | None = None,
             galaxies: Sequence[str] | None = None,
             dataset: DatasetProfile | None = None,
+            noise: Noise | None = None,
             name: str | None = None
     ):
         check_options(ObservationProfile.__init__, locals())
@@ -235,7 +246,7 @@ class ObservationProfile(Observation):
             else float(inclination)
         # (slopes have no values where the galaxy has no density)
         super().__init__(
-            keys, galaxies, dataset, name,
+            keys, galaxies, dataset, noise, name,
             model_can_have_missing_values=any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys))
 
@@ -299,7 +310,7 @@ class ObservationProfile(Observation):
     def with_dataset(self, dataset: Dataset) -> Self:
         return type(self)(
             inclination=self._inclination, galaxies=self._galaxies,
-            dataset=dataset, name=self._name)
+            dataset=dataset, noise=self._noise, name=self._name)
 
     def same_plan(self, other: Observation, seen: SeenGalaxies) -> bool:
         """

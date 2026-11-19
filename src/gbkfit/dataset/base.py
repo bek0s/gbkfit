@@ -17,7 +17,7 @@ from gbkfit.config import (
 from gbkfit.grid import Grid, SpectralAxis
 from gbkfit.utils import iterutils
 from . import _grids, _outliers, _resampling
-from .data import Data
+from .data import Data, DataFiles
 
 
 __all__ = [
@@ -78,6 +78,14 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
     # (None: not cut along its axes; see check_blocks)
     block_axes: tuple[str, ...] | None = None
+
+    # The titles of the options of several kinds: those of the files of a
+    # data item (see DataFiles), of the kinds of one item, and those of
+    # the reading and cleaning of the data
+    config_titles = DataFiles.config_titles | dict(
+        file='File', format='Format', regions='Regions',
+        spectral='Spectral axis', outliers='Outlier screening',
+        mask_whole_spectra='Mask whole spectra')
 
     def __init__(self, items: Mapping[str, Data]):
         if not items:
@@ -388,6 +396,10 @@ class DatasetGrid(Dataset):
         If the items are not valid (see Dataset), the spectral axis has
         another number of channels, or the grid is not valid.
     """
+
+    config_titles = dict(
+        step='Pixel size', rpix='Reference pixel',
+        rval='Reference position', rota='Rotation')
 
     # The axes of the grid (see Dataset), along which are both its
     # windows and its blocks

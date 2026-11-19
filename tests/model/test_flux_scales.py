@@ -18,8 +18,7 @@ from gbkfit.model import galaxy_parser
 from gbkfit.objective import (
     FittedNoise, LikelihoodGauss, LikelihoodUser, Likelihoods, Objective)
 from gbkfit.observation import (
-    ObservationGroup, ObservationPixelMoments, ObservationPixelSpectra,
-    noise_parser)
+    ObservationGroup, ObservationPixelMoments, ObservationPixelSpectra)
 from gbkfit.params import ParamSpace, SolveGauss
 
 
@@ -303,10 +302,10 @@ def test_only_linear_parameters_of_gaussian_likelihoods_are_solved(
 
 
 def test_mocks_take_flux_scales_per_spectrum_of_1_only(driver):
+    # (of the noise of the errors of the data, 1)
     from gbkfit.observation import MockOptions, draw_mocks
     obj, params = objective(driver, np.zeros(SIZE[::-1]), 1.0, scale=1)
-    options = MockOptions(
-        noise_parser.load(dict(type='gauss', rms=1.0)), nsamples=2, seed=1)
+    options = MockOptions(nsamples=2, seed=1)
     draw_mocks(obj.group_plan(), params.evaluate(), options)
     values = params.evaluate() | dict(
         obs_flux_scale=np.full(SIZE[0] * SIZE[1], 2.0))

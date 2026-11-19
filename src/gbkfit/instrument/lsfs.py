@@ -406,6 +406,8 @@ class LSFGauss(_AnalyticLSF):
         e.g. '1.7 Angstrom'.
     """
 
+    config_titles = dict(sigma='Dispersion')
+
     @staticmethod
     def type() -> str:
         return 'gauss'
@@ -463,6 +465,8 @@ class LSFGGauss(_AnalyticLSF):
     beta : float
         The shape, > 0: 2 is a Gaussian, and 1 an exponential.
     """
+
+    config_titles = dict(alpha='Scale', beta='Shape')
 
     @staticmethod
     def type() -> str:
@@ -535,6 +539,8 @@ class LSFLorentz(_AnalyticLSF):
         (see Channel.span).
     """
 
+    config_titles = dict(gamma='HWHM')
+
     @staticmethod
     def type() -> str:
         return 'lorentz'
@@ -592,6 +598,8 @@ class LSFMoffat(_AnalyticLSF):
     beta : float
         The slope of the wings, > 0.5 (for a finite flux).
     """
+
+    config_titles = dict(alpha='Core scale', beta='Wing slope')
 
     @staticmethod
     def type() -> str:
@@ -666,6 +674,8 @@ class LSFProfile(LSF):
         The width of the channels of the profile: a width of the light
         (see Channel.span).
     """
+
+    config_titles = dict(file='File', step='Channel width')
 
     config_constructors = ('from_file',)
 
@@ -767,6 +777,8 @@ class LSFSum(_detail.SpreadFunctionSum, LSF):
         The weight of each LSF, positive; they are normalised to sum to 1.
     """
 
+    config_titles = dict(lsfs='LSFs', weights='Weights')
+
     def __init__(self, lsfs: Sequence[LSF], weights: Sequence[float]):
         check_options(LSFSum.__init__, locals())
         super().__init__(lsfs, weights, "a sum of LSFs")
@@ -793,6 +805,8 @@ class LSFConvolution(_detail.SpreadFunctionConvolution, LSF):
     lsfs : Sequence of LSF
         The LSFs, at least one.
     """
+
+    config_titles = dict(lsfs='LSFs')
 
     def __init__(self, lsfs: Sequence[LSF]):
         check_options(LSFConvolution.__init__, locals())
@@ -830,6 +844,8 @@ class LSFHanning(LSF):
         multiple of the width of the channels it is drawn on (those of the
         data, with their oversampling).
     """
+
+    config_titles = dict(channels='Smoothed channel width')
 
     @staticmethod
     def type() -> str:
@@ -944,6 +960,9 @@ class LSFProfiles(_detail.SpreadFunctionImages, LSF):
         The width of the channels of the profiles: a width of the light
         (see Channel.span).
     """
+
+    config_titles = dict(
+        file='File', points='Points', step='Channel width')
 
     config_constructors = ('from_file',)
 

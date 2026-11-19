@@ -60,6 +60,8 @@ class DatasetRegionMoments(Dataset):
     # not kept.
     block_axes = ('the regions',)
 
+    config_titles = _detail.MOMENT_TITLES
+
     config_constructors = ('from_files', 'from_table')
 
     @staticmethod

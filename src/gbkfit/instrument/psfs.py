@@ -257,8 +257,7 @@ class _AnalyticPSF(_detail.AnalyticSpreadFunction, PSF):
         The position angle of the major axis.
     """
 
-    config_titles = dict(
-        fwhm='FWHM', ratio='Axis ratio', posa='Position angle')
+    config_titles = dict(ratio='Axis ratio', posa='Position angle')
 
     def __init__(self, scale: float, ratio: float, posa: float):
         super().__init__(scale)
@@ -344,7 +343,7 @@ class PSFGauss(_AnalyticPSF):
     """
 
     config_titles = dict(
-        sigma='Sigma', bmaj='Major FWHM', bmin='Minor FWHM',
+        sigma='Dispersion', bmaj='Major FWHM', bmin='Minor FWHM',
         bpa='Position angle', file='Header file')
     config_start = dict(fwhm=1)
 

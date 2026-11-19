@@ -50,6 +50,8 @@ class DatasetPixelMoments(DatasetGrid):
     # screen_outliers)
     block_axes = ('x', 'y')
 
+    config_titles = _detail.MOMENT_TITLES
+
     config_constructors = ('from_files',)
 
     @staticmethod

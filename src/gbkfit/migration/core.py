@@ -20,7 +20,7 @@ from gbkfit.config import FORMAT_VERSION, ConfigError
 import gbkfit.project
 from . import (
     v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16,
-    v17)
+    v17, v18)
 from .rules import Change, PiecesView, Rule, ViewedPiece, insert_first
 
 
@@ -83,7 +83,7 @@ RULES: tuple[Rule, ...] = (
     *v2.RULES, *v3.RULES, *v4.RULES, *v5.RULES, *v6.RULES, *v7.RULES,
     *v8.RULES, *v9.RULES, *v10.RULES, *v11.RULES, *v12.RULES,
     *v13.RULES,
-    *v14.RULES, *v15.RULES, *v16.RULES, *v17.RULES)
+    *v14.RULES, *v15.RULES, *v16.RULES, *v17.RULES, *v18.RULES)
 
 
 def migrate(

@@ -91,6 +91,8 @@ class ObservationRegions(ObservationSky):
     _dump_kind). It does not support pixel weights yet.
     """
 
+    config_titles = dict(regions='Regions')
+
     # (its data give its regions; regions on the sky need the size of
     # the grid of the cube, which regions on a grid give, see
     # spatial_grid_of_regions)

@@ -10,7 +10,7 @@ setups, one piece per file:
                               observation)
     psfs/<name>.yaml          a PSF (the option 'psf' of an instrument)
     lsfs/<name>.yaml          an LSF (the option 'lsf' of an instrument)
-    noise/<name>.yaml         a noise (the option 'noise' of the mock data)
+    noise/<name>.yaml         a noise (the option 'noise' of an observation)
     params/<name>.yaml        parameters (a section 'params')
     fitters/<name>.yaml       a fitter (a section 'fitter')
     setups/<name>.yaml        the configurations of the tasks (eval, fit)
@@ -20,13 +20,11 @@ setups, one piece per file:
 The name of a piece is the path of its file in the folder of its kind,
 without .yaml, and can have folders (e.g. 'ngc1313/hi'). In the sections
 galaxies, lenses, observations, params and fitter of a configuration in
-a project, in the options dataset, instrument.psf and instrument.lsf of
-its observations, and in the option noise of its section mock, a string
-names a piece, and a dictionary is one in place. Of the pieces, only
-observations name others (their dataset, PSF and LSF). The section
-'params' can also be a list of pieces, merged in order (see
-merge_params), and the option noise one for each observation, by
-observation name (a dictionary without a type). The relative paths of
+a project, and in the options dataset, noise, instrument.psf and
+instrument.lsf of its observations, a string names a piece, and a
+dictionary is one in place. Of the pieces, only observations name others
+(their dataset, noise, PSF and LSF). The section 'params' can also be a
+list of pieces, merged in order (see merge_params). The relative paths of
 the configurations in a project, and of its pieces, are relative to its
 folder.
 """
@@ -195,7 +193,7 @@ sigma: 15 km/s
 """,
     'noise': """\
 # A noise, of mock data: here Gaussian, of dispersion 0.01 at every value.
-# The section mock of a setup names it (noise: <name>).
+# Observations name it (noise: <name>).
 type: gauss
 rms: 0.01
 """,
@@ -666,10 +664,9 @@ class Resolved(NamedTuple):
     sources, relative to its project: its file ('file'), the file of each
     item of its sections galaxies, lenses, observations and params (a
     list, of the layers), and of its fitter; the file of the dataset, the
-    PSF and the LSF of each observation ('dataset', 'psf' and 'lsf':
-    lists, None for an observation without one), if any has one; the file
-    of the noise of its mock data ('noise'; a dict by observation name if
-    it is given by name); and the file of the layer that gives the
+    noise, the PSF and the LSF of each observation ('dataset', 'noise',
+    'psf' and 'lsf': lists, None for an observation without one), if any
+    has one; and the file of the layer that gives the
     properties of each parameter ('parameters', by name).
     """
     config: dict[str, Any]
@@ -729,7 +726,7 @@ def resolve(
                 _parts(project, item, i, sources[section][i], base)
                 for i, item in enumerate(loaded)]
             loaded = [observation for observation, _ in parts]
-            for key in ('dataset', 'psf', 'lsf'):
+            for key in ('dataset', 'noise', 'psf', 'lsf'):
                 if any(key in found for _, found in parts):
                     sources[key] = [found.get(key) for _, found in parts]
         if section != 'params':
@@ -743,20 +740,6 @@ def resolve(
         item = config['fitter']
         config['fitter'] = _piece(project, item, 'fitter')
         sources['fitter'] = source('fitter', item)
-    if isinstance(mock := config.get('mock'), Mapping) and 'noise' in mock:
-        mock = config['mock'] = dict(mock)
-        noise = mock['noise']
-        with config_path('mock'):
-            if _by_observation(noise):
-                mock['noise'] = {
-                    name: _piece(project, item, 'noise', name)
-                    for name, item in noise.items()}
-                sources['noise'] = {
-                    name: source('noise', item)
-                    for name, item in noise.items()}
-            else:
-                mock['noise'] = _piece(project, noise, 'noise')
-                sources['noise'] = source('noise', noise)
     return Resolved(config, sources)
 
 
@@ -769,8 +752,8 @@ def _parts(
 ) -> tuple[Any, dict[str, str]]:
     """
     Return an observation (the item of the section observations at an
-    index) with the pieces that its options dataset, instrument.psf and
-    instrument.lsf name in place, and the source of each of those options
+    index) with the pieces that its options dataset, noise, instrument.psf
+    and instrument.lsf name in place, and the source of each of those options
     that it has, by name: the file of its piece, or that of the
     observation (source) if it is in place.
     """
@@ -785,8 +768,9 @@ def _parts(
             else os.path.relpath(project.piece_file(key, value), base)
 
     with config_path('observations', index):
-        if 'dataset' in observation:
-            part(observation, 'dataset')
+        for key in ('dataset', 'noise'):
+            if key in observation:
+                part(observation, key)
         if isinstance(observation.get('instrument'), Mapping):
             instrument = observation['instrument'] = dict(
                 observation['instrument'])
@@ -795,15 +779,6 @@ def _parts(
                     if key in instrument:
                         part(instrument, key)
     return observation, found
-
-
-def _by_observation(value: Any) -> bool:
-    """
-    Return whether the value of an option given by observation (e.g. the
-    noise of mock data) is given by observation name: a dictionary without
-    a type, of their values (see ObservationGroup.per_observation).
-    """
-    return isinstance(value, Mapping) and 'type' not in value
 
 
 def _piece(
@@ -940,6 +915,7 @@ def _named(folder: str, content: Any) -> Iterator[tuple[Any, Any, str]]:
         if not isinstance(options, Mapping):
             return
         yield from names(options, 'dataset', 'datasets')
+        yield from names(options, 'noise', 'noise')
         for key, target in (('psf', 'psfs'), ('lsf', 'lsfs')):
             yield from names(options.get('instrument'), key, target)
 
@@ -953,14 +929,6 @@ def _named(folder: str, content: Any) -> Iterator[tuple[Any, Any, str]]:
                 else [observations]:
             yield from observation(item)
         yield from names(content, 'fitter', 'fitters')
-        mock = content.get('mock')
-        noise = mock.get('noise') if isinstance(mock, Mapping) else None
-        if _by_observation(noise):
-            yield from (
-                (noise, name, 'noise') for name, item in noise.items()
-                if isinstance(item, str))
-        else:
-            yield from names(mock, 'noise', 'noise')
 
 
 def _load_quietly(filename: str) -> Any:

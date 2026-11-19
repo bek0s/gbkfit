@@ -22,6 +22,12 @@ from .data import Data, DataFiles
 # data, see read_arrays)
 _GRID_TOLERANCE = 1e-3
 
+# The titles of the options of the moments (see MOMENT_ITEMS), of the
+# datasets of moments (see Serializable.config_titles)
+MOMENT_TITLES = {
+    f'moment{order}': f'Moment {order}' for order in MOMENT_ORDERS} | {
+    f'h{order}': f'Gauss-Hermite h{order}' for order in HERMITE_ORDERS}
+
 
 def moment_options(values: Mapping[str, Any]) -> dict[str, Any]:
     """

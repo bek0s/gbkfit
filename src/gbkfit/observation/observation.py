@@ -23,6 +23,7 @@ from gbkfit.io import Beam
 from gbkfit.lensing import Tracer
 from gbkfit.model import DataUnit, DepthUnit, Galaxy, Reference
 from gbkfit.params import ParamDesc
+from .noise import Noise
 from .plan import FluxScale, ObservationPlan
 
 if TYPE_CHECKING:
@@ -138,6 +139,11 @@ class Observation(TypedSerializable, abc.ABC):
         several (see ObservationGroup).
     dataset : Dataset, optional
         The data, of its kind.
+    noise : Noise, optional
+        The noise of its mock data (see draw_mocks), added to what its
+        instrument records (e.g. a cube, of which moments are measured).
+        By default, Gaussian noise of the errors of its data, if they are
+        what it records (e.g. spectra, an image) and have errors.
     name : str, optional
         Its name, which is the id of its extra outputs instead of its
         position (see ObservationGroup.observation_label), starts the
@@ -157,11 +163,15 @@ class Observation(TypedSerializable, abc.ABC):
         it (see Dataset.noise_correlation).
     """
 
+    config_titles = dict(
+        galaxies='Galaxies', dataset='Dataset', noise='Noise', name='Name')
+
     def __init__(
             self,
             keys: Sequence[str],
             galaxies: Sequence[str] | None = None,
             dataset: Dataset | None = None,
+            noise: Noise | None = None,
             name: str | None = None,
             model_can_have_missing_values: bool = False
     ):
@@ -183,6 +193,7 @@ class Observation(TypedSerializable, abc.ABC):
         self._keys = keys
         self._galaxies = galaxies
         self._dataset = dataset
+        self._noise = noise
         self._name = name
         self._model_can_have_missing_values = model_can_have_missing_values
 
@@ -197,6 +208,13 @@ class Observation(TypedSerializable, abc.ABC):
     def dataset(self) -> Dataset | None:
         """Return its data, if any."""
         return self._dataset
+
+    def noise(self) -> Noise | None:
+        """
+        Return the noise of its mock data, if given (see draw_mocks: by
+        default, that of the errors of its data).
+        """
+        return self._noise
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """

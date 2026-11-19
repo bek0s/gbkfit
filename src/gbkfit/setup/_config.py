@@ -600,7 +600,7 @@ def _load_sections(
                 warn(
                     "a fit needs data, and no observation has any: the "
                     "configuration can only be evaluated")
-    sections.mock = _load_mock(cfg, group)
+    sections.mock = _load_mock(cfg)
     sections.bootstrap = _load_bootstrap(cfg, group, params)
     sections.driver, sections.placement = _load_placement(
         cfg, group, drivers, host)
@@ -949,19 +949,16 @@ def _load_fitter(cfg: dict[str, Any]) -> Fitter | None:
         return fitter_parser.load(cfg['fitter'])
 
 
-def _load_mock(
-        cfg: dict[str, Any], group: ObservationGroup
-) -> MockOptions | None:
+def _load_mock(cfg: dict[str, Any]) -> MockOptions | None:
     """
     Return the options of mock data of a configuration (its section
-    'mock'), if it has them, checked against the observations of a group.
+    'mock'), if it has them (the noise of each observation is its own,
+    see noise_of).
     """
     if 'mock' not in cfg:
         return None
     with config_path('mock'):
-        options = MockOptions.load(cfg['mock'])
-        options.check(group)
-    return options
+        return MockOptions.load(cfg['mock'])
 
 
 def _load_bootstrap(

@@ -21,7 +21,9 @@ __all__ = [
 # trait), 15, of 2026-11-17 on (gravitational lenses are a section of
 # their own, not the foreground of an observation), 16, of 2026-11-18 on
 # (the alpha of Palatini f(R) gravity of the sign of f(R) = R + alpha
-# R^2), and 17, of 2026-11-18 on (the mass of a galaxy has a place of its
-# own: mass_xpos and mass_ypos, and mass_posa and mass_incl if it has a
-# plane); gbkfit.migration rewrites the older ones
-FORMAT_VERSION = 17
+# R^2), 17, of 2026-11-18 on (the mass of a galaxy that a lens bends
+# light by has a place of its own: mass_xpos and mass_ypos, and mass_posa
+# and mass_incl if it has a plane), and 18, of 2026-11-19 on (the noise
+# of mock data is an option of each observation, not of the section
+# mock); gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 18

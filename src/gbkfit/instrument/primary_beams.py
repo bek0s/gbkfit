@@ -100,6 +100,10 @@ class _RadialPrimaryBeam(PrimaryBeam):
         If the fwhm or the frequency is not positive.
     """
 
+    config_titles = dict(
+        fwhm='FWHM', x='Pointing x', y='Pointing y',
+        frequency='Reference frequency')
+
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -201,6 +205,10 @@ class PrimaryBeamImage(PrimaryBeam):
 
     # TODO: a cube of an image for each channel (e.g. a CASA .pb cube),
     # which varies (see varies and at), as the radial beams do
+
+    config_titles = dict(
+        file='File', step='Pixel size', rpix='Reference pixel',
+        rval='Reference position', rota='Rotation')
 
     config_constructors = ('from_file',)
 

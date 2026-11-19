@@ -111,6 +111,10 @@ class SlitMaskShutters(SlitMask):
         no pitch or one smaller than the length of a shutter.
     """
 
+    config_titles = dict(
+        size='Shutter size', pitch='Pitch', count='Shutters',
+        centre='Centre')
+
     @staticmethod
     def type() -> str:
         return 'shutters'

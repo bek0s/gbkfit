@@ -113,14 +113,16 @@ def moments_of(obs, **options):
         method=obs.method(), flux_floor=obs.flux_floor(), **options)
 
 
-def without_data(obs):
+def without_data(obs, noise=None):
     """
-    An observation as another, without data: its model is that of the
-    orbits as they are (see OrbitMomentsPlan), not in the series of data.
+    An observation as another, without data, of the given noise of mock
+    data, if any: its model is that of the orbits as they are (see
+    OrbitMomentsPlan), not in the series of data.
     """
     return moments_of(
-        obs, depth=obs.depth(), instrument=obs.instrument(),
-        lines=[], continuum=True, dtype='float64', oversampling=obs.oversampling())
+        obs, depth=obs.depth(), instrument=obs.instrument(), lines=[],
+        continuum=True, dtype='float64', oversampling=obs.oversampling(),
+        noise=noise)
 
 
 def sky_grid(obs):
@@ -461,16 +463,18 @@ def test_mock_data_of_orbits_are_the_model_plus_noise(driver):
     # h3): their errors (of 30 draws) hold the model without data, about
     # one error from it
     from gbkfit.model import Extras
-    from gbkfit.observation import MockOptions, draw_mocks, noise_parser
+    from gbkfit.observation import MockOptions, NoiseGauss, draw_mocks
     plan = ObservationGroup(
         [galaxy()], [without_data(observation(bins()))]).plan(driver)
     values = PROPERTIES | dict(stars_weights=np.ones(400))
     extras = Extras()
     model = plan.model_h(values, extras)[0]
     rms = extras.get('cube').data.max()
-    [[dataset]] = draw_mocks(plan, values, MockOptions(
-        noise_parser.load(dict(type='gauss', rms=rms)), nsamples=30,
-        seed=1))
+    # (the same observation, with the noise of its mock data)
+    noisy = ObservationGroup([galaxy()], [without_data(
+        observation(bins()), NoiseGauss(rms=rms))]).plan(driver)
+    [[dataset]] = draw_mocks(
+        noisy, values, MockOptions(nsamples=30, seed=1))
     z = np.concatenate([
         (dataset[key].data() - model[key].data) / dataset[key].error()
         for key in model])

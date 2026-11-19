@@ -3,7 +3,7 @@ The observation of spectra along a long slit.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
+from typing import Annotated, Any, TypeAlias
 
 import numpy as np
 from annotated_types import Gt
@@ -17,6 +17,7 @@ from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from ..depth import Depth
+from ..noise import Noise
 from ..plan import FluxScale, ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube
@@ -25,10 +26,6 @@ from ._data_units import data_unit
 from ._options import (
     Rota, Rpix, Rval, Size, Step, warn_unsmoothed_weights)
 from .base import DType, ObservationSky, SkyOptions, unmasked_pixels
-
-if TYPE_CHECKING:
-    from ..noise import Noise
-
 
 __all__ = [
     'ObservationSlitSpectra'
@@ -117,6 +114,10 @@ class ObservationSlitSpectra(ObservationSky):
     def type_title() -> str:
         return 'Slit spectra (long slit)'
 
+    config_titles = dict(
+        slit_pa='Slit position angle', slit_width='Slit width',
+        sky_rval='Sky reference position')
+
     config_required_without = dict(dataset=('size', 'spectral'))
     defaults_without_data = dict(step=(1,), rval=(0,), slit_pa=-90)
 
@@ -178,6 +179,7 @@ class ObservationSlitSpectra(ObservationSky):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             dataset: Dataset | None = None,
+            noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
             dtype: DType | None = None,
@@ -207,7 +209,7 @@ class ObservationSlitSpectra(ObservationSky):
         super().__init__(
             grid, source_grid, instrument, galaxies, components, lines,
             continuum, band, pixel_weights, flux_scale, offsets, dataset,
-            oversampling, depth, dtype, fft_dtype, name, unit)
+            noise, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def slit_pa(self) -> float:
         """Return the position angle of the slit (see the class)."""

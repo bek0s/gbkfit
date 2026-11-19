@@ -352,6 +352,8 @@ class AnalyticSpreadFunction(SpreadFunction):
         The scale.
     """
 
+    config_titles = dict(fwhm='FWHM')
+
     config_constructors = ('__init__', 'from_fwhm')
 
     @classmethod

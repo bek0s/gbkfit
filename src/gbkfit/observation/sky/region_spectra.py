@@ -16,6 +16,7 @@ from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from ..depth import Depth
+from ..noise import Noise
 from ..plan import FluxScale, ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube
@@ -138,6 +139,7 @@ class ObservationRegionSpectra(ObservationRegions):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             dataset: Dataset | None = None,
+            noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
             dtype: DType | None = None,
@@ -159,7 +161,7 @@ class ObservationRegionSpectra(ObservationRegions):
         super().__init__(
             grid, source_grid, instrument, galaxies, components, lines,
             continuum, band, pixel_weights, flux_scale, offsets, dataset,
-            oversampling, depth, dtype, fft_dtype, name, unit)
+            noise, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def spectral_grid(self) -> Grid:
         """Return the grid of the spectral axis (one axis)."""

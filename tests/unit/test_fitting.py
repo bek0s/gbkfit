@@ -1531,12 +1531,14 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
         BootstrapBlocks, BootstrapOptions, fitter_parser, run_bootstrap)
     from gbkfit.observation import MockOptions, NoiseGauss, draw_mocks
 
-    def group(dataset):
+    def group(dataset, noise=None):
         observation = ObservationPixelBrightness(
-            instrument=Instrument(psf=PSFGauss(1.5)), dataset=dataset)
+            instrument=Instrument(psf=PSFGauss(1.5)), dataset=dataset,
+            noise=noise)
         return ObservationGroup(
             galaxy_parser.load(GALAXY), observation).plan(DriverHost())
-    image = group(DatasetPixelBrightness(Data(np.zeros((48, 48)))))
+    blank = DatasetPixelBrightness(Data(np.zeros((48, 48))))
+    image = group(blank)
     values = ParamSpace.from_properties(
         image.group().pdescs(), TRUE).evaluate()
     peak = image.model_h(values)[0]['brightness'].data.max()
@@ -1544,7 +1546,7 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     fits = []
     for [mock] in draw_mocks(
-            image, values, MockOptions(noise, nmocks=41, seed=5)):
+            group(blank, noise), values, MockOptions(nmocks=41, seed=5)):
         # (without the correlation that mocks declare)
         dataset = DatasetPixelBrightness(Data(
             mock['brightness'].data(), error=mock['brightness'].error()))

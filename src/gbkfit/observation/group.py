@@ -104,9 +104,8 @@ class ObservationGroup:
     of a setup).
 
     Options of setups that are given by observation (e.g. their
-    likelihoods, see Likelihoods, or the noise of their mock data, see
-    MockOptions) are one value for all of them, or values by observation
-    name (see per_observation).
+    likelihoods, see Likelihoods) are one value for all of them, or
+    values by observation name (see per_observation).
 
     Parameters
     ----------
@@ -459,7 +458,7 @@ class ObservationGroup:
     ) -> dict[int, T]:
         """
         Return the values of an option of setups that is given by
-        observation (e.g. the noise of mock data, see MockOptions), by the
+        observation (e.g. their likelihoods, see Likelihoods), by the
         index of the observation: one value for all the observations, or
         values by observation name (a Mapping).
 

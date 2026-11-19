@@ -5,7 +5,7 @@ trace of the disperser (see pixel_footprints).
 """
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import Annotated, Any
 
 import astropy.constants
 import astropy.units
@@ -28,6 +28,7 @@ from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from gbkfit.utils import iterutils
 from ..depth import Depth
+from ..noise import Noise
 from ..plan import FluxScale, HostModelData, ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube, _moments
@@ -36,10 +37,6 @@ from ._data_units import data_unit
 from ._options import Rota, Rpix, Rval, Size, Step
 from ._sparse_sums import SparseSumsPlan
 from .base import DType, ObservationSky, SkyOptions
-
-if TYPE_CHECKING:
-    from ..noise import Noise
-
 
 __all__ = [
     'Exposure',
@@ -284,6 +281,9 @@ class Exposure(Serializable):
         If an offset is not two numbers.
     """
 
+    config_titles = dict(
+        sky_offset='Sky offset', image_offset='Image offset', weight='Weight')
+
     def dump(self) -> dict[str, Any]:
         return dict(
             sky_offset=list(self._sky_offset),
@@ -425,6 +425,10 @@ class ObservationSlitlessSpectra(ObservationSky):
     # axes of the detector
     spectral_axis = None
 
+    config_titles = dict(
+        trace='Trace', slit_mask='Slit mask', exposures='Exposures',
+        sky_sampling='Sky sampling', resampled='Resampled by drizzle')
+
     @staticmethod
     def type() -> str:
         return 'slitless_spectra'
@@ -483,6 +487,7 @@ class ObservationSlitlessSpectra(ObservationSky):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             dataset: Dataset | None = None,
+            noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
             dtype: DType | None = None,
@@ -514,8 +519,8 @@ class ObservationSlitlessSpectra(ObservationSky):
         super().__init__(
             self._make_grid(**grid), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
-            offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
-            unit)
+            offsets, dataset, noise, oversampling, depth, dtype, fft_dtype,
+            name, unit)
 
     def spectral(self) -> SpectralAxis:
         """Return the spectral axis of the model."""

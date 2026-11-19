@@ -2,7 +2,7 @@
 Tests that what configurations choose and what models fit is named for
 people: the type of each member of a family has a title (see
 TypedSerializable.type_title), every choice of an option has one (see
-Choices), every option of a galaxy has one (see
+Choices), every option of a galaxy and of an observation has one (see
 Serializable.config_titles), and every parameter that the library
 declares has a title and a description (see ParamDesc).
 """
@@ -182,6 +182,13 @@ def test_every_option_of_a_galaxy_has_a_title():
     schema = gbkfit.model.Galaxy.schema()
     problems = dict(_untitled_options(
         schema, schema['$defs'], set(), 'Galaxy'))
+    assert problems == {}
+
+
+def test_every_option_of_an_observation_has_a_title():
+    schema = gbkfit.observation.Observation.schema()
+    problems = dict(_untitled_options(
+        schema, schema['$defs'], set(), 'Observation'))
     assert problems == {}
 
 

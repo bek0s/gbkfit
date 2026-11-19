@@ -107,8 +107,7 @@ class Setup:
         If the parameters are not of the group and the likelihoods, the
         likelihoods are of another group, or not of mock data with options
         of mock data, the fitter cannot fit the
-        parameters (see Fitter.check), the options of mock data are not
-        of the observations (see MockOptions.check), the options of a
+        parameters (see Fitter.check), the options of a
         bootstrap do not suit the data (see BootstrapOptions.check), the
         group has lenses and a free parameter has no reference value, at
         which the grids of the planes behind them are laid out (see
@@ -165,8 +164,6 @@ class Setup:
                 f"{list(group.function_names())}")
         if fitter is not None:
             fitter.check(params, likelihoods)
-        if mock_options is not None:
-            mock_options.check(group)
         if bootstrap_options is not None and likelihoods.observations():
             bootstrap_options.check(group, params)
         # (the grids of the planes behind lenses are laid out at the

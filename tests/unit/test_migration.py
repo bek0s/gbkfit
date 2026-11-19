@@ -700,8 +700,9 @@ def test_the_widths_of_lsfs_get_their_unit():
         sigma='km/s')))
     assert migration.migrate(dict(observations=[dict(instrument=dict(
         lsf=with_units))]), 6) == migration.migrate(dict(), 6)
-    assert [c.path[-1] for c in changes if c.path != ['version']] == [
-        'sigma', 'alpha', 'width', 'sigma']
+    # (of version 18, the noise moves into the observation)
+    assert [c.path[-1] for c in changes if c.path != ['version']
+            and c.path[-1] != 'noise'] == ['sigma', 'alpha', 'width', 'sigma']
 
 
 def test_the_lsfs_of_a_project_are_migrated(tmp_path):
@@ -733,7 +734,10 @@ def test_gaussian_beams_are_gaussians():
     changes = migration.migrate(config, 6)
     assert beam == dict(type='gauss', bmaj=6, bmin=3, bpa=30)
     assert psf['psfs'][0] == dict(type='gauss', file='cube.fits')
-    assert config['mock']['noise']['spatial_correlation']['type'] == 'gauss'
+    # (of version 18, the noise of every observation is its own)
+    noises = [o['noise'] for o in config['observations']]
+    assert [n['spatial_correlation']['type'] for n in noises] \
+        == ['gauss', 'gauss']
     assert len([c for c in changes if c.message == "gauss_beam -> gauss"]) \
         == 3
 
@@ -753,8 +757,9 @@ def test_measured_lsfs_are_profiles():
     changes = migration.migrate(config, 6)
     assert one == dict(type='profile', file='lsf.fits', step='5 km/s')
     assert lsf['lsfs'][0] == dict(type='profiles', file='lsfs.fits')
-    assert config['mock']['noise']['spectral_correlation']['type'] \
-        == 'profile'
+    # (of version 18, the noise of every observation is its own)
+    assert config['observations'][0]['noise']['spectral_correlation'][
+        'type'] == 'profile'
     assert psf['type'] == 'image'
     assert [c.message for c in changes if c.path[-1] == 'type'] == [
         'image -> profile', 'images -> profiles', 'image -> profile']
@@ -1330,8 +1335,9 @@ def test_the_fitted_noise_of_a_likelihood_is_fitted_noise():
     assert migration.Change(
         ['mock', 'likelihood'], "noise -> fitted_noise") in changes
     # (of version 10: the mock likelihood, unlike that of the fit, is to
-    # be given by hand)
-    assert config['mock'] == dict(noise=dict(type='gauss', rms=1))
+    # be given by hand; of version 18, the noise is the observation's)
+    assert config['mock'] == {}
+    assert config['observations'][0]['noise'] == dict(type='gauss', rms=1)
     assert any(
         change.path == ['mock', 'likelihood']
         and change.message.startswith("by hand: dropped")
@@ -1654,19 +1660,27 @@ def test_options_of_each_observation_are_by_observation_name(
     # Version 10: one for all if they are all the same, or else by name,
     # of the observations named by their labels if they have none
     first, second = dict(type='gauss', rms=1), dict(type='gauss', rms=2)
+
+    def given(config):
+        # (of version 18: the noise of mock data is that of each
+        # observation)
+        if section == 'mock':
+            return [o[option] for o in config['observations']]
+        return config[section][option]
+
     config = {
         'observations': [with_data('hi'), with_data('ha')],
         section: {option: [first, first]}}
     changes = migration.migrate(config, 9)
-    assert config[section][option] == first
+    assert given(config) == ([first, first] if section == 'mock' else first)
     assert migration.Change(
         [section, option], "one for every observation") in changes
     config = {
         'observations': [with_data(), with_data()],
         section: {option: [first, second]}}
     changes = migration.migrate(config, 9)
-    assert config[section][option] == dict(
-        observation0=first, observation1=second)
+    assert given(config) == ([first, second] if section == 'mock' else dict(
+        observation0=first, observation1=second))
     assert migration.Change(
         [section, option], "by observation name, not by position") \
         in changes
@@ -1675,10 +1689,12 @@ def test_options_of_each_observation_are_by_observation_name(
     config = {
         'observations': [with_data('hi')],
         section: {option: [first, second]}}
-    [change] = [
-        c for c in migration.migrate(config, 9) if c.path[0] == section]
-    assert change.message.startswith("by hand: a list of 2 for 1")
-    assert config[section][option] == [first, second]
+    assert any(
+        c.path == [section, option]
+        and c.message.startswith("by hand: a list of 2 for 1")
+        for c in migration.migrate(config, 9))
+    assert given(config) == (
+        [[first, second]] if section == 'mock' else [first, second])
 
 
 def test_a_migrated_file_has_its_likelihoods_after_its_observations(
@@ -1717,9 +1733,8 @@ def test_the_likelihoods_of_observation_pieces_move_into_their_setups(
     yaml.dump(with_data('hi', likelihood=MOMENTS), pieces / 'hi.yaml')
     yaml.dump(with_data(likelihood=MOMENTS), pieces / 'unnamed.yaml')
     setups = tmp_path / 'study' / 'setups'
-    yaml.dump(dict(observations=['hi', with_data('ha')], mock=dict(
-        noise=[dict(type='gauss', rms=1), dict(type='gauss', rms=2)])),
-        setups / 'joint.yaml')
+    yaml.dump(dict(observations=['hi', with_data('ha')]),
+              setups / 'joint.yaml')
     yaml.dump(dict(observations=['hi']), setups / 'alone.yaml')
     yaml.dump(dict(observations=[
         'unnamed', with_data(likelihood=dict(type='gauss'))]),
@@ -1734,9 +1749,7 @@ def test_the_likelihoods_of_observation_pieces_move_into_their_setups(
     joint = yaml.load(setups / 'joint.yaml')
     assert joint == dict(
         observations=['hi', migrated(with_data('ha'))],
-        likelihoods=dict(hi=MOMENTS),
-        mock=dict(noise=dict(
-            hi=dict(type='gauss', rms=1), ha=dict(type='gauss', rms=2))))
+        likelihoods=dict(hi=MOMENTS))
     assert yaml.load(setups / 'alone.yaml') == dict(
         observations=['hi'], likelihoods=MOMENTS)
     by_hand = yaml.load(setups / 'by_hand.yaml')
@@ -2146,3 +2159,46 @@ def test_the_mass_of_a_lens_piece_of_a_project_has_a_place(tmp_path):
     assert setup['params']['properties'] == dict(
         dwarf_gas_xpos=0, dwarf_mass_xpos='dwarf_gas_xpos',
         dwarf_mass_ypos='dwarf_gas_ypos')
+
+
+def test_the_noise_of_mock_data_goes_into_the_observations():
+    # Version 18: the noise of the section mock is the noise of each
+    # observation: one for every observation, or one for each by name
+    noise = dict(type='gauss', rms=0.01)
+    config = dict(
+        observations=[
+            dict(type='pixel_spectra', name='hi', dataset=dict(type='x')),
+            dict(type='pixel_moments', name='ha')],
+        mock=dict(noise=noise, nmocks=2))
+    rewritten(config, 17, 18)
+    assert [list(o) for o in config['observations']] == [
+        ['type', 'name', 'dataset', 'noise'], ['type', 'name', 'noise']]
+    assert all(o['noise'] == noise for o in config['observations'])
+    assert config['mock'] == dict(nmocks=2)
+    other = dict(type='poisson', gain=10)
+    config = dict(
+        observations=[dict(type='pixel_spectra', name='hi'),
+                      dict(type='pixel_moments', name='ha')],
+        mock=dict(noise=dict(hi=noise, ha=other)))
+    rewritten(config, 17, 18)
+    assert [o['noise'] for o in config['observations']] == [noise, other]
+    assert config['mock'] == {}
+
+
+def test_the_noise_a_setup_gives_an_observation_piece_is_given_by_hand(
+        tmp_path):
+    # Of a project: an observation piece can be named by several setups,
+    # each with its noise; the migration stops, and leaves the project as
+    # it was
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(dict(format=project.FORMAT, version=17),
+              tmp_path / 'study' / project.MARKER)
+    yaml.dump(dict(type='pixel_spectra', name='hi'),
+              tmp_path / 'study' / 'observations' / 'hi.yaml')
+    yaml.dump(dict(observations='hi', mock=dict(noise='radio')),
+              tmp_path / 'study' / 'setups' / 'mock.yaml')
+    with pytest.raises(ValueError, match="observation piece 'hi'"):
+        migration.migrate_project(study.path)
+    assert yaml.load(tmp_path / 'study' / 'setups' / 'mock.yaml') == dict(
+        observations='hi', mock=dict(noise='radio'))
+    assert project.open(study.path).version() == 17

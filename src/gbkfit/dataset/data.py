@@ -59,6 +59,12 @@ class DataFiles(NamedTuple):
         The file of where the instrument looked (see Data).
     """
 
+    config_titles = dict(
+        data='Data', mask='Mask', error='Errors', unit='Unit', beam='Beam',
+        spatial_correlation='Spatial correlation',
+        spectral_correlation='Spectral correlation', error_kind='Error kind',
+        mask_kind='Mask kind', footprint='Footprint')
+
     data: DataFile
     mask: DataFile | None = None
     error: DataFile | float | None = None
@@ -87,6 +93,9 @@ class DataColumns(NamedTuple):
     unit : str, optional
         The unit of the values; by default, that of their column.
     """
+
+    config_titles = dict(
+        column='Column', error='Errors', mask='Mask', unit='Unit')
 
     column: str
     error: str | float | None = None

@@ -21,6 +21,7 @@ from gbkfit.moments import (
     moment_item, split_moments)
 from .._scene import SeenScenes
 from ..depth import Depth
+from ..noise import Noise
 from ..plan import ModelData, ObservationPlan
 from ..weights import Weights
 from . import _model_cube, _moments
@@ -104,6 +105,8 @@ class ObservationRegionMoments(ObservationRegions):
     # The moments have no spectral axis
     spectral_axis = None
 
+    config_titles = _moments.OPTION_TITLES
+
     @staticmethod
     def type() -> str:
         return 'region_moments'
@@ -173,6 +176,7 @@ class ObservationRegionMoments(ObservationRegions):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             dataset: Dataset | None = None,
+            noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
             dtype: DType | None = None,
@@ -197,7 +201,7 @@ class ObservationRegionMoments(ObservationRegions):
         super().__init__(
             grid, source_grid, instrument, galaxies, components, lines,
             continuum, band, pixel_weights, flux_scale, offsets, dataset,
-            oversampling, depth, dtype, fft_dtype, name, unit)
+            noise, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments, sorted."""

@@ -20,6 +20,7 @@ from gbkfit.moments import (
     moment_item, split_moments)
 from .._scene import SeenScenes
 from ..depth import Depth
+from ..noise import Noise
 from ..plan import ModelData
 from ..weights import Weights
 from . import _model_cube, _moments
@@ -114,6 +115,8 @@ class ObservationPixelMoments(ObservationSky):
     # Moment maps have no spectral axis
     spectral_axis = None
 
+    config_titles = _moments.OPTION_TITLES
+
     @staticmethod
     def type() -> str:
         return 'pixel_moments'
@@ -183,6 +186,7 @@ class ObservationPixelMoments(ObservationSky):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             dataset: Dataset | None = None,
+            noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
             dtype: DType | None = None,
@@ -203,8 +207,8 @@ class ObservationPixelMoments(ObservationSky):
         super().__init__(
             self._make_grid(**options), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
-            offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
-            unit)
+            offsets, dataset, noise, oversampling, depth, dtype, fft_dtype,
+            name, unit)
 
     def _measured_pixels(self) -> np.ndarray:
         return unmasked_pixels(self._dataset, self._grid.size[1::-1])

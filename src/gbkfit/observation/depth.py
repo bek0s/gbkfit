@@ -92,6 +92,10 @@ class Depth(Serializable):
         none).
     """
 
+    config_titles = dict(
+        extent='Extent', step='Voxel size', slab='Planes per slab',
+        subchannels='Sub-channels')
+
     def dump(self) -> dict[str, Any]:
         return dict(
             extent=self._extent, step=self._step, slab=self._slab,

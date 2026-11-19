@@ -107,6 +107,8 @@ class Aperture(TypedSerializable, abc.ABC):
     degrees, north through east (like posa).
     """
 
+    config_titles = dict(x='Centre x', y='Centre y', posa='Position angle')
+
     @abc.abstractmethod
     def centre(self) -> tuple[float, float]:
         """
@@ -160,6 +162,8 @@ class ApertureEllipse(Aperture):
         The position angle of a (degrees); 0 by default.
     """
 
+    config_titles = dict(a='Semi-axis along PA', b='Semi-axis across PA')
+
     @staticmethod
     def type() -> str:
         return 'ellipse'
@@ -202,6 +206,8 @@ class ApertureCircle(Aperture):
     radius : float
         The radius (arcsec).
     """
+
+    config_titles = dict(radius='Radius')
 
     @staticmethod
     def type() -> str:
@@ -269,6 +275,8 @@ class AperturePolygon(Aperture):
         The vertices, in order, each x and y (arcsec); at least three.
     """
 
+    config_titles = dict(vertices='Vertices')
+
     @staticmethod
     def type() -> str:
         return 'polygon'
@@ -320,6 +328,8 @@ class ApertureRectangle(Aperture):
     posa : float, optional
         The position angle of the length (degrees); 0 by default.
     """
+
+    config_titles = dict(length='Length', width='Width')
 
     @staticmethod
     def type() -> str:

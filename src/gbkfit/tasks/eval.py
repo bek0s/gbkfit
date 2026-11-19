@@ -60,13 +60,13 @@ def eval_(
     models (see Likelihoods; it can be given without data). The section
     'mock' of the configuration has the options
 
-    - noise: the noise of every observation, or of each, by observation
-      name (see MockOptions and Noise);
     - nmocks (1), nsamples (100) and seed (none): the number of mocks,
       the number of draws of the errors of measured data (e.g. moments),
       and the seed of the random numbers (see draw_mocks).
 
-    The mock data are in the units of the models.
+    The noise of the mock data of each observation is its own (its option
+    noise; by default, that of the errors of its data, see noise_of). The
+    mock data are in the units of the models.
 
     Parameters
     ----------

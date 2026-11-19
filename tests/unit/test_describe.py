@@ -41,7 +41,8 @@ def test_the_mock_and_bootstrap_sections_are_described_too(tmp_path):
     # (the mock data of eval, the bootstrap of fit: their errors showed
     # only when the task ran)
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    config['mock'] = dict(noise=dict(type='gauss', rms=1), nmock=2)
+    config['observations'][0]['noise'] = dict(type='gauss', rms=1)
+    config['mock'] = dict(nmock=2)
     filename = tmp_path / 'config.yaml'
     yaml.dump(config, filename)
     (problem,) = describe(str(filename)).problems
@@ -49,14 +50,17 @@ def test_the_mock_and_bootstrap_sections_are_described_too(tmp_path):
 
 
 
-def test_the_files_of_the_mock_section_are_those_of_the_root(
+def test_the_files_of_the_noise_of_mock_data_are_those_of_the_root(
         tmp_path, monkeypatch):
-    # (the error map of a mock, next to the configuration, checked from
-    # another directory: it was looked for there, audit 2026-10-31 #33)
+    # (the error map of the noise of an observation, next to the
+    # configuration, checked from another directory: it was looked for
+    # there, audit 2026-10-31 #33)
     import astropy.io.fits
     import numpy as np
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    config['mock'] = dict(noise=dict(type='gauss', error='error.fits'))
+    config['observations'][0]['noise'] = dict(
+        type='gauss', error='error.fits')
+    config['mock'] = dict(seed=1)
     folder = tmp_path / 'project'
     folder.mkdir()
     astropy.io.fits.writeto(folder / 'error.fits', np.ones((2, 2, 2)))
@@ -89,14 +93,15 @@ def test_the_templates_of_a_project_make_a_setup_without_problems(tmp_path):
         'fitters')
     for folder in folders:
         study.create_piece(folder, 'first')
-    # (the observation names the PSF and the LSF of the project)
+    # (the observation names the PSF, the LSF and the noise of the
+    # project)
     observation = pathlib.Path(study.piece_file('observations', 'first'))
     named = observation.read_text() \
         .replace('psf: {type: gauss, sigma: 1.5}', 'psf: first') \
         .replace('lsf: {type: gauss, sigma: 15 km/s}', 'lsf: first')
     assert 'psf: first' in named and 'lsf: first' in named
-    observation.write_text(named)
+    observation.write_text(named + 'noise: first\n')
     setup = pathlib.Path(study.create_piece('setups', 'first'))
     assert 'galaxies: [first]' in setup.read_text()
-    setup.write_text(setup.read_text() + 'mock: {noise: first}\n')
+    setup.write_text(setup.read_text() + 'mock: {seed: 1}\n')
     assert describe(str(setup)).problems == ()

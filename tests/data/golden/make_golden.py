@@ -99,8 +99,9 @@ class Case:
         The parameter properties of its configuration: the values at
         which it is evaluated (free elements at their 'value').
     noises : list of dict
-        The noise of the mock data of each observation (see
-        gbkfit.observation.noise_parser).
+        The noise of the mock data of each observation (its option noise
+        there, see gbkfit.observation.noise_parser; its configuration
+        fits them without it).
     likelihoods : list of dict or None, optional
         The likelihood of each observation (none: the default), which its
         configuration gives in its section 'likelihoods' (see
@@ -263,11 +264,12 @@ def likelihoods_section(
 def make_data(case: Case, folder: pathlib.Path) -> None:
     """
     Write the configuration and the data of a case into its folder: mock
-    data of the model at its true values (see Case.mock_galaxies), and
-    its parameters at its trial values.
+    data of the model at its true values (see Case.mock_galaxies), of the
+    noise of each observation (see Case.noises), and its parameters at
+    its trial values.
     """
     from gbkfit.objective import LikelihoodGauss, likelihood_parser
-    from gbkfit.observation import MockOptions, draw_mocks, noise_parser
+    from gbkfit.observation import MockOptions, draw_mocks
     from gbkfit.observation import observation_parser
     from gbkfit.config import FORMAT_VERSION
     from gbkfit.config import paths_relative_to
@@ -277,43 +279,40 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
         case.prepare(folder)
     sections = dict(galaxies=case.galaxies) | case.sections
     # (the labels of the observations, which name those without names
-    # where their options are by name, e.g. their noises; see
+    # where their options are by name, e.g. their likelihoods; see
     # likelihoods_section)
     labels = [
         observation.get('name', f'observation{i}')
         for i, observation in enumerate(case.observations)]
-    one_noise = all(noise == case.noises[0] for noise in case.noises)
+    # (the observations of the mock data have their noise; those of the
+    # configuration, which fits them, do not)
     setup = _load(
         sections | dict(
             galaxies=case.mock_galaxies or case.galaxies,
-            observations=case.observations if one_noise else [
-                dict(observation, name=label)
-                for observation, label in zip(case.observations, labels)],
+            observations=[
+                dict(observation, noise=noise) for observation, noise
+                in zip(case.observations, case.noises, strict=True)],
             params=dict(properties=case.truth)), folder, 'host')
     group_plan, params = setup.group_plan(), setup.params()
     likelihoods = case.likelihoods or [None] * len(case.observations)
-    # (their files, e.g. error maps or the modules of user likelihoods,
-    # are in the folder of the case)
+    # (their files, e.g. regions or the modules of user likelihoods, are
+    # in the folder of the case)
     with paths_relative_to(str(folder)):
-        noises = [noise_parser.load(noise) for noise in case.noises]
+        fitted = observation_parser.load(case.observations)
         likelihoods = [
             likelihood_parser.dump(
                 LikelihoodGauss() if info is None
                 else likelihood_parser.load(info))
             for info in likelihoods]
-    group = group_plan.group()
     [datasets] = draw_mocks(group_plan, params.evaluate(), MockOptions(
-        noises[0] if one_noise else dict(zip(labels, noises)),
         nsamples=case.nsamples, seed=case.seed))
     data_options = case.data_options or [{}] * len(case.observations)
     prefix = str(folder) + os.sep
     observations = []
-    for i, observation in enumerate(group.observations()):
+    for i, observation in enumerate(fitted):
         mocked = observation.with_dataset(datasets[i])
         info = _rebased(observation_parser.dump(
             mocked, f'{prefix}{labels[i]}_', overwrite=True), prefix)
-        if 'name' not in case.observations[i]:
-            info.pop('name', None)
         info['dataset'] = _compacted(info['dataset'], folder) \
             | data_options[i]
         observations.append(info)

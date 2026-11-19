@@ -198,8 +198,8 @@ def test_mock_data_and_their_configuration(tmp_path):
     # the likelihoods of the setup of the mocks: at the parameters of the
     # model, its residuals are of one standard deviation
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    config['mock'] = dict(
-        noise=dict(type='gauss', rms=0.01), nmocks=2, seed=3)
+    config['observations'][0]['noise'] = dict(type='gauss', rms=0.01)
+    config['mock'] = dict(nmocks=2, seed=3)
     config['likelihoods'] = dict(type='gauss', white_floor=0.2)
     run = run_eval('mock', config, tmp_path / 'mock')
     (filename, data0, error0), (_, data1, _) = (

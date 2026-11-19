@@ -79,6 +79,8 @@ class UVCoverage(Serializable):
     # The names of its arrays in files (see arrays)
     _ARRAYS = ('uvw', 'frequencies', 'phase_centre', 'frame', 'rest')
 
+    config_titles = dict(file='File')
+
     config_constructors = ('from_file',)
 
     @classmethod
@@ -275,6 +277,10 @@ class DatasetVisibilities(Dataset):
     """
 
     ndim = 2
+
+    config_titles = dict(
+        ms='Measurement set', field='Field', spw='Spectral window',
+        column='Column', rest='Rest frequency')
 
     config_constructors = ('from_file', 'from_ms')
 

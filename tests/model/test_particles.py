@@ -128,8 +128,11 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
     values = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), GEOMETRY).evaluate()
     peak = plan.model_h(values)[0]['spectra'].data.max()
-    [[mock]] = draw_mocks(
-        plan, values, MockOptions(NoiseGauss(rms=0.01 * peak), seed=2))
+    # (the same observation, with the noise of its mock data)
+    noisy = group_plan([dict(
+        driver=dict(type='host'), galaxy=particles,
+        observation=CUBE | dict(noise=NoiseGauss(rms=0.01 * peak)))])
+    [[mock]] = draw_mocks(noisy, values, MockOptions(seed=2))
     disk = observation_group([dict(
         driver=dict(type='host'), galaxy=DISK,
         observation=CUBE | dict(oversampling=[4, 4, 1]))])

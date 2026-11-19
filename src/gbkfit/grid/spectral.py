@@ -668,6 +668,12 @@ class SpectralAxis(Serializable):
         valid.
     """
 
+    config_titles = dict(
+        size='Channels', step='Channel width', rpix='Reference channel',
+        rval='Reference velocity', convention='Velocity convention',
+        rest='Rest', medium='Medium', frame='Reference frame',
+        type='Spectral type')
+
     @classmethod
     def of(cls, grid: Grid) -> 'SpectralAxis':
         """Return the spectral axis of a grid (that of a spectral axis)."""

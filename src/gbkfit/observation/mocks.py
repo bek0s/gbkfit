@@ -4,7 +4,7 @@ options: the section 'mock' of configurations, which the task eval draws
 (see MockOptions).
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Annotated, Any
 
 import numpy as np
@@ -14,35 +14,33 @@ from gbkfit.config import Serializable, check_options, config_path
 from gbkfit.dataset import Data, Dataset
 from gbkfit.model import GalaxyState
 from gbkfit.params import ParamValues
-from .noise import INSTRUMENT, Noise, noise_parser
+from .noise import INSTRUMENT, Noise, NoiseGauss
 from .plan import HostModelData, ObservationPlan
 from .observation import Observation
 from .sky import ObservationSky
 
 if TYPE_CHECKING:
     from .group_plan import GroupPlan
-    from .group import ObservationGroup
 
 
 __all__ = [
     'MockOptions',
-    'draw_mocks'
+    'draw_mocks',
+    'noise_of'
 ]
 
 
 class MockOptions(Serializable):
     """
     The options of mock data of the observations of a group (see
-    draw_mocks). Fits of the mock data compare them with the models under
-    the likelihoods of the setup (see Likelihoods), which a setup of mock
-    data can give for them.
+    draw_mocks): how many, and their random numbers. The noise of the
+    mock data of each observation is its own (see Observation: its option
+    noise; by default, that of the errors of its data). Fits of the mock
+    data compare them with the models under the likelihoods of the setup
+    (see Likelihoods), which a setup of mock data can give for them.
 
     Parameters
     ----------
-    noise : Noise or Mapping of str to Noise
-        The noise of the data of every observation, or of each, by
-        observation name (see ObservationGroup.per_observation, and the
-        examples).
     nmocks : int, optional
         The number of mock datasets of each observation.
     nsamples : int, optional
@@ -59,79 +57,35 @@ class MockOptions(Serializable):
 
     Examples
     --------
-    One noise for every observation:
+    Ten mock datasets of each observation, the same from run to run (the
+    noise of each in the observation):
 
     .. code-block:: yaml
 
+        observations:
+        - type: pixel_spectra
+          noise: {type: gauss, rms: 0.01}
+          ...
         mock:
-          noise:
-            type: gauss
-            rms: 0.01
           nmocks: 10
-
-    A noise for each observation, by name:
-
-    .. code-block:: yaml
-
-        mock:
-          noise:
-            halpha:
-              type: gauss
-              rms: 0.01
-            hi:
-              type: gauss
-              rms: 0.002
+          seed: 1
     """
 
     def __init__(
             self,
-            noise: Noise | Mapping[str, Noise],
             nmocks: Annotated[int, Ge(1)] = 1,
             nsamples: Annotated[int, Ge(2)] = 100,
             seed: int | None = None
     ):
         check_options(MockOptions.__init__, locals())
-        self._noise = dict(noise) if isinstance(noise, Mapping) else noise
         self._nmocks = nmocks
         self._nsamples = nsamples
         self._seed = seed
 
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        """
-        Dump the options to their configuration.
-
-        Parameters
-        ----------
-        prefix : str, optional
-            The start of the names of the files of the data of the noises
-            (e.g. an error map; see Noise.dump), followed by the name of
-            the observation and '_' for those given by name.
-        dump_path : bool, optional
-            Whether the configuration has the paths of the files, or only
-            their names.
-        overwrite : bool, optional
-            Whether to overwrite existing files.
-
-        Returns
-        -------
-        dict
-            The options.
-        """
-        if isinstance(self._noise, dict):
-            noise = {
-                name: noise_parser.dump(
-                    item, prefix=f'{prefix}{name}_', dump_path=dump_path,
-                    overwrite=overwrite)
-                for name, item in self._noise.items()}
-        else:
-            noise = noise_parser.dump(
-                self._noise, prefix=prefix, dump_path=dump_path,
-                overwrite=overwrite)
+    def dump(self) -> dict[str, Any]:
+        """Dump the options to their configuration."""
         info: dict[str, Any] = dict(
-            noise=noise, nmocks=self._nmocks, nsamples=self._nsamples)
+            nmocks=self._nmocks, nsamples=self._nsamples)
         if self._seed is not None:
             info['seed'] = self._seed
         return info
@@ -148,25 +102,45 @@ class MockOptions(Serializable):
         """Return the seed of the random numbers, if any."""
         return self._seed
 
-    def noises(self, group: 'ObservationGroup') -> list[Noise]:
-        """
-        Return the noise of each observation of a group.
 
-        Raises
-        ------
-        ValueError
-            If the noises are given by name, and do not name each
-            observation (see ObservationGroup.per_observation).
-        """
-        noises = group.per_observation(self._noise, 'noise')
-        return [noises[i] for i in range(group.nobservations())]
+def noise_of(observation: Observation, exact: bool) -> Noise:
+    """
+    Return the noise of the mock data of an observation (see draw_mocks):
+    its own (its option noise); without one, Gaussian noise of the errors
+    of its data, with their correlations, if its data are what its
+    instrument records plus the noise (exact errors, see
+    ObservationPlan.has_exact_errors; e.g. spectra, an image), in one
+    item, with errors.
 
-    def check(self, group: 'ObservationGroup') -> None:
-        """
-        Raise ValueError unless the options are of the observations of a
-        group: a noise for all of them, or for each (see noises).
-        """
-        self.noises(group)
+    Raises
+    ------
+    ValueError
+        If it has no noise, and its data cannot give one.
+    """
+    if (noise := observation.noise()) is not None:
+        return noise
+    data = observation.dataset()
+    why = None
+    if data is None:
+        why = "it has no data, whose errors would be its noise"
+    elif not exact:
+        why = (
+            "its data are measured from what its instrument records (e.g. "
+            "moments of a cube), to which the noise is added, so their "
+            "errors are not its noise")
+    elif len(observation.keys()) > 1:
+        why = (
+            f"its data are of several items ({list(observation.keys())}), "
+            f"each of its own errors, but it has one noise")
+    elif (item := data[observation.keys()[0]]).error() is None:
+        why = "its data have no errors, which would be its noise"
+    if why is not None:
+        raise ValueError(
+            f"the observation has no noise for its mock data (its option "
+            f"noise): {why}")
+    return NoiseGauss(
+        error=item.error(), spatial_correlation=item.spatial_correlation(),
+        spectral_correlation=item.spectral_correlation())
 
 
 def draw_mocks(
@@ -191,8 +165,9 @@ def draw_mocks(
     the series of their data (see GroupPlan.model_d), is not of what
     their instruments record.
 
-    The draws write over the models of the plan, which evaluates them
-    again after (see GroupPlan.borrow_plans).
+    The noise of each observation is its own (see noise_of). The draws
+    write over the models of the plan, which evaluates them again after
+    (see GroupPlan.borrow_plans).
 
     Parameters
     ----------
@@ -201,9 +176,8 @@ def draw_mocks(
     params : dict
         The parameters of the group (see ObservationGroup.pdescs).
     options : MockOptions
-        The options: the noise of the data of each observation, the
-        number of mock datasets and of draws of the errors of measured
-        data, and the seed of the random numbers.
+        The options: the number of mock datasets and of draws of the
+        errors of measured data, and the seed of the random numbers.
 
     Returns
     -------
@@ -215,19 +189,19 @@ def draw_mocks(
     Raises
     ------
     ValueError
-        If the options are not of the observations (see
-        MockOptions.check), or a noise does not suit the data of its
+        If an observation has no noise and its data cannot give one (see
+        noise_of), or a noise does not suit the data of its
         observation (see Noise.draw) or is correlated on the sky by a PSF
         that varies along the spectral axis, which the errors of data
         cannot take (see Data).
     """
-    noises = options.noises(plan.group())
-    streams = np.random.SeedSequence(options.seed()).spawn(len(noises))
+    observations = plan.group().observations()
+    streams = np.random.SeedSequence(options.seed()).spawn(len(observations))
     with plan.borrow_plans() as plans:
         states = plan.galaxy_states(params)
         datasets = [
-            _draw(plan, plans[i], i, params, states, noise, stream, options)
-            for i, (noise, stream) in enumerate(zip(noises, streams))]
+            _draw(plan, plans[i], i, params, states, stream, options)
+            for i, stream in enumerate(streams)]
     return [list(mock) for mock in zip(*datasets)]
 
 
@@ -237,7 +211,6 @@ def _draw(
         index: int,
         params: ParamValues,
         states: Sequence[GalaxyState],
-        noise: Noise,
         stream: np.random.SeedSequence,
         options: MockOptions
 ) -> list[Dataset]:
@@ -251,6 +224,7 @@ def _draw(
     nmocks = options.nmocks()
     with config_path('observations', index):
         exact = observation_plan.has_exact_errors()
+        noise = noise_of(observation, exact)
         items = _data_options(observation, noise, exact)
         draws, errors = observation_plan.mock(
             group.moved(index, params), plan.scene_state(index, states),

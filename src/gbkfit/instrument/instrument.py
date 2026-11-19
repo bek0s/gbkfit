@@ -39,6 +39,8 @@ class Instrument(Serializable):
         The line spread function, if any.
     """
 
+    config_titles = dict(primary_beam='Primary beam', psf='PSF', lsf='LSF')
+
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False

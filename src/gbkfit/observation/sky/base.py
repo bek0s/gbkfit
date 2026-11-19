@@ -33,6 +33,7 @@ from gbkfit.model.components.lines import catalogue_in_use
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .._scene import SeenScenes, check_component_names, make_scenes
 from ..depth import Depth, check_scene
+from ..noise import Noise, noise_parser
 from ..observation import Observation, SeenGalaxies, SkyFrame
 from ..plan import FluxScale, ObservationPlan
 from ..weights import Weights, weights_geometry
@@ -319,6 +320,20 @@ class ObservationSky(Observation, abc.ABC):
     # or nothing
     orbit_stars: ClassVar[Literal['light', 'moments'] | None]
 
+    # The titles of its options, and of those of several kinds: of their
+    # grids (the spatial axes, and the spectral axis of a kind with one)
+    # and their smoothing
+    config_titles = dict(
+        size='Pixels', step='Pixel size', rpix='Reference pixel',
+        rval='Reference position', rota='Rotation',
+        spectral='Spectral axis', smooth_weights='Smooth weights',
+        median_size='Median filter', source_grid='Source-plane grid',
+        instrument='Instrument', components='Components', lines='Lines',
+        continuum='Continuum', band='Band', pixel_weights='Pixel weights',
+        flux_scale='Flux scale', offsets='Offsets',
+        oversampling='Oversampling', depth='Depth', dtype='Precision',
+        fft_dtype='FFT precision', unit='Unit')
+
     # The options of its kind that its data give (see options_from_data):
     # those required without data (see Serializable), and the values of
     # the others without data, when not given
@@ -404,6 +419,8 @@ class ObservationSky(Observation, abc.ABC):
             unit=gbkfit.units.format_unit(self._light.unit))
         dataset = {} if self._dataset is None else dict(
             dataset=dataset_parser.dump(self._dataset, **kwargs))
+        noise = {} if self._noise is None else dict(
+            noise=noise_parser.dump(self._noise, **kwargs))
         # (only a given dtype: one the data chose is chosen again by the
         # data it is loaded with, e.g. mock data of correlated noise)
         dtype = {} if self._given_dtype is None else dict(
@@ -412,7 +429,7 @@ class ObservationSky(Observation, abc.ABC):
             | self._dump_kind(prefix, dump_path, overwrite) | galaxies \
             | components | lines | continuum | band | pixel_weights \
             | flux_scale \
-            | offsets | unit | dataset | dtype | dict(
+            | offsets | unit | dataset | noise | dtype | dict(
                 depth=options.depth.dump(),
                 source_grid=options.source_grid.dump(),
                 instrument=instrument_parser.dump(
@@ -593,6 +610,7 @@ class ObservationSky(Observation, abc.ABC):
             flux_scale: str | None,
             offsets: Mapping[str, bool] | None,
             dataset: Dataset | None,
+            noise: Noise | None,
             oversampling: Sequence[int] | None,
             depth: Depth | None,
             dtype: DType | None,
@@ -646,7 +664,7 @@ class ObservationSky(Observation, abc.ABC):
         self._flux_scale = flux_scale
         self._offsets = offsets
         super().__init__(
-            self.keys(), galaxies, dataset, name,
+            self.keys(), galaxies, dataset, noise, name,
             self.model_can_have_missing_values())
         # (as given, for copies of other data and dumps: by default, the
         # data choose it, see with_dataset)
@@ -712,7 +730,7 @@ class ObservationSky(Observation, abc.ABC):
             galaxies=self._galaxies, components=self._components,
             lines=self._lines, continuum=self._continuum, band=self._band,
             pixel_weights=options.pixel_weights, flux_scale=self._flux_scale,
-            offsets=self._offsets, dataset=dataset,
+            offsets=self._offsets, dataset=dataset, noise=self._noise,
             oversampling=options.oversampling, depth=options.depth,
             dtype=self._given_dtype, fft_dtype=options.fft_dtype.name,
             name=self._name)

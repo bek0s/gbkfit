@@ -3,7 +3,7 @@ The observation of spectra on a grid of pixels: a spectral cube.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 
@@ -15,6 +15,7 @@ from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from ..depth import Depth
+from ..noise import Noise
 from ..plan import FluxScale, ModelData, ModelItem
 from ..weights import Weights
 from . import _model_cube
@@ -24,10 +25,6 @@ from ._options import (
     MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size,
     warn_unsmoothed_weights)
 from .base import DType, ObservationSky, SkyOptions, unmasked_pixels
-
-if TYPE_CHECKING:
-    from ..noise import Noise
-
 
 __all__ = [
     'ObservationPixelSpectra'
@@ -132,6 +129,7 @@ class ObservationPixelSpectra(ObservationSky):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             dataset: Dataset | None = None,
+            noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
             dtype: DType | None = None,
@@ -149,8 +147,8 @@ class ObservationPixelSpectra(ObservationSky):
         super().__init__(
             self._make_grid(**grid), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
-            offsets, dataset, oversampling, depth, dtype, fft_dtype, name,
-            unit)
+            offsets, dataset, noise, oversampling, depth, dtype, fft_dtype,
+            name, unit)
 
     def _measured_pixels(self) -> np.ndarray:
         return unmasked_pixels(self._dataset, self._grid.size[1::-1])

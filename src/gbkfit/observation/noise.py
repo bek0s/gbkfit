@@ -174,6 +174,8 @@ class NoiseOfDispersion(Noise):
         negative values.
     """
 
+    config_titles = dict(rms='RMS', error='Error map')
+
     def __init__(
             self,
             rms: float | None = None,
@@ -299,6 +301,10 @@ class NoiseGauss(NoiseOfDispersion):
         If not exactly one of rms and error is given, the error map has
         negative values, or the spectral correlation varies.
     """
+
+    config_titles = dict(
+        spatial_correlation='Spatial correlation',
+        spectral_correlation='Spectral correlation')
 
     config_constructors = ('__init__', 'from_file')
 
@@ -494,6 +500,8 @@ class NoiseStudentT(NoiseOfDispersion):
         negative values.
     """
 
+    config_titles = dict(dof='Degrees of freedom')
+
     config_constructors = ('__init__', 'from_file')
 
     @staticmethod
@@ -586,6 +594,8 @@ class NoisePoisson(Noise):
         The level of the background, in the unit of the data; 0 by
         default.
     """
+
+    config_titles = dict(gain='Gain', background='Background')
 
     @staticmethod
     def type() -> str:

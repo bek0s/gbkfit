@@ -225,10 +225,10 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
 
 
 
-def two_observations(driver):
+def two_observations(driver, noise=None):
     """
     A plan of two spectral cubes of a disk, 'a' and 'b' (which fits the
-    offset of its frame).
+    offset of its frame), of the given noise of mock data, if any.
     """
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
@@ -241,7 +241,7 @@ def two_observations(driver):
             spectral=SpectralAxis(
                 size=11, step=20,
                 convention='relativistic'),
-            name=name, offsets=dict(position=name == 'b'))
+            noise=noise, name=name, offsets=dict(position=name == 'b'))
          for name in ('a', 'b')]).plan(driver)
 
 
@@ -304,11 +304,12 @@ def test_mocks_and_plans_with_other_data_evaluate_again(driver):
     from gbkfit.observation import MockOptions, NoiseGauss, draw_mocks
     noise = NoiseGauss(rms=1.0)
     [mocks] = draw_mocks(
-        two_observations(driver), TWO_PARAMS, MockOptions(noise, seed=1))
-    first = two_observations(driver).with_datasets(dict(enumerate(mocks)))
+        two_observations(driver, noise), TWO_PARAMS, MockOptions(seed=1))
+    first = two_observations(driver, noise).with_datasets(
+        dict(enumerate(mocks)))
     counts = counted(first)
     models = spectra(first.model_h(TWO_PARAMS))
-    [mocks] = draw_mocks(first, TWO_PARAMS, MockOptions(noise, seed=2))
+    [mocks] = draw_mocks(first, TWO_PARAMS, MockOptions(seed=2))
     for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):
         np.testing.assert_array_equal(got, want)
     assert counts == dict(a=2, b=2)

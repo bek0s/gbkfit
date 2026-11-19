@@ -33,6 +33,12 @@ _log = logging.getLogger(__name__)
 SPEC_STEP = 1
 SPEC_RANGE = 1000
 
+# The titles of the options of the moments that the observations of
+# moments share (see Serializable.config_titles)
+OPTION_TITLES = dict(
+    flux_floor='Flux floor', orders='Moment orders',
+    method='Measurement method')
+
 # The smallest dispersion (km/s) a spectral axis derived from the data
 # leaves room for (see spectral_axis)
 _MIN_DISPERSION = 100

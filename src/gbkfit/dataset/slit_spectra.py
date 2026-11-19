@@ -63,6 +63,8 @@ class DatasetSlitSpectra(DatasetGrid):
     # screen_outliers): of positions along the slit and channels
     block_axes = ('the position along the slit', 'the channels')
 
+    config_titles = dict(slit_pa='Slit position angle')
+
     config_constructors = ('from_files',)
 
     @staticmethod

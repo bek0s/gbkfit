@@ -180,10 +180,10 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
 
 def test_mock_profiles():
     galaxy = mass_galaxy()
-    observation = ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc)
+    observation = ObservationProfile(
+        ['vcirc'], [1.0, 3.0] * u.kpc, noise=NoiseGauss(rms=5.0))
     group = ObservationGroup(galaxy, observation)
-    [[mock]] = draw_mocks(
-        group.plan(), PARAMS, MockOptions(NoiseGauss(rms=5.0), seed=1))
+    [[mock]] = draw_mocks(group.plan(), PARAMS, MockOptions(seed=1))
     assert isinstance(mock, DatasetProfile)
     np.testing.assert_array_equal(mock['vcirc'].error(), [5, 5])
     assert np.all(np.abs(mock['vcirc'].data() - model(group, PARAMS)['vcirc'])
@@ -192,12 +192,12 @@ def test_mock_profiles():
 
 def test_mock_profiles_refuse_noise_correlated_by_an_instrument():
     # A profile has no instrument, and its data are not on the sky
-    group = ObservationGroup(
-        mass_galaxy(), ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc))
+    group = ObservationGroup(mass_galaxy(), ObservationProfile(
+        ['vcirc'], [1.0, 3.0] * u.kpc, noise=NoiseGauss(
+            rms=5.0, spatial_correlation='instrument')))
     with pytest.raises(
             ValueError, match="profile observations have no instrument"):
-        draw_mocks(group.plan(), PARAMS, MockOptions(NoiseGauss(
-            rms=5.0, spatial_correlation='instrument'), seed=1))
+        draw_mocks(group.plan(), PARAMS, MockOptions(seed=1))
 
 
 def test_profiles_refuse_what_they_cannot_measure():

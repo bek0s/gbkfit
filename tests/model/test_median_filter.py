@@ -99,12 +99,12 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
         size=(8, 8), spectral=SpectralAxis(size=5, convention='relativistic'),
         median_size=3).linear_in_light()
     group = ObservationGroup(disk('band'), ObservationPixelBrightness(
-        size=(24, 20), median_size=3))
+        size=(24, 20), median_size=3, noise=NoiseGauss(rms=1.0)))
     params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()
-    [[mock]] = draw_mocks(group.plan(driver), params, MockOptions(
-        NoiseGauss(rms=1.0), nsamples=50, seed=1))
+    [[mock]] = draw_mocks(
+        group.plan(driver), params, MockOptions(nsamples=50, seed=1))
     error = np.nanmedian(mock['brightness'].error())
     assert error == pytest.approx(0.41, abs=0.08)
 

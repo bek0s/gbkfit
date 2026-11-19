@@ -132,6 +132,11 @@ class RegionsBins(Regions):
     def type_title() -> str:
         return 'Bins of pixels'
 
+    config_titles = dict(
+        file='File', step='Pixel size', rpix='Reference pixel',
+        rval='Reference position', rota='Rotation',
+        valid='Valid pixels')
+
     config_constructors = ('from_file',)
 
     @classmethod
@@ -294,6 +299,8 @@ class RegionsApertures(Regions):
     apertures : Sequence of Aperture
         The apertures; at least one.
     """
+
+    config_titles = dict(apertures='Apertures')
 
     @staticmethod
     def type() -> str:
