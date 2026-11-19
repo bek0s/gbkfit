@@ -1600,3 +1600,4 @@ h2 { margin: 0; font: var(--text-heading); }
 .fx-fit-name { font: var(--text-data); color: var(--fg); white-space: nowrap; }
 .fx-eyebrow-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
 .fx-eyebrow-link:hover { text-decoration: underline; }
+.fx-edits-to { display: flex; align-items: center; gap: 10px; }

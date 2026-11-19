@@ -7,14 +7,14 @@
 // what gives it its properties (the values of a piece, shared by the fits
 // that use it, or this fit's own, where the edits go: a fit changes no
 // piece); and its fitter.
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { api, data } from '../../api/client';
-import { keys, useProject, useSchema } from '../../api/queries';
+import { keys, useCreateBlock, useProject, useSchema, useUpdateBlock } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
 import { SchemaForm, type Defs } from '../../components/SchemaForm';
 import { Dock, DockSection } from '../../components/ui/dock';
-import { Choice, NumberField } from '../../components/ui/inputs';
+import { Choice, NumberField, Segments } from '../../components/ui/inputs';
 import { DropMenu } from '../../components/ui/overlays';
 import { useStudio } from '../../studio';
 import { isObject } from '../galaxy/options';
@@ -80,7 +80,7 @@ export function RecipeSheet({
         <Observations project={project} setup={setup} draft={draft} all={pieces?.observations ?? []} defs={defs} onChange={(items) => setItems('observations', items)} />
       </DockSection>
       <DockSection id="fx-params" title="Parameters" note={params.length ? [`${free} free`, fixed && `${fixed} fixed`, tied && `${tied} tied`].filter(Boolean).join(' · ') : described ? 'none yet' : '…'}>
-        <Params setup={setup} draft={draft} params={params} setupFile={setupFile} problems={problems} />
+        <Params project={project} setup={setup} draft={draft} params={params} setupFile={setupFile} problems={problems} valued={valued} />
       </DockSection>
       <DockSection id="fx-fitter" title="Fitter" note={typeof setup.fitter === 'string' ? setup.fitter : isObject(setup.fitter) ? String(setup.fitter.type ?? '') : 'none'} needed={setup.fitter === undefined}>
         <Fitter project={project} setup={setup} draft={draft} all={pieces?.fitters ?? []} defs={defs} />
@@ -261,16 +261,68 @@ function Observations({ project, setup, draft, all, defs, onChange }: { project:
 }
 
 // The parameters, by item: their starts and ranges (free), values
-// (fixed) or ties, each with what gives it its properties; an edit goes to
-// the fit's own layer (in its names: a property replaced whole), and a
-// parameter of it can go back to what the layers before give it
-function Params({ setup, draft, params, setupFile, problems }: { setup: Options; draft: SetupDraft; params: SetupParam[]; setupFile: string; problems: Problem[] }) {
+// (fixed) or ties, each with what gives it its properties. An edit goes
+// to the fit's own layer (in its names: a property replaced whole), and a
+// parameter of it can go back to what the layers before give it; or, as
+// chosen, to the values of its galaxy (or lens), kept with its piece by
+// the Studio's convention (params/<piece>, in its own names; made if it is
+// not there, its layer then laid out in the fit), for every fit that uses
+// it: the fit's own value of it goes, as it would hide it
+function Params({ project, setup, draft, params, setupFile, problems, valued }: { project: string; setup: Options; draft: SetupDraft; params: SetupParam[]; setupFile: string; problems: Problem[]; valued: Set<string> }) {
+  const [to, setTo] = useState<'fit' | 'pieces'>('fit');
+  const client = useQueryClient();
+  const update = useUpdateBlock();
+  const create = useCreateBlock(project);
+  const [writing, setWriting] = useState<string | null>(null);
   const own = ownProperties(setup);
   const items = [...new Set(params.map((p) => p.item))];
-  const set = (key: string, property: unknown) => draft.edit((s) => withOwnProperty(s, key, property));
+  const placed = [...itemsOf(setup, 'galaxies'), ...itemsOf(setup, 'lenses')];
+  const pieceOf = (item: string) => placed.find((it) => (it.name ?? '') === item)?.piece ?? null;
+  const set = async (key: string, property: unknown) => {
+    const param = params.find((p) => p.name === key.split('[', 1)[0].trim());
+    const piece = param ? pieceOf(param.item) : null;
+    if (to === 'fit' || piece === null || property === undefined || !param) {
+      draft.edit((s) => withOwnProperty(s, key, property));
+      return;
+    }
+    const ownKey = param.item ? key.slice(param.item.length + 1) : key;
+    const path = joinPath(project, `params/${piece}.yaml`);
+    const exists = valued.has(piece);
+    setWriting(null);
+    try {
+      const content = exists ? await client.fetchQuery({ queryKey: keys.piece(path), queryFn: () => data(api.GET('/api/v1/pieces/{path}', { params: { path: { path } } })) }) : {};
+      const options = isObject(content) ? content : {};
+      const properties = { ...(isObject(options.properties) ? options.properties : {}), [ownKey]: property };
+      if (exists) await update.mutateAsync({ path, content: { ...options, properties } });
+      else await create.mutateAsync({ folder: 'params', name: piece, content: { properties } });
+    } catch (error) {
+      setWriting(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    draft.edit((s) => {
+      const next = withOwnProperty(s, key, undefined);
+      return exists ? next : withItems(next, 'galaxies', itemsOf(next, 'galaxies'), new Set([...valued, piece]));
+    });
+    void client.invalidateQueries({ queryKey: keys.view('setup') });
+  };
   const paramProblems = problems.filter((p) => p.path[0] === 'params');
+  const pieceNames = [...new Set(placed.map((it) => it.piece).filter((n): n is string => n !== null))];
   return (
     <div className="fx-params-sheet">
+      {pieceNames.length > 0 && (
+        <div className="fx-edits-to">
+          <span className="ob-label">Edits go to</span>
+          <Segments
+            label="Where an edit of a parameter goes"
+            value={to}
+            onChange={setTo}
+            items={[
+              { value: 'fit', label: 'This fit', title: 'Its own values: the galaxies keep theirs, for their other fits' },
+              { value: 'pieces', label: pieceNames.length === 1 ? pieceNames[0] : 'Their galaxies', title: 'The values of each galaxy (params/<galaxy>): every fit that uses it changes' },
+            ]}
+          />
+        </div>
+      )}
       {params.length === 0 ? (
         <p className="ob-text">The parameters show once the fit has galaxies and observations the library can set up.</p>
       ) : (
@@ -287,17 +339,22 @@ function Params({ setup, draft, params, setupFile, problems }: { setup: Options;
           </thead>
           <tbody>
             {items.map((item) => (
-              <ItemRows key={item} item={item} params={params.filter((p) => p.item === item)} own={own} setupFile={setupFile} onSet={set} />
+              <ItemRows key={item} item={item} params={params.filter((p) => p.item === item)} own={own} setupFile={setupFile} onSet={(key, property) => void set(key, property)} />
             ))}
           </tbody>
         </table>
       )}
+      {writing && <p className="fx-problem">{writing}</p>}
       {paramProblems.map((p, i) => (
         <p key={i} className="fx-problem">
           {plain(p.message)}
         </p>
       ))}
-      <p className="ob-text">Edits go to this fit alone: the values of a galaxy (its own screen sets them) stay as they are for its other fits. × takes a value of this fit out, back to that of the galaxy.</p>
+      <p className="ob-text">
+        {to === 'fit'
+          ? 'Edits go to this fit alone: the values of a galaxy (its own screen sets them) stay as they are for its other fits. × takes a value of this fit out, back to that of the galaxy.'
+          : 'Edits go to the values of the galaxy, at once (every fit that uses it changes); those of an observation stay in this fit.'}
+      </p>
     </div>
   );
 }
