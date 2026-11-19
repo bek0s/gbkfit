@@ -5,6 +5,7 @@ The server: its services, which the API serves (see gbkfit_server.api).
 from .checks import Checks
 from .events import Events
 from .galaxies import Galaxies
+from .lenses import Lenses
 from .executors import Executor
 from .jobs import Jobs
 from .preferences import Preferences
@@ -44,6 +45,7 @@ class Server:
     views : Views
     responses : Responses
     galaxies : Galaxies
+    lenses : Lenses
     renders : RenderPool
     preferences : Preferences
     """
@@ -59,6 +61,7 @@ class Server:
         self.views = Views(self.workspace)
         self.responses = Responses(self.workspace)
         self.galaxies = Galaxies(self.workspace)
+        self.lenses = Lenses(self.workspace)
         self.renders = RenderPool(self.workspace, self.events)
         self.preferences = preferences if preferences is not None \
             else Preferences()

@@ -62,8 +62,8 @@ _PREP_FILE = DataFile | Sequence[DataFile | None] | None
 
 # The folders of the pieces and of the setups of a project
 _PIECES = (
-    'galaxies', 'observations', 'datasets', 'psfs', 'lsfs', 'noise',
-    'params', 'fitters', 'setups')
+    'galaxies', 'lenses', 'observations', 'datasets', 'psfs', 'lsfs',
+    'noise', 'params', 'fitters', 'setups')
 
 
 @dataclasses.dataclass

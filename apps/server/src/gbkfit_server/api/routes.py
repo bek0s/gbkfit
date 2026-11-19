@@ -34,7 +34,8 @@ from .models import (
     ComponentType, CubeRenderInfo, FolderInfo, GalaxyExtraRequest,
     GalaxyInfo, GalaxyRenderRequest, GalaxyRequest, GalaxyVolumeRequest,
     HeaderInfo, ImportRequest,
-    JobInfo, JobRequest, LSFRequest, LSFViewInfo, ObservedArrayInfo,
+    JobInfo, JobRequest, LensInfo, LensRequest, LensViewInfo,
+    LensViewRequest, LSFRequest, LSFViewInfo, ObservedArrayInfo,
     ObservedInfo, ObservedRequest, PSFRequest, PSFViewInfo,
     PieceReference, PieceRename, PieceRequest, PreferencesInfo,
     PreparationInfo,
@@ -349,6 +350,29 @@ def galaxy_parameters(server: ServerDep, request: GalaxyRequest) -> GalaxyInfo:
     return GalaxyInfo.model_validate(
         server.galaxies.describe(request.project, request.galaxy),
         from_attributes=True)
+
+
+@router.post('/lenses/describe')
+def lens_parameters(server: ServerDep, request: LensRequest) -> LensInfo:
+    """
+    Describe a lens of the options of a piece of a project: its parameters
+    (by the names of the lens) and its problems.
+    """
+    return LensInfo.model_validate(
+        server.lenses.describe(request.project, request.lens),
+        from_attributes=True)
+
+
+@router.post('/views/lens')
+def view_lens(server: ServerDep, request: LensViewRequest) -> LensViewInfo:
+    """
+    Return what a lens makes of a source behind it: its deflection over a
+    field, its critical curves and its caustics.
+    """
+    view = server.lenses.view(
+        request.project, request.lens, request.properties, request.size,
+        request.half)
+    return LensViewInfo.model_validate(view, from_attributes=True)
 
 
 def _what(label: str | None) -> str:

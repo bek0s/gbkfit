@@ -1401,3 +1401,34 @@ h2 { margin: 0; font: var(--text-heading); }
 .obs-notes { margin: 0; padding: 6px 9px 6px 24px; border-left: 3px solid var(--warn-fill); border-radius: 4px; background: color-mix(in srgb, var(--warn-fill) 11%, transparent); font: var(--text-label); color: var(--fg2); overflow-wrap: anywhere; }
 .obs-problem { display: grid; gap: 8px; justify-items: start; max-width: 720px; margin: 24px auto; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--err-fill) 40%, transparent); border-radius: 8px; background: var(--panel); }
 .obs-problem p { margin: 0; font: var(--text-body); }
+
+/* The lens screen: its pieces as boxes, each its parameters a line (short
+   name, title, value, unit, fixed or free and its range); its picture, the
+   image plane and the source plane side by side, square, with their curves
+   over them */
+.ln-pieces { display: grid; gap: 10px; }
+.ln-piece { display: grid; gap: 4px; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--raise); }
+.ln-piece-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.ln-piece-head b { font: var(--text-body); font-weight: 600; color: var(--fg); }
+.ln-piece-head span { font: var(--text-label); color: var(--muted); }
+.ln-x { margin-left: auto; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--faint); font: 14px/1 var(--sans); }
+.ln-x:hover { color: var(--err); }
+.ln-param { display: grid; grid-template-columns: 6ch minmax(0, 1fr) 96px 18px auto; align-items: center; gap: 6px; min-height: 28px; }
+.ln-param .ob-number input { text-align: right; }
+.ln-free { height: 20px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--muted); font: var(--text-caption); }
+.ln-free[aria-pressed="true"] { border-color: transparent; background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--fg); }
+.ln-free[aria-pressed="true"]::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 5px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }
+.ln-range { grid-column: 2 / -1; display: grid; grid-template-columns: 96px auto 96px; align-items: center; gap: 6px; font: var(--text-caption); color: var(--faint); }
+.ln-problem { margin: 6px 0 0; color: var(--err); font: var(--text-caption); }
+.ln-planes { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-content: start; }
+.ln-plane { position: relative; width: 100%; aspect-ratio: 1; border-radius: 6px; overflow: hidden; background: #000; }
+.ln-plane canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ln-drag { cursor: crosshair; touch-action: none; }
+.ln-curves { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ln-curves polyline { fill: none; stroke-width: 1.4; }
+.ln-critical { stroke: #7fd4ff; }
+.ln-caustic { stroke: #ff8fc8; }
+.ln-key { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; font: var(--text-caption); color: var(--muted); }
+.ln-key i { display: inline-block; width: 14px; border-top: 2px solid; }
+.ln-key-critical { color: #7fd4ff; }
+.ln-key-caustic { color: #ff8fc8; }

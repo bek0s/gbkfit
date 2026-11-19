@@ -369,6 +369,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lenses/describe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lens Parameters
+         * @description Describe a lens of the options of a piece of a project: its parameters
+         *     (by the names of the lens) and its problems.
+         */
+        post: operations["lens_parameters_api_v1_lenses_describe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/lens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Lens
+         * @description Return what a lens makes of a source behind it: its deflection over a
+         *     field, its critical curves and its caustics.
+         */
+        post: operations["view_lens_api_v1_views_lens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/views/galaxy": {
         parameters: {
             query?: never;
@@ -1476,6 +1518,84 @@ export interface components {
             unit: string;
         };
         /**
+         * LensInfo
+         * @description A lens as the library describes it (see Lenses.describe): its
+         *     parameters, by the names of the lens (as those of GalaxyInfo; their
+         *     owner, their piece: ['pieces', i]), and its problems.
+         */
+        LensInfo: {
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            }[];
+            /** Problems */
+            problems: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
+         * LensRequest
+         * @description A lens to describe: the project of its piece, and its options (its
+         *     files relative to the project).
+         */
+        LensRequest: {
+            /** Project */
+            project: string;
+            /** Lens */
+            lens: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * LensViewInfo
+         * @description What a lens makes of a source behind it (see Lenses.view and LensView):
+         *     the half-width of the field (arcsec), the points across it, the
+         *     deflection at each (arcsec, row-major, y up), the critical curves and
+         *     the caustics (lists of [x, y]), and the pieces left out of it.
+         */
+        LensViewInfo: {
+            /** Half */
+            half: number;
+            /** Size */
+            size: number;
+            /** Alpha X */
+            alpha_x: number[];
+            /** Alpha Y */
+            alpha_y: number[];
+            /** Critical */
+            critical: number[][][];
+            /** Caustics */
+            caustics: number[][][];
+            /** Left Out */
+            left_out: string[];
+        };
+        /**
+         * LensViewRequest
+         * @description A lens to view (see Lenses.view): as LensRequest, with the properties
+         *     of its parameters (by the names of the lens), the number of points
+         *     across the field, and its half-width (arcsec; by default, of its
+         *     Einstein radii).
+         */
+        LensViewRequest: {
+            /** Project */
+            project: string;
+            /** Lens */
+            lens: {
+                [key: string]: unknown;
+            };
+            /** Properties */
+            properties: {
+                [key: string]: unknown;
+            };
+            /**
+             * Size
+             * @default 96
+             */
+            size: number;
+            /** Half */
+            half?: number | null;
+        };
+        /**
          * ObservedArrayInfo
          * @description An array of a galaxy observed: its kind ('model', 'data' or 'error'),
          *     its item (e.g. 'spectra', 'brightness', 'moment1'), the path the views of
@@ -2512,6 +2632,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GalaxyInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    lens_parameters_api_v1_lenses_describe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LensRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LensInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_lens_api_v1_views_lens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LensViewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LensViewInfo"];
                 };
             };
             /** @description Validation Error */

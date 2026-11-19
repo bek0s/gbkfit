@@ -10,6 +10,7 @@ import { isKind } from './screens/dataset/model';
 import { GalaxyScreen } from './screens/galaxy/GalaxyScreen';
 import { Home } from './screens/Home';
 import { ObservationScreen } from './screens/observation/ObservationScreen';
+import { LensScreen } from './screens/lens/LensScreen';
 import { Pending } from './screens/Pending';
 import { ResponseScreen } from './screens/Response';
 import { Welcome } from './screens/Welcome';
@@ -106,6 +107,7 @@ function ScreenView({ screen }: { screen: Screen }) {
       if (screen.folder === 'lsfs') return <ResponseScreen key={address(screen)} family="lsf" name={screen.name} />;
       if (screen.folder === 'galaxies') return <GalaxyScreen key={address(screen)} name={screen.name} />;
       if (screen.folder === 'observations') return <ObservationScreen key={address(screen)} name={screen.name} />;
+      if (screen.folder === 'lenses') return <LensScreen key={address(screen)} name={screen.name} />;
       return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} folder={screen.folder} />;
     case 'new-dataset':
       if (!isKind(screen.data)) return <Pending eyebrow="New dataset" title="This kind of data comes later" />;

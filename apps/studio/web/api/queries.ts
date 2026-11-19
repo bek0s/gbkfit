@@ -463,6 +463,32 @@ export function usePsfView(project: string, options: Record<string, unknown>, st
   });
 }
 
+// A lens of the options of a piece, as the library describes it: its
+// parameters, by the names of the lens, and its problems (see the
+// server's LensInfo)
+export function useLensDescription(project: string, lens: Record<string, unknown> | undefined) {
+  return useQuery({
+    queryKey: keys.view('lens-describe', project, JSON.stringify(lens ?? null)),
+    enabled: lens !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: ({ signal }) => data(api.POST('/api/v1/lenses/describe', { signal, body: { project, lens: lens ?? {} } })),
+  });
+}
+
+// What a lens makes of a source behind it, at the properties of its
+// parameters: its deflection over a field, its critical curves and its
+// caustics (see the server's LensViewInfo)
+export function useLensView(project: string, lens: Record<string, unknown> | undefined, properties: Record<string, unknown>, size = 96) {
+  return useQuery({
+    queryKey: keys.view('lens', project, JSON.stringify(lens ?? null), JSON.stringify(properties), size),
+    enabled: lens !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/lens', { signal, body: { project, lens: lens ?? {}, properties, size } })),
+  });
+}
+
 // How an LSF is drawn (see the server's LSFRequest): on channels of a
 // width (null: of its own scale), of velocities (km/s) at the rest of a
 // line (e.g. '6562.8 Angstrom'; null: none, which its widths in a unit of

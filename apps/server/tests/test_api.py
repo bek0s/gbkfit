@@ -5,6 +5,7 @@ project, a job and its run, and a live session.
 
 import copy
 import json
+import math
 import os
 import pathlib
 import time
@@ -1263,3 +1264,47 @@ def test_the_preferences_of_the_user_are_set_and_read(client, user_home):
         'theme': 'amber', 'colour-map': dict(map='viridis', inverted=False)}
     assert client.patch(
         '/api/v1/preferences', json=['clay']).status_code == 422
+
+
+# A lens of an SIE and a shear, its strengths quoted for a source at 1.5
+LENS = dict(name='lens', redshift=0.5, source_redshift=1.5, pieces=[
+    dict(type='sie'), dict(type='shear')])
+LENS_PROPERTIES = dict(
+    sie_theta_e=1.2, sie_q=1, sie_posa=0, sie_xpos=0, sie_ypos=0,
+    shear_gamma=0, shear_posa=0)
+
+
+def test_the_parameters_of_a_lens_are_described(client):
+    # (by the names of the lens: of each piece, by its name; each with its
+    # piece; a lens with a problem has none)
+    info = client.post('/api/v1/lenses/describe', json=dict(
+        project='study', lens=LENS)).json()
+    owners = {p['name']: p['owner'] for p in info['parameters']}
+    assert owners['sie_theta_e'] == ['pieces', 0]
+    assert owners['shear_gamma'] == ['pieces', 1]
+    assert info['problems'] == []
+    info = client.post('/api/v1/lenses/describe', json=dict(
+        project='study', lens=LENS | dict(source_redshift=None))).json()
+    assert info['parameters'] == []
+    assert 'source_redshift' in info['problems'][0]['message']
+
+
+def test_a_lens_shows_its_critical_curves_and_caustics(client):
+    # (of a singular isothermal sphere: the Einstein ring, of the Einstein
+    # radius, whose caustic is a point at its centre; the field of the view
+    # of its Einstein radius)
+    view = client.post('/api/v1/views/lens', json=dict(
+        project='study', lens=LENS, properties=LENS_PROPERTIES,
+        size=96)).json()
+    assert view['half'] == pytest.approx(2.5 * 1.2)
+    assert len(view['alpha_x']) == 96 * 96
+    ring = max(view['critical'], key=len)
+    radii = [math.hypot(x, y) for x, y in ring]
+    assert sum(radii) / len(radii) == pytest.approx(1.2, rel=0.02)
+    caustic = view['caustics'][view['critical'].index(ring)]
+    assert max(math.hypot(x, y) for x, y in caustic) < 0.05
+    assert view['left_out'] == []
+    response = client.post('/api/v1/views/lens', json=dict(
+        project='study', lens=LENS, properties=dict(sie_theta_e=1),
+        size=32))
+    assert response.status_code in (400, 422)

@@ -6,7 +6,7 @@
 // until the mouse leaves the rail (onLeave).
 import { useRef, type ReactNode } from 'react';
 import { useProject } from '../api/queries';
-import { CompareIcon, DataIcon, FitIcon, HomeIcon, ModelIcon, ObservationIcon } from '../components/icons';
+import { CompareIcon, DataIcon, FitIcon, HomeIcon, LensIcon, ModelIcon, ObservationIcon } from '../components/icons';
 import { SettingsButton } from '../components/ui/settings';
 import { useStudio } from '../studio';
 import type { Screen } from './navigation';
@@ -16,6 +16,7 @@ const ICONS: Record<SectionKey, ReactNode> = {
   home: <HomeIcon />,
   data: <DataIcon />,
   galaxies: <ModelIcon />,
+  lenses: <LensIcon />,
   observations: <ObservationIcon />,
   compare: <CompareIcon />,
   fit: <FitIcon />,

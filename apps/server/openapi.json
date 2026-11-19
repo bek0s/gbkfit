@@ -1170,6 +1170,84 @@
         }
       }
     },
+    "/api/v1/lenses/describe": {
+      "post": {
+        "summary": "Lens Parameters",
+        "description": "Describe a lens of the options of a piece of a project: its parameters\n(by the names of the lens) and its problems.",
+        "operationId": "lens_parameters_api_v1_lenses_describe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LensRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LensInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/views/lens": {
+      "post": {
+        "summary": "View Lens",
+        "description": "Return what a lens makes of a source behind it: its deflection over a\nfield, its critical curves and its caustics.",
+        "operationId": "view_lens_api_v1_views_lens_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LensViewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LensViewInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/views/galaxy": {
       "post": {
         "summary": "View Galaxy",
@@ -3283,6 +3361,169 @@
         ],
         "title": "LSFViewInfo",
         "description": "An LSF drawn on channels (see Responses.lsf): its values (they sum\nto 1), the width of the channels, its full width at half maximum (none\nfor a point), and the unit of both (e.g. 'km/s')."
+      },
+      "LensInfo": {
+        "properties": {
+          "parameters": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Parameters"
+          },
+          "problems": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Problems"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parameters",
+          "problems"
+        ],
+        "title": "LensInfo",
+        "description": "A lens as the library describes it (see Lenses.describe): its\nparameters, by the names of the lens (as those of GalaxyInfo; their\nowner, their piece: ['pieces', i]), and its problems."
+      },
+      "LensRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "lens": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Lens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "lens"
+        ],
+        "title": "LensRequest",
+        "description": "A lens to describe: the project of its piece, and its options (its\nfiles relative to the project)."
+      },
+      "LensViewInfo": {
+        "properties": {
+          "half": {
+            "type": "number",
+            "title": "Half"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "alpha_x": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Alpha X"
+          },
+          "alpha_y": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Alpha Y"
+          },
+          "critical": {
+            "items": {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Critical"
+          },
+          "caustics": {
+            "items": {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Caustics"
+          },
+          "left_out": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Left Out"
+          }
+        },
+        "type": "object",
+        "required": [
+          "half",
+          "size",
+          "alpha_x",
+          "alpha_y",
+          "critical",
+          "caustics",
+          "left_out"
+        ],
+        "title": "LensViewInfo",
+        "description": "What a lens makes of a source behind it (see Lenses.view and LensView):\nthe half-width of the field (arcsec), the points across it, the\ndeflection at each (arcsec, row-major, y up), the critical curves and\nthe caustics (lists of [x, y]), and the pieces left out of it."
+      },
+      "LensViewRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "lens": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Lens"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Properties"
+          },
+          "size": {
+            "type": "integer",
+            "maximum": 256.0,
+            "minimum": 16.0,
+            "title": "Size",
+            "default": 96
+          },
+          "half": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "lens",
+          "properties"
+        ],
+        "title": "LensViewRequest",
+        "description": "A lens to view (see Lenses.view): as LensRequest, with the properties\nof its parameters (by the names of the lens), the number of points\nacross the field, and its half-width (arcsec; by default, of its\nEinstein radii)."
       },
       "ObservedArrayInfo": {
         "properties": {

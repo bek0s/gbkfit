@@ -31,7 +31,7 @@ export function parseAddress(hash: string): Screen {
 }
 
 function isSection(key: string): key is SectionKey {
-  return ['home', 'data', 'galaxies', 'observations', 'compare', 'fit'].includes(key);
+  return ['home', 'data', 'galaxies', 'lenses', 'observations', 'compare', 'fit'].includes(key);
 }
 
 export function sameScreen(a: Screen, b: Screen): boolean {

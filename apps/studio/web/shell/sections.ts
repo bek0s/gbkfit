@@ -1,11 +1,11 @@
 // The sections of the Studio, as its rail shows them: the home of the
-// project; the blocks it is built of (data, galaxies, observations), each
+// project; the blocks it is built of (data, galaxies, lenses, observations), each
 // a list of groups of one folder each; and the tools that use them
 // (compare, fit). A block folds into its owner when it has no screen of
 // its own: the parameters of a galaxy are part of the galaxy's screen.
 import type { Screen } from './navigation';
 
-export type SectionKey = 'home' | 'data' | 'galaxies' | 'observations' | 'compare' | 'fit';
+export type SectionKey = 'home' | 'data' | 'galaxies' | 'lenses' | 'observations' | 'compare' | 'fit';
 
 export interface Group {
   folder: string;
@@ -26,6 +26,7 @@ export const SECTIONS: Section[] = [
   { key: 'home', title: 'Home', tool: false, groups: [] },
   { key: 'data', title: 'Datasets', tool: false, groups: [{ folder: 'datasets', title: 'Datasets', kind: 'Dataset' }] },
   { key: 'galaxies', title: 'Galaxies', tool: false, groups: [{ folder: 'galaxies', title: 'Galaxies', kind: 'Galaxy' }] },
+  { key: 'lenses', title: 'Lenses', tool: false, groups: [{ folder: 'lenses', title: 'Lenses', kind: 'Lens' }] },
   {
     key: 'observations',
     title: 'Observations',

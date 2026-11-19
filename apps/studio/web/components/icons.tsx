@@ -26,6 +26,15 @@ export const ModelIcon = () => (
   </Icon>
 );
 
+// A lens: an Einstein ring about its centre, an arc broken by the source
+export const LensIcon = () => (
+  <Icon>
+    <path d="M5.5 15.5a7 7 0 1 1 13 0" />
+    <path d="M8 18.5a7 7 0 0 0 8 0" />
+    <circle cx="12" cy="12" r="1.6" />
+  </Icon>
+);
+
 // Home: a house
 export const HomeIcon = () => (
   <Icon>

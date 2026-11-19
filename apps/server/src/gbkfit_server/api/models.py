@@ -5,7 +5,7 @@ in its contract, openapi.json).
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from gbkfit_server.services.jobs import TASKS
 
@@ -160,6 +160,55 @@ class GalaxyInfo(BaseModel):
     parameters: list[dict[str, Any]]
     problems: list[dict[str, Any]]
     whole: bool
+
+
+class LensRequest(BaseModel):
+    """
+    A lens to describe: the project of its piece, and its options (its
+    files relative to the project).
+    """
+    project: str
+    lens: dict[str, Any]
+
+
+class LensInfo(BaseModel):
+    """
+    A lens as the library describes it (see Lenses.describe): its
+    parameters, by the names of the lens (as those of GalaxyInfo; their
+    owner, their piece: ['pieces', i]), and its problems.
+    """
+    parameters: list[dict[str, Any]]
+    problems: list[dict[str, Any]]
+
+
+class LensViewRequest(BaseModel):
+    """
+    A lens to view (see Lenses.view): as LensRequest, with the properties
+    of its parameters (by the names of the lens), the number of points
+    across the field, and its half-width (arcsec; by default, of its
+    Einstein radii).
+    """
+    project: str
+    lens: dict[str, Any]
+    properties: dict[str, Any]
+    size: int = Field(96, ge=16, le=256)
+    half: float | None = Field(None, gt=0)
+
+
+class LensViewInfo(BaseModel):
+    """
+    What a lens makes of a source behind it (see Lenses.view and LensView):
+    the half-width of the field (arcsec), the points across it, the
+    deflection at each (arcsec, row-major, y up), the critical curves and
+    the caustics (lists of [x, y]), and the pieces left out of it.
+    """
+    half: float
+    size: int
+    alpha_x: list[float]
+    alpha_y: list[float]
+    critical: list[list[list[float]]]
+    caustics: list[list[list[float]]]
+    left_out: list[str]
 
 
 class GalaxyVolumeRequest(BaseModel):
