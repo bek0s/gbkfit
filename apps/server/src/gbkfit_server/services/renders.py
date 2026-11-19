@@ -40,6 +40,7 @@ from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.params import ParamSpace
 
 from .errors import Invalid
+from .setups import setup_text
 from .views import Cube, CubeAxis
 from .workspace import Workspace
 
@@ -523,37 +524,58 @@ class Renders:
                     | gbkfit.setup.data_outputs(plan)
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
-        observation = seen[0]
-        light = observation.data_unit()
-        arrays = []
-        for output in outputs.values():
-            data = getattr(output.value, 'data', output.value)
-            item = output.ids.get('item')
-            if output.kind in ('model', 'data', 'error') and item \
-                    and isinstance(data, np.ndarray) and data.ndim in (2, 3):
-                arrays.append(ObservedArray(
-                    output.kind, item, np.asarray(data, dtype=np.float32),
-                    _item_unit(item, light)))
-        spectral = observation.spectral()
-        velocities = None if spectral is None or spectral.size() is None \
-            else spectral.rval() + spectral.step() * (
-                np.arange(spectral.size()) - spectral.rpix())
-        # (a model with no light at all: say where it may have gone)
-        models = [a.values for a in arrays if a.kind == 'model']
-        if models and not any(np.nanmax(np.abs(m), initial=0) > 0
-                              for m in models):
-            where = '' if velocities is None else (
-                f", or its velocities out of the channels of the "
-                f"observation ({velocities.min():g} to "
-                f"{velocities.max():g} km/s; see its systemic velocity)")
-            notes.append(
-                f"the model has no light in the observation: the galaxy "
-                f"may be out of its field, or too small for its pixels"
-                f"{where}")
-        step, rpix = observation.step(), observation.rpix()
-        return Observed(
-            observation.type(), arrays, velocities, notes,
-            (float(step[0]), float(step[1])), (float(rpix[0]), float(rpix[1])))
+        return _observed(seen[0], outputs, None, notes)
+
+    def setup_observed(
+            self,
+            path: str,
+            setup: Mapping[str, Any],
+            observation: int,
+            progress: Callable[[str], None] | None = None
+    ) -> Observed:
+        """
+        Evaluate a setup of the given options as the file of a path (of a
+        project, relative to the workspace; e.g. as it is edited), at the
+        starts of its parameters (see ParamSpace.reference), through its
+        observation of the given index: its model on the grid of the
+        observation, and its data, if it has them; telling progress the
+        stage it reaches, if given.
+
+        Raises
+        ------
+        Invalid
+            If the setup has an error, or the observation is not one of it.
+        """
+        tell = progress or _quiet
+        tell('setting up')
+        filename = self._workspace.path(path)
+        notes: list[str] = []
+        try:
+            with _noted(notes):
+                description = gbkfit.setup.describe(
+                    filename, {filename: setup_text(setup)})
+                errors = [
+                    p for p in description.problems if p.severity == 'error']
+                if errors:
+                    raise Invalid(errors[0].message)
+                group, space = description.group, description.params
+                if group is None or space is None:
+                    raise Invalid("the setup has no galaxies and observations")
+                if not 0 <= observation < group.nobservations():
+                    raise Invalid(
+                        f"the setup has no observation {observation}")
+                values = space.reference()
+                with paths_relative_to(description.root or os.getcwd()):
+                    plan = group.plan(_driver())
+                tell('evaluating')
+                outputs = gbkfit.setup.evaluation_outputs(
+                    plan, None, values, True, False, False) \
+                    | gbkfit.setup.data_outputs(plan)
+        except (ConfigError, ValueError, TypeError, RuntimeError) as e:
+            raise Invalid(error_message(e)) from e
+        return _observed(
+            group.observations()[observation], outputs,
+            group.observation_label(observation), notes)
 
     def _load(
             self, project: str, options: Mapping[str, Any], view: View,
@@ -799,6 +821,53 @@ def _round_width(width: float) -> float:
         if lead * power >= width * (1 - 1e-9):
             return lead * power
     return 10 * power
+
+
+def _observed(
+        observation: Any,
+        outputs: Mapping[str, Any],
+        label: str | None,
+        notes: list[str]
+) -> Observed:
+    """
+    Return what an observation sees of an evaluation (see Renders.observed):
+    the model, data and errors of its items among the outputs (of the
+    observation of the label, if given; else all of them), the velocities
+    of its channels, the notes (with one more if the model has no light),
+    and its pixels.
+    """
+    light = observation.data_unit()
+    arrays = []
+    for output in outputs.values():
+        if label is not None and output.ids.get('observation') != label:
+            continue
+        data = getattr(output.value, 'data', output.value)
+        item = output.ids.get('item')
+        if output.kind in ('model', 'data', 'error') and item \
+                and isinstance(data, np.ndarray) and data.ndim in (2, 3):
+            arrays.append(ObservedArray(
+                output.kind, item, np.asarray(data, dtype=np.float32),
+                _item_unit(item, light)))
+    spectral = observation.spectral()
+    velocities = None if spectral is None or spectral.size() is None \
+        else spectral.rval() + spectral.step() * (
+            np.arange(spectral.size()) - spectral.rpix())
+    # (a model with no light at all: say where it may have gone)
+    models = [a.values for a in arrays if a.kind == 'model']
+    if models and not any(np.nanmax(np.abs(m), initial=0) > 0
+                          for m in models):
+        where = '' if velocities is None else (
+            f", or its velocities out of the channels of the "
+            f"observation ({velocities.min():g} to "
+            f"{velocities.max():g} km/s; see its systemic velocity)")
+        notes.append(
+            f"the model has no light in the observation: the galaxy "
+            f"may be out of its field, or too small for its pixels"
+            f"{where}")
+    step, rpix = observation.step(), observation.rpix()
+    return Observed(
+        observation.type(), arrays, velocities, notes,
+        (float(step[0]), float(step[1])), (float(rpix[0]), float(rpix[1])))
 
 
 def _values(

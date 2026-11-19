@@ -72,7 +72,7 @@ export function useOpenSection(): (key: SectionKey) => void {
   const { project, visited, go } = useStudio();
   const info = useProject(project);
   return (key: SectionKey) => {
-    if (key === 'home' || key === 'fit') {
+    if (key === 'home') {
       go({ kind: key });
       return;
     }

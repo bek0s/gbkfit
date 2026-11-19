@@ -1,4 +1,4 @@
-// The screens of the stage, and their addresses (#home, #fit,
+// The screens of the stage, and their addresses (#home,
 // #block/<folder>/<name>, #new-dataset/<kind>, #section/<key>), so
 // that the browser's back, forward and reload keep the screen.
 import type { SectionKey } from './sections';
@@ -9,8 +9,7 @@ export type Screen =
   | { kind: 'section'; key: SectionKey }
   | { kind: 'block'; folder: string; name: string }
   // A dataset being added: the key of its kind of data (see DATA_KINDS)
-  | { kind: 'new-dataset'; data: string }
-  | { kind: 'fit' };
+  | { kind: 'new-dataset'; data: string };
 
 export function address(screen: Screen): string {
   if (screen.kind === 'block') return `#block/${screen.folder}/${encodeURIComponent(screen.name)}`;
@@ -25,7 +24,6 @@ export function parseAddress(hash: string): Screen {
   if (kind === 'block' && rest.length === 2) return { kind, folder: rest[0], name: decodeURIComponent(rest[1]) };
   if (kind === 'new-dataset' && rest.length === 1) return { kind, data: rest[0] };
   if (kind === 'section' && rest.length === 1 && isSection(rest[0])) return { kind, key: rest[0] };
-  if (kind === 'fit') return { kind };
   return { kind: 'home' };
 }
 

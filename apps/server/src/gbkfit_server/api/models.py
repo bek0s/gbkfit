@@ -48,6 +48,9 @@ __all__ = [
     'ServerInfo',
     'SessionInfo',
     'SessionRequest',
+    'SetupInfo',
+    'SetupObservedRequest',
+    'SetupRequest',
     'SpectrumView'
 ]
 
@@ -179,6 +182,40 @@ class LensInfo(BaseModel):
     """
     parameters: list[dict[str, Any]]
     problems: list[dict[str, Any]]
+
+
+class SetupRequest(BaseModel):
+    """
+    A setup to describe: its path (of a project, relative to the
+    workspace) and its options (e.g. as it is edited, not saved yet).
+    """
+    path: str
+    setup: dict[str, Any]
+
+
+class SetupInfo(BaseModel):
+    """
+    A setup as the library describes it (see Setups.describe): its
+    parameters ({name, title, desc, size, default, unit, item, properties,
+    source}, in the order of the library; item the name of the item they
+    are of, '' for one galaxy without a name; properties those its layers
+    give them, by key; source the file of the layer that gives them,
+    relative to the project), and its problems ({severity, path,
+    message}; paths in the setup).
+    """
+    parameters: list[dict[str, Any]]
+    problems: list[dict[str, Any]]
+
+
+class SetupObservedRequest(BaseModel):
+    """
+    A setup to observe at the starts of its parameters (see
+    Renders.setup_observed): as SetupRequest, with the index of its
+    observation that sees it.
+    """
+    path: str
+    setup: dict[str, Any]
+    observation: int = 0
 
 
 class LensViewRequest(BaseModel):

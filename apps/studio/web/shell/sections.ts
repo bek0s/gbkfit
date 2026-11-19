@@ -75,8 +75,6 @@ export function sectionOf(screen: Screen): SectionKey {
       return sectionOfFolder(screen.folder);
     case 'new-dataset':
       return 'data';
-    case 'fit':
-      return 'fit';
   }
 }
 

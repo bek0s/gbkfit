@@ -11,6 +11,7 @@ import { GalaxyScreen } from './screens/galaxy/GalaxyScreen';
 import { Home } from './screens/Home';
 import { ObservationScreen } from './screens/observation/ObservationScreen';
 import { CompareScreen } from './screens/compare/CompareScreen';
+import { FitScreen } from './screens/fit/FitScreen';
 import { LensScreen } from './screens/lens/LensScreen';
 import { Pending } from './screens/Pending';
 import { ResponseScreen } from './screens/Response';
@@ -110,12 +111,11 @@ function ScreenView({ screen }: { screen: Screen }) {
       if (screen.folder === 'observations') return <ObservationScreen key={address(screen)} name={screen.name} />;
       if (screen.folder === 'lenses') return <LensScreen key={address(screen)} name={screen.name} />;
       if (screen.folder === 'comparisons') return <CompareScreen key={address(screen)} name={screen.name} />;
+      if (screen.folder === 'setups') return <FitScreen key={address(screen)} name={screen.name} />;
       return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} folder={screen.folder} />;
     case 'new-dataset':
       if (!isKind(screen.data)) return <Pending eyebrow="New dataset" title="This kind of data comes later" />;
       return <NewDataset key={address(screen)} kind={screen.data} />;
-    case 'fit':
-      return <Pending eyebrow="Fit" title="Fits and their runs" />;
   }
 }
 

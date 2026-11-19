@@ -533,6 +533,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/setups/describe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Setup Description
+         * @description Describe a setup of a project of the given options (e.g. as it is
+         *     edited), as the library does without devices: its parameters, each
+         *     with the properties its layers give it and the file of the layer that
+         *     does, and its problems.
+         */
+        post: operations["setup_description_api_v1_setups_describe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/setup-observed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Setup Observed
+         * @description Evaluate a setup of a project of the given options at the starts of
+         *     its parameters, through one of its observations (see
+         *     Renders.setup_observed), and keep its arrays as /views/observed does.
+         */
+        post: operations["view_setup_observed_api_v1_views_setup_observed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/renders": {
         parameters: {
             query?: never;
@@ -1919,6 +1964,58 @@ export interface components {
             config: string;
         };
         /**
+         * SetupInfo
+         * @description A setup as the library describes it (see Setups.describe): its
+         *     parameters ({name, title, desc, size, default, unit, item, properties,
+         *     source}, in the order of the library; item the name of the item they
+         *     are of, '' for one galaxy without a name; properties those its layers
+         *     give them, by key; source the file of the layer that gives them,
+         *     relative to the project), and its problems ({severity, path,
+         *     message}; paths in the setup).
+         */
+        SetupInfo: {
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            }[];
+            /** Problems */
+            problems: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
+         * SetupObservedRequest
+         * @description A setup to observe at the starts of its parameters (see
+         *     Renders.setup_observed): as SetupRequest, with the index of its
+         *     observation that sees it.
+         */
+        SetupObservedRequest: {
+            /** Path */
+            path: string;
+            /** Setup */
+            setup: {
+                [key: string]: unknown;
+            };
+            /**
+             * Observation
+             * @default 0
+             */
+            observation: number;
+        };
+        /**
+         * SetupRequest
+         * @description A setup to describe: its path (of a project, relative to the
+         *     workspace) and its options (e.g. as it is edited, not saved yet).
+         */
+        SetupRequest: {
+            /** Path */
+            path: string;
+            /** Setup */
+            setup: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * SpectrumView
          * @description The spectrum of a pixel of a cube: its values (none where it has
          *     none), and the coordinates of its channels along its spectral axis
@@ -2853,6 +2950,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ObservedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservedInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    setup_description_api_v1_setups_describe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_setup_observed_api_v1_views_setup_observed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupObservedRequest"];
             };
         };
         responses: {

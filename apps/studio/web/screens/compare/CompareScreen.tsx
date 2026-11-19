@@ -15,10 +15,10 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { api, data } from '../../api/client';
-import { keys, useGalaxyParameters, useMoments, useObserved, usePiece, useProject, useUpdateBlock, useChannel } from '../../api/queries';
-import { mapUnit, SNR } from '../../components/CubeViewer';
+import { keys, useGalaxyParameters, useObserved, usePiece, useProject, useUpdateBlock } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
 import { MapPanel, robustRange } from '../../components/MapPanel';
+import { SHOWN, useObservedMap, type Colours, type Shown } from '../../components/observedMaps';
 import { frameOf } from '../../components/sky';
 import { Dock, DockSection } from '../../components/ui/dock';
 import { Segments } from '../../components/ui/inputs';
@@ -28,22 +28,6 @@ import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
 import { isObject, type Options } from '../galaxy/options';
 import { forRender, type Param, type Properties } from '../galaxy/params';
-
-// What the cells show: a moment of the light (an image shows its light
-// whatever is chosen: it has no other map)
-type Shown = 'intensity' | 'velocity' | 'dispersion';
-
-const SHOWN: { value: Shown; label: string; colours: Colours }[] = [
-  { value: 'intensity', label: 'Intensity', colours: 'sequential' },
-  { value: 'velocity', label: 'Velocity', colours: 'median' },
-  { value: 'dispersion', label: 'Dispersion', colours: 'sequential' },
-];
-
-type Colours = 'sequential' | 'median' | 'zero';
-
-// The item of each map in moment maps, and the moment of a cube
-const MOMENT_ITEMS: Record<Shown, string> = { intensity: 'moment0', velocity: 'moment1', dispersion: 'moment2' };
-const CUBE_MOMENTS = { intensity: 'flux', velocity: 'velocity', dispersion: 'dispersion' } as const;
 
 // The sizes of the cells (their height, px)
 const SIZES = { s: 260, m: 340, l: 460 } as const;
@@ -366,24 +350,6 @@ function useSavedGalaxy(project: string, name: string) {
     [described.data, saved, params.isError],
   );
   return { options: properties === undefined ? undefined : options, properties: properties ?? {}, error: galaxy.error ?? described.error };
-}
-
-type Observed = NonNullable<ReturnType<typeof useObserved>['data']>;
-
-// A map of a galaxy observed: of its model or of its data, of the item
-// shown (moment maps), or the moment of its cube, measured as from data
-// (of the data, in the mask of their signal; see CubeViewer); an image is
-// its light alone
-function useObservedMap(observed: Observed | undefined, kind: 'model' | 'data', show: Shown) {
-  const arrays = observed?.arrays.filter((array) => array.kind === kind) ?? [];
-  const cube = observed?.type === 'pixel_spectra';
-  const item = cube ? arrays[0] : (arrays.find((array) => array.item === MOMENT_ITEMS[show]) ?? arrays.find((array) => array.item === 'brightness'));
-  const plane = useChannel(!cube && item ? item.path : null, 0, 0);
-  const moments = useMoments(item?.path ?? '', 0, kind === 'data' ? SNR : 0, cube && item !== undefined);
-  const values = cube ? moments.data?.find((array) => array.info.name === CUBE_MOMENTS[show])?.values : plane.data?.plane.values;
-  const unit = cube ? mapUnit(CUBE_MOMENTS[show], item?.unit || null) : (item?.unit ?? '');
-  const colours: Colours = item?.item === 'brightness' ? 'sequential' : SHOWN.find((s) => s.value === show)!.colours;
-  return { item, values, unit, colours, error: (cube ? moments.error : plane.error) ?? null };
 }
 
 // A cell: a galaxy as an observation sees it (its model, or the residual

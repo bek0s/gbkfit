@@ -692,6 +692,35 @@ export function useGalaxyRender(
 // observation, if it has them), each kept by the server for the views of
 // cubes; the type of the observation; and what the library noted. Asked
 // again as the galaxy, its values or the observation change.
+// A setup of a project of the given options (e.g. as it is edited), as
+// the library describes it (see the server's /setups/describe): its
+// parameters, each with the properties its layers give it and the file of
+// the layer that does, and its problems; the last stays while the next
+// comes
+export function useSetupDescription(path: string, setup: Record<string, unknown> | undefined) {
+  return useQuery({
+    queryKey: keys.view('setup', path, JSON.stringify(setup ?? null)),
+    enabled: setup !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: ({ signal }) => data(api.POST('/api/v1/setups/describe', { signal, body: { path, setup: setup ?? {} } })),
+  });
+}
+
+// A setup of a project of the given options at the starts of its
+// parameters, through one of its observations (see the server's
+// /views/setup-observed): as useObserved
+export function useSetupObserved(path: string, setup: Record<string, unknown> | undefined, observation: number) {
+  return useQuery({
+    queryKey: keys.view('setup-observed', path, JSON.stringify(setup ?? null), observation),
+    enabled: setup !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    gcTime: 0,
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/setup-observed', { signal, body: { path, setup: setup ?? {}, observation } })),
+  });
+}
+
 export function useObserved(
   project: string,
   galaxy: Record<string, unknown> | undefined,

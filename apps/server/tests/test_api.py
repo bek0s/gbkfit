@@ -223,6 +223,38 @@ def test_comparisons_are_pieces_of_the_studio_that_follow_their_names(
         'comparisons'] == []
 
 
+def test_a_setup_gives_each_parameter_the_file_of_its_layer(client, setup):
+    # (as edited: a layer in place after the params piece of the galaxy
+    # replaces its inclination; a parameter no layer gives has none)
+    content = client.get(f'/api/v1/pieces/{setup}').json()
+    content['params'] = ['disk', dict(properties=dict(incl=60))]
+    info = client.post('/api/v1/setups/describe', json=dict(
+        path=setup, setup=content)).json()
+    assert info['problems'] == []
+    by_name = {p['name']: p for p in info['parameters']}
+    assert by_name['posa']['source'] == 'params/disk.yaml'
+    assert by_name['posa']['properties'] == dict(posa=30)
+    assert by_name['incl']['source'] == 'setups/disk.yaml'
+    assert by_name['incl']['properties'] == dict(incl=60)
+    assert by_name['incl']['item'] == '' and by_name['incl']['unit'] == 'deg'
+    assert by_name['rpt_s']['source'] == 'params/disk.yaml'
+    content['params'].append(dict(properties=dict(nothing=1)))
+    problems = client.post('/api/v1/setups/describe', json=dict(
+        path=setup, setup=content)).json()['problems']
+    assert any('nothing' in p['message'] for p in problems)
+
+
+def test_a_setup_is_observed_at_its_starts(client, setup):
+    content = client.get(f'/api/v1/pieces/{setup}').json()
+    observed = client.post('/api/v1/views/setup-observed', json=dict(
+        path=setup, setup=content, observation=0)).json()
+    assert observed['type'] == 'pixel_brightness'
+    [model] = observed['arrays']
+    assert model['kind'] == 'model' and model['shape'] == [16, 12, 1]
+    assert client.post('/api/v1/views/setup-observed', json=dict(
+        path=setup, setup=content, observation=1)).status_code == 400
+
+
 def test_pieces_are_updated_and_their_comments_stay(client):
     path = client.post('/api/v1/pieces', json=dict(
         project='study', folder='psfs', name='beam')).json()

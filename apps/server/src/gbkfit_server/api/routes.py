@@ -40,7 +40,8 @@ from .models import (
     PieceReference, PieceRename, PieceRequest, PreferencesInfo,
     PreparationInfo,
     ProjectInfo, ProjectRename, ProjectRequest, RenderInfo, RunInfo,
-    SessionInfo, SessionRequest, SpectrumView)
+    SessionInfo, SessionRequest, SetupInfo, SetupObservedRequest,
+    SetupRequest, SpectrumView)
 
 
 __all__ = [
@@ -494,6 +495,44 @@ async def view_observed(
         properties=request.properties, observation=request.observation),
         f"{_what(request.label)} through {request.observation}",
         connection.is_disconnected)
+    return _observed_info(server, observed)
+
+
+@router.post('/setups/describe')
+def setup_description(server: ServerDep, request: SetupRequest) -> SetupInfo:
+    """
+    Describe a setup of a project of the given options (e.g. as it is
+    edited), as the library does without devices: its parameters, each
+    with the properties its layers give it and the file of the layer that
+    does, and its problems.
+    """
+    return SetupInfo.model_validate(
+        server.setups.describe(request.path, request.setup),
+        from_attributes=True)
+
+
+@router.post('/views/setup-observed')
+async def view_setup_observed(
+        server: ServerDep, request: SetupObservedRequest,
+        connection: Request) -> ObservedInfo:
+    """
+    Evaluate a setup of a project of the given options at the starts of
+    its parameters, through one of its observations (see
+    Renders.setup_observed), and keep its arrays as /views/observed does.
+    """
+    observed = await server.renders.render('setup_observed', dict(
+        path=request.path, setup=request.setup,
+        observation=request.observation),
+        f"{request.path.rsplit('/', 1)[-1]} at its start",
+        connection.is_disconnected)
+    return _observed_info(server, observed)
+
+
+def _observed_info(server: Server, observed: Any) -> ObservedInfo:
+    """
+    Keep the arrays of what an observation sees (see Renders.observed) for
+    the views of cubes, and return them with where they are kept.
+    """
     arrays = []
     for array in observed.arrays:
         values = array.values if array.values.ndim == 3 \

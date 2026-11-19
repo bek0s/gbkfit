@@ -5,7 +5,7 @@ import { latestFirst } from './remember';
 test('every screen has an address that leads back to it', () => {
   const screens: Screen[] = [
     { kind: 'home' },
-    { kind: 'fit' },
+    { kind: 'section', key: 'fit' },
     { kind: 'block', folder: 'observations', name: 'ngc1313/hi #2' },
     { kind: 'new-dataset', data: 'cube' },
   ];

@@ -1431,6 +1431,84 @@
         }
       }
     },
+    "/api/v1/setups/describe": {
+      "post": {
+        "summary": "Setup Description",
+        "description": "Describe a setup of a project of the given options (e.g. as it is\nedited), as the library does without devices: its parameters, each\nwith the properties its layers give it and the file of the layer that\ndoes, and its problems.",
+        "operationId": "setup_description_api_v1_setups_describe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/views/setup-observed": {
+      "post": {
+        "summary": "View Setup Observed",
+        "description": "Evaluate a setup of a project of the given options at the starts of\nits parameters, through one of its observations (see\nRenders.setup_observed), and keep its arrays as /views/observed does.",
+        "operationId": "view_setup_observed_api_v1_views_setup_observed_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupObservedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservedInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/renders": {
       "get": {
         "summary": "Renders",
@@ -4178,6 +4256,78 @@
         ],
         "title": "SessionRequest",
         "description": "A live session to open: its configuration (its path)."
+      },
+      "SetupInfo": {
+        "properties": {
+          "parameters": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Parameters"
+          },
+          "problems": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Problems"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parameters",
+          "problems"
+        ],
+        "title": "SetupInfo",
+        "description": "A setup as the library describes it (see Setups.describe): its\nparameters ({name, title, desc, size, default, unit, item, properties,\nsource}, in the order of the library; item the name of the item they\nare of, '' for one galaxy without a name; properties those its layers\ngive them, by key; source the file of the layer that gives them,\nrelative to the project), and its problems ({severity, path,\nmessage}; paths in the setup)."
+      },
+      "SetupObservedRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "setup": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Setup"
+          },
+          "observation": {
+            "type": "integer",
+            "title": "Observation",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "setup"
+        ],
+        "title": "SetupObservedRequest",
+        "description": "A setup to observe at the starts of its parameters (see\nRenders.setup_observed): as SetupRequest, with the index of its\nobservation that sees it."
+      },
+      "SetupRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "setup": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Setup"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "setup"
+        ],
+        "title": "SetupRequest",
+        "description": "A setup to describe: its path (of a project, relative to the\nworkspace) and its options (e.g. as it is edited, not saved yet)."
       },
       "SpectrumView": {
         "properties": {

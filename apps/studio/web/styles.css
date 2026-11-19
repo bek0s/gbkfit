@@ -1456,3 +1456,72 @@ h2 { margin: 0; font: var(--text-heading); }
 .cmp-cell > .map-panel { flex: 1; min-width: 0; }
 .cmp-none { align-items: center; justify-content: center; color: var(--faint); font: var(--text-caption); border-style: dashed; background: none; }
 .cmp-error { margin: 14px; font: var(--text-caption); overflow-wrap: anywhere; }
+
+/* The fit screen: the recipe as its sheet; the next run (its checks, and
+   the model at its starts against the data) as its picture */
+.fx-body { flex: 1; min-height: 0; }
+.fx-picture { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.fx-scroll { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px 24px; }
+.fx-view-grid { display: grid; gap: 14px; align-content: start; }
+.fx-card { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.fx-card-head { display: flex; align-items: baseline; gap: 10px; padding: 10px 14px 6px; }
+.fx-card-head h2 { color: var(--fg2); }
+.fx-faint { color: var(--faint); }
+.fx-small { font: var(--text-caption); }
+.fx-sign { display: inline-grid; place-items: center; width: 16px; flex: none; font-weight: 600; }
+.fx-checks ul { margin: 0; padding: 2px 14px 12px; list-style: none; display: grid; gap: 6px; }
+.fx-checks li { display: flex; align-items: baseline; gap: 8px; font: var(--text-body); color: var(--fg2); overflow-wrap: anywhere; }
+.fx-checks li[data-sign="ok"] .fx-sign { color: var(--ok); }
+.fx-checks li[data-sign="warn"] .fx-sign { color: var(--warn); }
+.fx-checks li[data-sign="error"] .fx-sign, .fx-checks li[data-sign="error"] { color: var(--err); }
+.fx-checks li[data-sign="info"] .fx-sign { color: var(--faint); }
+.fx-wait-card { padding: 14px; color: var(--muted); font: var(--text-body); }
+.fx-triptych { margin: 0; padding: 10px 12px 8px; }
+.fx-triptych figcaption { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 0 2px 8px; font: var(--text-heading); color: var(--fg2); }
+.fx-triptych figcaption .ui-segments:first-of-type { margin-left: auto; }
+.fx-caption-note { font: var(--text-caption); color: var(--faint); }
+.fx-three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.fx-three[data-count="1"] { grid-template-columns: minmax(0, 480px); }
+.fx-three > div { height: 340px; display: flex; flex-direction: column; min-width: 0; }
+.fx-three > div > .map-panel { flex: 1; min-height: 0; }
+.fx-map-title { font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); padding: 0 2px 4px; }
+.fx-start-error { margin: 8px 2px; font: var(--text-label); overflow-wrap: anywhere; }
+.fx-notes { margin: 8px 2px 2px; padding-left: 16px; color: var(--muted); font: var(--text-caption); }
+
+/* (the recipe) */
+.fx-placed-list { display: grid; gap: 8px; justify-items: start; }
+.fx-placed-list > .gm-add { margin-left: -4px; }
+.fx-placed { width: 100%; display: flex; align-items: center; gap: 8px; }
+.fx-placed-piece { flex: 1; min-width: 0; }
+.fx-role { width: 100px; height: 28px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 5px; background: var(--field); color: var(--fg); font: var(--text-data-small); }
+.fx-role:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+.fx-role[data-invalid] { border-color: var(--err); }
+.fx-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: var(--text-label); white-space: nowrap; }
+.fx-link:hover { text-decoration: underline; }
+.fx-x { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--faint); font: 15px/1 var(--sans); }
+.fx-x:hover { color: var(--err); background: var(--panel2); }
+.fx-seen { width: 100%; display: grid; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.fx-seen-lines { width: 100%; display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 4px 10px; padding-left: 2px; }
+.fx-seen-lines .fx-small { color: var(--fg2); }
+.fx-likelihood { max-width: 220px; }
+.fx-params-sheet { display: grid; gap: 10px; }
+.fx-param-editor { width: 100%; border-collapse: collapse; }
+.fx-param-editor th { padding: 2px 4px 5px; text-align: left; font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
+.fx-param-editor th.fx-num { text-align: right; }
+.fx-param-editor td { padding: 2px 4px; }
+.fx-param-editor td:nth-child(2) { text-align: center; }
+.fx-param-editor .fx-name { color: var(--fg2); white-space: nowrap; font: var(--text-data-small); max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.fx-param-editor tr[data-fixed] .fx-name { color: var(--faint); }
+.fx-param-editor tr[data-own] .fx-name { color: var(--accent-text); }
+.fx-param-editor input[type="checkbox"] { accent-color: var(--accent); }
+.fx-param-editor .fx-item-row td { padding: 10px 4px 3px; border-bottom: 1px solid var(--line); }
+.fx-param-editor .fx-item-row code { font: var(--text-data-small); font-weight: 600; color: var(--fg); }
+.fx-num-field { display: block; width: 66px; }
+.fx-num-field input { text-align: right; }
+.fx-tie { font: var(--text-data-small); color: var(--muted); }
+.fx-tie code { color: var(--fg2); }
+.fx-from { display: inline-flex; align-items: center; gap: 2px; max-width: 110px; padding: 0 6px; border-radius: 9px; background: var(--panel2); font: var(--text-data-small); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.fx-from[data-own] { background: var(--sel); color: var(--accent-text); }
+.fx-from-x { padding: 0 0 0 2px; border: 0; background: none; color: inherit; font: 13px/1 var(--sans); }
+.fx-from-x:hover { color: var(--err); }
+.fx-problem { margin: 0; color: var(--err); font: var(--text-label); overflow-wrap: anywhere; }
