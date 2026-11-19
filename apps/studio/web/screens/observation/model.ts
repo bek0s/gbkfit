@@ -4,19 +4,54 @@
 import type { ArrayInfo } from '../../api/client';
 import { membersOf, propertiesOf, typeOf, type Defs, type Options, type Schema } from '../../components/SchemaForm';
 
-// The stages of an observation on the sky, from the galaxies to the data,
-// as the dock has them (by the id of their section)
+// The stages of an observation on the sky, in the order of the path of the
+// light, from the galaxies to the data, as the dock and the strip have
+// them (by the id of their section)
 export const STAGES = [
-  { key: 'light', title: 'Galaxies', section: 'ob-light' },
+  { key: 'sees', title: 'Sees', section: 'ob-sees' },
   { key: 'instrument', title: 'Instrument', section: 'ob-instrument' },
-  { key: 'kind', title: 'Kind', section: 'ob-kind' },
-  { key: 'dataset', title: 'Dataset', section: 'ob-data' },
+  { key: 'records', title: 'Records', section: 'ob-records' },
+  { key: 'noise', title: 'Noise', section: 'ob-noise' },
+  { key: 'data', title: 'Data', section: 'ob-data' },
 ] as const;
 
-// The options of a sky observation that its sections set by hand; the
-// others are in its forms of more options
-export const LIGHT_KEYS = ['galaxies', 'components', 'lines', 'band'];
-export const HANDLED_KEYS = ['type', 'dataset', 'instrument', ...LIGHT_KEYS];
+// The options of a sky observation, by the section that sets them: what it
+// sees; how its data meet the model (with its data); how accurately and
+// fast its model is made (folded); the others are those its sections set
+// by hand
+export const LIGHT_KEYS = ['galaxies', 'components', 'lines', 'continuum', 'band'];
+export const MEETING_KEYS = ['offsets', 'flux_scale', 'pixel_weights', 'smooth_weights', 'median_size'];
+export const ACCURACY_KEYS = ['oversampling', 'depth', 'source_grid', 'dtype', 'fft_dtype', 'name'];
+export const HANDLED_KEYS = ['type', 'dataset', 'instrument', 'noise', 'unit', ...LIGHT_KEYS, ...MEETING_KEYS, ...ACCURACY_KEYS];
+
+// The kinds of observations whose data are what their instrument records
+// plus the noise, in one item (whose errors are then the noise of their mock
+// data, by default; see the library's noise_of): not those measured from it
+// (e.g. moments of a cube)
+const RECORDED = ['pixel_spectra', 'pixel_brightness', 'slit_spectra', 'slitless_spectra', 'visibilities'];
+
+export function isRecorded(type: unknown): boolean {
+  return RECORDED.includes(String(type));
+}
+
+// Whether a dataset (its piece) has errors: of an item, or of its one item
+export function datasetHasErrors(dataset: Options | undefined): boolean {
+  if (!dataset) return false;
+  if (dataset.error != null) return true;
+  return Object.values(dataset).some((item) => isObject(item) && item.error != null);
+}
+
+// The noise of mock data of an observation in a few words (its options, of
+// the project or in place; undefined: not read yet)
+export function noiseText(noise: unknown, options: Options | undefined, titleOf: (family: string, type: unknown) => string): string {
+  if (noise == null) return 'None';
+  if (!options) return typeof noise === 'string' ? noise : '…';
+  const kind = titleOf('noise', options.type);
+  const level = typeof options.rms === 'number' ? ` ${options.rms}` : options.error != null ? ' of an error map' : '';
+  const spatial = options.spatial_correlation;
+  const correlated = spatial === 'instrument' ? ' · as the PSF' : spatial != null ? ' · correlated on the sky' : '';
+  return `${typeof noise === 'string' ? `${noise}: ` : ''}${kind}${level}${correlated}`;
+}
 
 // The kinds of observations (and datasets) whose data have a spectral axis
 const SPECTRAL = ['pixel_spectra', 'pixel_moments', 'slit_spectra', 'slitless_spectra', 'region_spectra', 'region_moments', 'visibilities'];
@@ -47,11 +82,13 @@ export function withKey(options: Options, key: string, value: unknown): Options 
   return value === undefined ? rest : { ...rest, [key]: value };
 }
 
-// What a stage of an observation is, at a glance
-export function glanceOf(key: (typeof STAGES)[number]['key'], options: Options, titleOf: (family: string, type: unknown) => string): string {
-  if (key === 'light') {
+// What a stage of an observation is, at a glance (the noise as given; see
+// noiseText)
+export function glanceOf(key: (typeof STAGES)[number]['key'], options: Options, titleOf: (family: string, type: unknown) => string, noise: string): string {
+  if (key === 'sees') {
     const galaxies = options.galaxies;
-    return Array.isArray(galaxies) && galaxies.length ? galaxies.join(', ') : 'All of the setup';
+    const lines = Array.isArray(options.lines) && options.lines.length ? ` · ${options.lines.join(', ')}` : '';
+    return `${Array.isArray(galaxies) && galaxies.length ? galaxies.join(', ') : 'All of the setup'}${lines}`;
   }
   if (key === 'instrument') {
     const instrument = objectAt(options, 'instrument');
@@ -62,7 +99,8 @@ export function glanceOf(key: (typeof STAGES)[number]['key'], options: Options, 
     });
     return parts.join(' · ') || 'A perfect one';
   }
-  if (key === 'kind') return titleOf('observation', options.type);
+  if (key === 'records') return titleOf('observation', options.type);
+  if (key === 'noise') return noise;
   return typeof options.dataset === 'string' ? options.dataset : options.dataset ? 'Given in place' : 'None: a model';
 }
 
@@ -101,6 +139,8 @@ export function checksOf({
   data,
   psf,
   lsfWidth,
+  errors,
+  noise,
   titleOf,
 }: {
   options: Options;
@@ -110,6 +150,10 @@ export function checksOf({
   data: ArrayInfo | undefined;
   psf: Ellipse | null;
   lsfWidth: number | null;
+  // Whether the data have errors, and the noise of mock data in a few
+  // words (see noiseText)
+  errors: boolean;
+  noise: string;
   titleOf: (family: string, type: unknown) => string;
 }): Check[] {
   const checks: Check[] = [];
@@ -150,9 +194,21 @@ export function checksOf({
       checks.push({ ok: null, text: `The LSF is ${fixed(lsfWidth)} km/s across (FWHM): ${fixed(lsfWidth / width)} channels of the data.` });
     }
   }
+  // (the sampling of the PSF and the LSF: at least two pixels or channels
+  // across their FWHM)
+  const pixel = data?.step ? Math.abs(data.step[0]) : typeof options.step === 'number' ? options.step : Array.isArray(options.step) ? Number(options.step[0]) : null;
+  if (psf && pixel) {
+    const across = psf.major / pixel;
+    checks.push(across >= 2 ? { ok: true, text: `The PSF spans ${fixed(across)} pixels: well sampled.` } : { ok: false, text: `The PSF spans ${fixed(across)} pixels: under-sampled (at least 2 are needed).` });
+  }
   if (data?.step) {
     checks.push({ ok: null, text: `The data have pixels of ${fixed(Math.abs(data.step[0]))}″${width !== null ? ` and channels of ${fixed(width)} km/s` : ''}.` });
   }
+  // (of the data: fits need their errors; of mock data: their noise)
+  if (named !== null && datasetType !== undefined && !errors) checks.push({ ok: false, text: 'The data have no errors: their fits need them (give the dataset its errors).' });
+  if (options.noise != null) checks.push({ ok: null, text: `Mock noise: ${noise}.` });
+  else if (options.dataset != null && isRecorded(options.type) && errors) checks.push({ ok: null, text: 'Mock noise: the errors of the data, as Gaussian noise.' });
+  else checks.push({ ok: null, text: 'No noise for mock data: a setup cannot draw them (give it one in Noise).' });
   return checks;
 }
 
@@ -227,14 +283,14 @@ export function needsOf({
   const member = observationMember(defs, options.type);
   if (typeof options.dataset === 'string' && !datasets.includes(options.dataset)) needs.push({ section: 'ob-data', text: `The project has no dataset ${options.dataset}` });
   if (withData && datasetType !== undefined && datasetType !== options.type) {
-    needs.push({ section: 'ob-kind', text: `The observation is not of the type of the data (${titleOf('observation', datasetType)})` });
+    needs.push({ section: 'ob-records', text: `The observation is not of the type of the data (${titleOf('observation', datasetType)})` });
   }
   const required = [...((member?.required as string[] | undefined) ?? []), ...(withData ? [] : requiredWithoutData(member))];
   const missing = required.filter((key) => key !== 'type' && options[key] == null);
-  if (missing.length) needs.push({ section: 'ob-kind', text: `Give the observation its ${missing.map((key) => NAMES[key] ?? key).join(', ')}` });
+  if (missing.length) needs.push({ section: 'ob-records', text: `Give the observation its ${missing.map((key) => NAMES[key] ?? key).join(', ')}` });
   else if (member && 'spectral' in propertiesOf(member) && isSpectral(options.type) && !(withData && dataHaveChannels(datasetType))) {
     const spectral = objectAt(options, 'spectral');
-    if (spectral.size == null || spectral.step == null) needs.push({ section: 'ob-kind', text: 'Give the channels of the model (their number and width)' });
+    if (spectral.size == null || spectral.step == null) needs.push({ section: 'ob-records', text: 'Give the channels of the model (their number and width)' });
   }
   return needs;
 }

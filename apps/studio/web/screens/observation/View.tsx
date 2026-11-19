@@ -1,7 +1,9 @@
 // The view of an observation: its stages at a glance (each leads to its
 // section of the dock), the sky as it sees it (the map of its data, or its
 // grid, with its PSF and the beam of the data drawn to scale at a corner),
-// its spectral resolution (the LSF against the channels), and its checks.
+// its spectral resolution (the LSF against the channels), a patch of the
+// noise of its mock data, and its checks.
+import { useEffect, useRef } from 'react';
 import type { ArrayInfo } from '../../api/client';
 import { useChannel, useMoments, type Reading } from '../../api/queries';
 import { MapPanel, robustRange, useFitted } from '../../components/MapPanel';
@@ -10,19 +12,92 @@ import { showSection } from '../../components/ui/dock';
 import type { Options } from '../../components/SchemaForm';
 import { glanceOf, STAGES, type Check, type Ellipse } from './model';
 
-export function Stages({ options, titleOf }: { options: Options; titleOf: (family: string, type: unknown) => string }) {
+export function Stages({ options, titleOf, noise }: { options: Options; titleOf: (family: string, type: unknown) => string; noise: string }) {
   return (
     <ol className="ob-stages" aria-label="The stages of the observation">
       {STAGES.map((stage) => (
         <li key={stage.key}>
           <button onClick={() => showSection(stage.section)}>
             <span className="ob-stage-title">{stage.title}</span>
-            <span className="ob-stage-glance">{glanceOf(stage.key, options, titleOf)}</span>
+            <span className="ob-stage-glance">{glanceOf(stage.key, options, titleOf, noise)}</span>
           </button>
         </li>
       ))}
     </ol>
   );
+}
+
+// A patch of the noise of the mock data of an observation (none: what it
+// takes): white noise of a fixed seed, correlated on the sky as its PSF if
+// the noise is (smoothed by a Gaussian of the width of the PSF in pixels),
+// in grey, about its mean
+const PATCH = 64;
+
+export function NoisePatch({ noise, text, psf, pixel }: { noise: Options | undefined; text: string; psf: Ellipse | null; pixel: number | null }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const correlated = noise?.spatial_correlation === 'instrument' && psf !== null && pixel !== null && pixel > 0;
+  const sigma = correlated ? psf.major / 2.3548 / pixel : 0;
+  useEffect(() => {
+    const context = canvas.current?.getContext('2d');
+    if (!context || !noise) return;
+    const values = smoothed(whiteNoise(PATCH * PATCH), PATCH, sigma);
+    let low = Infinity;
+    let high = -Infinity;
+    for (const v of values) [low, high] = [Math.min(low, v), Math.max(high, v)];
+    const image = context.createImageData(PATCH, PATCH);
+    values.forEach((v, i) => {
+      const grey = Math.round(((v - low) / (high - low || 1)) * 255);
+      image.data.set([grey, grey, grey, 255], i * 4);
+    });
+    context.putImageData(image, 0, 0);
+  }, [noise, sigma]);
+  return (
+    <figure className="ob-figure ob-noise">
+      <figcaption>Noise of its mock data</figcaption>
+      {noise ? (
+        <div className="ob-noise-body">
+          <canvas ref={canvas} width={PATCH} height={PATCH} aria-label="A patch of its noise" />
+          <span>
+            {text}
+            <small>
+              {PATCH} × {PATCH} pixels{correlated ? `, correlated over ${Number(sigma.toPrecision(2))} px (σ)` : ', independent'}
+            </small>
+          </span>
+        </div>
+      ) : (
+        <p className="ob-caption">{text === 'None' ? 'None given (see Noise).' : text}</p>
+      )}
+    </figure>
+  );
+}
+
+// White Gaussian noise of unit dispersion, of a fixed seed (a patch that
+// stays the same as the options change)
+function whiteNoise(count: number): Float32Array {
+  let seed = 12345;
+  const uniform = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) + 0.5) / 4294967296;
+  const values = new Float32Array(count);
+  for (let i = 0; i < count; i++) values[i] = Math.sqrt(-2 * Math.log(uniform())) * Math.cos(2 * Math.PI * uniform());
+  return values;
+}
+
+// A square of values smoothed by a Gaussian of a dispersion in pixels (none
+// below a third of a pixel), along x and then y, wrapping around
+function smoothed(values: Float32Array, n: number, sigma: number): Float32Array {
+  if (sigma < 0.33) return values;
+  const half = Math.ceil(3 * sigma);
+  const kernel = Array.from({ length: 2 * half + 1 }, (_, i) => Math.exp(-0.5 * ((i - half) / sigma) ** 2));
+  const pass = (input: Float32Array, step: (i: number, k: number) => number) => {
+    const output = new Float32Array(input.length);
+    for (let i = 0; i < input.length; i++) {
+      let sum = 0;
+      for (let k = -half; k <= half; k++) sum += kernel[k + half] * input[step(i, k)];
+      output[i] = sum;
+    }
+    return output;
+  };
+  const along = pass(values, (i, k) => Math.floor(i / n) * n + (((i % n) + k + n) % n));
+  return pass(along, (i, k) => ((Math.floor(i / n) + k + n) % n) * n + (i % n));
 }
 
 // The data as the observation sees them: an array of a file and how to

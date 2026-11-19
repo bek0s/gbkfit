@@ -1,16 +1,21 @@
-// The sections of the dock of an observation on the sky: its data, its
-// kind of data, its instrument, the light it sees, and its other options
-// (e.g. its depth axis, for the galaxies that need one: what they are
-// made of decides how they are seen along the line of sight). The common
-// choices are made by hand; the options of each choice are a form of the
-// schema (see SchemaForm). How its data are compared with its model, its
-// likelihood, is not of the observation but of the fits of it (the
-// section likelihoods of a setup).
+// The sections of the dock of an observation on the sky, in the order of
+// the path of the light: what it sees (galaxies, components, lines or a
+// band), its instrument (primary beam, PSF, LSF), what it records (its kind
+// of data and its grid: the data's, read only, with data), the noise of its
+// mock data, its data and how they meet the model, and how accurately and
+// fast its model is made. The common choices are made by hand; the options
+// of each choice are a form of the schema (see SchemaForm), titled by the
+// library. How its data are compared with its model, its likelihood, is
+// not of the observation but of the fits of it (the section likelihoods of
+// a setup).
 import { useState, type ReactNode } from 'react';
+import type { ArrayInfo } from '../../api/client';
+import { useLines } from '../../api/queries';
 import { membersOf, propertiesOf, SchemaForm, typeOf, type Defs, type Options, type Schema } from '../../components/SchemaForm';
 import { Button } from '../../components/ui/basics';
 import { Choice, NumberField, Segments } from '../../components/ui/inputs';
-import { dataHaveChannels, gridOptions, isObject, isSpectral, objectAt, observationMember, skyKeys, withKey, type Ellipse } from './model';
+import { DropMenu } from '../../components/ui/overlays';
+import { ACCURACY_KEYS, dataHaveChannels, gridOptions, isObject, isRecorded, isSpectral, MEETING_KEYS, objectAt, observationMember, skyKeys, withKey, type Ellipse } from './model';
 
 interface Common {
   defs: Defs;
@@ -24,7 +29,7 @@ interface Common {
 // ---------------------------------------------------------------------------
 // The data
 
-export function DataFields({ options, onChange, blocks, openBlock, datasetType, titleOf }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string }) {
+export function DataFields({ defs, project, options, onChange, blocks, openBlock, datasetType, titleOf, member }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string; member: Schema }) {
   const datasets = blocks.datasets ?? [];
   const value = typeof options.dataset === 'string' ? options.dataset : options.dataset ? '(in place)' : '';
   return (
@@ -50,9 +55,22 @@ export function DataFields({ options, onChange, blocks, openBlock, datasetType, 
           </button>
         </p>
       )}
-      {options.dataset == null && <p className="ob-text">Without data, the observation makes a model on a grid of its own (see Kind), or mock data.</p>}
+      {options.dataset == null && <p className="ob-text">Without data, the observation makes a model on a grid of its own (see Records), or mock data.</p>}
+      {options.dataset != null && (
+        <>
+          <div className="ob-sub">Meeting the model</div>
+          <OptionFields defs={defs} project={project} options={options} onChange={onChange} blocks={blocks} openBlock={openBlock} member={member} keys={MEETING_KEYS} />
+        </>
+      )}
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// How accurately and fast its model is made
+
+export function AccuracyFields(props: Common & { member: Schema }) {
+  return <OptionFields {...props} keys={ACCURACY_KEYS} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +79,7 @@ export function DataFields({ options, onChange, blocks, openBlock, datasetType, 
 // The options of the kind set by hand: its grid on the sky and its channels
 const GRID_KEYS = ['size', 'step', 'spectral'];
 
-export function KindFields({ defs, project, options, onChange, blocks, datasetType, titleOf }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string }) {
+export function RecordsFields({ defs, project, options, onChange, blocks, datasetType, titleOf, array }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string; array: ArrayInfo | undefined }) {
   const withData = options.dataset != null;
   // (the channels of data of a spectral axis are those of the model; moment
   // maps have none, and the model needs its own)
@@ -100,8 +118,9 @@ export function KindFields({ defs, project, options, onChange, blocks, datasetTy
           </Button>
         </div>
       )}
-      {extra.length > 0 && <p className="ob-text">The data give the grid: the observation's own {extra.join(', ')} serve only without data.</p>}
-      {'size' in properties && (
+      {withData && array && <FromData array={array} spectral={isSpectral(options.type) && dataHaveChannels(datasetType)} />}
+      {extra.length > 0 && <p className="ob-text">The observation's own {extra.join(', ')} serve only without data.</p>}
+      {'size' in properties && !withData && (
         <>
           <Row label="Pixels" unit="px">
             <span className="ob-pair">
@@ -119,7 +138,7 @@ export function KindFields({ defs, project, options, onChange, blocks, datasetTy
           </Row>
         </>
       )}
-      {'spectral' in properties && isSpectral(options.type) && (
+      {'spectral' in properties && isSpectral(options.type) && !fromData && (
         <>
           <div className="ob-sub">{withData ? 'Channels of the model' : 'Channels'}</div>
           <Row label="Channels">
@@ -145,6 +164,7 @@ export function KindFields({ defs, project, options, onChange, blocks, datasetTy
           </Row>
         </>
       )}
+      {member && 'unit' in propertiesOf(member) && <OptionFields defs={defs} project={project} options={options} onChange={onChange} blocks={blocks} openBlock={() => {}} member={member} keys={['unit']} />}
       {Object.keys(others).length > 0 && (
         <More title={`More of ${titleOf(options.type).toLowerCase()}`} count={Object.keys(pick(options, Object.keys(others))).length}>
           <SchemaForm
@@ -156,6 +176,43 @@ export function KindFields({ defs, project, options, onChange, blocks, datasetTy
             blocks={blocks}
           />
         </More>
+      )}
+    </div>
+  );
+}
+
+// The grid of the data, read only: their pixels and their size on the sky,
+// and of data with channels, their number and width (see ArrayInfo: the
+// first two axes on the sky, the third the spectral one)
+function FromData({ array, spectral }: { array: ArrayInfo; spectral: boolean }) {
+  const [nx, ny, nz] = array.shape;
+  const [sx, , sz] = array.step ?? [];
+  return (
+    <div className="ob-fromdata">
+      <div className="ob-sub">From the data</div>
+      <Row label="Pixels">
+        <span className="ob-value">
+          {nx} × {ny}
+        </span>
+      </Row>
+      {sx !== undefined && (
+        <Row label="Pixel size">
+          <span className="ob-value">
+            {round(Math.abs(sx))}″ <small>{round(Math.abs(sx) * nx)}″ across</small>
+          </span>
+        </Row>
+      )}
+      {spectral && nz !== undefined && (
+        <>
+          <Row label="Channels">
+            <span className="ob-value">{nz}</span>
+          </Row>
+          {sz !== undefined && (
+            <Row label="Channel width">
+              <span className="ob-value">{round(Math.abs(sz))} km/s</span>
+            </Row>
+          )}
+        </>
       )}
     </div>
   );
@@ -173,12 +230,16 @@ export function InstrumentFields({
   openBlock,
   beam,
   psf,
+  lsfWidth,
+  channel,
   titleOf,
 }: Common & {
-  // The beam of the header of the data (none: none), and the PSF as the
-  // server measures it
+  // The beam of the header of the data (none: none), the PSF as the
+  // server measures it, and the FWHM of the LSF and the width of a channel
   beam: Ellipse | null;
   psf: Ellipse | null;
+  lsfWidth: number | null;
+  channel: number | null;
   titleOf: (family: string, type: unknown) => string;
 }) {
   const instrument = objectAt(options, 'instrument');
@@ -191,7 +252,13 @@ export function InstrumentFields({
   const psfIsBeam = beam !== null && psf !== null && Math.abs(psf.major / beam.major - 1) < 0.05 && Math.abs(psf.minor / beam.minor - 1) < 0.05;
   return (
     <div className="ob-form">
-      <Response family="psf" folder="psfs" title="PSF" value={instrument.psf} onChange={(value) => set('psf', value)} defs={defs} project={project} blocks={blocks} openBlock={openBlock} titleOf={titleOf} />
+      <Response family="primary_beam" folder="" title="Primary beam" none="None: no attenuation" value={instrument.primary_beam} onChange={(value) => set('primary_beam', value)} defs={defs} project={project} blocks={blocks} openBlock={openBlock} titleOf={titleOf} />
+      <Response family="psf" folder="psfs" title="PSF" none="None: a perfect instrument" value={instrument.psf} onChange={(value) => set('psf', value)} defs={defs} project={project} blocks={blocks} openBlock={openBlock} titleOf={titleOf} />
+      {psf && (
+        <p className="ob-measure">
+          FWHM {round(psf.major)}″{Math.abs(psf.minor - psf.major) > 1e-6 * psf.major ? ` × ${round(psf.minor)}″ at ${round(psf.angle)}°` : ''}
+        </p>
+      )}
       {beamPsf && !psfIsBeam && (
         <div className="ob-hint">
           <span>
@@ -203,28 +270,26 @@ export function InstrumentFields({
         </div>
       )}
       {isSpectral(options.type) && (
-        <Response family="lsf" folder="lsfs" title="LSF" value={instrument.lsf} onChange={(value) => set('lsf', value)} defs={defs} project={project} blocks={blocks} openBlock={openBlock} titleOf={titleOf} />
+        <>
+          <Response family="lsf" folder="lsfs" title="LSF" none="None: a perfect spectrograph" value={instrument.lsf} onChange={(value) => set('lsf', value)} defs={defs} project={project} blocks={blocks} openBlock={openBlock} titleOf={titleOf} />
+          {lsfWidth !== null && instrument.lsf != null && (
+            <p className="ob-measure">
+              FWHM {round(lsfWidth)} km/s{channel ? ` · ${round(lsfWidth / channel)} channels` : ''}
+            </p>
+          )}
+        </>
       )}
-      <More title="Primary beam" count={instrument.primary_beam == null ? 0 : 1}>
-        <SchemaForm
-          defs={defs}
-          node={{ type: 'object', properties: { primary_beam: propertiesOf(defs.Instrument ?? {}).primary_beam ?? {} }, required: [] }}
-          project={project}
-          value={pick(instrument, ['primary_beam'])}
-          onChange={(next) => set('primary_beam', next.primary_beam)}
-          blocks={blocks}
-        />
-      </More>
     </div>
   );
 }
 
-// A PSF or an LSF: none, one of the project (by name), or given in place
-// (of a type, with its options)
-function Response({
+// A PSF, an LSF or a noise: none, one of the project (by name), or given in
+// place (of a type, with its options)
+export function Response({
   family,
   folder,
   title,
+  none,
   value,
   onChange,
   defs,
@@ -233,9 +298,11 @@ function Response({
   openBlock,
   titleOf,
 }: {
-  family: 'psf' | 'lsf';
+  family: string;
   folder: string;
   title: string;
+  // What none is, in words (e.g. 'None: a perfect instrument')
+  none: string;
   value: unknown;
   onChange: (value: unknown) => void;
   defs: Defs;
@@ -255,7 +322,7 @@ function Response({
       <Row label={title}>
         <Choice
           items={[
-            { value: 'none', label: family === 'psf' ? 'None: a perfect instrument' : 'None: a perfect spectrograph' },
+            { value: 'none', label: none },
             ...named.map((name) => ({ value: `block:${name}`, label: name, description: `the ${title} ${name} of the project` })),
             ...types.map((type) => ({ value: `type:${type}`, label: titleOf(family, type), description: 'given here' })),
           ]}
@@ -299,45 +366,93 @@ function formFits(member: Schema, value: Options): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// The light it sees: of which galaxies, components and lines, and in which
-// band (lists of names; all by default)
+// What it sees: which galaxies (by their names in the setup) and
+// components, and which lines (of a spectral observation) or band (of an
+// image); all of them by default
 
-export function LightFields({ options, onChange }: Common) {
-  const names = (key: string, label: string, placeholder: string, text: string) => {
-    const value = options[key];
-    const shown = Array.isArray(value) ? value.join(', ') : '';
-    return (
-      <Row label={label}>
-        <NamesField
-          value={shown}
-          placeholder={placeholder}
-          label={text}
-          onChange={(typed) => {
-            const list = typed
-              .split(',')
-              .map((name) => name.trim())
-              .filter(Boolean);
-            onChange(withKey(options, key, list.length ? list : undefined));
-          }}
-        />
-      </Row>
-    );
-  };
+export function SeesFields({ options, onChange }: Common) {
+  const catalogue = (useLines().data ?? []) as { name: string; rest: string }[];
+  const spectral = isSpectral(options.type);
+  const names = (key: string) => (Array.isArray(options[key]) ? (options[key] as unknown[]).map(String) : []);
+  const setNames = (key: string, list: string[]) => onChange(withKey(options, key, list.length ? list : undefined));
   const band = options.band;
   return (
     <div className="ob-form">
-      {names('galaxies', 'Galaxies', 'all of the setup', 'The galaxies it sees, by name (needed when the setup has several)')}
-      {names('components', 'Components', 'all that emit', 'The components whose light it sees, by name')}
-      {names('lines', 'Lines', 'all', 'The emission lines it sees, by name (e.g. Halpha)')}
-      <Row label="Band">
-        {band == null || typeof band === 'string' ? (
-          <NamesField value={band ?? ''} placeholder="none" label="The band of an image, by its name in the catalogue" onChange={(typed) => onChange(withKey(options, 'band', typed.trim() || undefined))} />
-        ) : (
-          <span className="ob-text">Given in place (in the file)</span>
-        )}
+      <Row label="Galaxies">
+        <Chips names={names('galaxies')} none="all of the setup" label="A galaxy it sees, by its name in the setup" onChange={(list) => setNames('galaxies', list)} />
       </Row>
-      <p className="ob-text">Names are separated by commas; blank, the observation sees all of them.</p>
+      <Row label="Components">
+        <Chips names={names('components')} none="all that emit" label="A component whose light it sees, by name" onChange={(list) => setNames('components', list)} />
+      </Row>
+      {spectral ? (
+        <>
+          <Row label="Lines">
+            <Chips names={names('lines')} none="all" label="A line it sees" choices={catalogue.map((l) => ({ name: l.name, description: l.rest }))} onChange={(list) => setNames('lines', list)} />
+          </Row>
+          <Row label="Continuum">
+            <Segments
+              items={[
+                { value: 'off', label: 'Off' },
+                { value: 'on', label: 'On' },
+              ]}
+              value={options.continuum === true ? 'on' : 'off'}
+              label="Whether it sees the velocities of the continuum"
+              onChange={(value) => onChange(withKey(options, 'continuum', value === 'on' || undefined))}
+            />
+          </Row>
+        </>
+      ) : (
+        <Row label="Band">
+          {band == null || typeof band === 'string' ? (
+            <NamesField value={band ?? ''} placeholder="none" label="The band of an image, by its name in the catalogue" onChange={(typed) => onChange(withKey(options, 'band', typed.trim() || undefined))} />
+          ) : (
+            <span className="ob-text">Given in place (in the file)</span>
+          )}
+        </Row>
+      )}
     </div>
+  );
+}
+
+// Names as chips, each removable, and what adds one: typed (Enter), or
+// chosen from given choices (e.g. the lines of the catalogue); none: its
+// placeholder, what none means
+function Chips({ names, none, label, choices, onChange }: { names: string[]; none: string; label: string; choices?: { name: string; description: string }[]; onChange: (names: string[]) => void }) {
+  const [text, setText] = useState('');
+  const add = (name: string) => {
+    const clean = name.trim();
+    if (clean && !names.includes(clean)) onChange([...names, clean]);
+    setText('');
+  };
+  return (
+    <span className="ob-chips">
+      {names.map((name) => (
+        <span key={name} className="ob-chip">
+          {name}
+          <button aria-label={`Remove ${name}`} onClick={() => onChange(names.filter((n) => n !== name))}>
+            ×
+          </button>
+        </span>
+      ))}
+      {choices ? (
+        <DropMenu
+          label={label}
+          width={260}
+          entries={choices.filter((c) => !names.includes(c.name)).map((c) => ({ label: c.name, description: c.description, onClick: () => add(c.name) }))}
+          target={<button className="ob-chip-add">{names.length ? '+ add' : `${none} · + add`}</button>}
+        />
+      ) : (
+        <input
+          className="ob-chip-input"
+          value={text}
+          placeholder={names.length ? '+ name' : none}
+          aria-label={label}
+          onChange={(event) => setText(event.currentTarget.value)}
+          onKeyDown={(event) => event.key === 'Enter' && add(text)}
+          onBlur={() => add(text)}
+        />
+      )}
+    </span>
   );
 }
 
@@ -345,6 +460,36 @@ export function LightFields({ options, onChange }: Common) {
 // it as the field is left)
 function NamesField({ value, placeholder, label, onChange }: { value: string; placeholder: string; label: string; onChange: (text: string) => void }) {
   return <input key={value} className="ob-names" defaultValue={value} placeholder={placeholder} aria-label={label} title={label} onBlur={(event) => onChange(event.target.value)} />;
+}
+
+// ---------------------------------------------------------------------------
+// The noise of its mock data: none, a noise of the project, or one in place;
+// what it does with the data it has (and, without one, what its mock data
+// take)
+
+export function NoiseFields({ defs, project, options, onChange, blocks, openBlock, titleOf, errors, rms }: Common & { titleOf: (family: string, type: unknown) => string; errors: boolean; rms: number | null }) {
+  const withData = options.dataset != null;
+  const recorded = isRecorded(options.type);
+  let note: string;
+  if (options.noise != null) note = withData ? 'Only the mock data of the observation use it (a setup with mock); fits of its data use their own errors.' : 'Its mock data: the model plus this noise (a setup with mock draws them).';
+  else if (withData && recorded && errors) note = 'Its mock data take the errors of its data, as Gaussian noise.';
+  else if (withData && !recorded) note = 'Its data are measured from what its instrument records (e.g. moments of a cube), to which the noise is added: its mock data need a noise here.';
+  else if (withData) note = 'Its data have no errors: its mock data need a noise here.';
+  else note = 'Without data, its mock data need a noise here.';
+  return (
+    <div className="ob-form">
+      <Response family="noise" folder="noise" title="Kind" none="None" value={options.noise} onChange={(value) => onChange(withKey(options, 'noise', value))} defs={defs} project={project} blocks={blocks} openBlock={openBlock} titleOf={titleOf} />
+      {options.noise == null && rms !== null && rms > 0 && (
+        <div className="ob-hint">
+          <span>The data have an rms of {round(rms)}.</span>
+          <Button kind="small" onClick={() => onChange(withKey(options, 'noise', { type: 'gauss', rms: round(rms) }))}>
+            Use it
+          </Button>
+        </div>
+      )}
+      <p className="ob-text">{note}</p>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

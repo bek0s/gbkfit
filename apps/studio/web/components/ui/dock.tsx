@@ -22,6 +22,7 @@ export function DockSection({
   note,
   actions,
   needed,
+  folded: startFolded = false,
   children,
 }: {
   // The id of the section in the page (its element, and its fold)
@@ -31,9 +32,11 @@ export function DockSection({
   actions?: ReactNode;
   // Whether it needs the user before the screen can go on
   needed?: boolean;
+  // Whether it is folded until the user opens it (e.g. options seldom set)
+  folded?: boolean;
   children: ReactNode;
 }) {
-  const [folded, setFolded] = useRemembered(`dock:${id}`, false);
+  const [folded, setFolded] = useRemembered(`dock:${id}`, startFolded);
   // (a section that needs the user is never folded away)
   const open = !folded || needed === true;
   return (

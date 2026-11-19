@@ -1,8 +1,11 @@
 // The screen of an observation of the project: how an instrument sees the
 // galaxies, and the data it compares them with. Its view shows it at a
 // glance (its stages, the sky with its PSF and the beam of the data to
-// scale, its spectral resolution, and its checks); its dock sets it, a
-// section for each stage. Its options are edited as a whole, and saved or
+// scale, its spectral resolution, a patch of the noise of its mock data,
+// and its checks); its dock sets it, a section for each stage, in the order
+// of the path of the light (what it sees, its instrument, what it records,
+// the noise of its mock data, its data), and then how accurately and fast
+// its model is made. Its options are edited as a whole, and saved or
 // reverted (see editing).
 import { useDescriptions, useLsfView, usePiece, usePsfView, type SpectralTypeOption } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
@@ -13,9 +16,9 @@ import { useStudio } from '../../studio';
 import { BlockLinks } from '../../shell/BlockLinks';
 import { arraysOf, draftOfDataset, EMPTY_ITEM, kept, KINDS, kindOfType } from '../dataset/model';
 import { SaveActions, useEditedBlock } from '../editing';
-import { checksOf, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, objectAt, psfEllipse, skyKeys, textAt } from './model';
-import { DataFields, InstrumentFields, KindFields, LightFields, OptionFields } from './Sections';
-import { Checks, Resolution, Sky, Stages, type SkyData } from './View';
+import { ACCURACY_KEYS, checksOf, datasetHasErrors, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, noiseText, objectAt, psfEllipse, skyKeys, textAt } from './model';
+import { AccuracyFields, DataFields, InstrumentFields, NoiseFields, OptionFields, RecordsFields, SeesFields } from './Sections';
+import { Checks, NoisePatch, Resolution, Sky, Stages, type SkyData } from './View';
 import { SheetLayout } from '../../components/ui/sheet';
 
 export function ObservationScreen({ name }: { name: string }) {
@@ -50,6 +53,9 @@ export function ObservationScreen({ name }: { name: string }) {
   const psfView = usePsfView(root, psfOptions ?? {}, null, psfOptions !== undefined && typeof psfOptions.type === 'string');
   // (its LSF at its rest: of its widths of wavelength or frequency)
   const lsfView = useLsfView(root, lsfOptions ?? {}, { step: null, rest: array?.rest ?? given, unit: null, channel: null }, lsfOptions !== undefined && typeof lsfOptions.type === 'string');
+  // (the noise of its mock data, of the project or in place)
+  const noisePiece = usePiece(named('noise', options?.noise)).data as Options | undefined;
+  const noiseOptions = isObject(options?.noise) ? options.noise : noisePiece;
 
   if (project === null) return null;
   const title = (family: string, type: unknown) => (type === undefined ? '—' : titleOf(defs, family, String(type)));
@@ -63,8 +69,10 @@ export function ObservationScreen({ name }: { name: string }) {
   const channel = array?.step?.length === 3 ? Math.abs(array.step[2]) : typeof spectral.step === 'number' ? spectral.step : null;
   const skyData: SkyData | null = first && array ? { path: first.file, array, cube: kept(array).length === 3, reading: { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null } } : null;
   const grid = !withData && options && (Array.isArray(options.size) || typeof options.size === 'number') ? { size: pairOf(options.size), step: pairOf(options.step ?? 1) } : null;
+  const errors = datasetHasErrors(dataset);
+  const noise = noiseText(options?.noise, noiseOptions, title);
   const checks = options
-    ? checksOf({ options, datasets: edited.blocks.datasets ?? [], datasetType: dataset?.type as string | undefined, data: array, psf, lsfWidth, titleOf: title })
+    ? checksOf({ options, datasets: edited.blocks.datasets ?? [], datasetType: dataset?.type as string | undefined, data: array, psf, lsfWidth, errors, noise, titleOf: title })
     : [];
   const needs = defs && options ? needsOf({ options, defs, datasets: edited.blocks.datasets ?? [], datasetType: dataset?.type as string | undefined, titleOf: title }) : [];
   const needed = (section: string) => needs.some((need) => need.section === section);
@@ -114,11 +122,12 @@ export function ObservationScreen({ name }: { name: string }) {
           width={400}
           picture={
             <div className="ob-view">
-              <Stages options={options} titleOf={title} />
+              <Stages options={options} titleOf={title} noise={noise} />
               <div className="ob-figures">
                 <Sky data={skyData} grid={grid} psf={psf} beam={beam} />
                 <div className="ob-side">
                   {isSpectral(options.type) && <Resolution fwhm={lsfWidth} channel={channel} named={instrument.lsf != null} />}
+                  <NoisePatch noise={noiseOptions} text={noise} psf={psf} pixel={array?.step ? Math.abs(array.step[0]) : grid ? grid.step[0] : null} />
                   <Checks checks={checks} />
                 </div>
               </div>
@@ -126,21 +135,29 @@ export function ObservationScreen({ name }: { name: string }) {
           }
           sheet={
             <Dock label="The observation">
-              <DockSection id="ob-data" title="Dataset" needed={needed('ob-data')}>
-                <DataFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observation', type)} />
-              </DockSection>
-              <DockSection id="ob-kind" title="Kind" needed={needed('ob-kind')}>
-                <KindFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observation', type)} />
+              <DockSection id="ob-sees" title="Sees" note={setCount(options, LIGHT_KEYS)}>
+                <SeesFields {...common} />
               </DockSection>
               <DockSection id="ob-instrument" title="Instrument">
-                <InstrumentFields {...common} beam={beam} psf={psf} titleOf={title} />
+                <InstrumentFields {...common} beam={beam} psf={psf} lsfWidth={lsfWidth} channel={channel} titleOf={title} />
               </DockSection>
-              <DockSection id="ob-light" title="Galaxies and light" note={setCount(options, LIGHT_KEYS)}>
-                <LightFields {...common} />
+              <DockSection id="ob-records" title="Records" needed={needed('ob-records')}>
+                <RecordsFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observation', type)} array={array} />
               </DockSection>
-              <DockSection id="ob-more" title="More options" note={setCount(options, others)}>
-                <OptionFields {...common} member={sky} keys={others} />
+              <DockSection id="ob-noise" title="Noise" note={options.noise == null ? undefined : noise}>
+                <NoiseFields {...common} titleOf={title} errors={errors} rms={array?.rms ?? null} />
               </DockSection>
+              <DockSection id="ob-data" title="Data" needed={needed('ob-data')}>
+                <DataFields {...common} datasetType={dataset?.type as string | undefined} titleOf={(type) => title('observation', type)} member={sky} />
+              </DockSection>
+              <DockSection id="ob-accuracy" title="Accuracy and speed" note={setCount(options, ACCURACY_KEYS) ?? 'as by default'} folded>
+                <AccuracyFields {...common} member={sky} />
+              </DockSection>
+              {others.length > 0 && (
+                <DockSection id="ob-more" title="Other options" note={setCount(options, others)}>
+                  <OptionFields {...common} member={sky} keys={others} />
+                </DockSection>
+              )}
             </Dock>
           }
         />

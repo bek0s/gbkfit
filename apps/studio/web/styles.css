@@ -1329,8 +1329,12 @@ h2 { margin: 0; font: var(--text-heading); }
 
 /* (the forms of the dock of an observation) */
 .ob-form { display: grid; gap: 10px; }
-.ob-row { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.ob-row { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
 .ob-label { font: var(--text-label); color: var(--muted); }
+/* (the forms of the schema in the sections, in the columns of their rows:
+   their labels in the same words and type) */
+.ob-form .schema-row { grid-template-columns: 104px minmax(0, 1fr); }
+.ob-form .schema-label { font: var(--text-label); }
 .ob-field { min-width: 0; }
 .ob-field .ui-segments { justify-self: start; }
 .ob-unit { min-width: 28px; font: var(--text-data-small); color: var(--faint); }
@@ -1344,6 +1348,28 @@ h2 { margin: 0; font: var(--text-heading); }
 .ob-hint { border: 1px dashed var(--line2); color: var(--muted); }
 .ob-response { display: grid; gap: 8px; }
 .ob-nested { padding-left: 10px; border-left: 2px solid var(--line2); }
+/* (read only: the numbers of the data; the FWHM measured of a PSF or an
+   LSF, under it) */
+.ob-fromdata { display: grid; gap: 6px; }
+.ob-value { font: var(--text-data); color: var(--fg2); }
+.ob-value small { margin-left: 8px; font: var(--text-data-small); color: var(--faint); }
+.ob-measure { margin: -4px 0 0 112px; font: var(--text-data-small); color: var(--muted); }
+/* (names as chips, and what adds one) */
+.ob-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 26px; }
+.ob-chip { display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 3px 0 9px; border-radius: 11px; background: var(--panel2); font: var(--text-data-small); color: var(--fg); }
+.ob-chip button { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 3px; background: none; color: var(--faint); font: 13px/1 var(--sans); }
+.ob-chip button:hover { color: var(--err); }
+.ob-chip-add { height: 22px; padding: 0 6px; border: 0; border-radius: 5px; background: none; color: var(--muted); font: var(--text-label); }
+.ob-chip-add:hover, .ob-chip-add[aria-expanded="true"] { background: var(--panel2); color: var(--fg); }
+.ob-chip-input { flex: 1; min-width: 90px; height: 24px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--fg); font: var(--text-label); outline: none; }
+.ob-chip-input:hover { border-color: var(--line2); }
+.ob-chip-input:focus { border-color: var(--accent); background: var(--field); }
+.ob-chip-input::placeholder { color: var(--faint); }
+/* (a patch of the noise of the mock data, and what it is) */
+.ob-noise-body { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 12px; }
+.ob-noise-body canvas { width: 96px; height: 96px; border-radius: 6px; image-rendering: pixelated; }
+.ob-noise-body span { display: grid; gap: 4px; font: var(--text-body); }
+.ob-noise-body small { font: var(--text-data-small); color: var(--muted); }
 .ob-more { border-top: 1px solid var(--line); padding-top: 8px; }
 .ob-more > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--muted); font: var(--text-label); }
 .ob-more > summary:hover { color: var(--fg); }
