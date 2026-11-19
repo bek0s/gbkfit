@@ -15,7 +15,8 @@ setups, one piece per file:
     fitters/<name>.yaml       a fitter (a section 'fitter')
     setups/<name>.yaml        the configurations of the tasks (eval, fit)
     data/                     the data, in any files and folders
-    runs/                     the runs of the setups (see gbkfit.outputs)
+    runs/<setup>/<n>/         the runs of the setups, numbered (see
+                              gbkfit.outputs)
 
 The name of a piece is the path of its file in the folder of its kind,
 without .yaml, and can have folders (e.g. 'ngc1313/hi'). In the sections
@@ -337,9 +338,23 @@ class Project:
             return None
         return os.path.splitext(path)[0]
 
-    def run_path(self, name: str) -> str:
+    def runs_path(self, name: str) -> str:
         """Return the folder of the runs of a setup by name (runs/<name>)."""
         return os.path.join(self._path, 'runs', name)
+
+    def next_run_path(self, name: str) -> str:
+        """
+        Return the folder of the next run of a setup by name: runs/<name>/
+        <n>, n one more than the greatest number of its runs (1 for the
+        first; see runs_path). It is not made: the task that writes the run
+        makes it (see gbkfit.outputs.create).
+        """
+        folder = Path(self.runs_path(name))
+        numbers = [
+            int(child.name) for child in folder.glob('*')
+            if child.is_dir() and child.name.isdigit()] \
+            if folder.is_dir() else []
+        return str(folder / str(max(numbers, default=0) + 1))
 
     def names(self, folder: str) -> list[str]:
         """Return the names of the pieces (or setups) of a folder."""

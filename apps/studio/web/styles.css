@@ -1525,3 +1525,48 @@ h2 { margin: 0; font: var(--text-heading); }
 .fx-from-x { padding: 0 0 0 2px; border: 0; background: none; color: inherit; font: 13px/1 var(--sans); }
 .fx-from-x:hover { color: var(--err); }
 .fx-problem { margin: 0; color: var(--err); font: var(--text-label); overflow-wrap: anywhere; }
+/* (the runs of a fit: a strip, oldest first, the next run at its end) */
+.fx-runs-strip { display: flex; margin: 14px 18px 0; padding: 0; list-style: none; flex: none; overflow-x: auto; }
+.fx-runs-strip li { flex: 0 1 200px; min-width: 120px; position: relative; }
+.fx-runs-strip li.fx-strip-next { flex: 1 1 200px; }
+.fx-runs-strip button { width: 100%; height: 100%; display: grid; align-content: start; gap: 3px; padding: 8px 14px; border: 1px solid var(--line); border-left-width: 0; background: var(--panel); color: var(--fg); text-align: left; }
+.fx-runs-strip li:first-child button { border-left-width: 1px; border-radius: 9px 0 0 9px; }
+.fx-runs-strip li:last-child button { border-radius: 0 9px 9px 0; }
+.fx-runs-strip li:only-child button { border-radius: 9px; }
+.fx-runs-strip button:hover { background: var(--panel2); }
+.fx-runs-strip button[aria-current] { background: var(--sel); box-shadow: inset 0 -2px 0 var(--accent); }
+.fx-strip-top { display: flex; align-items: center; gap: 6px; }
+.fx-strip-title { font: var(--text-heading); white-space: nowrap; }
+.fx-strip-glance { font: var(--text-data-small); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fx-strip-next button { border-style: dashed; }
+.fx-strip-next .fx-strip-title { color: var(--accent-text); }
+.fx-state { display: inline-flex; align-items: center; gap: 5px; font: var(--text-label); color: var(--fg2); white-space: nowrap; }
+.fx-state-sign { display: inline-grid; place-items: center; width: 14px; font-size: 11px; }
+.fx-state[data-state="running"] .fx-state-sign { color: var(--accent); }
+.fx-state[data-state="complete"] .fx-state-sign { color: var(--ok); }
+.fx-state[data-state="stopped"] .fx-state-sign { color: var(--warn); }
+.fx-state[data-state="failed"] .fx-state-sign, .fx-state[data-state="cancelled"] .fx-state-sign { color: var(--err); }
+.fx-state[data-state="queued"] .fx-state-sign { color: var(--faint); }
+.fx-run-head { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin: 12px 18px 0; }
+.fx-run-what { display: grid; gap: 2px; }
+.fx-run-title { font: var(--text-subtitle); }
+.fx-overline { font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
+.fx-right { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; }
+.fx-run-folder { font: var(--text-data-small); }
+.fx-log { margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); font: var(--text-data-small); color: var(--fg2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.fx-log-error { margin-bottom: 12px; border-color: var(--err); }
+/* (the result of a run) */
+.fx-alert { display: flex; align-items: baseline; gap: 8px; padding: 10px 14px; border: 1px solid var(--warn); border-radius: 10px; background: color-mix(in srgb, var(--warn) 8%, transparent); font: var(--text-body); color: var(--fg2); }
+.fx-alert .fx-sign { color: var(--warn); }
+.fx-merits { display: flex; flex-wrap: wrap; gap: 10px 28px; padding: 12px 16px; }
+.fx-merits > div { display: grid; gap: 3px; }
+.fx-merits b { font: var(--text-data); font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+.fx-best { width: calc(100% - 24px); margin: 0 12px 6px; border-collapse: collapse; }
+.fx-best th { padding: 4px 6px; text-align: left; font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--line); }
+.fx-best th.fx-num, .fx-best td.fx-num { text-align: right; }
+.fx-best td { padding: 4px 6px; font: var(--text-data-small); color: var(--fg2); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.fx-best tr[data-bound] td { background: color-mix(in srgb, var(--warn) 7%, transparent); }
+.fx-range { position: relative; display: inline-block; width: 140px; height: 10px; border-bottom: 1px solid var(--line2); vertical-align: middle; }
+.fx-range i { position: absolute; bottom: -1px; width: 3px; height: 10px; margin-left: -1px; border-radius: 1px; background: var(--accent); }
+.fx-range em { position: absolute; left: 148px; top: -3px; font: var(--text-caption); font-style: normal; color: var(--warn); white-space: nowrap; }
+.fx-fixed-list { margin: 4px 14px 12px; color: var(--faint); font: var(--text-caption); }

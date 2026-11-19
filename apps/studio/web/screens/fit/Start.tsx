@@ -25,12 +25,10 @@ export function StartView({ path, setup, params, problems, pending, failed }: { 
   const errors = problems.filter((p) => p.severity === 'error');
   const ready = setup !== undefined && !pending && failed === null && errors.length === 0 && params.length > 0;
   return (
-    <div className="fx-picture">
-      <div className="fx-scroll">
-        <div className="fx-view-grid">
-          <Checks setup={setup} params={params} problems={problems} pending={pending} failed={failed} />
-          {ready ? <AtTheStart path={path} setup={setup} /> : <div className="fx-card fx-wait-card">The model at its starts shows once the recipe has no error.</div>}
-        </div>
+    <div className="fx-scroll">
+      <div className="fx-view-grid">
+        <Checks setup={setup} params={params} problems={problems} pending={pending} failed={failed} />
+        {ready ? <AtTheStart path={path} setup={setup} /> : <div className="fx-card fx-wait-card">The model at its starts shows once the recipe has no error.</div>}
       </div>
     </div>
   );

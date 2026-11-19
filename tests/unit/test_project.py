@@ -161,6 +161,17 @@ def test_a_project_is_found_above_its_files(study, tmp_path):
         project.find(tmp_path / 'newer' / 'setups')
 
 
+def test_the_runs_of_a_setup_are_numbered(study):
+    # (the next is one more than the greatest; folders of other names, e.g.
+    # of the setups of a folder of setups, are not runs of it)
+    runs = Path(study.runs_path('disk'))
+    assert study.next_run_path('disk') == str(runs / '1')
+    for name in ('1', '2', '7', 'warp'):
+        (runs / name).mkdir(parents=True)
+    assert study.next_run_path('disk') == str(runs / '8')
+    assert study.next_run_path('disk/warp') == str(runs / 'warp' / '1')
+
+
 def test_pieces_are_made_from_templates_in_their_folders(study):
     path = study.create_piece('observations', 'ngc1313/halpha')
     assert path == os.path.join(study.path, 'observations/ngc1313/halpha.yaml')

@@ -27,13 +27,13 @@ _LOG_FORMAT = (
 def run_dir(output_dir: str | None, config: ConfigFile) -> str:
     """
     Return the directory of the run of a configuration: the one given, or
-    by default the folder of the runs of its setup in its project (see
-    gbkfit.project.Project.run_path), or else 'output'.
+    by default the next run of its setup in its project (runs/<setup>/<n>;
+    see gbkfit.project.Project.next_run_path), or else 'output'.
     """
     if output_dir is not None:
         return output_dir
     if config.setup is not None:
-        return config.project.run_path(config.setup)
+        return config.project.next_run_path(config.setup)
     return 'output'
 
 

@@ -220,6 +220,34 @@ export function useMoments(path: string, hdu: number, snr: number, enabled: bool
   });
 }
 
+// A run of a project (see the server's /runs): its manifest (its task,
+// status, times and products), asked again as the server says it changed
+export function useRun(path: string | null) {
+  return useQuery({
+    queryKey: ['run', path ?? ''],
+    enabled: path !== null,
+    // (a run just made has no manifest yet: its event asks again)
+    retry: false,
+    queryFn: () => data(api.GET('/api/v1/runs/{path}', { params: { path: { path: path ?? '' } } })),
+  });
+}
+
+// The text of a file of the workspace (e.g. the log of a run), asked again
+// every few seconds while it may grow (none: once), and as its version
+// changes (e.g. the time its run was last written)
+export function useFileText(path: string | null, every: number | false = false, version = '') {
+  return useQuery({
+    queryKey: ['file', path ?? '', version],
+    enabled: path !== null,
+    refetchInterval: every,
+    queryFn: async () => {
+      const { data: text, error, response } = await api.GET('/api/v1/files/{path}', { params: { path: { path: path ?? '' } }, parseAs: 'text' });
+      if (!response.ok) throw new Error(errorMessage(error, response.status, response.statusText));
+      return text ?? '';
+    },
+  });
+}
+
 export function useJobs() {
   return useQuery({ queryKey: keys.jobs, queryFn: () => data(api.GET('/api/v1/jobs')) });
 }

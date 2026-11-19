@@ -520,8 +520,8 @@ class Jobs:
 
 def _setup_runs(config: str) -> str:
     """
-    Return the folder of the runs of a setup of a project (see
-    gbkfit.project.Project.run_path).
+    Return the folder of the next run of a setup of a project (runs/
+    <setup>/<n>; see gbkfit.project.Project.next_run_path).
 
     Raises
     ------
@@ -537,7 +537,7 @@ def _setup_runs(config: str) -> str:
         raise Invalid(
             f"{Path(config).name} is not a setup of a project (in its folder "
             f"setups): give the folder of the run (output_dir)")
-    return project.run_path(name)
+    return project.next_run_path(name)
 
 
 def _now() -> str:

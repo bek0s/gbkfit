@@ -23,6 +23,7 @@ export function useServerEvents(): boolean {
     const changed = () => {
       void client.invalidateQueries({ queryKey: keys.jobs });
       void client.invalidateQueries({ queryKey: ['project'] });
+      void client.invalidateQueries({ queryKey: ['run'] });
     };
     source.addEventListener('job', changed);
     source.addEventListener('run', changed);

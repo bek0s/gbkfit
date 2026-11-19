@@ -78,8 +78,8 @@ def test_a_job_runs_a_setup_into_its_runs(root, setup):
         return server, first, second, states
 
     server, first, second, states = asyncio.run(run())
-    assert (first.state, first.run) == ('complete', 'study/runs/disk')
-    assert second.run.startswith('study/runs/disk_')
+    assert (first.state, first.run) == ('complete', 'study/runs/disk/1')
+    assert second.run == 'study/runs/disk/2'
     assert states == ['queued', 'running', 'complete'] * 2
     run = server.workspace.run(first.run)
     assert run['status'] == 'complete'

@@ -414,7 +414,7 @@ function Fitter({ project, setup, draft, all, defs }: { project: string; setup: 
   const fitter = setup.fitter;
   const here = '(written here)';
   const choice = typeof fitter === 'string' ? fitter : isObject(fitter) ? here : '';
-  const choose = (value: string) => draft.edit((s) => ({ ...s, fitter: value === here ? { type: typesOf(defs, 'fitter')[0]?.value ?? 'scipy_least_squares' } : value }));
+  const choose = (value: string) => draft.edit((s) => ({ ...s, fitter: value === here ? { type: typesOf(defs, 'fitter').some((t) => t.value === 'scipy.least_squares') ? 'scipy.least_squares' : (typesOf(defs, 'fitter')[0]?.value ?? 'scipy.least_squares') } : value }));
   return (
     <div className="ob-form">
       <Row label="Fitter">
