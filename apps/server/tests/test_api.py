@@ -190,6 +190,39 @@ def test_a_project_gives_the_links_of_its_pieces(client):
         '/api/v1/projects/study').json()['links']
 
 
+def test_comparisons_are_pieces_of_the_studio_that_follow_their_names(
+        client, root):
+    # (the library does not know them: the workspace writes them, and they
+    # follow the galaxies and the observations they name as those are
+    # renamed)
+    content = dict(galaxies=['disk'], observations=['image'], rows='galaxies')
+    path = client.post('/api/v1/pieces', json=dict(
+        project='study', folder='comparisons', name='all/first',
+        content=content)).json()
+    assert path == 'study/comparisons/all/first.yaml'
+    assert client.get(f'/api/v1/pieces/{path}').json() == content
+    assert client.get('/api/v1/projects/study').json()['pieces'][
+        'comparisons'] == ['all/first']
+    assert dict(folder='comparisons', name='all/first') in client.get(
+        '/api/v1/references/study/galaxies/disk.yaml').json()
+    client.patch('/api/v1/pieces/study/galaxies/disk.yaml',
+                 json=dict(name='thin'))
+    assert client.get(f'/api/v1/pieces/{path}').json()['galaxies'] == \
+        ['thin']
+    client.put(f'/api/v1/pieces/{path}', json=dict(content, rows='x'))
+    assert client.get(f'/api/v1/pieces/{path}').json()['rows'] == 'x'
+    path = client.patch(f'/api/v1/pieces/{path}', json=dict(name='second')) \
+        .json()
+    assert path == 'study/comparisons/second.yaml'
+    assert not pathlib.Path(root, 'study/comparisons/all').exists()
+    assert client.post('/api/v1/pieces', json=dict(
+        project='study', folder='comparisons', name='../x')).status_code \
+        == 400
+    assert client.delete(f'/api/v1/pieces/{path}').status_code == 204
+    assert client.get('/api/v1/projects/study').json()['pieces'][
+        'comparisons'] == []
+
+
 def test_pieces_are_updated_and_their_comments_stay(client):
     path = client.post('/api/v1/pieces', json=dict(
         project='study', folder='psfs', name='beam')).json()

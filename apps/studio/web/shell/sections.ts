@@ -38,7 +38,7 @@ export const SECTIONS: Section[] = [
       { folder: 'noise', title: 'Noise', kind: 'Noise model' },
     ],
   },
-  { key: 'compare', title: 'Compare', tool: true, groups: [] },
+  { key: 'compare', title: 'Compare', tool: true, groups: [{ folder: 'comparisons', title: 'Comparisons', kind: 'Comparison' }] },
   {
     key: 'fit',
     title: 'Fit',
@@ -75,8 +75,6 @@ export function sectionOf(screen: Screen): SectionKey {
       return sectionOfFolder(screen.folder);
     case 'new-dataset':
       return 'data';
-    case 'compare':
-      return 'compare';
     case 'fit':
       return 'fit';
   }

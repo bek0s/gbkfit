@@ -42,7 +42,7 @@ export interface Layer {
 }
 
 type Moment = 'flux' | 'velocity' | 'dispersion' | 'skewness' | 'kurtosis' | 'h3' | 'h4';
-type View = 'channel' | Moment;
+export type View = 'channel' | Moment;
 
 // The moment maps (by order), what they are, how their colours run
 // (sequential, diverging about their median, e.g. velocities, or about 0),
@@ -70,7 +70,7 @@ const MORE_MOMENTS = MOMENTS.slice(3);
 
 // The signal-to-noise ratio of the mask of the moments, at first (see the
 // server's views)
-const SNR = 5;
+export const SNR = 5;
 
 // How often (ms) the spectrum of the pixel under the pointer is updated
 const HOVER = 40;
@@ -464,7 +464,7 @@ export function CubeViewer({
 }
 
 // The unit of a map, from that of the values of the cube
-function mapUnit(view: View, unit: string | null): string {
+export function mapUnit(view: View, unit: string | null): string {
   if (view === 'channel') return unit ?? '';
   if (view === 'flux') return unit ? `${unit} km/s` : 'km/s';
   if (view === 'velocity' || view === 'dispersion') return 'km/s';

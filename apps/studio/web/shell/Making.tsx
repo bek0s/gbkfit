@@ -21,12 +21,13 @@ export interface AdderProps {
 
 const ADDERS: Record<string, ComponentType<AdderProps>> = { datasets: DataKindDialog };
 
-// The new blocks the menu makes, by the section they are in (the tools
-// make none yet: comparisons and fits come with their screens)
+// The new blocks the menu makes, by the section they are in (fits come
+// with their screen)
 const MADE: { section: string; folders: string[] }[] = [
   { section: 'Datasets', folders: ['datasets'] },
   { section: 'Galaxies', folders: ['galaxies'] },
   { section: 'Observations', folders: ['observations', 'psfs', 'lsfs', 'noise'] },
+  { section: 'Compare', folders: ['comparisons'] },
 ];
 
 export function NewMenu() {
@@ -61,8 +62,9 @@ export function Adding() {
 // What a new block of a folder starts with, where it is not the template
 // of its folder (see the library's project templates, made to be edited
 // by hand): a galaxy starts empty, its components and its mass added in
-// its sheet
-const STARTS: Record<string, Record<string, unknown>> = { galaxies: {} };
+// its sheet; a comparison (of the Studio: it has no template) compares
+// nothing yet
+const STARTS: Record<string, Record<string, unknown>> = { galaxies: {}, comparisons: {} };
 
 export function NamingDialog({ project, folder, onDone }: AdderProps) {
   const { go } = useStudio();

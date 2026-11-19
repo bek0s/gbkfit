@@ -65,14 +65,24 @@ _PIECES = (
     'galaxies', 'lenses', 'observations', 'datasets', 'psfs', 'lsfs',
     'noise', 'params', 'fitters', 'setups')
 
+# The folders of the pieces of the Studio, which the library does not
+# know: comparisons, of galaxies seen by observations side by side (their
+# options a dictionary, with lists of the names of the galaxies and the
+# observations they compare). The workspace writes them itself; by folder,
+# the options of their pieces that name pieces of the project: a list of
+# names of the folder of the same name. As a piece is renamed, the pieces
+# of the Studio that name it follow.
+_STUDIO_PIECES = {'comparisons': ('galaxies', 'observations')}
+
 
 @dataclasses.dataclass
 class ProjectInfo:
     """
-    A project: its path, the names of its pieces and setups by folder,
-    the paths of its runs, and its links: each piece or setup that names
-    a piece, with the piece it names and whether that piece is missing
-    ({source: {folder, name}, target: {folder, name}, missing}; see
+    A project: its path, the names of its pieces and setups by folder
+    (and of the pieces of the Studio, e.g. its comparisons), the paths of
+    its runs, and its links: each piece or setup that names a piece, with
+    the piece it names and whether that piece is missing ({source:
+    {folder, name}, target: {folder, name}, missing}; see
     gbkfit.project.Project.links).
     """
     path: str
@@ -169,7 +179,7 @@ class Workspace:
                 file.relative_to(Path(path, folder)).with_suffix('')
                 .as_posix()
                 for file in Path(path, folder).rglob('*.yaml'))
-            for folder in _PIECES}
+            for folder in (*_PIECES, *_STUDIO_PIECES)}
         runs = sorted(
             self.relative(manifest.parent)
             for manifest in Path(path, 'runs').rglob(gbkfit.outputs.MANIFEST))
@@ -177,7 +187,8 @@ class Workspace:
             dict(source=dict(folder=source[0], name=source[1]),
                  target=dict(folder=folder, name=name),
                  missing=name not in pieces.get(folder, ()))
-            for source, (folder, name) in target.links()]
+            for source, (folder, name)
+            in [*target.links(), *_studio_links(path)]]
         return ProjectInfo(self.relative(path), pieces, runs, links)
 
     def create_project(self, relative: str) -> ProjectInfo:
@@ -211,7 +222,8 @@ class Workspace:
         """
         Create a piece (or a setup) of a project with its content, or from
         its template (see gbkfit.project.Project.create_piece), and return
-        its path.
+        its path. A piece of the Studio (e.g. a comparison) is made with
+        its content, or empty.
 
         Raises
         ------
@@ -225,7 +237,14 @@ class Workspace:
         except ValueError as e:
             raise NotFound(str(e)) from e
         try:
-            return self.relative(target.create_piece(folder, name, content))
+            if folder not in _STUDIO_PIECES:
+                return self.relative(
+                    target.create_piece(folder, name, content))
+            path = _studio_file(target.path, folder, name)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open('x') as f:
+                _write_yaml(content or {}, f)
+            return self.relative(str(path))
         except (ValueError, OSError) as e:
             raise Invalid(f"cannot create the piece '{name}': {e}") from e
 
@@ -278,8 +297,9 @@ class Workspace:
     def references(self, relative: str) -> list[dict[str, str]]:
         """
         Return the pieces and setups of a project that name one of its
-        pieces (see gbkfit.project.Project.references), by its path: their
-        folders and names ({folder, name}).
+        pieces (see gbkfit.project.Project.references), and the pieces of
+        the Studio that do, by its path: their folders and names ({folder,
+        name}).
 
         Raises
         ------
@@ -287,15 +307,20 @@ class Workspace:
             If the piece is not one of a project.
         """
         target, folder, name = self._piece_of(relative)
+        studio = [
+            source for source, named in _studio_links(target.path)
+            if named == (folder, name)]
         return [
             dict(folder=other, name=other_name)
-            for other, other_name in target.references(folder, name)]
+            for other, other_name
+            in [*target.references(folder, name), *studio]]
 
     def rename_piece(self, relative: str, name: str) -> str:
         """
         Rename a piece (or a setup) of a project by its path, and the
         pieces and setups that name it with it (see
-        gbkfit.project.Project.rename_piece); return its new path.
+        gbkfit.project.Project.rename_piece), and the pieces of the Studio
+        that do; return its new path.
 
         Raises
         ------
@@ -306,14 +331,27 @@ class Workspace:
         """
         target, folder, old = self._piece_of(relative)
         try:
-            return self.relative(target.rename_piece(folder, old, name))
+            if folder in _STUDIO_PIECES:
+                source = _studio_file(target.path, folder, old)
+                path = _studio_file(target.path, folder, name)
+                if path.exists():
+                    raise FileExistsError(
+                        f"the project has a piece '{name}' of {folder}")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                source.rename(path)
+                _prune(Path(target.path, folder), source.parent)
+                return self.relative(str(path))
+            renamed = target.rename_piece(folder, old, name)
         except (ValueError, FileExistsError) as e:
             raise Invalid(f"cannot rename the piece '{old}': {e}") from e
+        _rename_in_studio(target.path, folder, old, name)
+        return self.relative(renamed)
 
     def update_piece(self, relative: str, content: dict[str, Any]) -> None:
         """
         Write the content of a piece (or a setup) of a project by its path
-        (see gbkfit.project.Project.update_piece: its comments stay).
+        (see gbkfit.project.Project.update_piece: its comments stay; those
+        of a piece of the Studio go).
 
         Raises
         ------
@@ -321,7 +359,11 @@ class Workspace:
             If the piece is not one of a project.
         """
         target, folder, name = self._piece_of(relative)
-        target.update_piece(folder, name, content)
+        if folder not in _STUDIO_PIECES:
+            target.update_piece(folder, name, content)
+            return
+        with _studio_file(target.path, folder, name).open('w') as f:
+            _write_yaml(content, f)
 
     def delete_piece(self, relative: str) -> None:
         """
@@ -334,7 +376,12 @@ class Workspace:
             If the piece is not one of a project.
         """
         target, folder, name = self._piece_of(relative)
-        target.delete_piece(folder, name)
+        if folder not in _STUDIO_PIECES:
+            target.delete_piece(folder, name)
+            return
+        path = _studio_file(target.path, folder, name)
+        path.unlink()
+        _prune(Path(target.path, folder), path.parent)
 
     def _project_path(self, relative: str) -> str:
         """
@@ -371,7 +418,8 @@ class Workspace:
             raise NotFound(str(e)) from e
         parts = Path(os.path.relpath(path, target.path)).parts \
             if target is not None else ()
-        if len(parts) < 2 or parts[0] not in _PIECES \
+        if len(parts) < 2 \
+                or parts[0] not in (*_PIECES, *_STUDIO_PIECES) \
                 or not parts[-1].endswith('.yaml') \
                 or not os.path.isfile(path):
             raise NotFound(f"no piece '{relative}'")
@@ -808,6 +856,107 @@ class Workspace:
                     f"'{relative}' of shape {data.shape} has no plane {plane}")
             data = data[plane]
         return np.ascontiguousarray(data, dtype=np.float32)
+
+
+def _studio_file(project: str, folder: str, name: str) -> Path:
+    """
+    Return the file of a piece of the Studio of a project (absolute) by
+    its folder and name.
+
+    Raises
+    ------
+    ValueError
+        If the name is not a path in the folder.
+    """
+    base = Path(project, folder)
+    path = Path(os.path.normpath(base / f'{name}.yaml'))
+    if os.path.isabs(name) or not path.is_relative_to(base):
+        raise ValueError(
+            f"the name of a piece must be a path in {folder}/; it is "
+            f"'{name}'")
+    return path
+
+
+def _studio_pieces(project: str) -> Iterator[tuple[str, str, Path]]:
+    """
+    Yield the pieces of the Studio of a project: their folders, names and
+    files, in the order of the folders and of the names.
+    """
+    for folder in _STUDIO_PIECES:
+        base = Path(project, folder)
+        for path in sorted(base.rglob('*.yaml')):
+            yield folder, path.relative_to(base).with_suffix('').as_posix(), \
+                path
+
+
+def _studio_links(
+        project: str
+) -> list[tuple[tuple[str, str], tuple[str, str]]]:
+    """
+    Return the links of the pieces of the Studio of a project (see
+    gbkfit.project.Project.links): each that names a piece, with the
+    piece it names, once each. A file that cannot be read names none.
+    """
+    found: dict[tuple[tuple[str, str], tuple[str, str]], None] = {}
+    for folder, name, path in _studio_pieces(project):
+        content = _read_yaml_quietly(path)
+        if not isinstance(content, dict):
+            continue
+        for named in _STUDIO_PIECES[folder]:
+            for target in _names(content.get(named)):
+                found[(folder, name), (named, target)] = None
+    return list(found)
+
+
+def _rename_in_studio(project: str, folder: str, old: str, new: str) -> None:
+    """
+    Rename a piece of a project, of a folder, in the pieces of the Studio
+    that name it (see _STUDIO_PIECES).
+    """
+    for studio, _, path in _studio_pieces(project):
+        if folder not in _STUDIO_PIECES[studio]:
+            continue
+        content = _read_yaml_quietly(path)
+        if isinstance(content, dict) and old in _names(content.get(folder)):
+            content[folder] = [
+                new if name == old else name for name in content[folder]]
+            with path.open('w') as f:
+                _write_yaml(content, f)
+
+
+def _names(value: Any) -> list[str]:
+    """Return the names of pieces of a list of them (none of another)."""
+    if not isinstance(value, list):
+        return []
+    return [name for name in value if isinstance(name, str)]
+
+
+def _read_yaml_quietly(path: Path) -> Any:
+    """Return the options of a file of YAML; none if it cannot be read."""
+    try:
+        return ruamel.yaml.YAML(typ='safe').load(path.read_text())
+    except (OSError, ruamel.yaml.YAMLError):
+        return None
+
+
+def _write_yaml(content: dict[str, Any], stream: Any) -> None:
+    """Write options as YAML in block style (small lists in flow)."""
+    yaml = ruamel.yaml.YAML(typ='safe')
+    yaml.default_flow_style = None
+    yaml.dump(content, stream)
+
+
+def _prune(base: Path, folder: Path) -> None:
+    """
+    Remove a folder of a piece gone and those above it that it leaves
+    empty, up to the folder of its kind (base).
+    """
+    while folder != base and folder.is_relative_to(base):
+        try:
+            folder.rmdir()
+        except OSError:
+            break
+        folder = folder.parent
 
 
 def _temporary(path: Path) -> Path:

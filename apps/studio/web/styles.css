@@ -1432,3 +1432,27 @@ h2 { margin: 0; font: var(--text-heading); }
 .ln-key i { display: inline-block; width: 14px; border-top: 2px solid; }
 .ln-key-critical { color: #7fd4ff; }
 .ln-key-caustic { color: #ff8fc8; }
+
+/* The compare screen: a grid of cells, a galaxy as an observation sees it
+   each, under the heads of the columns and beside those of the rows */
+.cmp-screen .sheet-layout { min-height: 0; }
+.cmp-row { grid-template-columns: 92px minmax(0, 1fr); align-items: start; }
+.cmp-row > .ob-label { padding-top: 4px; }
+.cmp-toggles { display: flex; flex-wrap: wrap; gap: 4px; }
+.cmp-toggle { height: 24px; padding: 0 10px; border: 1px solid var(--line2); border-radius: 12px; background: none; color: var(--muted); font: var(--text-data-small); cursor: pointer; }
+.cmp-toggle:hover { color: var(--fg); border-color: var(--faint); }
+.cmp-toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--sel); color: var(--accent-text); }
+.cmp-missing { border-style: dashed; color: var(--err); }
+.cmp-picture { min-width: 0; min-height: 0; overflow: auto; padding: 14px 16px 20px; }
+.cmp-empty { display: grid; place-items: center; color: var(--muted); font: var(--text-body); }
+.cmp-grid { display: grid; gap: 10px; align-items: stretch; }
+.cmp-head, .cmp-side { display: flex; gap: 6px; font: var(--text-label); color: var(--fg); }
+.cmp-head { align-items: baseline; padding: 0 2px; }
+.cmp-side { flex-direction: column; justify-content: center; padding-right: 6px; max-width: 140px; }
+.cmp-head b, .cmp-side b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-head span, .cmp-side span { font: var(--text-caption); color: var(--muted); }
+.cmp-head[data-data] b, .cmp-side[data-data] b { color: var(--muted); }
+.cmp-cell { height: var(--cmp-cell, 340px); min-width: 0; display: flex; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden; }
+.cmp-cell > .map-panel { flex: 1; min-width: 0; }
+.cmp-none { align-items: center; justify-content: center; color: var(--faint); font: var(--text-caption); border-style: dashed; background: none; }
+.cmp-error { margin: 14px; font: var(--text-caption); overflow-wrap: anywhere; }

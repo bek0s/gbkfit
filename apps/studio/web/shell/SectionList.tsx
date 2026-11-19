@@ -15,7 +15,7 @@ import { sectionNamed, type Group as GroupInfo, type SectionKey } from './sectio
 // The blocks a group shows before 'show all'
 const SHOWN = 12;
 
-// Whether a section has a list (home and compare have none, yet)
+// Whether a section has a list (home has none, nor fit yet)
 export function hasList(key: SectionKey): boolean {
   return sectionNamed(key).groups.length > 0;
 }
