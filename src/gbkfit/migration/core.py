@@ -19,7 +19,8 @@ from ruamel.yaml.comments import CommentedMap
 from gbkfit.config import FORMAT_VERSION, ConfigError
 import gbkfit.project
 from . import (
-    v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16)
+    v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16,
+    v17)
 from .rules import Change, PiecesView, Rule, ViewedPiece, insert_first
 
 
@@ -37,8 +38,17 @@ _SECTIONS = gbkfit.project.piece_sections()
 
 # The sections of setups whose pieces the rules see with them, as they
 # were (rules that rename parameters take the galaxies and the
-# observations that the parameters are of: see _setup_view)
+# observations that the parameters are of: see _setup_view), with those
+# inline in the setups among the pieces of the project
 _VIEWED = ('galaxies', 'observations')
+
+# The sections of setups whose pieces that they name the rules see in
+# them, as they were: those of _VIEWED, and the lenses (rules that add
+# parameters of the galaxies whose masses lenses are take them; see
+# _setup_view). Rules add pieces of lenses (e.g. those of the foregrounds
+# of observations, version 15), which the copies of those inline would
+# hide among the pieces of the project
+_NAMED = (*_VIEWED, 'lenses')
 
 # The umask of the process, for the files it makes (see _replacing):
 # there is no way to read it but to set it, which is done once here
@@ -73,7 +83,7 @@ RULES: tuple[Rule, ...] = (
     *v2.RULES, *v3.RULES, *v4.RULES, *v5.RULES, *v6.RULES, *v7.RULES,
     *v8.RULES, *v9.RULES, *v10.RULES, *v11.RULES, *v12.RULES,
     *v13.RULES,
-    *v14.RULES, *v15.RULES, *v16.RULES)
+    *v14.RULES, *v15.RULES, *v16.RULES, *v17.RULES)
 
 
 def migrate(
@@ -204,16 +214,16 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
         os.path.join(project.path, 'setups', f'{name}.yaml')
         for name in project.names('setups')]
     setups = [_read(file) for file in setup_files]
-    # The galaxy and observation pieces as they were, by name, for the
-    # setups that name them; and the galaxies and observations inline in
-    # the setups, whose parameters the params pieces can have (rules that
-    # rename parameters take the galaxies and the observations they are
-    # with: see _setup_view)
+    # The galaxy, observation and lens pieces as they were, by name, for
+    # the setups that name them; and the galaxies and observations inline
+    # in the setups, whose parameters the params pieces can have (rules
+    # that rename or add parameters take the galaxies, the observations
+    # and the lenses they are with: see _setup_view)
     originals = {
         section: dict(zip(
             project.names(gbkfit.project.piece_folder(section)),
             copy.deepcopy(pieces[section])))
-        for section in _VIEWED}
+        for section in _NAMED}
     inline = {
         section: [
             copy.deepcopy(item) for setup in setups
@@ -224,7 +234,7 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
         section: pieces[section] + inline[section] for section in _VIEWED})
     for change in _rewrite(view, version):
         section, index, *rest = change.path
-        # (not the copies of the galaxies and observations of the setups;
+        # (not the copies of the viewed pieces of the setups;
         # those beyond the files of other sections are pieces that the
         # rules added, new files of their names)
         if index < len(files[section]) or section not in _VIEWED:
@@ -276,19 +286,19 @@ def _setup_view(
         originals: Mapping[str, Mapping[str, Any]]
 ) -> tuple[dict[str, Any], dict[str, set[int]]]:
     """
-    Return a view of a setup with its galaxies and observations that name
-    pieces replaced by copies of the pieces as they were (originals, by
-    section and name; see ViewedPiece), so that the rules that take what
-    the setup takes of them know them (e.g. those that rename parameters;
-    the rest is the setup itself, rewritten in place), and the positions
-    of those items, by section (whose changes are those of the pieces,
-    not of the setup).
+    Return a view of a setup with its galaxies, observations and lenses
+    that name pieces replaced by copies of the pieces as they were
+    (originals, by section and name; see ViewedPiece), so that the rules
+    that take what the setup takes of them know them (e.g. those that
+    rename parameters; the rest is the setup itself, rewritten in place),
+    and the positions of those items, by section (whose changes are those
+    of the pieces, not of the setup).
     """
     named = {
         section: {
             i for i, item in enumerate(_listed(setup, section))
             if isinstance(item, str) and item in originals[section]}
-        for section in _VIEWED}
+        for section in _NAMED}
     named = {section: found for section, found in named.items() if found}
     if not named:
         return setup, {}

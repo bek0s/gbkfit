@@ -3,8 +3,8 @@ The mass of a galaxy laid out on the sky (SkyMass), for the lenses of
 its mass: a closed set of plain layers of projected mass (points, round
 layers, elliptical layers and bands of rings), in kpc and Msun, which
 lensing turns into deflections. The mass components that can be laid
-out on the sky give their layers (see SkyProjected), placed by the
-components of their galaxy (see SkyPlacement).
+out on the sky give their layers (see SkyProjected), placed where the
+mass is, or on the components that they follow (see SkyPlacement).
 
 The layers are on the plane of the sky, in the frame of the parameters
 of the galaxies (+x to the west, +y to the north, from the origin of
@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, NamedTuple, Protocol, TypeAlias, \
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.params import ModelEvaluationError, ParamValues
+from gbkfit.params import ParamValues
 from . import _numerics
 
 if TYPE_CHECKING:
@@ -52,6 +52,7 @@ __all__ = [
     'HeightProfile',
     'LinearBetweenKnots',
     'LogTable',
+    'MassPlace',
     'MassPlane',
     'PointLayer',
     'RingGeometry',
@@ -62,7 +63,6 @@ __all__ = [
     'SkyPlacement',
     'SkyProjected',
     'SpheroidAxis',
-    'check_planes',
     'plane_normal',
     'plane_tilt',
     'projected_ratio'
@@ -87,12 +87,6 @@ _TAIL = 1e-16
 # thick layer (see HeightProfile), evenly from 0 to their tops: cubic
 # between them, to about 1e-7 of an exponential pdf of 24 scale heights
 _HEIGHT_TABLE = 512
-
-# The largest angle (degrees) between the planes of the components that
-# place the mass in one plane (see SkyPlacement.plane): planes tied or
-# fixed at the same values agree to the last bits
-_PLANE_TOLERANCE = 1e-9
-
 
 @dataclasses.dataclass(frozen=True, eq=False)
 class LogTable:
@@ -397,11 +391,24 @@ class SkyMass:
 
 class MassPlane(NamedTuple):
     """
-    The plane of the mass of a galaxy (see SkyPlacement.plane): its
-    position angle and inclination (degrees), as those of disks.
+    The plane of the mass of a galaxy (see MassPlace): its position angle
+    and inclination (degrees), as those of disks.
     """
     posa: float
     incl: float
+
+
+class MassPlace(NamedTuple):
+    """
+    Where the mass of a galaxy is on the sky (see MassModel.place): its
+    centre (x, y; arcsec, in the frame of the parameters of the galaxy)
+    and its plane, each None if it has none (no mass component lies at
+    it, or in it: see MassModel.takes_mass_centre and takes_mass_plane;
+    e.g. no plane for a halo and a point mass, and neither for parts
+    that all follow components, which lie on them).
+    """
+    centre: tuple[float, float] | None
+    plane: MassPlane | None
 
 
 class SpheroidAxis(NamedTuple):
@@ -460,22 +467,27 @@ class RingPlacement(Protocol):
 @dataclasses.dataclass(frozen=True, eq=False)
 class SkyPlacement:
     """
-    Where a galaxy places its mass on the sky: its one centre, and the
-    components that its mass moves, holds up or follows (the disks by
-    their rings, the spheroids by their axes), by name. A mass component
-    that follows a component takes its geometry (see rings and axis); the
-    others lie in the plane of the mass at its centre (see plane).
+    Where a galaxy places its mass on the sky: where the mass is (its
+    centre and its plane, if it has them; see MassPlace), and the
+    components that its mass follows (the disks by their rings, the
+    spheroids by their axes), by name. A mass component that follows a
+    component takes its geometry (see rings and axis); the others lie at
+    the centre of the mass (see centre), in its plane if they are not
+    round (see plane).
 
     Attributes
     ----------
-    centre : tuple of float
-        The centre of the mass (kpc, see the module).
+    mass_centre : tuple of float or None
+        The centre of the mass (kpc, see the module), if it has one.
+    mass_plane : MassPlane or None
+        The plane of the mass, if it has one.
     disks : Mapping
         The rings of each disk, by the name of its component.
     spheroids : Mapping
         The axis of each spheroid, by the name of its component.
     """
-    centre: tuple[float, float]
+    mass_centre: tuple[float, float] | None = None
+    mass_plane: MassPlane | None = None
     disks: Mapping[str, RingPlacement] = dataclasses.field(
         default_factory=dict)
     spheroids: Mapping[str, SpheroidAxis] = dataclasses.field(
@@ -513,28 +525,35 @@ class SkyPlacement:
                 f"{list(self.spheroids)}")
         return self.spheroids[component]
 
-    def plane(self) -> MassPlane:
+    def centre(self) -> tuple[float, float]:
         """
-        Return the plane of the mass: that of the innermost ring of each
-        disk and the axis of each spheroid that has one, which must agree
-        (see check_planes; a disk that warps beyond its innermost ring does
-        not move it).
+        Return the centre of the mass (kpc).
 
         Raises
         ------
-        ModelEvaluationError
-            If they disagree, or there are none (no component gives the
-            mass a plane).
+        ValueError
+            If the mass has no centre (see MassPlace).
         """
-        planes = [
-            (f"the disk {name!r}", float(rings.posa[0]), float(rings.incl[0]))
-            for name, placement in self.disks.items()
-            for rings in [placement.rings(np.zeros(1))]]
-        planes += [
-            (f"the spheroid {name!r}", axis.posa, axis.incl)
-            for name, axis in self.spheroids.items()
-            if axis.posa is not None]
-        return check_planes(planes)
+        if self.mass_centre is None:
+            raise ValueError(
+                "a mass component lies at the centre of the mass of its "
+                "galaxy, which has none (see MassModel.takes_mass_centre)")
+        return self.mass_centre
+
+    def plane(self) -> MassPlane:
+        """
+        Return the plane of the mass.
+
+        Raises
+        ------
+        ValueError
+            If the mass has no plane (see MassPlace).
+        """
+        if self.mass_plane is None:
+            raise ValueError(
+                "a mass component lies in the plane of the mass of its "
+                "galaxy, which has none (see MassModel.takes_mass_plane)")
+        return self.mass_plane
 
 
 def plane_normal(posa: float, incl: float) -> np.ndarray:
@@ -582,45 +601,6 @@ def plane_tilt(
         float(np.linalg.norm(np.cross(n1, n2))), abs(float(n1 @ n2))))
 
 
-def check_planes(planes: Sequence[tuple[str, float, float]]) -> MassPlane:
-    """
-    Return the one plane of the mass of a galaxy that the planes of its
-    components give, which must agree (to _PLANE_TOLERANCE, as the
-    gravity takes them in one plane).
-
-    Parameters
-    ----------
-    planes : Sequence of tuple
-        The label (for the messages; e.g. "the disk 'gas'"), position
-        angle and inclination (degrees) of each.
-
-    Returns
-    -------
-    MassPlane
-        The plane, that of the first.
-
-    Raises
-    ------
-    ModelEvaluationError
-        If there are none, or they disagree.
-    """
-    if not planes:
-        raise ModelEvaluationError(
-            "the mass of a galaxy lies in the plane of its components, "
-            "but none of those that place it has a plane (a disk, or a "
-            "spheroid of an axis)")
-    first, posa, incl = planes[0]
-    for label, other_posa, other_incl in planes[1:]:
-        if plane_tilt((posa, incl), (other_posa, other_incl)) \
-                > _PLANE_TOLERANCE:
-            raise ModelEvaluationError(
-                f"the mass of a galaxy lies in one plane, but the components "
-                f"that place it disagree: {label} at posa {other_posa:g}, "
-                f"incl {other_incl:g}, {first} at posa {posa:g}, incl "
-                f"{incl:g}; tie them")
-    return MassPlane(posa, incl)
-
-
 @runtime_checkable
 class SkyProjected(Protocol):
     """
@@ -629,10 +609,21 @@ class SkyProjected(Protocol):
     mass is (tables of circular velocities, and functions of the user).
     """
 
+    def takes_mass_centre(self) -> bool:
+        """
+        Check whether its layers lie at the centre of the mass of its
+        galaxy (see SkyPlacement.centre), which its mass model then has
+        (see MassModel.takes_mass_centre): not those of a component that
+        it follows, which lie on it.
+        """
+        ...
+
     def takes_mass_plane(self) -> bool:
         """
         Check whether its layers lie in the plane of the mass of its
-        galaxy (see SkyPlacement.plane), which the galaxy must have.
+        galaxy (see SkyPlacement.plane), which its mass model then has
+        (see MassModel.takes_mass_plane); only those that lie at its
+        centre can (see takes_mass_centre).
         """
         ...
 

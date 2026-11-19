@@ -19,7 +19,9 @@ __all__ = [
 # observations), 14, of 2026-11-16 on (the vertical equilibrium of the
 # dispersion of a thick disk is its option equilibrium, not a dispersion
 # trait), 15, of 2026-11-17 on (gravitational lenses are a section of
-# their own, not the foreground of an observation), and 16, of 2026-11-18
-# on (the alpha of Palatini f(R) gravity of the sign of f(R) = R + alpha
-# R^2); gbkfit.migration rewrites the older ones
-FORMAT_VERSION = 16
+# their own, not the foreground of an observation), 16, of 2026-11-18 on
+# (the alpha of Palatini f(R) gravity of the sign of f(R) = R + alpha
+# R^2), and 17, of 2026-11-18 on (the mass of a galaxy has a place of its
+# own: mass_xpos and mass_ypos, and mass_posa and mass_incl if it has a
+# plane); gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 17

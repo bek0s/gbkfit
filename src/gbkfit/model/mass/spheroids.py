@@ -164,6 +164,9 @@ class _ShapedMass(MassComponent, abc.ABC):
         return self._shape.potential(
             R, z, self._profile_at(params, context), params, context)
 
+    def takes_mass_centre(self) -> bool:
+        return True
+
     def takes_mass_plane(self) -> bool:
         # (a flattened spheroid lies in the plane of the mass)
         return not self._shape.spherical()
@@ -178,7 +181,7 @@ class _ShapedMass(MassComponent, abc.ABC):
         # of the projection of its profile (see sky.spheroid_stretch), in
         # the plane of the mass, its axis along the normal of the plane
         scale, unit = self._sky_scale(params)
-        centre = placement.centre
+        centre = placement.centre()
         if self._shape.spherical():
             return (round_layer(centre, scale, lambda r: self.enclosed_mass(
                 r, unit, context)),)
@@ -905,8 +908,11 @@ class TracedSpheroid(MassComponent):
             lambda shape, profile, values: shape.potential(
                 R, z, profile, values, context), params, context)
 
+    def takes_mass_centre(self) -> bool:
+        # (the spheroid it traces places it)
+        return False
+
     def takes_mass_plane(self) -> bool:
-        # (the axis of the spheroid it traces orients it)
         return False
 
     def sky_layers(

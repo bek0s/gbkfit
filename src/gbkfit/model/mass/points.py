@@ -69,6 +69,9 @@ class MassPoint(MassSpherical):
         r = np.hypot(R, z)
         return -G * 10 ** params['log_m'] / r
 
+    def takes_mass_centre(self) -> bool:
+        return True
+
     def takes_mass_plane(self) -> bool:
         return False
 
@@ -78,4 +81,4 @@ class MassPoint(MassSpherical):
             context: MassContext,
             placement: SkyPlacement
     ) -> tuple[SkyLayer, ...]:
-        return (PointLayer(placement.centre, 10.0 ** params['log_m']),)
+        return (PointLayer(placement.centre(), 10.0 ** params['log_m']),)

@@ -175,10 +175,18 @@ class ObservationGroup:
         self._cosmology = DEFAULT if cosmology is None else cosmology
         self._depth = None if depth_order is None else DepthOrder(
             depth_order, galaxy_names, observation_names, self._prefixes)
-        # The parameters of the galaxies (and of their separations), to
-        # which those of the lenses and of the observations are added
+        # The parameters of the galaxies, with those of where the masses
+        # are on the sky of the galaxies that pieces of lenses are the
+        # masses of (which lay them out there; see Galaxy.sky_pdescs and
+        # _check_masses), and of their separations, to which those of the
+        # lenses and of the observations are added
+        lensing = {
+            piece.galaxy() for lens in self._lenses for piece in lens.pieces()
+            if isinstance(piece, OfGalaxy)}
         galaxy_pdescs, self._mappings = iterutils.merge_with_prefixes(
-            [galaxy.pdescs() for galaxy in self._galaxies], self._prefixes)
+            [galaxy.pdescs() | (
+                galaxy.sky_pdescs() if galaxy.name() in lensing else {})
+             for galaxy in self._galaxies], self._prefixes)
         # The separations of the galaxies of groups, by galaxy
         separations = {} if self._depth is None else self._depth.pdescs()
         self._separations = {} if self._depth is None \
@@ -674,10 +682,12 @@ class ObservationGroup:
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
-        Return the parameters of the galaxies and of the lenses, prefixed,
-        and those of the observations (see Observation.pdescs): those of
-        their models (the likelihoods, which compare them with the data,
-        add their own; see Likelihoods.pdescs).
+        Return the parameters of the galaxies (with those of where the
+        masses are on the sky of the galaxies that lenses bend light by,
+        see Galaxy.sky_pdescs) and of the lenses, prefixed, and those of
+        the observations (see Observation.pdescs): those of their models
+        (the likelihoods, which compare them with the data, add their own;
+        see Likelihoods.pdescs).
         """
         return self._pdescs
 

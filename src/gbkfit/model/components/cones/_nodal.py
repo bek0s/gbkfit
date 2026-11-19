@@ -18,7 +18,7 @@ from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import NodalComponent, evaluate_native_traits, native_traits
 from ..base import (
     ComponentState, FieldsLayout, NativeGrid)
-from ..geometries import GEOMETRY_UNITS, geometry_pdesc
+from ...geometries import GEOMETRY_UNITS, geometry_pdesc
 from ..traits import Trait
 
 

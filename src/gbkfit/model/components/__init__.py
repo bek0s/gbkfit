@@ -1,7 +1,6 @@
 from ._units import DataUnit, LightUnit, check_data_unit
 from .base import *
 from .extinction import *
-from .geometries import *
 from .lines import *
 from .nodes import *
 from .particles import *

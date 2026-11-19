@@ -17,7 +17,7 @@ from ._common import (
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid, SceneTarget)
-from .geometries import geometry_pdesc
+from ..geometries import geometry_pdesc
 from .lines import Bands, LinePlacement, Lines
 from .roles import (
     Emission, View, emission_parser)

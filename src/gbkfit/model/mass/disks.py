@@ -335,9 +335,12 @@ class MassDisk(MassComponent):
         return self._surface.height_potential(
             R, z, self._vertical, params, context)
 
-    def takes_mass_plane(self) -> bool:
+    def takes_mass_centre(self) -> bool:
         # (a disk of the surface density of a component lies on its rings)
         return self._surface.followed_component() is None
+
+    def takes_mass_plane(self) -> bool:
+        return self.takes_mass_centre()
 
     def sky_layers(
             self,
@@ -367,13 +370,14 @@ class MassDisk(MassComponent):
 
         def sigma(R: np.ndarray) -> np.ndarray:
             return surface.surface_density(R, unit, context)
+        centre = placement.centre()
         if isinstance(surface, LinearBetweenKnots):
             return (band_layer(
                 scale, surface.linear_knots(),
-                fixed_geometry(placement.centre, posa, stretch, normal),
+                fixed_geometry(centre, posa, stretch, normal),
                 sigma, heights),)
         return (elliptical_layer(
-            placement.centre, scale, posa, stretch, sigma, heights, normal),)
+            centre, scale, posa, stretch, sigma, heights, normal),)
 
     def _ring_bands(
             self,

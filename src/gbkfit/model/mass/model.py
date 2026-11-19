@@ -15,10 +15,11 @@ from gbkfit.config import (
 from gbkfit.cosmology import Cosmology
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
+from ..geometries import geometry_pdesc
 from .base import MassComponent, MassContext
 from .disks import MassDisk, TracedDisk
 from .points import MassPoint
-from .sky import SkyMass, SkyPlacement, SkyProjected
+from .sky import MassPlace, MassPlane, SkyMass, SkyPlacement, SkyProjected
 from .spheroids import Halo, MassSpheroid, TracedSpheroid
 from .tables import MassTable
 from .user import MassUser
@@ -40,17 +41,37 @@ mass_component_parser = TypedParser(MassComponent, [
     MassTable,
     MassUser], family='mass_component')
 
+# The descriptions of the parameters of where the mass is (see
+# MassModel.place), as those of the geometries of the components
+_PLACE_DESCS = dict(
+    xpos="the x coordinate of the centre of the mass on the sky",
+    ypos="the y coordinate of the centre of the mass on the sky",
+    posa="the position angle of the major axis of the plane of the mass, "
+         "from north through east",
+    incl="the angle of the axis of the mass from the line of sight (0: "
+         "face-on)")
+
 
 class MassModel(Serializable):
     """
     The mass of a galaxy: its mass components (e.g. stars, gas, dark
     matter), whose densities, potentials and forces add up, and so do
-    their squared circular velocities. Its parameters are those of its
-    components, prefixed by 'mass_' and their names (e.g. mass_halo_c).
+    their squared circular velocities, about one centre and one axis.
     It computes gravity only, in kpc (see units): the distance of its
     galaxy converts arcsec to kpc, and the velocity traits 'mass' of the
     components of its galaxy turn its circular velocity into their
     rotation.
+
+    Its parameters are those of its components, prefixed by 'mass_' and
+    their names (e.g. mass_halo_c). Where it is on the sky (see place) is
+    given only where its mass is laid out on the sky (e.g. by a lens of
+    its mass, see ObservationGroup), by the parameters of its place (see
+    place_pdescs): its centre, mass_xpos and mass_ypos, if a component
+    lies at it (see takes_mass_centre: e.g. a halo, or a point mass),
+    and its plane, mass_posa and mass_incl (as those of disks), if a
+    component lies in it (see takes_mass_plane: e.g. a mass disk, or a
+    flattened halo). The mass components that follow components of its
+    galaxy lie on them (e.g. a traced disk on the rings of its disk).
 
     Parameters
     ----------
@@ -81,11 +102,16 @@ class MassModel(Serializable):
             raise ValueError(
                 f"the components of a mass model must have different "
                 f"names; repeated: {repeated}")
-        self._pdescs, self._mappings = iterutils.merge_with_prefixes(
-            [component.pdescs() for component in components],
-            [f'mass_{name}_' for name in names])
         self._components = components
         self._check_responses()
+        place = (('xpos', 'ypos') if self.takes_mass_centre() else ()) \
+            + (('posa', 'incl') if self.takes_mass_plane() else ())
+        self._place_pdescs = {
+            f'mass_{name}': geometry_pdesc(name, desc=_PLACE_DESCS[name])
+            for name in place}
+        self._parts_pdescs, self._mappings = iterutils.merge_with_prefixes(
+            [component.pdescs() for component in components],
+            [f'mass_{name}_' for name in names])
 
     def _check_responses(self) -> None:
         """
@@ -204,8 +230,33 @@ class MassModel(Serializable):
         return names.index(name)
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        """Return its parameters, by name."""
-        return self._pdescs
+        """
+        Return its parameters, those of its components, by name (e.g.
+        mass_halo_c): all that its densities, forces and potentials read.
+        """
+        return self._parts_pdescs
+
+    def place_pdescs(self) -> dict[str, ParamDesc]:
+        """
+        Return the parameters of where it is on the sky (see place), by
+        name: mass_xpos and mass_ypos if it has a centre, and mass_posa
+        and mass_incl if it has a plane; none if all its components
+        follow components of its galaxy.
+        """
+        return self._place_pdescs
+
+    def place(self, params: ParamValues) -> MassPlace:
+        """
+        Return where it is on the sky (see MassPlace), of the values of
+        the parameters of its place (see place_pdescs; and possibly
+        others), by name: its centre and its plane, if it has them.
+        """
+        centre = (float(params['mass_xpos']), float(params['mass_ypos'])) \
+            if 'mass_xpos' in self._place_pdescs else None
+        plane = MassPlane(
+            float(params['mass_posa']), float(params['mass_incl'])) \
+            if 'mass_posa' in self._place_pdescs else None
+        return MassPlace(centre, plane)
 
     def mass_ratios(self) -> dict[str, str]:
         """
@@ -424,11 +475,29 @@ class MassModel(Serializable):
                 f"disks, spheroids, halos or points")
         return None
 
+    def takes_mass_centre(self) -> bool:
+        """
+        Check whether a component lies at the centre of the mass (see
+        sky.SkyProjected.takes_mass_centre; e.g. a halo, a point mass, or
+        a mass disk of its own surface density), which it then has (see
+        place): not those that follow components of its galaxy, which lie
+        on them.
+        """
+        return any(
+            isinstance(component, SkyProjected)
+            and component.takes_mass_centre()
+            for component in self._components)
+
     def takes_mass_plane(self) -> bool:
         """
-        Check whether a component lays out its mass on the sky in the plane
-        of the mass of its galaxy (see sky.SkyProjected.takes_mass_plane),
-        which the galaxy must have.
+        Check whether a component lies in the plane of the mass (see
+        sky.SkyProjected.takes_mass_plane; e.g. a mass disk, or a
+        flattened halo), which it then has (see place). Those that follow
+        components of its galaxy lie on them, and the others are round
+        (e.g. a spherical halo, or a point mass), or do not say where
+        their mass is (tables and functions of the user, whose circular
+        velocities are those of the planes of the components that take
+        them).
         """
         return any(
             isinstance(component, SkyProjected)

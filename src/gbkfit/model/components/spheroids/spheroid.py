@@ -41,7 +41,7 @@ from .._units import mass_per_unit
 from ..base import (
     Component, ComponentLinks, ComponentPart, ComponentState, FieldsLayout,
     FrameParams, NativeGrid, SceneTarget)
-from ..geometries import geometry_pdesc
+from ...geometries import geometry_pdesc
 from ..nodes import Nodes, as_nodes
 from ..parts import kinematic_traits
 from ..roles import (

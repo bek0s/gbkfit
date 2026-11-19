@@ -60,7 +60,10 @@ HALO = dict(
 
 RHO_S, R_S = 3e6, 20.0
 
-HALO_PARAMS = dict(mass_halo_log_rho=math.log10(RHO_S), mass_halo_rs=R_S)
+# (the mass at the centre of the components of the galaxies here)
+HALO_PARAMS = dict(
+    mass_xpos=0.1, mass_ypos=-0.05, mass_halo_log_rho=math.log10(RHO_S),
+    mass_halo_rs=R_S)
 
 
 def deflector(components=(GAS,), mass=(HALO,), **options):
@@ -96,8 +99,12 @@ def values_of(group, properties):
 
 
 def galaxy_values_of(galaxy, properties):
-    """The values of the parameters of a galaxy (all fixed)."""
-    return ParamSpace.from_properties(galaxy.pdescs(), properties).evaluate()
+    """
+    The values of the parameters of a galaxy (all fixed), with those of
+    where its mass is on the sky (see Galaxy.sky_pdescs).
+    """
+    return ParamSpace.from_properties(
+        galaxy.pdescs() | galaxy.sky_pdescs(), properties).evaluate()
 
 
 def evaluate(group, values, driver):
@@ -111,14 +118,18 @@ def evaluate(group, values, driver):
     return images, plan
 
 
-def test_the_mass_of_a_halo_lenses_as_the_nfw_lens(driver):
+@pytest.mark.parametrize('components', [(GAS,), ()])
+def test_the_mass_of_a_halo_lenses_as_the_nfw_lens(driver, components):
     # The image of the arc alone, bent by the mass of an NFW halo of the
     # deflector (which it does not see), is that of the NFW lens of the
-    # convergence kappa_s = rho_s r_s / Sigma_cr, quoted for the arc
+    # convergence kappa_s = rho_s r_s / Sigma_cr, quoted for the arc, at
+    # the centre of the mass: of a galaxy of a gas disk that the mass
+    # moves, or of the mass alone (a dark lens)
     group = ObservationGroup(
-        [deflector(), ARC], image('alma', ['arc']),
+        [deflector(components), ARC], image('alma', ['arc']),
         Lens('lens', LENS_Z, LensGalaxyMass('deflector')))
-    values = values_of(group, prefixed('deflector', GAS_PARAMS | HALO_PARAMS)
+    own = GAS_PARAMS if components else {}
+    values = values_of(group, prefixed('deflector', own | HALO_PARAMS)
                        | ARC_PARAMS)
     [lensed], _ = evaluate(group, values, driver)
     cosmology = group.cosmology()
@@ -127,15 +138,18 @@ def test_the_mass_of_a_halo_lenses_as_the_nfw_lens(driver):
     d_ls = 1e3 * cosmology.angular_diameter_distance_between(
         LENS_Z, SOURCE_Z)
     kpc_per_arcsec = d_l / ARCSEC
+    # (the deflector of the NFW lens is not its mass: no place of it)
+    halo = {k: v for k, v in HALO_PARAMS.items()
+            if k not in ('mass_xpos', 'mass_ypos')}
     nfw = ObservationGroup(
         [deflector(), ARC], image('alma', ['arc']),
         Lens('lens', LENS_Z, LensNFW(), source_redshift=SOURCE_Z))
     [expected], _ = evaluate(nfw, values_of(nfw, prefixed(
-        'deflector', GAS_PARAMS | HALO_PARAMS) | ARC_PARAMS | dict(
+        'deflector', GAS_PARAMS | halo) | ARC_PARAMS | dict(
         lens_kappa_s=math.pi * K * RHO_S * R_S * d_l * d_ls / d_s,
         lens_r_s=R_S / kpc_per_arcsec, lens_q=1, lens_posa=0,
-        lens_xpos=GAS_PARAMS['gas_xpos'],
-        lens_ypos=GAS_PARAMS['gas_ypos'])), driver)
+        lens_xpos=HALO_PARAMS['mass_xpos'],
+        lens_ypos=HALO_PARAMS['mass_ypos'])), driver)
     assert lensed.max() > 0.1
     np.testing.assert_allclose(lensed, expected, rtol=0, atol=1e-6)
 
@@ -158,6 +172,27 @@ GALAXY_PARAMS = dict(
     bulge_posa=30, bulge_incl=60, bulge_ie=1, bulge_re=0.3, bulge_n=2,
     bulge_q=0.6, mass_stars_upsilon=3e9, mass_bulge_upsilon=1e9) \
     | HALO_PARAMS
+
+
+def test_the_components_of_a_lens_are_at_its_mass_and_in_its_plane():
+    # The components that the mass of a lens galaxy moves or follows are at
+    # the centre of its mass on the sky (mass_xpos, mass_ypos), and those
+    # that it follows in one plane (the disk and the axis of the bulge):
+    # else an evaluation fails, naming the tie
+    from gbkfit.params import ModelEvaluationError
+    galaxy = deflector([STARS, BULGE], GALAXY_MASS)
+    stage = galaxy.plan_stage(sky_mass=True)
+    values = galaxy_values_of(galaxy, GALAXY_PARAMS)
+    stage.evaluate(values)
+    with pytest.raises(ModelEvaluationError, match="different centres"):
+        stage.evaluate(values | dict(mass_xpos=0.3))
+    with pytest.raises(ModelEvaluationError, match="lies in one plane"):
+        stage.evaluate(values | dict(bulge_incl=50))
+    # (without the sky, of the stars and the bulge alone)
+    plain = galaxy.plan_stage()
+    plain.evaluate(values)
+    with pytest.raises(ModelEvaluationError, match="lies in one plane"):
+        plain.evaluate(values | dict(bulge_incl=50))
 
 
 def galaxy_group():
@@ -216,7 +251,8 @@ def test_deflections_are_kept_layer_by_layer(monkeypatch):
     # where their unit shapes change: not for a step in a lens parameter,
     # in the light of the arc (a fixed mass is deflected once), or in a
     # mass-to-light ratio (which scales its layer), but for its halo or
-    # the orientation of its stars
+    # the orientation of its stars and its bulge (tied: its mass lies in
+    # one plane)
     calls = []
     unit_deflection = mass_deflections.unit_deflection
 
@@ -231,13 +267,15 @@ def test_deflections_are_kept_layer_by_layer(monkeypatch):
     plan.model_h(values)
     assert calls
     sky = plan.stage_caches()['galaxy.deflector.sky']
-    for name, again in (
-            ('lens_shear_gamma', []), ('arc_disk_rpt_s', []),
-            ('deflector_mass_stars_upsilon', []),
-            ('deflector_mass_halo_rs', ['RoundLayer'] * 2),
-            ('deflector_stars_posa', ['BandLayer'] * 2)):
+    for names, again in (
+            (['lens_shear_gamma'], []), (['arc_disk_rpt_s'], []),
+            (['deflector_mass_stars_upsilon'], []),
+            (['deflector_mass_halo_rs'], ['RoundLayer'] * 2),
+            (['deflector_stars_posa', 'deflector_bulge_posa'],
+             ['BandLayer'] * 2 + ['EllipticalLayer'] * 2)):
+        name = names[0]
         calls.clear()
-        stepped = values | {name: 1.1 * values[name]}
+        stepped = values | {n: 1.1 * values[n] for n in names}
         version = sky.version()
         images = [model['brightness'].data.copy()
                   for model in plan.model_h(stepped)]
@@ -314,9 +352,9 @@ def test_steps_that_move_no_mass_render_no_lensed_observation(monkeypatch):
 def test_a_step_evaluates_again_only_the_parts_it_moves():
     # The mass on the sky takes the mass, not its field: a step in the
     # gravity lays out neither the mass nor its sky again; one in the
-    # orientation of the gas, which places the mass, lays out its sky
-    # again, as it was (a round halo), which is kept; one in the
-    # dispersion of the gas none of them; one in the halo all three
+    # orientation or the dispersion of the gas, which the mass moves but
+    # does not follow, none of them; one in the halo all three; one in the
+    # centre of the mass (and of the gas, tied to it) its sky alone
     galaxy = deflector(gravity=dict(type='hu_sawicki'))
     stage = galaxy.plan_stage(sky_mass=True)
     values = galaxy_values_of(galaxy, GAS_PARAMS | HALO_PARAMS | dict(
@@ -337,17 +375,24 @@ def test_a_step_evaluates_again_only_the_parts_it_moves():
         assert (state.sky is first.sky) == ('sky' not in again), name
         stage.evaluate(values)
         first = stage.evaluate(values)
-    # A disk of mass in the plane of the mass, which the gas gives: a step
-    # in the orientation of the gas moves it on the sky
+    versions = {
+        part: caches[part].version() for part in ('mass', 'field', 'sky')}
+    moved = stage.evaluate(values | dict(mass_xpos=0.2, gas_xpos=0.2))
+    assert {part for part, version in versions.items()
+            if caches[part].version() != version} == {'sky'}
+    assert moved.sky is not first.sky
+    # A disk of mass in the plane of the mass, its own: a step in it moves
+    # the disk on the sky, one in the orientation of the gas does not
     galaxy = deflector(mass=[HALO, dict(
         type='disk', name='disk', surface=dict(type='exponential'),
         vertical=dict(type='thin'))])
     stage = galaxy.plan_stage(sky_mass=True)
     values = galaxy_values_of(galaxy, GAS_PARAMS | HALO_PARAMS | dict(
-        mass_disk_log_m=10.5, mass_disk_rd=2.0))
+        mass_posa=30, mass_incl=60, mass_disk_log_m=10.5, mass_disk_rd=2.0))
     first = stage.evaluate(values)
     version = stage.caches()['sky'].version()
-    assert stage.evaluate(values | dict(gas_posa=40)).sky is not first.sky
+    assert stage.evaluate(values | dict(gas_posa=40)).sky is first.sky
+    assert stage.evaluate(values | dict(mass_posa=40)).sky is not first.sky
     assert stage.caches()['sky'].version() == version + 1
 
 
@@ -484,7 +529,7 @@ def test_distortions_of_order_two_place_no_mass():
     # The rings of a disk of a distortion of order 2 are not ellipses on
     # the sky: a galaxy whose mass follows them cannot lens (refused with
     # the group, as gbkfit.describe sees it); one whose mass only moves the
-    # disk can (its plane is that of its innermost ring)
+    # disk can
     bowl = WARPED | dict(zptraits=[
         dict(type='nw_uniform', zmax=2),
         dict(type='nw_harmonic', order=2, zmax=2)])

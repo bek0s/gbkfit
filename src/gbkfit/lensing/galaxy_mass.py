@@ -24,11 +24,12 @@ class LensGalaxyMass(LensPiece):
     the light that passes the plane by the mass model of the galaxy, laid
     out on the sky by the galaxy in each evaluation (see GalaxyState.sky
     and SkyMass), which those who evaluate its lens give it (see
-    GalaxyBending and MassBending): its
-    mass components projected, each where the components of the galaxy
-    place it (a part that follows a component takes the geometry of the
-    component, ring by ring for a disk, warps included; the others lie in
-    the plane of the mass at its one centre; see Galaxy.placed).
+    GalaxyBending and MassBending): its mass components projected where
+    the mass is on the sky (its centre, and its plane for the parts that
+    lie in it: the parameters that the galaxy has as the mass of the
+    piece, see Galaxy.sky_pdescs), and a part that follows a component on
+    the component (ring by ring for a disk, warps included; see
+    Galaxy.placed).
 
     Its deflection is the deflection angle itself (alpha-hat, D_ls / D_s
     = 1; see Normalisation), that of the convergence kappa = 4 pi G D_l
@@ -43,13 +44,14 @@ class LensGalaxyMass(LensPiece):
     mass cut at an edge.
 
     It has no parameters: those of the mass are those of the galaxy (its
-    mass, distance and components). The galaxy must have mass and a
+    mass, distance and components, and where its mass is on the sky, which
+    it has as the mass of the piece). The galaxy must have mass and a
     distance, a gravity that bends light as its mass does (see
-    Capability.LENSING: not MOND), mass components that lay out their
-    mass on the sky (not tables or user components) and components that
-    place it (see Galaxy.gives). It must be at the plane of its lens, and
-    no other piece may be its mass (see ObservationGroup); it bends no
-    light of its own plane (see Tracer).
+    Capability.LENSING: not MOND) and mass components that lay out their
+    mass on the sky (not tables or user components; see Galaxy.gives): a
+    galaxy of mass alone too (e.g. a dark lens). It must be at the plane
+    of its lens, and no other piece may be its mass (see
+    ObservationGroup); it bends no light of its own plane (see Tracer).
 
     A shape beside it (e.g. an NFW halo in its lens) is mass that no model
     of a galaxy holds (e.g. the halo of a group): do not give the galaxy a

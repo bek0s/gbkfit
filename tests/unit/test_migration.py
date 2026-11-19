@@ -2087,3 +2087,62 @@ def test_a_params_piece_of_palatini_gravity_is_negated_once(tmp_path):
     inline = yaml.load(tmp_path / 'study' / 'setups' / 'inline.yaml')
     assert inline['params'] == dict(properties=dict(
         dwarf_gravity_alpha=0.2))
+
+
+def test_the_mass_of_a_lens_has_a_place_on_the_sky():
+    # Version 17: a galaxy that a lens bends light by has its mass at a
+    # centre (if a mass component lies at it) and in a plane (if one lies
+    # in it) of its own: tied to the first component that its mass
+    # follows, else moves, else the first (its plane to the first disk),
+    # at 0 without components; a galaxy that no lens takes has none, and
+    # one whose mass all follows components neither
+    config = dict(
+        galaxies=[
+            dict(name='a', components=[
+                dict(type='thin_disk', name='light'),
+                dict(type='thin_disk', name='gas',
+                     vptraits=[dict(type='mass')])],
+                mass=[dict(type='halo', name='halo'), dict(
+                    type='disk', name='stars',
+                    surface=dict(type='exponential'))]),
+            dict(name='b', mass=[dict(type='halo', name='halo')]),
+            dict(name='c', components=[dict(type='thin_disk', name='s')],
+                 mass=[dict(type='traced_disk', name='s', component='s')]),
+            dict(name='d', components=[dict(type='thin_disk', name='g')],
+                 mass=[dict(type='halo', name='halo')])],
+        lenses=[
+            dict(name='near', redshift=0.3, pieces=[
+                dict(type='mass', galaxy='a'), dict(type='shear')]),
+            dict(name='far', redshift=0.5, pieces=[
+                dict(type='mass', galaxy='b'),
+                dict(type='mass', galaxy='c')])],
+        params=dict(properties=dict(a_gas_xpos=0)))
+    changes = rewritten(config, 16, 17)
+    assert config['params']['properties'] == dict(
+        a_gas_xpos=0, a_mass_xpos='a_gas_xpos', a_mass_ypos='a_gas_ypos',
+        a_mass_posa='a_gas_posa', a_mass_incl='a_gas_incl', b_mass_xpos=0,
+        b_mass_ypos=0)
+    assert not any(c.message.startswith('by hand') for c in changes)
+
+
+def test_the_mass_of_a_lens_piece_of_a_project_has_a_place(tmp_path):
+    # Of a project: the params of a setup whose lens piece takes a galaxy
+    # piece get the place of its mass
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(dict(format=project.FORMAT, version=16),
+              tmp_path / 'study' / project.MARKER)
+    yaml.dump(dict(name='dwarf', components=[dict(
+        type='thin_disk', name='gas', vptraits=dict(type='mass'))],
+        mass=[dict(type='point', name='bh')]),
+        tmp_path / 'study' / 'galaxies' / 'dwarf.yaml')
+    yaml.dump(dict(name='lens', redshift=0.3, pieces=[
+        dict(type='mass', galaxy='dwarf')]),
+        tmp_path / 'study' / 'lenses' / 'lens.yaml')
+    yaml.dump(dict(galaxies='dwarf', lenses='lens', params=dict(
+        properties=dict(dwarf_gas_xpos=0))),
+        tmp_path / 'study' / 'setups' / 'fit.yaml')
+    migration.migrate_project(study.path)
+    setup = yaml.load(tmp_path / 'study' / 'setups' / 'fit.yaml')
+    assert setup['params']['properties'] == dict(
+        dwarf_gas_xpos=0, dwarf_mass_xpos='dwarf_gas_xpos',
+        dwarf_mass_ypos='dwarf_gas_ypos')

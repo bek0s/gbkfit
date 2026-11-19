@@ -333,7 +333,7 @@ def test_two_lenses_of_the_mass_of_one_galaxy_are_refused():
 @pytest.mark.parametrize('options, message', [
     (dict(components=[disk()], mass=None, distance=None), "which has none"),
     (dict(distance=dict(type='parameter'), redshift=0.3), None),
-    (dict(components=[], mass=[HALO]), "sie, epl or nfw"),
+    (dict(components=[], mass=[HALO]), None),
     (dict(gravity=dict(type='mond', interpolation='simple')),
      "relativistic theory"),
     (dict(mass=[HALO, dict(
@@ -351,9 +351,27 @@ def test_what_the_galaxy_of_a_mass_lens_must_give(options, message):
         mass_group(galaxy)
 
 
-def test_a_mass_in_its_plane_needs_a_component_of_a_plane():
-    # A disk of mass lies in the plane of the mass, which a sphere that
-    # its mass follows does not give
+def test_the_mass_of_a_lens_has_a_place_on_the_sky():
+    # A galaxy whose mass a lens bends light by has the parameters of where
+    # its mass is on the sky, in the group: its centre (a halo lies at it);
+    # one that no lens takes has none (e.g. of its rotation curve alone)
+    group = mass_group()
+    assert {'deflector_mass_xpos', 'deflector_mass_ypos'} \
+        <= group.pdescs().keys()
+    assert 'deflector_mass_posa' not in group.pdescs()
+    alone = deflector()
+    assert not alone.sky_pdescs().keys() & alone.pdescs().keys()
+    seen = ObservationGroup(
+        [alone, galaxy_parser.load(dict(
+            name='arc', redshift=2.0, components=[disk()]))],
+        [image(['arc'], name='alma')])
+    assert not any('mass_xpos' in name for name in seen.pdescs())
+
+
+def test_a_mass_in_its_plane_has_a_plane_of_its_own():
+    # A disk of mass lies in the plane of the mass, its own (mass_posa and
+    # mass_incl), whatever the components that its mass follows (a
+    # sphere here)
     spheroid = dict(
         type='spheroid', name='stars', profile=dict(type='sersic'),
         rmax=5, emission=dict(type='band'))
@@ -361,11 +379,12 @@ def test_a_mass_in_its_plane_needs_a_component_of_a_plane():
     galaxy = deflector(components=[spheroid], mass=[traced, dict(
         type='disk', name='disk', surface=dict(type='exponential'),
         vertical=dict(type='sech2'))])
-    with pytest.raises(ValueError, match="none of the components that "
-                                         "place its mass has a plane"):
-        mass_group(galaxy)
-    # (a halo needs no plane)
-    mass_group(deflector(components=[spheroid], mass=[traced, HALO]))
+    mass_group(galaxy)
+    assert {'mass_posa', 'mass_incl'} <= galaxy.sky_pdescs().keys()
+    # (a halo has none)
+    galaxy = deflector(components=[spheroid], mass=[traced, HALO])
+    mass_group(galaxy)
+    assert 'mass_posa' not in galaxy.sky_pdescs()
 
 
 @pytest.mark.parametrize('gravity', ['hu_sawicki', 'palatini'])

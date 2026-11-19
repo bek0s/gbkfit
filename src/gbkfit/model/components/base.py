@@ -692,8 +692,9 @@ class Placed(Protocol):
     ComponentStage) that says where the parts of the component are: of a
     component that is where the mass of the galaxy is (one that the mass
     moves, holds up or follows, see Galaxy.placed), which the gravity
-    takes at the one centre of the mass and a lens of the mass places
-    the mass on the sky by (see GalaxyStage).
+    takes at one centre (that of the mass on the sky, where it is laid
+    out there), and on which the mass components that follow it lie on
+    the sky, for the lenses of the mass (see GalaxyStage).
     """
 
     def placement_params(self) -> tuple[str, ...]:
@@ -721,8 +722,8 @@ class Placed(Protocol):
     ) -> None:
         """
         Add where its component is on the sky to the placement of the mass
-        of its galaxy (see SkyPlacements): a disk its rings, a spheroid
-        its axis.
+        of its galaxy (see SkyPlacements), for the mass components that
+        follow it: a disk its rings, a spheroid its axis.
 
         Parameters
         ----------

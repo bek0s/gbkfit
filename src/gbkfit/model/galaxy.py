@@ -274,8 +274,10 @@ class Galaxy(Serializable):
         Return the indices of its components that are where its mass is:
         those that its mass moves or holds up (that need it, see
         Component.needs) or follows (see MassLinks). The gravity takes
-        them at the one centre of its mass, and its mass on the sky is
-        placed by them (see GalaxyStage); none without mass.
+        them at one centre, and in one plane those that it follows, which
+        are those of its mass on the sky where it is laid out there (see
+        GalaxyStage); the mass components that follow them lie on them
+        on the sky. None without mass.
         """
         if self._mass_model is None:
             return ()
@@ -291,11 +293,9 @@ class Galaxy(Serializable):
         each capability, None if it gives it, or else why not. What its
         mass, its distance and its gravity give (see Gravity.gives), and
         the bending of light by its mass only if it can lay out its mass
-        on the sky (see GalaxyStage): at its distance, if components place
-        it (see placed), if a mass component lies in the plane of its mass
-        (see MassModel.takes_mass_plane) one of them has a plane, and the
-        rings of the components of rings that its mass follows are
-        ellipses on the sky (see Ringed).
+        on the sky (see GalaxyStage): at its distance, if the rings of the
+        components of rings that its mass follows are ellipses on the sky
+        (see Ringed).
         """
         gives = galaxy_gives(
             self._mass_model, self.gravity(), self._distance is not None)
@@ -311,20 +311,6 @@ class Galaxy(Serializable):
         """
         if self._distance is None:
             return "it has no distance, at which its mass lies on the sky"
-        placed = self.placed()
-        if not placed:
-            return (
-                "it places its mass on the sky by the components that its "
-                "mass moves, holds up or follows, and has none (e.g. a "
-                "galaxy of mass alone): bend light by such a mass with a "
-                "shape instead (sie, epl or nfw)")
-        if self._mass_model.takes_mass_plane() and all(
-                self._components[i].frame_params().posa is None
-                for i in placed):
-            return (
-                "its mass components lie in the plane of its mass, but "
-                "none of the components that place its mass has a plane "
-                "(a disk, or a spheroid of an axis)")
         followed = self._links.followed
         for component in self._components:
             if component.name() in followed \
@@ -377,6 +363,19 @@ class Galaxy(Serializable):
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name (see the class)."""
         return self._params.pdescs
+
+    def sky_pdescs(self) -> dict[str, ParamDesc]:
+        """
+        Return the parameters of where its mass is on the sky (see
+        MassModel.place_pdescs; none without mass), by name, which it has
+        besides its own (see pdescs) where its mass is laid out on the
+        sky: those who lay it out give them (e.g. a group of a lens of its
+        mass, see ObservationGroup), and its stage reads them (see
+        plan_stage: sky_mass).
+        """
+        if self._mass_model is None:
+            return {}
+        return self._mass_model.place_pdescs()
 
     def constants(self) -> dict[str, Any]:
         """

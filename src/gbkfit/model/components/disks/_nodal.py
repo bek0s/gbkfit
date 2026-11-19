@@ -19,7 +19,7 @@ from .._nodal import (
 from ..base import ComponentState, NativeGrid
 from .._needs import Need, density_needs
 from ...gravity import Capability
-from ..geometries import GEOMETRY_PARAMS, geometry_pdesc
+from ...geometries import GEOMETRY_PARAMS, geometry_pdesc
 from ..traits import (
     DispersionEquilibrium, PressureSupport, RHTraitEquilibrium, Trait)
 

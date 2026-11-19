@@ -22,7 +22,6 @@ from gbkfit.model.mass import (
     VerticalThin, sky)
 from gbkfit.model.mass.profiles import ProfileGauss
 from gbkfit.model.mass.shapes import ShapeSphere
-from gbkfit.params import ModelEvaluationError
 
 
 def _context(**densities) -> MassContext:
@@ -46,7 +45,8 @@ class _Rings:
 
 def _plane(posa=30.0, incl=50.0, centre=(0.4, -0.3)) -> SkyPlacement:
     return SkyPlacement(
-        centre, disks={'gas': _Rings(*centre, posa=posa, incl=incl)})
+        centre, sky.MassPlane(posa, incl),
+        disks={'gas': _Rings(*centre, posa=posa, incl=incl)})
 
 
 def _layers(component, params, context=None, placement=None):
@@ -422,32 +422,50 @@ def test_traced_spheroid_terms():
         float(sky.projected_ratio(0.5, 70.0)))
 
 
-def test_plane_must_agree_when_needed():
+def test_the_mass_plane_is_its_own():
+    # (a disk of its own surface density lies in the plane of the mass,
+    # not on the rings of a component; a mass without a plane has none
+    # to give it)
     disk = MassDisk('disk', SurfaceExponential(), VerticalThin())
-    placement = SkyPlacement((0.0, 0.0), disks={
-        'gas': _Rings(incl=50.0), 'stars': _Rings(incl=50.0, posa=1e-6)})
-    with pytest.raises(ModelEvaluationError, match='disagree'):
-        _layers(disk, dict(log_m=10.0, rd=3.0), placement=placement)
+    rings = {'gas': _Rings(posa=10.0, incl=20.0)}
+    (layer,) = _layers(
+        disk, dict(log_m=10.0, rd=3.0), placement=SkyPlacement(
+            (0.0, 0.0), sky.MassPlane(70.0, 60.0), disks=rings))
+    assert layer.posa == 70.0
+    assert layer.stretch[1] == pytest.approx(np.cos(np.radians(60.0)))
+    with pytest.raises(ValueError, match='which has none'):
+        _layers(disk, dict(log_m=10.0, rd=3.0),
+                placement=SkyPlacement((0.0, 0.0), disks=rings))
     # (a part on the rings of its component, or spherical, needs none)
     knots = np.linspace(0, 5, 6)
-    traced = TracedDisk('traced', 'gas')
-    _layers(traced, dict(upsilon=1.0),
-            _context(gas=_DiskDensity(knots, 1 - knots / 5)), placement)
+    _layers(TracedDisk('traced', 'gas'), dict(upsilon=1.0),
+            _context(gas=_DiskDensity(knots, 1 - knots / 5)),
+            SkyPlacement((0.0, 0.0), disks=rings))
     _layers(Halo('halo', ProfileNFW()), dict(log_m=12.0, c=10.0),
-            placement=placement)
-    # (a warp beyond the innermost ring does not move the plane)
-    warped = SkyPlacement((0.0, 0.0), disks={
-        'gas': _Rings(incl=50.0, dincl=3.0),
-        'stars': _Rings(incl=50.0)})
-    _layers(disk, dict(log_m=10.0, rd=3.0), placement=warped)
+            placement=SkyPlacement((0.0, 0.0)))
 
 
-def test_plane_needs_a_component():
-    disk = MassDisk('disk', SurfaceExponential(), VerticalThin())
-    placement = SkyPlacement((0.0, 0.0), spheroids={
-        'bulge': SpheroidAxis(0.0, 0.0, None, None)})
-    with pytest.raises(ModelEvaluationError, match='none of those'):
-        _layers(disk, dict(log_m=10.0, rd=3.0), placement=placement)
+def test_the_place_of_the_mass():
+    # Its centre if a component lies at it, its plane if one lies in it;
+    # neither if its components all follow components (which lie on them);
+    # none of its own parameters (see Galaxy.sky_pdescs)
+    round_ = MassModel([MassPoint('bh'), Halo('halo', ProfileNFW())])
+    assert list(round_.place_pdescs()) == ['mass_xpos', 'mass_ypos']
+    assert round_.place(dict(mass_xpos=1.0, mass_ypos=-2.0)) \
+        == sky.MassPlace((1.0, -2.0), None)
+    flat = MassModel(Halo('halo', ProfileNFW(), shape=ShapeFlattened()))
+    assert list(flat.place_pdescs()) == [
+        'mass_xpos', 'mass_ypos', 'mass_posa', 'mass_incl']
+    assert flat.place(dict(
+        mass_xpos=0.0, mass_ypos=0.0, mass_posa=30.0, mass_incl=60.0)) \
+        == sky.MassPlace((0.0, 0.0), sky.MassPlane(30.0, 60.0))
+    assert not flat.place_pdescs().keys() & flat.pdescs().keys()
+    traced = MassModel([
+        TracedDisk('disk', 'gas'), TracedSpheroid('bulge', 'bulge')])
+    assert traced.place_pdescs() == {}
+    assert traced.place({}) == sky.MassPlace(None, None)
+    with pytest.raises(ValueError, match="which has none"):
+        SkyPlacement().centre()
 
 
 def test_projection_gaps():
@@ -465,6 +483,9 @@ def test_takes_mass_plane():
     assert MassModel([
         MassPoint('bh'), Halo('halo', ProfileNFW()),
         TracedDisk('traced', 'gas')]).takes_mass_plane() is False
+    assert MassModel(TracedDisk('traced', 'gas')).takes_mass_centre() \
+        is False
+    assert MassModel(MassPoint('bh')).takes_mass_centre()
     assert MassModel(Halo(
         'halo', ProfileNFW(), shape=ShapeFlattened())).takes_mass_plane()
     assert MassModel(MassDisk(
@@ -531,9 +552,3 @@ def test_planes():
         == pytest.approx(1e-6, rel=1e-6)
     np.testing.assert_allclose(
         sky.plane_normal(90.0, 90.0), [0, 1, 0], atol=1e-15)
-    assert sky.check_planes([('a', 30.0, 50.0), ('b', 30.0, 50.0)]) \
-        == sky.MassPlane(30.0, 50.0)
-    with pytest.raises(ModelEvaluationError, match="'b' at posa 31"):
-        sky.check_planes([('a', 30.0, 50.0), ("'b'", 31.0, 50.0)])
-    with pytest.raises(ModelEvaluationError, match="none of those"):
-        sky.check_planes([])

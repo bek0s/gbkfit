@@ -25,7 +25,8 @@ from .components.base import Balanced, GalaxyMass, Placed
 from .extras import Extras
 from .mass import MassContext
 from .mass.sky import (
-    RingPlacement, SkyPlacement, SpheroidAxis, plane_tilt)
+    MassPlace, MassPlane, RingPlacement, SkyPlacement, SpheroidAxis,
+    plane_tilt)
 
 if TYPE_CHECKING:
     from .galaxy import Galaxy
@@ -44,17 +45,23 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 # The angle (degrees) between the plane of a part that the gravity takes
-# as in the plane of the mass and the plane of the first, above which a
-# warning says that the gravity takes the components too simply (see
-# GalaxyStage.evaluate). Measured on an exponential disk whose outer rings
-# tilt: that makes their circular velocity about 1% wrong (2026-10-14: 1%
-# at a tilt of about 20 degrees).
+# as in the plane of the mass and that plane (or without one, the plane of
+# the first), above which a warning says that the gravity takes the
+# components too simply (see GalaxyStage.evaluate). Measured on an
+# exponential disk whose outer rings tilt: that makes their circular
+# velocity about 1% wrong (2026-10-14: 1% at a tilt of about 20 degrees).
 _MAX_TILT = 20.0
 
 # The largest difference (arcsec) between the centres of the components
-# that the mass moves, holds up or follows: one centre, that of the mass;
-# centres tied or fixed at the same values are equal to the last bits
+# that the mass moves, holds up or follows, and that of the mass where it
+# is laid out on the sky: centres tied or fixed at the same values are
+# equal to the last bits
 _CENTRE_TOLERANCE = 1e-9
+
+# The largest angle (degrees) between the planes of the components that
+# the mass follows, and that of the mass where it has one on the sky:
+# planes tied or fixed at the same values agree to the last bits
+_PLANE_TOLERANCE = 1e-9
 
 # The largest change of the pdf of a balanced layer in its last pass,
 # relative to its peak, at which the layers have settled (see
@@ -136,9 +143,9 @@ class GalaxyStage:
        of the components it follows (of their light);
     4. its field, in the gravity of the galaxy (see Gravity.field);
     5. with the sky part (for the lenses of its mass; see the parameter
-       sky_mass), its mass laid out on the sky (see SkyMass), placed by
-       the components that the mass moves, holds up or follows (see
-       Galaxy.placed and SkyPlacement);
+       sky_mass), its mass laid out on the sky (see SkyMass): where the
+       mass is (see MassModel.place), and on the components that it
+       follows (see SkyPlacement);
     6. what each component takes from the galaxy: the groundwork of its
        state (see ComponentStage.groundwork; e.g. the forces in the Jeans
        equations of a spheroid), and its state (see ComponentStage.state):
@@ -153,29 +160,32 @@ class GalaxyStage:
     components then draw (see _balance).
 
     Each part reads the values of the parameters it declares alone: the
-    scale those of the distance, the mass those of the mass, the field
-    those of the gravity, the sky those that place the components where
-    the mass is (see Placed.placement_params), and each part of a
-    component those that its stage declares (see ComponentStage); and it
-    takes the parts before it that it uses (the sky takes the mass, not
-    its field). An evaluation computes a part again only when the values
-    it reads, or the parts it takes, change (see StageCache and evaluate):
-    e.g. a step in the position angle of a spheroid of Jeans kinematics
-    computes none of them again, a step in the anisotropy of its stars not
-    the groundwork of its state, and a step in a parameter of the gravity
-    neither the mass nor the sky. A sky computed again of the same layers
-    as the last (e.g. after a step in the rotation of a disk that the mass
-    follows, which builds the mass again) is the last, of its version
-    (see StageCache: same): what takes it is not evaluated again (e.g.
-    the observations whose light its lenses bend).
+    scale those of the distance, the mass those of the mass components
+    (see MassModel.pdescs), the field those of the gravity, the sky
+    those of where the mass is (see MassModel.place_pdescs) and those that
+    place the components it follows (see Placed.placement_params), and
+    each part of a component those that its stage declares (see
+    ComponentStage); and it takes the parts before it that it uses (the
+    sky takes the mass, not its field). An evaluation computes a part
+    again only when the values it reads, or the parts it takes, change
+    (see StageCache and evaluate): e.g. a step in the position angle of a
+    spheroid of Jeans kinematics computes none of them again, a step in
+    the anisotropy of its stars not the groundwork of its state, a step in
+    a parameter of the gravity neither the mass nor the sky, and a step in
+    the centre of the mass the sky alone. A sky computed again of the same
+    layers as the last (e.g. after a step in the rotation of a disk that
+    the mass follows, which builds the mass again) is the last, of its
+    version (see StageCache: same): what takes it is not evaluated again
+    (e.g. the observations whose light its lenses bend).
 
     The components that the mass moves, holds up and follows are at one
-    centre, that of the mass: an evaluation where their centres differ
-    fails (see Placed.frames). It takes their parts as in one
+    centre, that of the mass where it is laid out on the sky (see
+    MassModel.place), and those that it follows in one plane, that of
+    the mass where it has one there: an evaluation where they are not
+    fails (see Placed.frames). The gravity takes their parts as in one
     plane, whatever their orientations (their rotation is then projected
     with their own orientations); with extra outputs, a warning says
-    where their planes tilt from that of the first enough to matter (see
-    evaluate).
+    where they tilt from that plane enough to matter (see evaluate).
 
     Parameters
     ----------
@@ -196,7 +206,9 @@ class GalaxyStage:
         gbkfit.cosmology.DEFAULT).
     sky_mass : bool, optional
         Whether it lays out the mass of the galaxy on the sky (the sky
-        part; for the lenses of its mass); not by default.
+        part; for the lenses of its mass); not by default. Its values then
+        hold those of the parameters of where the mass is on the sky (see
+        Galaxy.sky_pdescs).
 
     Raises
     ------
@@ -248,8 +260,8 @@ class GalaxyStage:
             if isinstance(stage, Balanced) and stage.balanced())
         self._coupled = () if mass_model is None else _coupled(
             mass_model, {components[i].name() for i in self._balanced})
-        # The components that the mass follows, and the parts of those
-        # where the mass is that say where they are, by index (see
+        # The components that the mass follows, and the parts of those at
+        # the centre of the mass that say where they are, by index (see
         # Galaxy.placed)
         self._followed = tuple(
             i for i in self._stages if components[i].name() in followed)
@@ -276,14 +288,15 @@ class GalaxyStage:
         if mass_model is not None:
             scale = () if self._scale_cache is None else (self._scale_cache,)
             followed_lights = tuple(lights[i] for i in self._followed)
+            parts = mass_model.pdescs()
             if self._balanced:
                 # (the mass with its field, which sets the layers it takes)
                 self._mass_cache = StageCache(
-                    (*mass_model.pdescs(), *galaxy.gravity().pdescs()),
+                    (*parts, *galaxy.gravity().pdescs()),
                     (*scale, *followed_lights))
             else:
                 self._mass_cache = StageCache(
-                    mass_model.pdescs(), (*scale, *followed_lights))
+                    parts, (*scale, *followed_lights))
                 self._field_cache = StageCache(
                     galaxy.gravity().pdescs(), (self._mass_cache,))
         # (a sky of the same layers is not new, see the class)
@@ -293,9 +306,9 @@ class GalaxyStage:
                 raise ValueError(
                     f"the galaxy cannot lay out its mass on the sky: {gap}")
             self._sky_cache = StageCache(
-                dict.fromkeys(
-                    mappings[i][p] for i, stage in self._placed.items()
-                    for p in stage.placement_params()),
+                (*mass_model.place_pdescs(), *dict.fromkeys(
+                    mappings[i][p] for i in self._followed
+                    for p in self._placed[i].placement_params())),
                 (self._mass_cache,), _same_sky)
         # (what the components take of the mass: its field)
         field = () if mass_model is None else (
@@ -376,9 +389,10 @@ class GalaxyStage:
             with their name, or their position, as the id 'component', see
             ComponentStage.state). With them and mass, a warning says where
             the parts of the components it moves, holds up and follows
-            tilt from the plane of the first part of the first by more
-            than 20 degrees (which makes their circular velocities about
-            1% wrong, or more).
+            tilt from the plane of the mass (or without one, from the
+            plane of the first part of the first) by more than 20 degrees
+            (which makes their circular velocities about 1% wrong, or
+            more).
 
         Returns
         -------
@@ -388,9 +402,10 @@ class GalaxyStage:
         Raises
         ------
         ModelEvaluationError
-            If the components that the mass moves, holds up or follows have
-            different centres (see the class), or with the sky part, the
-            mass cannot be laid out on the sky (see SkyProjected).
+            If the components that the mass moves, holds up or follows are
+            not at one centre, or those that it follows not in one plane
+            (see the class), or with the sky part, the mass cannot be laid
+            out on the sky (see SkyProjected).
         """
         lights = {
             i: parts.light.evaluate(
@@ -468,13 +483,14 @@ class GalaxyStage:
         ValueError
             If it has no sky part (see the class: sky_mass).
         ModelEvaluationError
-            If the components that place the mass have different centres,
+            If the components that the mass moves, holds up or follows are
+            not at one centre, or those that it follows not in one plane,
             or the mass cannot be laid out on the sky.
         """
         cache = self.sky_cache()
         lights = {
             i: self._light(self._parts[i].light.view(params), i)
-            for i in {*self._followed, *self._placed}}
+            for i in self._followed}
         scale = None if self._scale_cache is None \
             else self._scale(self._scale_cache.view(params))
         built = self._mass(self._mass_cache.view(params), scale, lights)
@@ -697,26 +713,27 @@ class GalaxyStage:
     ) -> 'SkyMass':
         """
         Return the mass of the galaxy laid out on the sky (see SkyMass), of
-        the values of the parameters that place the components where the
-        mass is (see Placed.placement_params), the mass as it is built (see
-        _mass) and the light of each component that takes part (see
-        _light), by its index: each of them adds where it is to the
-        placement (see Placed.place and SkyPlacement), at the one centre of
-        the mass (that of the first, see _check_frames).
+        the values of the parameters of where the mass is (see
+        MassModel.place) and of those that place the components it follows
+        (see Placed.placement_params), the mass as it is built (see _mass)
+        and the light of each component that it follows (see _light), by
+        its index: each of them adds where it is to the placement (see
+        Placed.place and SkyPlacement).
         """
         kpc_per_arcsec = mass.context.kpc_per_arcsec
         placement = _SkyPlacements()
-        centre = None
-        for i, stage in self._placed.items():
+        for i in self._followed:
+            stage = self._placed[i]
             # (all the values of the component: its light reads those of
             # a disk, which its rings take, and those that place it)
             values = lights[i] | self._own(view, i, stage.placement_params())
-            if centre is None:
-                first = stage.frames(values)[0]
-                centre = (first.x * kpc_per_arcsec, first.y * kpc_per_arcsec)
             stage.place(self._labels[i], values, kpc_per_arcsec, placement)
+        place = mass.model.place(view)
+        centre = None if place.centre is None \
+            else tuple(kpc_per_arcsec * x for x in place.centre)
         return mass.model.sky_mass(
-            mass.params, mass.context, placement.placement(centre))
+            mass.params, mass.context,
+            placement.placement(centre, place.plane))
 
     def _groundwork(
             self,
@@ -765,44 +782,76 @@ class GalaxyStage:
     def _check_frames(self, params: ParamValues, warn: bool) -> None:
         """
         Check where the gravity takes the components that the mass moves,
-        holds up or follows (see Placed.frames): at one centre, that of
-        the mass; and with warn, log a warning if their planes tilt from
-        that of the first part of the first by more than _MAX_TILT.
+        holds up or follows (see Placed.frames): at one centre, that of the
+        mass where it is laid out on the sky and has one (see
+        MassModel.place), else that of the first part of the first; and
+        those that it follows (mass, as the rest of it) in one plane, that
+        of the mass where it is laid out on the sky and has one, else that
+        of the first that has one, at the innermost ring of a disk (a warp
+        beyond it does not move it). With warn, log a warning where a part
+        of any of them tilts from that plane (or without one, from that of
+        the first part of the first) by more than _MAX_TILT: the gravity
+        takes them as in one plane (e.g. gas that the mass moves, tilted
+        from the plane of its stars).
 
         Raises
         ------
         ModelEvaluationError
-            If their centres differ.
+            If one is not at that centre, or one that the mass follows is
+            not in that plane.
         """
-        frames = [
-            (self._labels[i], frame)
-            for i, stage in self._placed.items()
-            for frame in stage.frames(self._own(
-                params, i, stage.placement_params()))]
+        frames = {
+            i: stage.frames(self._own(params, i, stage.placement_params()))
+            for i, stage in self._placed.items()}
+        parts = [(self._labels[i], frame)
+                 for i, own in frames.items() for frame in own]
         # (a galaxy of mass alone has none)
-        if not frames:
+        if not parts:
             return
-        ref, first = frames[0]
-        for label, frame in frames[1:]:
+        place = MassPlace(None, None) if self._sky_cache is None \
+            else self._galaxy.mass_model().place(params)
+        if place.centre is not None:
+            ref, centre = "the mass (mass_xpos, mass_ypos)", place.centre
+        else:
+            ref, first = parts[0]
+            ref, centre = repr(ref), (first.x, first.y)
+        for label, frame in parts:
             if not np.allclose(
-                    (frame.x, frame.y), (first.x, first.y), rtol=0,
+                    (frame.x, frame.y), centre, rtol=0,
                     atol=_CENTRE_TOLERANCE):
                 where = f" at the radius {frame.radius:g}" \
                     if frame.radius else ""
                 raise ModelEvaluationError(
                     f"the mass of a galaxy has one centre, but the "
                     f"components it moves, holds up or follows have "
-                    f"different centres: {label}{where} at ({frame.x:g}, "
-                    f"{frame.y:g}), {ref} at ({first.x:g}, {first.y:g}); "
-                    f"tie them (e.g. its xpos and ypos to those of {ref})")
-        planes = [(label, f) for label, f in frames if f.posa is not None]
-        if not warn or not planes:
+                    f"different centres: {label!r}{where} at ({frame.x:g}, "
+                    f"{frame.y:g}), {ref} at ({centre[0]:g}, {centre[1]:g}); "
+                    f"tie them (e.g. the xpos and ypos of {label!r} to those "
+                    f"of {ref})")
+        planes = [
+            (repr(self._labels[i]), own[0].posa, own[0].incl)
+            for i, own in frames.items()
+            if i in self._followed and own and own[0].posa is not None]
+        if place.plane is not None:
+            planes.insert(0, ("the mass (mass_posa, mass_incl)", *place.plane))
+        for label, posa, incl in planes[1:]:
+            ref, ref_posa, ref_incl = planes[0]
+            if plane_tilt((ref_posa, ref_incl), (posa, incl)) \
+                    > _PLANE_TOLERANCE:
+                raise ModelEvaluationError(
+                    f"the mass of a galaxy lies in one plane, but the "
+                    f"component {label}, which it follows, is at posa "
+                    f"{posa:g}, incl {incl:g}, {ref} at posa {ref_posa:g}, "
+                    f"incl {ref_incl:g}; tie them")
+        tilted = [(label, f) for label, f in parts if f.posa is not None]
+        if not warn or not tilted:
             return
-        ref, first = planes[0]
+        ref, first_posa, first_incl = planes[0] if planes else (
+            repr(tilted[0][0]), tilted[0][1].posa, tilted[0][1].incl)
         tilt, label, radius = max(
-            (plane_tilt((first.posa, first.incl), (f.posa, f.incl)), label,
+            (plane_tilt((first_posa, first_incl), (f.posa, f.incl)), label,
              f.radius)
-            for label, f in planes)
+            for label, f in tilted)
         if tilt > _MAX_TILT:
             where = f" at the radius {radius:g}" if radius else ""
             _log.warning(
@@ -810,6 +859,7 @@ class GalaxyStage:
                 f"follows as in one plane, but {label}{where} is tilted by "
                 f"{tilt:.0f} degrees from the plane of {ref}: its circular "
                 f"velocities can be off by 1% or more there")
+
 
 class _SkyPlacements:
     """
@@ -830,12 +880,15 @@ class _SkyPlacements:
         """Add the centre and axis of a spheroid, by name."""
         self._spheroids[name] = axis
 
-    def placement(self, centre: tuple[float, float]) -> SkyPlacement:
+    def placement(
+            self, centre: tuple[float, float], plane: MassPlane | None
+    ) -> SkyPlacement:
         """
         Return the placement of the mass (see SkyPlacement) at its centre
-        (kpc), of the disks and the spheroids added.
+        (kpc) and in its plane (None if it has none), of the disks and the
+        spheroids added.
         """
-        return SkyPlacement(centre, self._disks, self._spheroids)
+        return SkyPlacement(centre, plane, self._disks, self._spheroids)
 
 
 def _coupled(mass_model: 'MassModel', layers: set[str]) -> tuple[str, ...]:

@@ -17,10 +17,10 @@ from gbkfit.lensing import LensNFW, SkyPoints, _layers
 from gbkfit.lensing._deflections import nfw_convergence, nfw_round_deflection
 from gbkfit.model.mass import (
     BandLayer, EllipticalLayer, Halo, LogTable, MassContext, MassDisk,
-    MassModel, MassPoint, PointLayer, ProfileNFW, ProfilePseudoIsothermal,
-    RingGeometry, RoundLayer, SkyPlacement, SurfaceExponential,
-    SurfaceNodewise, TracedDisk, VerticalComponent, VerticalExponential,
-    VerticalSech2, VerticalThin, sky)
+    MassModel, MassPlane, MassPoint, PointLayer, ProfileNFW,
+    ProfilePseudoIsothermal, RingGeometry, RoundLayer, SkyPlacement,
+    SurfaceExponential, SurfaceNodewise, TracedDisk, VerticalComponent,
+    VerticalExponential, VerticalSech2, VerticalThin, sky)
 from gbkfit.model.mass.units import G
 from layer_references import (
     band_deflection, elliptical_deflection, keeton_deflection,
@@ -270,8 +270,7 @@ def test_nfw_halo_as_the_nfw_lens():
 def test_far_field_of_a_disk():
     # Far away, any mass bends as a point of its mass: 4 G M / (c^2 b)
     disk = MassDisk('disk', SurfaceExponential(), VerticalThin())
-    plane = SkyPlacement(
-        (0.0, 0.0), disks={'gas': _Rings(posa=30.0, incl=60.0)})
+    plane = SkyPlacement((0.0, 0.0), MassPlane(30.0, 60.0))
     mass = MassModel(disk).sky_mass(
         {'mass_disk_log_m': 10.0, 'mass_disk_rd': 2.0}, _context(), plane)
     b = 3000.0
@@ -358,7 +357,8 @@ def test_inclined_thin_disk_against_direct_integration():
     # converges, to 1e-8; and within, against its bands)
     disk = MassDisk('disk', SurfaceExponential(), VerticalThin())
     rings = _Rings(x=0.2, y=-0.1, posa=30.0, incl=70.0)
-    placement = SkyPlacement((0.2, -0.1), disks={'gas': rings})
+    placement = SkyPlacement(
+        (0.2, -0.1), MassPlane(30.0, 70.0), disks={'gas': rings})
     mass = MassModel(disk).sky_mass(
         {'mass_disk_log_m': 10.0, 'mass_disk_rd': 1.0}, _context(),
         placement)
@@ -529,8 +529,9 @@ def _against_heights(layer, x, y, reference, tolerance=THICK_TOLERANCE):
     (90.0, VerticalExponential())])
 def test_thick_elliptical_disk_to_edge_on(incl, vertical):
     disk = MassDisk('disk', SurfaceExponential(), vertical)
-    placement = SkyPlacement((0.0, 0.0), disks={'gas': _Rings(
-        posa=30.0, incl=incl)})
+    placement = SkyPlacement(
+        (0.0, 0.0), MassPlane(30.0, incl),
+        disks={'gas': _Rings(posa=30.0, incl=incl)})
     (layer,) = MassModel(disk).sky_mass(
         {'mass_disk_log_m': 0.0, 'mass_disk_rd': 3.0, 'mass_disk_hz': 0.4},
         _context(), placement).layers()
@@ -543,8 +544,9 @@ def test_thick_bands_to_edge_on(incl):
     # its nodes)
     disk = MassDisk('disk', SurfaceNodewise([0, 2, 5, 9, 14]),
                     VerticalSech2())
-    placement = SkyPlacement((0.0, 0.0), disks={'gas': _Rings(
-        posa=30.0, incl=incl)})
+    placement = SkyPlacement(
+        (0.0, 0.0), MassPlane(30.0, incl),
+        disks={'gas': _Rings(posa=30.0, incl=incl)})
     (layer,) = MassModel(disk).sky_mass(
         {'mass_disk_log_sigma': np.array([8.0, 7.6, 7.0, 6.0]),
          'mass_disk_hz': 0.5}, _context(), placement).layers()
@@ -594,8 +596,9 @@ def test_thick_disk_in_the_layer_of_a_component():
     incl = 60.0
     disk = MassDisk('disk', SurfaceExponential(), VerticalComponent('gas'))
     density = _ThickDensity(np.linspace(0, 12, 13))
-    placement = SkyPlacement((0.0, 0.0), disks={'gas': _Rings(
-        posa=30.0, incl=incl)})
+    placement = SkyPlacement(
+        (0.0, 0.0), MassPlane(30.0, incl),
+        disks={'gas': _Rings(posa=30.0, incl=incl)})
     (layer,) = MassModel(disk).sky_mass(
         {'mass_disk_log_m': 0.0, 'mass_disk_rd': 3.0},
         _context(gas=density), placement).layers()

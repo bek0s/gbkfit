@@ -1,7 +1,8 @@
 """
-The geometric parameters of the components: their centre, orientation
-and systemic velocity, each its own (components that share them tie
-them in the parameter space).
+The geometric parameters of the components of galaxies, and of their
+mass: their centre, orientation and systemic velocity, each its own
+(components that share them, and the mass, tie them in the parameter
+space).
 """
 
 from typing import Any
@@ -39,13 +40,17 @@ _DESCS = dict(
     incl="the angle of the spin axis from the line of sight (0: face-on)")
 
 
-def geometry_pdesc(name: str, nnodes: int | None = None) -> ParamDesc:
+def geometry_pdesc(
+        name: str, nnodes: int | None = None, desc: str | None = None
+) -> ParamDesc:
     """
     Return the description of a geometric parameter (see GEOMETRY_UNITS):
     a scalar, or node-wise (one value for each of nnodes rings) if nnodes
-    is given. The position angle repeats every 360 degrees.
+    is given, of the description of a component, or the one given (e.g.
+    of the centre of the mass). The position angle repeats every 360
+    degrees.
     """
-    title, desc = _TITLES[name], _DESCS[name]
+    title, desc = _TITLES[name], _DESCS[name] if desc is None else desc
     options: dict[str, Any] = dict(
         unit=GEOMETRY_UNITS[name], default=_DEFAULTS[name],
         period=360 if name == 'posa' else None)
