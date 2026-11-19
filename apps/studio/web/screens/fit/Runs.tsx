@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react';
 import { useFileText, useJobs, useProject, useRun, useStopJob } from '../../api/queries';
 import { Button } from '../../components/ui/basics';
 import { Segments } from '../../components/ui/inputs';
+import { LiveView } from './Live';
 import { ResultView } from './Results';
 
 type Job = NonNullable<ReturnType<typeof useJobs>['data']>[number];
@@ -103,7 +104,7 @@ export function RunPage({ entry, onStarts }: { entry: RunEntry; onStarts: (value
   const products = manifest?.products ?? [];
   const [chosen, setTab] = useState<'result' | 'log' | 'recipe' | null>(null);
   // (the result, once there is one; else the log)
-  const tab = chosen ?? (products.some((p) => p.kind === 'fit_result') ? 'result' : 'log');
+  const tab = chosen ?? (products.some((p) => p.kind === 'fit_result') || running ? 'result' : 'log');
   const productPath = (kind: string) => {
     const product = products.find((p) => p.kind === kind);
     return product && entry.run ? `${entry.run}/${String(product.path)}` : null;
@@ -128,7 +129,7 @@ export function RunPage({ entry, onStarts }: { entry: RunEntry; onStarts: (value
           value={tab}
           onChange={setTab}
           items={[
-            { value: 'result', label: 'Result' },
+            { value: 'result', label: running ? 'Live' : 'Result' },
             { value: 'log', label: 'Log' },
             { value: 'recipe', label: 'Its recipe' },
           ]}
@@ -147,7 +148,7 @@ export function RunPage({ entry, onStarts }: { entry: RunEntry; onStarts: (value
         {state === 'queued' ? (
           <p className="ob-text">It waits for a free place on the server; it runs as the runs before it end.</p>
         ) : tab === 'result' ? (
-          running ? <p className="ob-text">Its result shows as it ends; meanwhile, its log.</p> : entry.run && <ResultView run={entry.run} products={products as { kind: string; path: string; ids?: Record<string, string> }[]} onStarts={onStarts} />
+          running ? <LiveView path={productPath('progress')} version={manifest?.updated ?? ''} /> : entry.run && <ResultView run={entry.run} products={products as { kind: string; path: string; ids?: Record<string, string> }[]} onStarts={onStarts} />
         ) : shown.error ? (
           <p className="error">{shown.error.message}</p>
         ) : shown.data !== undefined ? (

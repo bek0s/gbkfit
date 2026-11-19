@@ -1570,3 +1570,13 @@ h2 { margin: 0; font: var(--text-heading); }
 .fx-range i { position: absolute; bottom: -1px; width: 3px; height: 10px; margin-left: -1px; border-radius: 1px; background: var(--accent); }
 .fx-range em { position: absolute; left: 148px; top: -3px; font: var(--text-caption); font-style: normal; color: var(--warn); white-space: nowrap; }
 .fx-fixed-list { margin: 4px 14px 12px; color: var(--faint); font: var(--text-caption); }
+/* (a run as it runs) */
+.fx-live-two { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.fx-pad { padding: 4px 14px 14px; }
+.fx-trace { padding: 0 12px 10px; }
+.fx-trace svg { display: block; width: 100%; height: auto; }
+.fx-trace text { font: var(--text-data-small); fill: var(--faint); }
+.fx-trace-axis { stroke: var(--line2); stroke-width: 1; }
+.fx-trace-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.fx-trace-dot { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+.fx-trace-read { display: block; min-height: 18px; font: var(--text-data-small); color: var(--muted); }
