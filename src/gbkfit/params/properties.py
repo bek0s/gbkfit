@@ -13,7 +13,7 @@ from typing import Any, TypeAlias
 import numpy as np
 
 from gbkfit.config import ConfigError, config_path, report_unknown
-from ._expressions import check_name
+from ._expressions import RESERVED, check_name
 from ._keys import InvalidKeyError, Key, parse_key
 from .elements import (
     DerivedValue, Element, Elements, FreeElement, Solved, Tied, Transformed)
@@ -27,6 +27,7 @@ __all__ = [
     'is_list',
     'parse_derived',
     'parse_properties',
+    'prefixed_params',
     'problems_text',
     'renamed_expression',
     'renamed_params'
@@ -310,6 +311,92 @@ def renamed_params(
             _renamed_options(prior, names, _PRIOR_EXPRESSIONS)
             for prior in priors]
     return result
+
+
+def prefixed_params(params: Mapping[str, Any], prefix: str) -> dict[str, Any]:
+    """
+    Return a params configuration (see ParamSpace.load) in the names of
+    an item (e.g. a galaxy: gas_vsys) in those of the group it is in, by
+    its prefix (e.g. 'deflector_': deflector_gas_vsys): every name of it
+    prefixed, the keys of its properties, modes and derived values and
+    the names in its expressions, but those that expressions reserve
+    (np, relations and the builtins they call; see renamed_params). Every
+    name of an item in a group is its own prefixed (see
+    ObservationGroup), so that the params of an item are the same in
+    every group (see merge_layers).
+
+    Parameters
+    ----------
+    params : Mapping
+        The params configuration, in the names of the item; not changed.
+    prefix : str
+        The prefix of the item.
+
+    Returns
+    -------
+    dict
+        The params configuration, in the names of the group.
+
+    Raises
+    ------
+    ValueError
+        If it has transforms, whose function is code that names the
+        parameters of the whole group, or a name would not be valid.
+    """
+    if 'transforms' in params:
+        raise ValueError(
+            "the params of an item cannot have transforms: their function "
+            "names the parameters of the whole group; give them in params "
+            "of its names")
+    names = set()
+    for option in ('properties', 'modes', 'derived'):
+        if isinstance(mapping := params.get(option), Mapping):
+            names |= {str(key).partition('[')[0] for key in mapping}
+    for expression in _expressions(params):
+        names |= _names_of(expression)
+    renames = {name: f'{prefix}{name}' for name in names - RESERVED}
+    result = renamed_params(params, renames)
+    if isinstance(derived := result.get('derived'), Mapping):
+        result['derived'] = {
+            renames.get(key, key): value for key, value in derived.items()}
+    return result
+
+
+def _expressions(params: Mapping[str, Any]) -> list[str]:
+    """
+    Return the expressions of a params configuration: the ties of its
+    properties, its derived values and the expressions of its priors.
+    """
+    found = []
+    properties = params.get('properties')
+    for value in properties.values() if isinstance(properties, Mapping) \
+            else ():
+        found += [v for v in (value if is_list(value) else [value])
+                  if isinstance(v, str)]
+    derived = params.get('derived')
+    for value in derived.values() if isinstance(derived, Mapping) else ():
+        found += [value] if isinstance(value, str) else [
+            value['expr']] if isinstance(value, Mapping) \
+            and isinstance(value.get('expr'), str) else []
+    priors = params.get('priors')
+    for prior in priors if isinstance(priors, list) else ():
+        if isinstance(prior, Mapping):
+            found += [
+                prior[key] for key in _PRIOR_EXPRESSIONS
+                if isinstance(prior.get(key), str)]
+    return found
+
+
+def _names_of(expression: str) -> set[str]:
+    """
+    Return the names in an expression (not the attributes, e.g. the sin of
+    np.sin); none of one that does not parse, for its parsing to report.
+    """
+    try:
+        tree = ast.parse(expression, mode='eval')
+    except SyntaxError:
+        return set()
+    return {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
 
 
 def _renamed_keys(

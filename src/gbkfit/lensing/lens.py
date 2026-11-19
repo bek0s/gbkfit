@@ -54,10 +54,11 @@ class Lens(Serializable):
     light by that mass laid out on the sky, which its deflection takes
     (see deflection).
 
-    Its parameters are those of its pieces, each prefixed by its name
-    when there are several ('main_theta_e', 'shear_gamma'); its name
-    prefixes them all among those of the galaxies and the observations
-    (e.g. 'lens_main_theta_e').
+    Its parameters are those of its pieces, each prefixed by its name,
+    one piece alone too ('main_theta_e', 'shear_gamma'; a piece is named
+    after its type by default: 'sie_theta_e'); its name prefixes them all
+    among those of the galaxies and the observations (e.g.
+    'lens_main_theta_e').
 
     Parameters
     ----------
@@ -149,8 +150,9 @@ class Lens(Serializable):
         self._redshift = redshift
         self._pieces = pieces
         self._source_redshift = source_redshift
-        self._prefixes = [''] if len(pieces) == 1 \
-            else [f'{piece_name}_' for piece_name in names]
+        # (each prefixed by its name, one alone too: adding a piece leaves
+        # the names of the others as they were)
+        self._prefixes = [f'{piece_name}_' for piece_name in names]
         self._pdescs, self._mappings = iterutils.merge_with_prefixes(
             [piece.pdescs() for piece in pieces], self._prefixes)
 

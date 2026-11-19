@@ -3,7 +3,7 @@ The parameters of models: their descriptions, the modes of vector
 parameters, the solves of solved elements, the priors of free elements
 (and on several parameters), and the space of the parameters of a
 configuration, which fixes, ties, frees or solves each of them and
-evaluates them.
+evaluates them, and layers of their configurations (see merge_layers).
 """
 
 from ._cache import *
@@ -17,3 +17,4 @@ from .elements import *
 from .properties import *
 from .space import *
 from .joint_priors import *
+from .layers import *

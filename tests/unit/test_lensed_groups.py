@@ -206,8 +206,8 @@ def lensed_config(**observation):
             type='pixel_brightness', name='hst', size=[16, 16], step=0.1,
             galaxies=['deflector', 'arc']) | observation],
         params=dict(properties=dict(
-            lens_theta_e=dict(value=0.5, min=0.1, max=1), lens_q=1,
-            lens_posa=0, lens_xpos=0, lens_ypos=0,
+            lens_sie_theta_e=dict(value=0.5, min=0.1, max=1), lens_sie_q=1,
+            lens_sie_posa=0, lens_sie_xpos=0, lens_sie_ypos=0,
             **{f'{g}_disk_{p}': v for g in ('deflector', 'arc')
                for p, v in dict(xpos=0, ypos=0, posa=0, incl=30, rpt_a=1,
                                 rpt_s=0.3).items()})))

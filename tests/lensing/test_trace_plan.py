@@ -26,9 +26,13 @@ FOOTPRINT = np.ones((20, 24), dtype=bool)
 
 SIE = dict(theta_e=1.1, q=0.7, posa=30, xpos=0.1, ypos=-0.2)
 
-NAMES = {name: f'lens_{name}' for name in SIE}
+# (the parameters of the lens: those of its SIE, prefixed by the name of
+# the piece, after its type; and their names among those of the scene)
+LENS = {f'sie_{name}': value for name, value in SIE.items()}
 
-PARAMS = {f'lens_{name}': value for name, value in SIE.items()} \
+NAMES = {name: f'lens_{name}' for name in LENS}
+
+PARAMS = {NAMES[name]: value for name, value in LENS.items()} \
     | dict(obs_dx=0.0, obs_dy=0.0)
 
 
@@ -56,7 +60,7 @@ def expected_rays(params, shift=(0.0, 0.0)):
     x, y = sky_positions(GRID)
     points = SkyPoints(x - shift[0], y - shift[1], ORIGIN)
     ray = sie_tracer().trace(
-        points, [{name: params[f'lens_{name}'] for name in SIE}],
+        points, [{name: params[group] for name, group in NAMES.items()}],
         DriverHost())[1]
     return ray.x + shift[0], ray.y + shift[1]
 
@@ -116,15 +120,16 @@ def test_the_rays_are_traced_again_only_when_they_change(
     plan.positions(PARAMS, {})
     plan.positions(PARAMS | dict(other=3.0), {})
     assert len(calls) == 1
-    plan.positions(PARAMS | dict(lens_q=0.8), {})
-    plan.positions(PARAMS | dict(lens_q=0.8, obs_dx=0.1), {})
+    plan.positions(PARAMS | dict(lens_sie_q=0.8), {})
+    plan.positions(PARAMS | dict(lens_sie_q=0.8, obs_dx=0.1), {})
     assert len(calls) == 3
 
 
 def test_the_magnification_of_an_isothermal_sphere(driver):
     # 1 / (1 - theta_e / r), along the radius 1, of a source at the
     # redshift its Einstein radius is quoted for
-    params = PARAMS | dict(lens_q=1.0, lens_xpos=0.0, lens_ypos=0.0)
+    params = PARAMS | dict(
+        lens_sie_q=1.0, lens_sie_xpos=0.0, lens_sie_ypos=0.0)
     plan = trace_plan(driver, reference=params)
     plan.positions(params, {})
     x, y = sky_positions(GRID)
@@ -146,7 +151,7 @@ def test_the_automatic_step_resolves_the_stretch(driver):
     plan = trace_plan(driver, tracer=tracer)
     x, y = sky_positions(GRID)
     jacobian = tracer.jacobian(
-        1, SkyPoints(x, y, ORIGIN), [SIE], 0.1, driver)
+        1, SkyPoints(x, y, ORIGIN), [LENS], 0.1, driver)
     expected = source_step(0.2, stretch(jacobian))
     assert 0.2 / MAX_STRETCH <= expected < 0.2
     assert plan.grid(1).coords.step[0] == pytest.approx(expected)

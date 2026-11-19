@@ -36,6 +36,10 @@ BUILTINS = {
     name: getattr(builtins, name)
     for name in ('abs', 'min', 'max', 'round', 'sum', 'len')}
 
+# The names that expressions reserve: of numpy, of the scaling relations,
+# and of the builtins they can call; no parameter or constant has one
+RESERVED = frozenset(('np', 'relations', *BUILTINS))
+
 # The nodes that expressions can have (and their operators)
 _NODES = (
     ast.Expression, ast.Constant, ast.Name, ast.Load,
@@ -82,7 +86,7 @@ def check_name(name: str) -> str | None:
         return "it is not a valid name"
     if keyword.iskeyword(name):
         return "it is a Python keyword"
-    if name in ('np', 'relations') or name in BUILTINS:
+    if name in RESERVED:
         return "expressions use it"
     return None
 

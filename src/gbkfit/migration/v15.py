@@ -115,8 +115,11 @@ class LensesSection(Rule):
                 for path, note in notes]
         if all(isinstance(observation, ViewedPiece)
                for _, observation, _ in lensed):
-            # (the lens piece, which the pieces of the project give)
-            _insert_after(config, 'galaxies', 'lenses', [_LENS])
+            # (the lens piece, which the pieces of the project give: as the
+            # setup sees it, for the rules after this one; written as its
+            # name)
+            _insert_after(
+                config, 'galaxies', 'lenses', [ViewedPiece(_LENS, lens)])
             return changes + [Change(
                 ['lenses'], f"the lens piece {_LENS!r} of the project")]
         _insert_after(config, 'galaxies', 'lenses', [lens])

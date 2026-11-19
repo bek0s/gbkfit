@@ -48,10 +48,11 @@ def trace_plan(driver, grid, tracer=None, names=None, params=None,
     if footprint is None:
         footprint = np.ones(grid.size[1::-1], dtype=bool)
     return TracePlan(
-        tracer or tracer_of(NO_LENS), [names or dict(kappa='lens_kappa')],
-        [1], grid, footprint, ORIGIN, (0.0, 0.0), (None, None),
-        Reference(params or dict(lens_kappa=0.0), {}), options, driver,
-        np.float64)
+        tracer or tracer_of(NO_LENS),
+        [names or dict(sheet_kappa='lens_sheet_kappa')], [1], grid,
+        footprint, ORIGIN, (0.0, 0.0), (None, None),
+        Reference(params or dict(lens_sheet_kappa=0.0), {}), options,
+        driver, np.float64)
 
 
 # Scenes of stand-ins: planes of uniform light and transmission, which
@@ -127,7 +128,7 @@ def composite(scene, planner, plan, grid):
     channels = 1 if grid.spectral_axis is None else grid.size[2]
     cube = np.zeros((channels,) + grid.size[1::-1])
     lensed.evaluate(
-        dict(lens_kappa=0.0), SceneState((None, None), {}), cube, None)
+        dict(lens_sheet_kappa=0.0), SceneState((None, None), {}), cube, None)
     return cube
 
 
@@ -223,7 +224,7 @@ VALUES = [
 PARAMS = {
     f'{galaxy.name()}_{name}': value
     for galaxy, values in zip(GALAXIES, VALUES)
-    for name, value in values.items()} | dict(lens_kappa=0.0)
+    for name, value in values.items()} | dict(lens_sheet_kappa=0.0)
 
 
 def scene_of(indices, behind):
@@ -294,8 +295,8 @@ def test_an_isothermal_sphere_makes_an_einstein_ring(driver, caplog):
     lens = Lens('lens', 0.3, LensSIE(), source_redshift=1.5)
     names = {name: f'lens_{name}' for name in lens.pdescs()}
     params = dict(
-        lens_theta_e=1.2, lens_q=1.0, lens_posa=0.0, lens_xpos=0.0,
-        lens_ypos=0.0)
+        lens_sie_theta_e=1.2, lens_sie_q=1.0, lens_sie_posa=0.0,
+        lens_sie_xpos=0.0, lens_sie_ypos=0.0)
     trace = trace_plan(
         driver, IMAGE, tracer_of(lens), names, params, SourceGrid())
     lensed = LensedScene([LensedPlane(scene_of([1], False), (1,), 1)])

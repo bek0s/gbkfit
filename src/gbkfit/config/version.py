@@ -23,7 +23,8 @@ __all__ = [
 # (the alpha of Palatini f(R) gravity of the sign of f(R) = R + alpha
 # R^2), 17, of 2026-11-18 on (the mass of a galaxy that a lens bends
 # light by has a place of its own: mass_xpos and mass_ypos, and mass_posa
-# and mass_incl if it has a plane), and 18, of 2026-11-19 on (the noise
-# of mock data is an option of each observation, not of the section
-# mock); gbkfit.migration rewrites the older ones
-FORMAT_VERSION = 18
+# and mass_incl if it has a plane), 18, of 2026-11-19 on (the noise of
+# mock data is an option of each observation, not of the section mock),
+# and 19, of 2026-11-19 on (the parameters of a lens of one piece are
+# named after the piece too); gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 19

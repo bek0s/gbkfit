@@ -11,6 +11,7 @@ import ruamel.yaml
 
 from gbkfit import project
 from gbkfit.config import FORMAT_VERSION, ConfigError
+from gbkfit.params import merge_layers
 
 
 yaml = ruamel.yaml.YAML(typ='safe')
@@ -111,7 +112,7 @@ def test_observations_name_their_parts(study):
 
 
 def test_a_layer_replaces_all_the_properties_of_a_parameter():
-    params, owners = project.merge_params([
+    params, owners = merge_layers([
         dict(properties={'vt': dict(value=100), 'vt[0]': 0, 'incl': 45},
              priors=[PRIOR], derived=dict(vmax='max(vt)')),
         dict(properties={'vt[1:]': dict(value=150)}, priors=[PRIOR],

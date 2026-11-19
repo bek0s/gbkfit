@@ -53,7 +53,8 @@ def disk_params(name, **values):
 
 
 LENS_PARAMS = dict(
-    lens_theta_e=THETA_E, lens_q=1, lens_posa=0, lens_xpos=0, lens_ypos=0)
+    lens_sie_theta_e=THETA_E, lens_sie_q=1, lens_sie_posa=0, lens_sie_xpos=0,
+    lens_sie_ypos=0)
 
 
 def evaluate(group, properties, driver):
@@ -197,7 +198,7 @@ def test_the_grid_of_the_source_is_laid_out_once(driver, extent):
             source_grid=SourceGrid(extent=extent)), [sis()])
     params = ParamSpace.from_properties(
         group.pdescs(), disk_params('arc_disk') | LENS_PARAMS
-        | dict(lens_theta_e=dict(value=THETA_E, min=0.2, max=0.8)))
+        | dict(lens_sie_theta_e=dict(value=THETA_E, min=0.2, max=0.8)))
     plan = group.plan(driver, reference=params.evaluate())
     r = radius()
     for theta_e in (0.45, 0.55):
@@ -239,7 +240,8 @@ LINE_DISK_PARAMS = dict(
     xpos=0.3, ypos=-0.4, posa=40, incl=55, vsys=10, rpt_a=1, rpt_s=3,
     vpt_rt=2, vpt_vt=150, dpt_a=25)
 LINE_LENS_PARAMS = dict(
-    lens_theta_e=2, lens_q=0.8, lens_posa=20, lens_xpos=0, lens_ypos=0)
+    lens_sie_theta_e=2, lens_sie_q=0.8, lens_sie_posa=20, lens_sie_xpos=0,
+    lens_sie_ypos=0)
 
 
 def lensed_kind(kind):
@@ -312,14 +314,14 @@ def test_workers_evaluate_lensed_models_as_the_objective_does(driver):
     group = ObservationGroup(source, observation, [sis()])
     params = ParamSpace.from_properties(
         group.pdescs(), truth | dict(
-            lens_theta_e=dict(value=THETA_E, min=0.3, max=0.7),
+            lens_sie_theta_e=dict(value=THETA_E, min=0.3, max=0.7),
             arc_disk_rpt_s=dict(value=SIGMA, min=0.1, max=0.2)))
     plan = group.plan(driver, reference=params.evaluate())
     objective = Objective(plan, Likelihoods(group))
     # (the free elements in their order: the dispersion, then the
     # Einstein radius; the truth in the middle)
     assert list(params.free_properties()) == [
-        'arc_disk_rpt_s', 'lens_theta_e']
+        'arc_disk_rpt_s', 'lens_sie_theta_e']
     xs = [[0.14, 0.45], [SIGMA, THETA_E], [0.16, 0.55]]
     alone = FitProblem(objective, params).chi2_batch(xs)
     with WorkersThreads([driver, driver]).start(objective) as pool:

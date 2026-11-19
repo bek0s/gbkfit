@@ -146,10 +146,10 @@ def test_the_mass_of_a_halo_lenses_as_the_nfw_lens(driver, components):
         Lens('lens', LENS_Z, LensNFW(), source_redshift=SOURCE_Z))
     [expected], _ = evaluate(nfw, values_of(nfw, prefixed(
         'deflector', GAS_PARAMS | halo) | ARC_PARAMS | dict(
-        lens_kappa_s=math.pi * K * RHO_S * R_S * d_l * d_ls / d_s,
-        lens_r_s=R_S / kpc_per_arcsec, lens_q=1, lens_posa=0,
-        lens_xpos=HALO_PARAMS['mass_xpos'],
-        lens_ypos=HALO_PARAMS['mass_ypos'])), driver)
+        lens_nfw_kappa_s=math.pi * K * RHO_S * R_S * d_l * d_ls / d_s,
+        lens_nfw_r_s=R_S / kpc_per_arcsec, lens_nfw_q=1, lens_nfw_posa=0,
+        lens_nfw_xpos=HALO_PARAMS['mass_xpos'],
+        lens_nfw_ypos=HALO_PARAMS['mass_ypos'])), driver)
     assert lensed.max() > 0.1
     np.testing.assert_allclose(lensed, expected, rtol=0, atol=1e-6)
 

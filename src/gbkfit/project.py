@@ -24,12 +24,13 @@ a project, and in the options dataset, noise, instrument.psf and
 instrument.lsf of its observations, a string names a piece, and a
 dictionary is one in place. Of the pieces, only observations name others
 (their dataset, noise, PSF and LSF). The section 'params' can also be a
-list of pieces, merged in order (see merge_params). The relative paths of
+list of pieces, merged in order (see gbkfit.params.merge_layers); see
+resolve for the pieces that items of a setup use under its names, and
+the parameters of an item. The relative paths of
 the configurations in a project, and of its pieces, are relative to its
 folder.
 """
 
-import copy
 import os
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
@@ -39,6 +40,7 @@ import ruamel.yaml
 
 from gbkfit.config import (
     FORMAT_VERSION, ConfigError, config_path, plain_values)
+from gbkfit.params import merge_layers, prefixed_params
 
 
 __all__ = [
@@ -49,7 +51,6 @@ __all__ = [
     'Resolved',
     'create',
     'find',
-    'merge_params',
     'open',
     'piece_folder',
     'piece_sections',
@@ -222,7 +223,10 @@ type: scipy.least_squares
 # in their folders, without .yaml), or written in place. Preview it, or
 # evaluate or fit it (a fit needs a fitter, and fits the observations
 # with data under their likelihoods: Gaussian by default, or one for all
-# as below, or likelihoods by observation name).
+# as below, or likelihoods by observation name). With several galaxies,
+# name each in the setup and give each its own parameters, e.g.
+#   galaxies: [{{name: source, use: ngc1}}, {{name: deflector, use: ngc2}}]
+#   params: [{{of: source, use: ngc1}}, {{of: deflector, use: ngc2}}]
 driver: {{type: host}}
 galaxies: [{galaxies}]
 # lenses: [{lenses}]
@@ -663,7 +667,8 @@ class Resolved(NamedTuple):
     A configuration with its pieces in place (see resolve), and its
     sources, relative to its project: its file ('file'), the file of each
     item of its sections galaxies, lenses, observations and params (a
-    list, of the layers), and of its fitter; the file of the dataset, the
+    list, of the layers; of a layer of an item from a list of pieces,
+    their files), and of its fitter; the file of the dataset, the
     noise, the PSF and the LSF of each observation ('dataset', 'noise',
     'psf' and 'lsf': lists, None for an observation without one), if any
     has one; and the file of the layer that gives the
@@ -680,7 +685,19 @@ def resolve(
 ) -> Resolved:
     """
     Put the pieces that a configuration names in place, and merge the
-    layers of its section 'params', if it is a list (see merge_params).
+    layers of its section 'params', if it is a list (see merge_layers).
+
+    An item of the sections galaxies, lenses and observations is the
+    piece it names, or {name: <name>, use: <piece>}: the piece under a
+    name of the configuration (e.g. a galaxy that is the deflector of a
+    lens in one setup, and alone in another). A layer of params is the
+    piece it names or one in place, in the names of the configuration,
+    or the parameters of an item of it: {of: <item>, use: <piece or
+    list of pieces>}, or {of: <item>, ...} with the options of params in
+    place, in the names of the item (e.g. gas_vsys), which its prefix
+    makes those of the configuration (e.g. deflector_gas_vsys; see
+    prefixed_params): the parameters of a galaxy are the same in every
+    setup it is in.
 
     Parameters
     ----------
@@ -700,8 +717,10 @@ def resolve(
     Raises
     ------
     ConfigError
-        If it names pieces outside a project, or unknown pieces, or the
-        layers of 'params' are invalid.
+        If it names pieces outside a project, or unknown pieces, a piece
+        used under another name than its own, a layer of params of an
+        item that the configuration has not (by name), or the layers of
+        'params' are invalid.
     """
     base = os.path.dirname(filename) if project is None else project.path
     config = dict(config)
@@ -718,9 +737,16 @@ def resolve(
             items = [items]
         if not isinstance(items, list):
             continue
+        if section == 'params':
+            config['params'], sources['params'], sources['parameters'] \
+                = _layers(project, items, _prefixes(config), source)
+            continue
         loaded = [
-            _piece(project, item, section, i) for i, item in enumerate(items)]
-        sources[section] = [source(section, item) for item in items]
+            _named_piece(project, item, section, i)
+            for i, item in enumerate(items)]
+        sources[section] = [
+            source(section, item.get('use') if _uses(item) else item)
+            for item in items]
         if section == 'observations':
             parts = [
                 _parts(project, item, i, sources[section][i], base)
@@ -729,13 +755,7 @@ def resolve(
             for key in ('dataset', 'noise', 'psf', 'lsf'):
                 if any(key in found for _, found in parts):
                     sources[key] = [found.get(key) for _, found in parts]
-        if section != 'params':
-            config[section] = loaded
-            continue
-        with config_path('params'):
-            config['params'], owners = merge_params(loaded)
-        sources['parameters'] = {
-            name: sources['params'][i] for name, i in owners.items()}
+        config[section] = loaded
     if 'fitter' in config:
         item = config['fitter']
         config['fitter'] = _piece(project, item, 'fitter')
@@ -781,6 +801,122 @@ def _parts(
     return observation, found
 
 
+def _uses(item: Any) -> bool:
+    """
+    Check whether an item of a section uses a piece under a name of the
+    configuration ({name: <name>, use: <piece>}; see resolve).
+    """
+    return isinstance(item, Mapping) and 'use' in item
+
+
+def _named_piece(
+        project: Project | None,
+        item: Any,
+        section: str,
+        index: int
+) -> Any:
+    """
+    Return an item of a section of a configuration: the piece it names,
+    the piece it uses under a name of the configuration (see resolve), or
+    itself.
+    """
+    if not _uses(item):
+        return _piece(project, item, section, index)
+    with config_path(section, index):
+        if set(item) != {'name', 'use'} or not isinstance(item['use'], str):
+            raise ConfigError(
+                "an item that uses a piece gives only the piece (use) and "
+                "its name (name)")
+        piece = _piece(project, item['use'], section, index)
+        if not isinstance(piece, Mapping):
+            return piece
+        own = piece.get('name')
+        if own is not None and own != item['name']:
+            raise ConfigError(
+                f"the piece {item['use']!r} is named {own!r}; it cannot be "
+                f"used as {item['name']!r} (take the name out of the piece, "
+                f"for the setups to name it)")
+        return dict(piece) | dict(name=item['name'])
+
+
+def _prefixes(config: Mapping[str, Any]) -> dict[str, str]:
+    """
+    Return the prefixes of the names of the parameters of the named items
+    of a configuration (its galaxies, lenses and observations, their
+    pieces in place), by their names: each its name and '_' (see
+    ObservationGroup).
+    """
+    return {
+        item['name']: f"{item['name']}_"
+        for section in ('galaxies', 'lenses', 'observations')
+        for item in _listed_items(config.get(section))
+        if isinstance(item, Mapping) and isinstance(item.get('name'), str)}
+
+
+def _listed_items(value: Any) -> list[Any]:
+    """Return the items of a section: a list, or one item."""
+    return value if isinstance(value, list) else [value]
+
+
+def _layers(
+        project: Project | None,
+        items: Sequence[Any],
+        prefixes: Mapping[str, str],
+        source: Any
+) -> tuple[dict[str, Any], list[Any], dict[str, str]]:
+    """
+    Return the merged layers of the section params of a configuration
+    (see resolve and merge_layers), the source of each item (a file, or of
+    the parameters of an item from pieces, their files), and the source
+    of the properties of each parameter, by name.
+    """
+    layers, files, sources = [], [], []
+    for i, item in enumerate(items):
+        if not (isinstance(item, Mapping) and 'of' in item):
+            layers.append(_piece(project, item, 'params', i))
+            files.append(source('params', item))
+            sources.append(files[-1])
+            continue
+        with config_path('params', i):
+            of = item['of']
+            if of not in prefixes:
+                raise ConfigError(
+                    f"the parameters are of {of!r}, which names no galaxy, "
+                    f"lens or observation of the configuration (by name: "
+                    f"{sorted(prefixes)})")
+            rest = {k: v for k, v in item.items() if k not in ('of', 'use')}
+            if 'use' in item and rest:
+                raise ConfigError(
+                    "the parameters of an item are from pieces (use) or in "
+                    "place, not both")
+            uses = item.get('use')
+            uses = [uses] if isinstance(uses, str) else uses
+            if uses is not None and not (
+                    isinstance(uses, list)
+                    and all(isinstance(u, str) for u in uses)):
+                raise ConfigError(
+                    "use names a params piece, or a list of them")
+            blocks = [rest] if uses is None else [
+                _piece(project, use, 'params', i) for use in uses]
+            used = [source('params', None)] if uses is None else [
+                source('params', use) for use in uses]
+            for block, file in zip(blocks, used):
+                if not isinstance(block, Mapping):
+                    raise ConfigError(
+                        "a layer of parameters must be a dictionary")
+                try:
+                    layers.append(prefixed_params(block, prefixes[of]))
+                except ValueError as e:
+                    raise ConfigError(str(e)) from None
+                sources.append(file)
+            files.append(
+                used if isinstance(item.get('use'), list) else used[0])
+    with config_path('params'):
+        merged, owners = merge_layers(layers)
+    return merged, files, {
+        name: sources[layer] for name, layer in owners.items()}
+
+
 def _piece(
         project: Project | None,
         item: Any,
@@ -799,76 +935,6 @@ def _piece(
                 f"'{item}' names a piece of a project, but the "
                 f"configuration is not in one (no {MARKER} above it)")
         return project.piece(section, item)
-
-
-def merge_params(
-        layers: Sequence[Mapping[str, Any]]
-) -> tuple[dict[str, Any], dict[str, int]]:
-    """
-    Merge layers of parameters (sections 'params'), in order.
-
-    The properties of a parameter in a layer (by its name, with or
-    without subscripts) replace all those of the parameter in the layers
-    before it, as do its mode, and a derived value of a name. The priors
-    of the layers add up. Any other option is that of the last layer
-    that has it (e.g. transforms).
-
-    Parameters
-    ----------
-    layers : Sequence of Mapping
-        The layers.
-
-    Returns
-    -------
-    dict
-        The parameters.
-    dict
-        The layer of the properties of each parameter (its index), by
-        name.
-
-    Raises
-    ------
-    ConfigError
-        If a layer is not a dictionary, or its options 'properties',
-        'modes' or 'derived' are not dictionaries, or 'priors' is not a
-        list.
-    """
-    merged: dict[str, Any] = {}
-    owners: dict[str, int] = {}
-    for i, layer in enumerate(layers):
-        with config_path(i):
-            if not isinstance(layer, Mapping):
-                raise ConfigError("a layer of parameters must be a dictionary")
-            for key, value in layer.items():
-                with config_path(key):
-                    merged[key] = _merge_option(key, merged.get(key), value)
-            names = {_parameter(key) for key in layer.get('properties', {})}
-            owners |= dict.fromkeys(names, i)
-    return copy.deepcopy(merged), owners
-
-
-def _merge_option(key: str, merged: Any, value: Any) -> Any:
-    """Return an option of the merged layers with that of the next one."""
-    if key == 'priors':
-        if not isinstance(value, list):
-            raise ConfigError("must be a list")
-        return (merged or []) + value
-    if key not in ('properties', 'modes', 'derived'):
-        return value
-    if not isinstance(value, Mapping):
-        raise ConfigError("must be a dictionary")
-    # (the properties of a parameter go by its name, without subscripts)
-    name_of = _parameter if key == 'properties' else str
-    replaced = {name_of(name) for name in value}
-    kept = {
-        name: v for name, v in (merged or {}).items()
-        if name_of(name) not in replaced}
-    return kept | dict(value)
-
-
-def _parameter(key: str) -> str:
-    """Return the name of the parameter of a key of the properties."""
-    return key.split('[', 1)[0].strip()
 
 
 def _marker(path: str) -> dict[str, Any]:
@@ -906,10 +972,16 @@ def _named(folder: str, content: Any) -> Iterator[tuple[Any, Any, str]]:
         value = parent.get(key) if isinstance(parent, Mapping) else None
         if isinstance(value, str):
             yield parent, key, target
+        elif isinstance(value, Mapping):
+            yield from names(value, 'use', target)
         elif isinstance(value, list):
-            yield from (
-                (value, i, target) for i, item in enumerate(value)
-                if isinstance(item, str))
+            for i, item in enumerate(value):
+                if isinstance(item, str):
+                    yield value, i, target
+                elif isinstance(item, Mapping):
+                    # (a piece under a name of the setup, or parameters of
+                    # an item from pieces: see resolve)
+                    yield from names(item, 'use', target)
 
     def observation(options: Any) -> Iterator[Any]:
         if not isinstance(options, Mapping):

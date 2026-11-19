@@ -44,8 +44,21 @@ def sis(name, redshift, source_redshift):
     return Lens(name, redshift, LensSIE(), source_redshift=source_redshift)
 
 
-def sis_values(theta_e, centre=(0.0, 0.0)):
+def sphere(theta_e, centre=(0.0, 0.0)):
+    """The parameters of an isothermal sphere: an SIE of q = 1."""
     return dict(theta_e=theta_e, q=1, posa=0, xpos=centre[0], ypos=centre[1])
+
+
+def lens_values(values):
+    """
+    The parameters of a lens of one SIE: those of the SIE (values),
+    prefixed by the name of the piece, after its type.
+    """
+    return {f'sie_{name}': value for name, value in values.items()}
+
+
+def sis_values(theta_e, centre=(0.0, 0.0)):
+    return lens_values(sphere(theta_e, centre))
 
 
 def tracer_of(galaxies, lenses):
@@ -91,7 +104,7 @@ def test_one_lens_of_its_quoted_source_is_todays_model():
     points = SkyPoints(*np.mgrid[-2:2:7j, -2:2:5j], ORIGIN)
     values = dict(theta_e=1.3, q=0.6, posa=30, xpos=0.2, ypos=-0.1)
     alpha = LensSIE().deflection(points, values, HOST)
-    ray = tracer.trace(points, [values], HOST)[-1]
+    ray = tracer.trace(points, [lens_values(values)], HOST)[-1]
     np.testing.assert_allclose(ray.x, points.x - alpha[0], atol=1e-12)
     np.testing.assert_allclose(ray.y, points.y - alpha[1], atol=1e-12)
 
@@ -139,8 +152,8 @@ def test_the_lenses_of_one_plane_add_up():
     tracer = tracer_of([('arc', 2.0)], lenses)
     assert len(tracer.planes()) == 2
     points = SkyPoints(*np.mgrid[-2:2:5j, -2:2:4j], ORIGIN)
-    values = [sis_values(0.8, (0.3, 0)), sis_values(0.5, (-0.4, 0.2))]
-    both = tracer.trace(points, values, HOST)[-1]
+    values = [sphere(0.8, (0.3, 0)), sphere(0.5, (-0.4, 0.2))]
+    both = tracer.trace(points, list(map(lens_values, values)), HOST)[-1]
     # (each at the distance of the plane, their mean redshift)
     z = 0.4005
     expected_x, expected_y = points.x.copy(), points.y.copy()

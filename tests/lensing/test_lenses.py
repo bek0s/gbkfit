@@ -27,20 +27,23 @@ HOST = DriverHost()
 
 
 def test_the_parameters_of_a_lens():
-    # Several pieces: prefixed by their names; one: not
+    # Prefixed by the names of their pieces, of several and of one
     lens = Lens('lens', 0.35, [LensSIE(name='main'), LensShear(name='shear')],
                 source_redshift=2.1)
     assert list(lens.pdescs()) == [
         'main_theta_e', 'main_q', 'main_posa', 'main_xpos', 'main_ypos',
         'shear_gamma', 'shear_posa']
     alone = Lens('lens', 0.35, LensSIE(name='main'), source_redshift=2.1)
-    assert list(alone.pdescs()) == ['theta_e', 'q', 'posa', 'xpos', 'ypos']
+    assert list(alone.pdescs()) == [
+        'main_theta_e', 'main_q', 'main_posa', 'main_xpos', 'main_ypos']
     # (named after their types by default)
     unnamed = Lens('lens', 0.35, [LensSIE(), LensShear()], source_redshift=2.1)
     assert list(unnamed.pdescs()) == [
         'sie_theta_e', 'sie_q', 'sie_posa', 'sie_xpos', 'sie_ypos',
         'shear_gamma', 'shear_posa']
     assert 'name' not in lens_parser.dump(unnamed)['pieces'][0]
+    alone = Lens('lens', 0.35, LensSIE(), source_redshift=2.1)
+    assert list(alone.pdescs())[0] == 'sie_theta_e'
     with pytest.raises(ValueError, match="repeat names"):
         Lens('lens', 0.35, [LensSIE(name='a'), LensShear(name='a')],
              source_redshift=2.1)
@@ -117,14 +120,13 @@ def test_lenses_from_configurations(tmp_path):
         'epl', 'nfw', 'sheet', 'shear']
     assert lens_parser.dump(lens) == info
     assert 'main_a4' in lens.pdescs()
-    # Maps are dumped to files named after the lens (and the piece, of
-    # several)
+    # Maps are dumped to files named after the lens and the piece
     maps = Lens('cluster', 0.4, LensDeflectionMap(
         np.ones((4, 4)), np.ones((4, 4)), step=0.5, rval=(150.0, 2.0),
         name='map'))
     dumped = lens_parser.dump(maps, prefix=str(tmp_path / 'd_'))
     assert dumped['pieces'][0]['alpha_x'] == str(
-        tmp_path / 'd_cluster_alpha_x.fits')
+        tmp_path / 'd_cluster_map_alpha_x.fits')
     again = lens_parser.load(copy.deepcopy(dumped))
     centre = SkyPoints(np.zeros(1), np.zeros(1), (150.0, 2.0))
     np.testing.assert_allclose(

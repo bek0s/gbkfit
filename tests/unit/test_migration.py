@@ -1495,16 +1495,18 @@ def test_the_lens_parameters_of_a_project_are_renamed_with_its_pieces(
     yaml.dump(dict(observations=[hst | dict(name='alma')], params='alma'),
               tmp_path / 'study' / 'setups' / 'inline.yaml')
     changes = migration.migrate_project(study.path)
+    # (of version 19, the parameters of the lens of one piece are named
+    # after the piece too)
     assert study.piece('params', 'hst') == dict(
-        properties=dict(lens_xpos=0, lens_posa=30))
+        properties=dict(lens_sie_xpos=0, lens_sie_posa=30))
     assert study.piece('params', 'alma') == dict(
-        properties=dict(lens_xpos=0))
+        properties=dict(lens_sie_xpos=0))
     lens = dict(name='lens', pieces=dict(type='sie'))
     assert study.piece('lenses', 'lens') == lens
     named = yaml.load(tmp_path / 'study' / 'setups' / 'named.yaml')
     assert named == dict(
         observations='hst', lenses=['lens'],
-        params=dict(properties=dict(lens_ypos=0.1)))
+        params=dict(properties=dict(lens_sie_ypos=0.1)))
     observation = {k: v for k, v in hst.items() if k != 'foreground'}
     assert study.piece('observations', 'hst') == observation
     assert 'observations/hst.yaml' in changes
@@ -2202,3 +2204,28 @@ def test_the_noise_a_setup_gives_an_observation_piece_is_given_by_hand(
     assert yaml.load(tmp_path / 'study' / 'setups' / 'mock.yaml') == dict(
         observations='hi', mock=dict(noise='radio'))
     assert project.open(study.path).version() == 17
+
+
+def test_the_parameters_of_a_lens_of_one_piece_are_named_after_it():
+    # Version 19: lens_theta_e of a lens of one SIE is lens_sie_theta_e
+    # (a piece is named after its type by default), in keys, modes and
+    # expressions; not those of a galaxy whose name starts with the
+    # lens's, nor those of a lens of several pieces
+    config = dict(
+        galaxies=[dict(name='lens_b')],
+        lenses=[
+            dict(name='lens', pieces=[dict(type='sie')]),
+            dict(name='far', pieces=dict(type='epl', name='main')),
+            dict(name='pair', pieces=[
+                dict(type='sie', name='main'), dict(type='shear')])],
+        params=dict(
+            properties=dict(
+                lens_theta_e=1, lens_q='lens_theta_e * 0.5',
+                far_slope=2, lens_b_gas_vsys=3, pair_main_q=0.8),
+            priors=[dict(type='joint', expr='far_slope - lens_q')]))
+    rewritten(config, 18, 19)
+    assert config['params'] == dict(
+        properties=dict(
+            lens_sie_theta_e=1, lens_sie_q='lens_sie_theta_e * 0.5',
+            far_main_slope=2, lens_b_gas_vsys=3, pair_main_q=0.8),
+        priors=[dict(type='joint', expr='far_main_slope - lens_sie_q')])
