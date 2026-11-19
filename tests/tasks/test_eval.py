@@ -289,10 +289,11 @@ def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
     options = eval_options('objective', 'study/setups/disk/cube.yaml')
     result = run_task(tmp_path, 'eval', options | dict(output_dir=None))
     assert result.returncode == 0, result.stderr
-    run = outputs.open(study / 'runs/disk/cube')
+    # (the first run of the setup, numbered)
+    run = outputs.open(study / 'runs/disk/cube/1')
     np.testing.assert_allclose(array(run, 'residual'), 1, rtol=1e-5)
     setup = run.read(run.product('setup'))
-    assert setup['project'] == '../../..'
+    assert setup['project'] == '../../../..'
     assert setup['file'] == 'setups/disk/cube.yaml'
     assert setup['parameters']['incl'] == 'setups/disk/cube.yaml'
     assert setup['parameters']['vsys'] == 'params/model.yaml'
