@@ -96,7 +96,7 @@ export function RunCard({ entry, current, onOpen }: { entry: RunEntry; current: 
 
 // A run: its state and times, Stop while it runs, and its result (see
 // Results), its log, or its recipe as it ran
-export function RunPage({ entry, onStarts }: { entry: RunEntry; onStarts: (values: Record<string, number>) => void }) {
+export function RunPage({ project, entry, onStarts }: { project: string; entry: RunEntry; onStarts: (values: Record<string, number>) => void }) {
   const manifest = useRun(entry.run).data;
   const stop = useStopJob();
   const { word, state } = runState(entry, manifest?.status);
@@ -148,7 +148,7 @@ export function RunPage({ entry, onStarts }: { entry: RunEntry; onStarts: (value
         {state === 'queued' ? (
           <p className="ob-text">It waits for a free place on the server; it runs as the runs before it end.</p>
         ) : tab === 'result' ? (
-          running ? <LiveView path={productPath('progress')} version={manifest?.updated ?? ''} /> : entry.run && <ResultView run={entry.run} products={products as { kind: string; path: string; ids?: Record<string, string> }[]} onStarts={onStarts} />
+          running ? <LiveView path={productPath('progress')} version={manifest?.updated ?? ''} /> : entry.run && <ResultView project={project} run={entry.run} products={products as { kind: string; path: string; ids?: Record<string, string> }[]} onStarts={onStarts} />
         ) : shown.error ? (
           <p className="error">{shown.error.message}</p>
         ) : shown.data !== undefined ? (

@@ -6,7 +6,8 @@
 // fit, and the data, the model and the residuals at the best fit through
 // each observation, as the run wrote them.
 import { useMemo, useState } from 'react';
-import { useChannel, useFileText, useMoments } from '../../api/queries';
+import { useChannel, useFileText, useGalaxyParameters, useGalaxyRender, useMoments, usePiece } from '../../api/queries';
+import { CurvePlot, massCurves } from '../galaxy/Curves';
 import { mapUnit, SNR } from '../../components/CubeViewer';
 import { MapPanel, robustRange } from '../../components/MapPanel';
 import { SHOWN, type Colours, type Shown } from '../../components/observedMaps';
@@ -44,7 +45,7 @@ interface FitResult {
   solutions: Solution[];
 }
 
-export function ResultView({ run, products, onStarts }: { run: string; products: Product[]; onStarts: (values: Record<string, number>) => void }) {
+export function ResultView({ project, run, products, onStarts }: { project: string; run: string; products: Product[]; onStarts: (values: Record<string, number>) => void }) {
   const file = products.find((p) => p.kind === 'fit_result');
   const text = useFileText(file ? `${run}/${file.path}` : null);
   const result = useMemo(() => (text.data ? (JSON.parse(text.data) as FitResult) : undefined), [text.data]);
@@ -63,7 +64,12 @@ export function ResultView({ run, products, onStarts }: { run: string; products:
       )}
       {best && <Merits result={result} best={best} />}
       <Maps run={run} products={products} />
-      {best && <BestParams result={result} best={best} onStarts={onStarts} />}
+      {best && (
+        <div className="fx-two-cards">
+          <BestParams result={result} best={best} onStarts={onStarts} />
+          <CurvesCard project={project} run={run} best={best} />
+        </div>
+      )}
       {best && posterior && <PosteriorCard path={`${run}/${posterior.path}`} free={Object.keys(best.free)} />}
     </div>
   );
@@ -88,6 +94,47 @@ function Merits({ result, best }: { result: FitResult; best: Solution }) {
           <b>{value}</b>
         </div>
       ))}
+    </div>
+  );
+}
+
+// The curves of the (first) galaxy of the run at the best fit: its rotation
+// and its circular speeds, of the galaxy as the run fitted it (its
+// configuration as it ran)
+function CurvesCard({ project, run, best }: { project: string; run: string; best: Solution }) {
+  const config = usePiece(`${run}/config.yaml`).data;
+  const listed = isObject(config) ? config.galaxies : undefined;
+  const galaxy = Array.isArray(listed) ? listed[0] : listed;
+  const options = isObject(galaxy) ? galaxy : undefined;
+  const prefix = options && typeof options.name === 'string' ? `${options.name}_` : '';
+  const known = new Set(((useGalaxyParameters(project, options).data?.parameters ?? []) as { name: string }[]).map((p) => p.name));
+  const properties = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(best.elements)
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([key, value]) => [key.slice(prefix.length), value] as const)
+          .filter(([key]) => known.has(key.split('[', 1)[0])),
+      ),
+    [best.elements, prefix, known],
+  );
+  const render = useGalaxyRender(project, known.size ? options : undefined, properties, 'sky', 64);
+  const curves = render.data ? massCurves(render.data, new Map(), new Map()) : [];
+  return (
+    <div className="fx-card">
+      <div className="fx-card-head">
+        <h2>Curves</h2>
+        <span className="fx-faint fx-small">{prefix ? `of ${prefix.slice(0, -1)} ` : ''}at the best fit</span>
+      </div>
+      <div className="fx-curves">
+        {render.error ? (
+          <p className="error fx-pad">{render.error.message}</p>
+        ) : render.data ? (
+          <CurvePlot curves={curves} radius={render.data.curves.radius ?? []} unit="km/s" empty="No curves: the galaxy has no rotation or mass." />
+        ) : (
+          <div className="gx-map-wait" />
+        )}
+      </div>
     </div>
   );
 }

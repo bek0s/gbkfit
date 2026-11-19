@@ -178,7 +178,7 @@ function FitPicture({
           </button>
         </li>
       </ol>
-      {current ? <RunPage key={current.key} entry={current} onStarts={onStarts} /> : children}
+      {current ? <RunPage key={current.key} project={project} entry={current} onStarts={onStarts} /> : children}
     </div>
   );
 }

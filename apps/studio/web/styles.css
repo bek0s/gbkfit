@@ -1586,3 +1586,6 @@ h2 { margin: 0; font: var(--text-heading); }
 .fx-corner .fx-corner-value { fill: var(--fg2); }
 .fx-cell { fill: none; stroke: var(--line); }
 .fx-bar { fill: var(--accent); opacity: 0.85; }
+.fx-two-cards { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.fx-curves { height: 280px; padding: 0 12px 10px; display: flex; }
+.fx-curves > * { flex: 1; min-width: 0; }
