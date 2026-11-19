@@ -105,15 +105,16 @@ def output_files(
         file_d: DataFile,
         file_e: DataFile | None,
         file_m: DataFile | None,
-        noise_error: bool = False
+        made_error: bool = False
 ) -> tuple[str, str | None, str | None]:
     """
     Return the prepared files of the data, errors and mask (None for
     those not given) that prep_pixel_brightness, prep_slit_spectra,
     prep_pixel_spectra and prep_pixel_moments (of each map) write in an
     output directory, named after the data (see the module); with
-    noise_error (prep_pixel_spectra), the errors estimated from the noise
-    of the data.
+    made_error, the errors that the preparation makes: estimated from the
+    noise of the data (noise_error of prep_pixel_spectra), or the noise it
+    adds to them (add_noise).
 
     Parameters
     ----------
@@ -121,8 +122,8 @@ def output_files(
         The output directory.
     file_d, file_e, file_m : DataFile
         The files of the data, errors and mask.
-    noise_error : bool, optional
-        Whether the errors are estimated from the noise of the data.
+    made_error : bool, optional
+        Whether the preparation makes the errors.
 
     Returns
     -------
@@ -130,7 +131,7 @@ def output_files(
         The prepared files of the data, errors and mask.
     """
     error = _output(output_dir, file_d, 'error') \
-        if file_e is not None or noise_error else None
+        if file_e is not None or made_error else None
     mask = _output(output_dir, file_d, 'mask') if file_m is not None else None
     return _output(output_dir, file_d), error, mask
 
@@ -158,6 +159,44 @@ def _clip(
         arrays = arrays.masked(prep.largest_regions_mask(
             arrays.mask, ccl_lcount, ccl_pcount, ccl_lratio))
     return arrays
+
+
+def _errors_once(
+        file_e: DataFile | None, noise_error: bool, add_noise: float | None
+) -> None:
+    """
+    Raise ConfigError unless the errors of data come from one place at
+    most: a file of errors, the noise of the data (noise_error), or the
+    noise added to them (add_noise, which must be above 0).
+    """
+    given = [
+        name for name, on in (
+            ('a file of the errors', file_e is not None),
+            ('the noise of the data (noise_error)', noise_error),
+            ('the noise added (add_noise)', add_noise is not None)) if on]
+    if len(given) > 1:
+        raise ConfigError(
+            f"the errors come from one of a file of the errors, the noise of "
+            f"the data and the noise added; given: {', '.join(given)}")
+    if add_noise is not None and not add_noise > 0:
+        raise ConfigError(
+            f"the noise added must have a dispersion above 0; it is "
+            f"{add_noise}")
+
+
+def _with_noise(
+        arrays: FitsArrays, rms: float, seed: int | None
+) -> FitsArrays:
+    """
+    Return arrays with Gaussian noise of a dispersion added to their valid
+    values (e.g. those of a simulation without noise), and that
+    dispersion as their errors; the noise of a seed is the same from run
+    to run. The noise is independent from value to value.
+    """
+    noise = np.random.default_rng(seed).normal(0.0, rms, arrays.data.shape)
+    data = arrays.data + noise
+    return dataclasses.replace(
+        arrays, data=data, error=np.where(np.isfinite(data), rms, np.nan))
 
 
 def _write(
@@ -197,26 +236,42 @@ def prep_pixel_brightness(
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
         error_kind: ErrorKind = 'sigma',
-        mask_kind: MaskKind = 'valid'
+        mask_kind: MaskKind = 'valid',
+        add_noise: float | None = None,
+        seed: int | None = None
 ) -> None:
     """
     Prepare an image (pixel_brightness): crop it to a region (roi_spat:
-    x from, x to, y from, y to), clip it, crop it to its valid pixels
-    (minify), and pad it with invalid pixels (nanpad). error_kind is what
-    the file of the errors holds, and mask_kind what the mask marks (see
-    read_arrays); the prepared errors are standard deviations.
+    x from, x to, y from, y to), add noise to it (add_noise: the
+    dispersion of Gaussian noise, e.g. of a simulation without noise,
+    which is then its errors; of a seed, the same from run to run), clip
+    it, crop it to its valid pixels (minify), and pad it with invalid
+    pixels (nanpad). error_kind is what the file of the errors holds, and
+    mask_kind what the mask marks (see read_arrays); the prepared errors
+    are standard deviations.
+
+    Raises
+    ------
+    ConfigError
+        If both add_noise and an errors file are given, or add_noise is
+        not above 0.
     """
+    _errors_once(file_e, False, add_noise)
     output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(
         file_d, file_e, file_m, error_kind=error_kind, mask_kind=mask_kind)
     if roi_spat is not None:
         x0, x1, y0, y1 = roi_spat
         arrays = arrays.crop((slice(y0, y1), slice(x0, x1)))
+    if add_noise is not None:
+        arrays = _with_noise(arrays, add_noise, seed)
     arrays = _clip(
         arrays, clip_min, clip_max, sclip_sigma, sclip_iters, ccl_lcount,
         ccl_pcount, ccl_lratio)
     _write(arrays, minify, nanpad,
-           output_files(output_dir, file_d, file_e, file_m), dtype)
+           output_files(
+               output_dir, file_d, file_e, file_m, add_noise is not None),
+           dtype)
 
 
 def prep_slit_spectra(
@@ -295,7 +350,9 @@ def prep_pixel_spectra(
         output_dir_mode: _Exists = 'overwrite',
         noise_error: bool = False,
         error_kind: ErrorKind = 'sigma',
-        mask_kind: MaskKind = 'valid'
+        mask_kind: MaskKind = 'valid',
+        add_noise: float | None = None,
+        seed: int | None = None
 ) -> None:
     """
     Prepare a cube (pixel_spectra), with its spectral axis in velocities
@@ -308,18 +365,19 @@ def prep_pixel_spectra(
     error_kind what the file of the errors holds, and mask_kind what the
     mask marks (see FitsArrays.read); the prepared errors are standard
     deviations. With noise_error, the errors are the noise of each channel
-    of the cropped cube, from its negative values (see prep.noise_errors;
-    see output_files for the names of the prepared files).
+    of the cropped cube, from its negative values (see prep.noise_errors);
+    with add_noise, Gaussian noise of that dispersion is added to it (e.g.
+    to a simulation without noise), which is then its errors (of a seed,
+    the same from run to run; see output_files for the names of the
+    prepared files).
 
     Raises
     ------
     ConfigError
-        If both noise_error and an errors file are given.
+        If more than one of an errors file, noise_error and add_noise are
+        given, or add_noise is not above 0.
     """
-    if noise_error and file_e is not None:
-        raise ConfigError(
-            "give a file of the errors or estimate them from the noise "
-            "(noise_error), not both")
+    _errors_once(file_e, noise_error, add_noise)
     output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
@@ -335,11 +393,15 @@ def prep_pixel_spectra(
         # (of the noise before the clipping, which masks some of it)
         arrays = dataclasses.replace(
             arrays, error=prep.noise_errors(arrays.data, arrays.mask))
+    if add_noise is not None:
+        arrays = _with_noise(arrays, add_noise, seed)
     arrays = _clip(
         arrays, clip_min, clip_max, sclip_sigma, sclip_iters, ccl_lcount,
         ccl_pcount, ccl_lratio)
     _write(arrays, minify, nanpad,
-           output_files(output_dir, file_d, file_e, file_m, noise_error),
+           output_files(
+               output_dir, file_d, file_e, file_m,
+               noise_error or add_noise is not None),
            dtype)
 
 

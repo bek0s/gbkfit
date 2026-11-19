@@ -918,10 +918,29 @@ def test_the_errors_of_a_prepared_cube_can_be_its_noise():
     prep_pixel_spectra('cube.fits', noise_error=True)
     np.testing.assert_allclose(
         fits.getdata('prep_cube_error.fits'), 0.05, rtol=0.3)
-    with pytest.raises(ConfigError, match="not both"):
+    with pytest.raises(ConfigError, match="one of"):
         prep.prep_pixel_spectra(
             'cube.fits', 'errors.fits', None, *[None] * 9, False, None,
             'float32', noise_error=True)
+
+
+def test_noise_can_be_added_to_a_cube_without_it():
+    # (e.g. to a simulation: Gaussian noise of the dispersion given, which
+    # is then the errors; of a seed, the same from run to run; the errors
+    # come from one place at most)
+    write_cube('cube.fits')
+    clean, _ = prep_pixel_spectra('cube.fits')
+    noisy, _ = prep_pixel_spectra('cube.fits', add_noise=0.05, seed=1)
+    errors = fits.getdata('prep_cube_error.fits')
+    valid = np.isfinite(noisy)
+    np.testing.assert_allclose(errors[valid], 0.05)
+    assert np.std(noisy[valid] - clean[valid]) == pytest.approx(0.05, rel=0.1)
+    again, _ = prep_pixel_spectra('cube.fits', add_noise=0.05, seed=1)
+    np.testing.assert_array_equal(again, noisy)
+    with pytest.raises(ConfigError, match="one of"):
+        prep_pixel_spectra('cube.fits', add_noise=0.05, noise_error=True)
+    with pytest.raises(ConfigError, match="above 0"):
+        prep_pixel_spectra('cube.fits', add_noise=0)
 
 
 def test_grown_masks_keep_faint_values_next_to_bright_ones():

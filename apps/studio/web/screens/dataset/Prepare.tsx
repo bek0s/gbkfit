@@ -46,7 +46,11 @@ export function PrepareForm({
   const setValues = (key: string, changed: Partial<ValueEdits>) =>
     set({ values: { ...edits.values, [key]: { ...(edits.values[key] ?? NO_VALUE_EDITS), ...changed } } });
   const item = draft.items[slots[0].key];
-  const noiseErrors = kind === 'cube' && item.files.error === undefined && item.errorValue === null;
+  // (of data without errors: errors from their noise, of a cube; or noise
+  // added, e.g. to a simulation without noise, which is then the errors)
+  const withoutErrors = item.files.error === undefined && item.errorValue === null;
+  const noiseErrors = kind === 'cube' && withoutErrors;
+  const addNoise = (kind === 'cube' || kind === 'image') && withoutErrors;
   const channels = kind === 'cube' ? rangeOf(edits.channels, nz) : null;
   const cube = kind === 'cube' ? draft.items[slots[0].key].files.data : undefined;
   return (
@@ -70,19 +74,33 @@ export function PrepareForm({
           {channels && cube && <ChannelSpan path={cube.file} hdu={first.index} channels={channels} />}
         </>
       )}
+      {(noiseErrors || addNoise) && (
+        <div className="ds-group">
+          <span>Errors</span>
+        </div>
+      )}
       {noiseErrors && (
+        <div className="ds-edit-wide">
+          <Check
+            checked={edits.noise && !edits.added.trim()}
+            label="From the noise of each channel"
+            title="The robust noise of the negative values of each channel, measured before any values are left out"
+            onChange={(noise) => set({ noise, ...(noise ? { added: '' } : {}) })}
+          />
+        </div>
+      )}
+      {addNoise && (
         <>
-          <div className="ds-group">
-            <span>Errors</span>
-          </div>
-          <div className="ds-edit-wide">
-            <Check
-              checked={edits.noise}
-              label="From the noise of each channel"
-              title="The robust noise of the negative values of each channel, measured before any values are left out"
-              onChange={(noise) => set({ noise })}
-            />
-          </div>
+          <span className="ds-label">Add noise of</span>
+          <NumberField value={edits.added} placeholder="none" label="Add Gaussian noise of this dispersion (e.g. to a simulation without noise); it is then the errors" onChange={(added) => set({ added, ...(added.trim() ? { noise: false } : {}) })} />
+          <span className="ds-unit">{first.unit ?? ''}</span>
+          {edits.added.trim() !== '' && (
+            <>
+              <span className="ds-label ds-indent">seed</span>
+              <NumberField value={edits.seed} placeholder="random" label="The seed of the noise: the same noise from run to run" onChange={(seed) => set({ seed })} />
+              <span className="ds-unit" />
+            </>
+          )}
         </>
       )}
       <div className="ds-group">

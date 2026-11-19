@@ -434,9 +434,12 @@ class Jobs:
                         for k, key in enumerate(_FILES)
                         if any(output[k] is not None for output in outputs)}
                 else:
+                    # (of the errors that the preparation makes: of the
+                    # noise of the data, or of the noise it adds)
                     outputs = gbkfit.tasks.prep.output_files(
                         folder, *(options[key] for key in _FILES),
-                        options.get('noise_error', False))
+                        options.get('noise_error', False)
+                        or options.get('add_noise') is not None)
                     job.files = {
                         key: keep(output)
                         for key, output in zip(_FILES, outputs)

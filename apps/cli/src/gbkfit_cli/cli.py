@@ -292,6 +292,16 @@ def _add_prep(
         '--minify', action='store_true',
         help="crop the edges of the input data until valid pixels are found")
     # ...
+    parser_prep_add_noise = argparse.ArgumentParser(add_help=False)
+    parser_prep_add_noise.add_argument(
+        '--add-noise', type=_number_range(float, 0.0, None), metavar='RMS',
+        help="add Gaussian noise of this dispersion (e.g. to a simulation "
+             "without noise), which is then the errors (instead of an "
+             "errors file)")
+    parser_prep_add_noise.add_argument(
+        '--seed', type=int,
+        help="the seed of the noise added: the same noise from run to run")
+    # ...
     parser_prep_nanpad = argparse.ArgumentParser(add_help=False)
     parser_prep_nanpad.add_argument(
         '--nanpad', type=_number_range(int, 0, None),
@@ -441,7 +451,7 @@ def _add_prep(
     parsers_prep.required = True
     parsers_prep.add_parser('pixel_brightness', parents=[
         parser_prep_input_1,
-        parser_prep_roi_spat_2d,
+        parser_prep_roi_spat_2d, parser_prep_add_noise,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_dtype, parser_prep_minify, parents.output,
         parents.common],
@@ -492,6 +502,7 @@ def _add_prep(
         'pixel_spectra', parents=[
             parser_prep_input_1, parser_prep_rest,
             parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
+            parser_prep_add_noise,
             parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
             parser_prep_dtype, parser_prep_minify, parents.output,
             parents.common],
@@ -702,6 +713,8 @@ def _run_prep(args: argparse.Namespace) -> None:
             velocity=args.velocity)
     if task == 'pixel_spectra':
         options['noise_error'] = args.noise_error
+    if task in ('pixel_brightness', 'pixel_spectra'):
+        options |= dict(add_noise=args.add_noise, seed=args.seed)
     run(f'prep_{task}', options | dict(
         output_dir=args.output_dir, output_dir_mode=args.output_dir_mode))
 

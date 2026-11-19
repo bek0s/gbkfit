@@ -193,6 +193,12 @@ export interface Edits {
   // Errors from the noise of each channel (of a cube without a file of
   // errors)
   noise: boolean;
+  // Gaussian noise added (its dispersion, as typed; blank: none), whose
+  // dispersion is then the errors, and the seed of its random numbers (of
+  // a cube or an image without a file of errors; e.g. a simulation without
+  // noise)
+  added: string;
+  seed: string;
 }
 
 export const NO_EDITS: Edits = {
@@ -206,6 +212,8 @@ export const NO_EDITS: Edits = {
   minify: false,
   pad: '',
   noise: false,
+  added: '',
+  seed: '',
 };
 
 export interface Draft {
@@ -450,6 +458,8 @@ export function hasEdits(edits: Edits, keys: string[]): boolean {
     edits.pixels,
     edits.ratio,
     edits.pad,
+    edits.added,
+    edits.seed,
     ...keys.flatMap((key) => Object.values(edits.values[key] ?? NO_VALUE_EDITS)),
   ];
   return typed.some((text) => text.trim() !== '') || edits.minify || edits.noise;
@@ -570,6 +580,8 @@ function editNeeds(kind: Kind, draft: Draft, arrays: Record<string, Arrays>, dat
     edits.pixels,
     edits.ratio,
     edits.pad,
+    edits.added,
+    edits.seed,
     ...keys.flatMap((key) => Object.values(edits.values[key] ?? NO_VALUE_EDITS)),
   ];
   if (typed.some((text) => Number.isNaN(numberOf(text)))) return [{ place: 'prepare', text: 'An edit is not a number' }];
@@ -725,11 +737,14 @@ export function prepRequest({ kind, draft, arrays }: Resolved, project: string):
   const key = slots[0].key;
   const own = files(key);
   const base = { ...common, ...values(key), file_d: own.file_d, file_m: own.file_m };
+  // (noise added to data without errors, e.g. a simulation without noise)
+  const added = own.file_e === null ? numberOf(edits.added) : null;
+  const adding = added !== null ? { add_noise: added, seed: integerOf(edits.seed) } : {};
   if (kind === 'image') {
-    return { task: KINDS.image.task, options: { ...base, file_e: own.file_e, error_kind: own.file_e === null ? 'sigma' : own.kind } };
+    return { task: KINDS.image.task, options: { ...base, file_e: own.file_e, error_kind: own.file_e === null ? 'sigma' : own.kind, ...adding } };
   }
   const channels = rangeOf(edits.channels, shape[2]);
-  const noise = edits.noise && own.file_e === null;
+  const noise = edits.noise && own.file_e === null && added === null;
   return {
     task: KINDS.cube.task,
     options: {
@@ -741,6 +756,7 @@ export function prepRequest({ kind, draft, arrays }: Resolved, project: string):
       velocity: draft.spectral.convention,
       spectral_type: first?.nonstandard_type ? draft.spectral.type : null,
       noise_error: noise,
+      ...adding,
     },
   };
 }
@@ -887,6 +903,8 @@ export function draftOfPreparation(kind: Kind, dataset: Record<string, unknown>,
       minify: options.minify === true,
       pad: text(options.nanpad),
       noise: options.noise_error === true,
+      added: text(options.add_noise),
+      seed: text(options.seed),
     },
   };
 }
@@ -904,6 +922,7 @@ export function editsInWords(kind: Kind, draft: Draft): string[] {
   ].filter(Boolean);
   if (crops.length) lines.push(`Cropped to ${crops.join(', ')}`);
   if (edits.noise) lines.push('Errors from the noise of each channel');
+  if (edits.added.trim()) lines.push(`Added Gaussian noise of ${edits.added.trim()}${edits.seed.trim() ? ` (seed ${edits.seed.trim()})` : ''}, its errors`);
   for (const slot of presentSlots(kind, draft)) {
     const own = edits.values[slot.key] ?? NO_VALUE_EDITS;
     const of = kind === 'moments' ? ` of ${slot.title.toLowerCase()}` : '';

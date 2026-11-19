@@ -77,6 +77,21 @@ def test_prep_writes_to_the_output_directory(tmp_path):
     assert "output will be stored" in result.stderr
 
 
+def test_prep_adds_noise_to_data_without_it(tmp_path):
+    # (of a seed, the same from run to run; its errors, its dispersion)
+    write_image(tmp_path / 'image.fits')
+    runs = []
+    for out in ('a', 'b'):
+        result = run_cli(
+            tmp_path, 'prep', 'pixel_brightness', '--data-d', 'image.fits',
+            '--add-noise', '0.5', '--seed', '3', '--output-dir', out)
+        assert result.returncode == 0, result.stderr
+        runs.append(fits.getdata(tmp_path / out / 'prep_image.fits'))
+    np.testing.assert_array_equal(runs[0], runs[1])
+    errors = fits.getdata(tmp_path / 'a' / 'prep_image_error.fits')
+    np.testing.assert_allclose(errors[np.isfinite(runs[0])], 0.5)
+
+
 def test_prep_reads_the_hdu_in_brackets(tmp_path):
     # (e.g. the errors of a MUSE cube, in its HDU STAT)
     write_image(tmp_path / 'image.fits')
@@ -123,5 +138,5 @@ def test_configuration_errors_are_reported_without_a_traceback(tmp_path):
         tmp_path, 'prep', 'pixel_spectra', '--data-d', 'cube.fits',
         '--data-e', 'errors.fits', '--noise-error')
     assert result.returncode == 1
-    assert "error: give a file of the errors" in result.stderr
+    assert "error: the errors come from one of" in result.stderr
     assert 'Traceback' not in result.stderr
