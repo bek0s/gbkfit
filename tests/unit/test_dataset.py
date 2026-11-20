@@ -185,12 +185,38 @@ def test_dataset_reference_pixel_survives_fits_round_trip(tmp_path):
 
 
 def test_dataset_round_trip_keeps_the_footprint(tmp_path):
+    # One for the dataset: of a map, of the sky of a cube (for every
+    # channel), and of moment maps (for all of them); its items are masked
+    # outside it
     footprint = np.ones((8, 20))
     footprint[:, :3] = 0
-    dataset = DatasetPixelBrightness(
-        Data(np.zeros((8, 20)), footprint=footprint))
-    loaded = dataset_parser.load(dataset.dump(prefix=str(tmp_path / '')))
-    np.testing.assert_array_equal(loaded['brightness'].footprint(), footprint)
+    datasets = [
+        DatasetPixelBrightness(Data(np.zeros((8, 20))), footprint=footprint),
+        DatasetPixelSpectra(
+            Data(np.zeros((6, 8, 20))), spectral=SpectralAxis(step=10),
+            footprint=footprint),
+        DatasetPixelMoments(
+            {0: Data(np.zeros((8, 20))), 1: Data(np.zeros((8, 20)))},
+            footprint=footprint)]
+    for i, dataset in enumerate(datasets):
+        for key, item in dataset.items():
+            np.testing.assert_array_equal(
+                item.mask(), np.broadcast_to(footprint, item.shape()))
+        loaded = dataset_parser.load(
+            dataset.dump(prefix=str(tmp_path / f'{i}_')))
+        np.testing.assert_array_equal(loaded.footprint(), footprint)
+
+
+def test_a_footprint_is_of_the_items_or_of_the_sky_of_a_cube():
+    with pytest.raises(ValueError, match="shape of the data items"):
+        DatasetPixelBrightness(Data(np.zeros((8, 20))), footprint=np.ones(5))
+    with pytest.raises(ValueError, match="1 where the instrument looked"):
+        DatasetPixelBrightness(
+            Data(np.zeros((2, 2))), footprint=np.full((2, 2), 0.5))
+    cube = DatasetPixelSpectra(
+        Data(np.zeros((6, 8, 20))), spectral=SpectralAxis(step=10),
+        footprint=np.ones((6, 8, 20)))
+    assert cube.footprint_of('spectra').shape == (6, 8, 20)
 
 
 def test_a_slit_is_oriented_by_its_position_angle(tmp_path):
@@ -318,15 +344,15 @@ def test_data_mask_errors_of_0_and_reject_negative_ones():
 
 
 def test_data_take_any_error_of_the_values_left_out():
-    # An error map can mark the values left out (not finite, masked or
-    # outside the footprint) with a negative error, e.g. -1
+    # An error map can mark the values left out (not finite or masked)
+    # with a negative error, e.g. -1
     values = np.ones((2, 3))
     values[0, 0] = np.nan
-    mask, footprint = np.ones((2, 3)), np.ones((2, 3))
-    mask[0, 1] = footprint[0, 2] = 0
+    mask = np.ones((2, 3))
+    mask[0, 1:] = 0
     error = np.ones((2, 3))
     error[0] = -1
-    data = Data(values, mask, error, footprint=footprint)
+    data = Data(values, mask, error)
     np.testing.assert_array_equal(data.mask(), [[0, 0, 0], [1, 1, 1]])
     assert np.isnan(data.error()[0]).all()
 

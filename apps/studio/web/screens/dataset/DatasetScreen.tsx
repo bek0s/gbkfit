@@ -429,6 +429,7 @@ function EditorBody({ project, editor }: { project: string; editor: Editor }) {
               onItem={state.setItem}
               onAdd={kind === 'moments' ? (key) => state.addItem(key, EMPTY_ITEM) : undefined}
               onRemove={kind === 'moments' ? state.removeItem : undefined}
+              onFootprint={state.setFootprint}
             />
           </DockSection>
           {hasSpectralChoices(resolved) && (

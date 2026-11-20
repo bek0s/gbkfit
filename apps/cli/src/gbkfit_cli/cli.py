@@ -366,6 +366,13 @@ def _add_prep(
         '--unit', type=str, nargs='+',
         help=_UNIT_HELP + "; one for each map")
     # ...
+    parser_prep_footprint = argparse.ArgumentParser(add_help=False)
+    parser_prep_footprint.add_argument(
+        '--footprint', type=_data_file, metavar='FOOTPRINT',
+        help="where the instrument looked: 1 inside, 0 outside (of the "
+             "shape of the data, or of the sky of a cube; one for all the "
+             "maps of moments); cropped and padded as the data")
+    # ...
     parser_prep_rest = argparse.ArgumentParser(add_help=False)
     parser_prep_rest.add_argument(
         '--velocity-rest', type=str, metavar='REST',
@@ -459,14 +466,14 @@ def _add_prep(
         dest='prep_task', help="the type of data to prepare")
     parsers_prep.required = True
     parsers_prep.add_parser('pixel_brightness', parents=[
-        parser_prep_input_1,
+        parser_prep_input_1, parser_prep_footprint,
         parser_prep_roi_spat_2d, parser_prep_add_noise,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_dtype, parser_prep_minify, parents.output,
         parents.common],
         help="brightness on a grid of pixels (an image)")
     parsers_prep.add_parser('slit_spectra', parents=[
-        parser_prep_input_1, parser_prep_rest,
+        parser_prep_input_1, parser_prep_footprint, parser_prep_rest,
         parser_prep_roi_spat_1d, parser_prep_roi_spec_1d,
         parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_dtype, parser_prep_minify, parents.output,
@@ -474,7 +481,7 @@ def _add_prep(
         help="spectra along a long slit")
     parsers_prep.add_parser('pixel_moments', parents=[
         parser_prep_orders,
-        parser_prep_input_n,
+        parser_prep_input_n, parser_prep_footprint,
         parser_prep_roi_spat_2d,
         parser_prep_clip_n, parser_prep_ccl, parser_prep_nanpad,
         parser_prep_dtype, parser_prep_minify, parents.output,
@@ -509,7 +516,7 @@ def _add_prep(
              "its last axis")
     parser_prep_pixel_spectra = parsers_prep.add_parser(
         'pixel_spectra', parents=[
-            parser_prep_input_1, parser_prep_rest,
+            parser_prep_input_1, parser_prep_footprint, parser_prep_rest,
             parser_prep_roi_spat_2d, parser_prep_roi_spec_1d,
             parser_prep_add_noise,
             parser_prep_clip_1, parser_prep_ccl, parser_prep_nanpad,
@@ -698,7 +705,7 @@ def _run_prep(args: argparse.Namespace) -> None:
             sclip_sigma=args.sclip_sigma, sclip_iters=args.sclip_iters,
             minify=args.minify, nanpad=args.nanpad, dtype=args.dtype,
             error_kind=args.error_kind, mask_kind=args.mask_kind,
-            unit=args.unit)
+            unit=args.unit, file_f=args.footprint)
     elif task in ('region_moments', 'region_spectra'):
         options = dict(
             file_bins=args.bins, bins_plane=args.bins_plane,

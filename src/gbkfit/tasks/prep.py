@@ -105,16 +105,17 @@ def output_files(
         file_d: DataFile,
         file_e: DataFile | None,
         file_m: DataFile | None,
-        made_error: bool = False
-) -> tuple[str, str | None, str | None]:
+        made_error: bool = False,
+        file_f: DataFile | None = None
+) -> tuple[str, str | None, str | None, str | None]:
     """
-    Return the prepared files of the data, errors and mask (None for
-    those not given) that prep_pixel_brightness, prep_slit_spectra,
-    prep_pixel_spectra and prep_pixel_moments (of each map) write in an
-    output directory, named after the data (see the module); with
-    made_error, the errors that the preparation makes: estimated from the
-    noise of the data (noise_error of prep_pixel_spectra), or the noise it
-    adds to them (add_noise).
+    Return the prepared files of the data, errors, mask and footprint
+    (None for those not given) that prep_pixel_brightness,
+    prep_slit_spectra, prep_pixel_spectra and prep_pixel_moments (of each
+    map; the footprint of the first) write in an output directory, named
+    after the data (see the module); with made_error, the errors that the
+    preparation makes: estimated from the noise of the data (noise_error
+    of prep_pixel_spectra), or the noise it adds to them (add_noise).
 
     Parameters
     ----------
@@ -124,16 +125,20 @@ def output_files(
         The files of the data, errors and mask.
     made_error : bool, optional
         Whether the preparation makes the errors.
+    file_f : DataFile, optional
+        The file of the footprint.
 
     Returns
     -------
     tuple of str and (str or None)
-        The prepared files of the data, errors and mask.
+        The prepared files of the data, errors, mask and footprint.
     """
     error = _output(output_dir, file_d, 'error') \
         if file_e is not None or made_error else None
     mask = _output(output_dir, file_d, 'mask') if file_m is not None else None
-    return _output(output_dir, file_d), error, mask
+    footprint = _output(output_dir, file_d, 'footprint') \
+        if file_f is not None else None
+    return _output(output_dir, file_d), error, mask, footprint
 
 
 def _clip(
@@ -203,13 +208,13 @@ def _write(
         arrays: FitsArrays,
         minify: bool,
         nanpad: int | None,
-        outputs: tuple[str, str | None, str | None],
+        outputs: tuple[str, str | None, str | None, str | None],
         dtype: npt.DTypeLike
 ) -> None:
     """
     Crop the arrays to their valid pixels (minify), pad them (nanpad),
-    and write them in the prepared files of the data, errors and mask
-    (see output_files).
+    and write them in the prepared files of the data, errors, mask and
+    footprint (see output_files).
     """
     if minify:
         arrays = arrays.minified()
@@ -239,7 +244,8 @@ def prep_pixel_brightness(
         mask_kind: MaskKind = 'valid',
         add_noise: float | None = None,
         seed: int | None = None,
-        unit: str | None = None
+        unit: str | None = None,
+        file_f: DataFile | None = None
 ) -> None:
     """
     Prepare an image (pixel_brightness): crop it to a region (roi_spat:
@@ -248,9 +254,11 @@ def prep_pixel_brightness(
     which is then its errors; of a seed, the same from run to run), clip
     it, crop it to its valid pixels (minify), and pad it with invalid
     pixels (nanpad). error_kind is what the file of the errors holds,
-    mask_kind what the mask marks (see read_arrays), and unit the unit of
-    the data, which replaces their BUNIT (written in the prepared files);
-    the prepared errors are standard deviations.
+    mask_kind what the mask marks (see read_arrays), unit the unit of the
+    data, which replaces their BUNIT (written in the prepared files), and
+    file_f the file of where the instrument looked (see read_footprint;
+    cropped and padded as the data); the prepared errors are standard
+    deviations.
 
     Raises
     ------
@@ -262,7 +270,7 @@ def prep_pixel_brightness(
     output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(
         file_d, file_e, file_m, error_kind=error_kind, mask_kind=mask_kind,
-        unit=unit)
+        unit=unit, footprint=file_f)
     if roi_spat is not None:
         x0, x1, y0, y1 = roi_spat
         arrays = arrays.crop((slice(y0, y1), slice(x0, x1)))
@@ -273,7 +281,8 @@ def prep_pixel_brightness(
         ccl_pcount, ccl_lratio)
     _write(arrays, minify, nanpad,
            output_files(
-               output_dir, file_d, file_e, file_m, add_noise is not None),
+               output_dir, file_d, file_e, file_m, add_noise is not None,
+               file_f),
            dtype)
 
 
@@ -301,7 +310,8 @@ def prep_slit_spectra(
         output_dir_mode: _Exists = 'overwrite',
         error_kind: ErrorKind = 'sigma',
         mask_kind: MaskKind = 'valid',
-        unit: str | None = None
+        unit: str | None = None,
+        file_f: DataFile | None = None
 ) -> None:
     """
     Prepare the spectra along a slit (slit_spectra: positions along x,
@@ -314,15 +324,17 @@ def prep_slit_spectra(
     that FITS does not define, or none, spectral_unit the unit of a
     spectral axis whose header gives none or one that is not valid
     (written in the prepared files), error_kind what the file of the
-    errors holds, mask_kind what the mask marks and unit the unit of the
-    data, which replaces their BUNIT (see FitsArrays.read); the prepared
-    errors are standard deviations.
+    errors holds, mask_kind what the mask marks, unit the unit of the
+    data, which replaces their BUNIT, and file_f the file of where the
+    instrument looked (see FitsArrays.read); the prepared errors are
+    standard deviations.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
         spectral_type=spectral_type, spectral_unit=spectral_unit,
-        error_kind=error_kind, mask_kind=mask_kind, unit=unit)
+        error_kind=error_kind, mask_kind=mask_kind, unit=unit,
+        footprint=file_f)
     rows, columns = slice(None), slice(None)
     if roi_spec is not None:
         rows = slice(*roi_spec)
@@ -332,7 +344,8 @@ def prep_slit_spectra(
         arrays.crop((rows, columns)), clip_min, clip_max, sclip_sigma,
         sclip_iters, ccl_lcount, ccl_pcount, ccl_lratio)
     _write(arrays, minify, nanpad,
-           output_files(output_dir, file_d, file_e, file_m), dtype)
+           output_files(output_dir, file_d, file_e, file_m, file_f=file_f),
+           dtype)
 
 
 def prep_pixel_spectra(
@@ -362,7 +375,8 @@ def prep_pixel_spectra(
         mask_kind: MaskKind = 'valid',
         add_noise: float | None = None,
         seed: int | None = None,
-        unit: str | None = None
+        unit: str | None = None,
+        file_f: DataFile | None = None
 ) -> None:
     """
     Prepare a cube (pixel_spectra), with its spectral axis in velocities
@@ -374,9 +388,11 @@ def prep_pixel_spectra(
     of an axis whose header gives one that FITS does not define, or none,
     spectral_unit the unit of a spectral axis whose header gives none or
     one that is not valid (written in the prepared files), error_kind
-    what the file of the errors holds, mask_kind what the mask marks and
-    unit the unit of the data, which replaces their BUNIT (see
-    FitsArrays.read); the prepared errors are standard deviations. With
+    what the file of the errors holds, mask_kind what the mask marks,
+    unit the unit of the data, which replaces their BUNIT, and file_f the
+    file of where the instrument looked, of the shape of the cube or of
+    its sky (see FitsArrays.read); the prepared errors are standard
+    deviations. With
     noise_error, the errors are the noise of each channel of the cropped
     cube, from its negative values (see prep.noise_errors);
     with add_noise, Gaussian noise of that dispersion is added to it (e.g.
@@ -395,7 +411,8 @@ def prep_pixel_spectra(
     arrays = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
         spectral_type=spectral_type, spectral_unit=spectral_unit,
-        error_kind=error_kind, mask_kind=mask_kind, unit=unit)
+        error_kind=error_kind, mask_kind=mask_kind, unit=unit,
+        footprint=file_f)
     channels, ys, xs = slice(None), slice(None), slice(None)
     if roi_spat is not None:
         xs, ys = slice(*roi_spat[0:2]), slice(*roi_spat[2:4])
@@ -414,7 +431,7 @@ def prep_pixel_spectra(
     _write(arrays, minify, nanpad,
            output_files(
                output_dir, file_d, file_e, file_m,
-               noise_error or add_noise is not None),
+               noise_error or add_noise is not None, file_f),
            dtype)
 
 
@@ -437,7 +454,8 @@ def prep_pixel_moments(
         output_dir_mode: _Exists = 'overwrite',
         error_kind: ErrorKind = 'sigma',
         mask_kind: MaskKind = 'valid',
-        unit: Sequence[str | None] | None = None
+        unit: Sequence[str | None] | None = None,
+        file_f: DataFile | None = None
 ) -> None:
     """
     Prepare moment maps (pixel_moments), as image (see
@@ -446,8 +464,10 @@ def prep_pixel_moments(
     clip_max, sclip_sigma and sclip_iters) have one value for each map
     (None: none for that map); sclip_iters can also be one value for all
     maps. error_kind is what the files of the errors hold, mask_kind
-    what the masks mark (see read_arrays), and unit the unit of each map,
-    which replaces its BUNIT (None: none for that map).
+    what the masks mark (see read_arrays), unit the unit of each map,
+    which replaces its BUNIT (None: none for that map), and file_f the
+    file of where the instrument looked, one for all the maps (read on
+    the pixels of the first, and written after it).
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     nmaps = len(file_d)
@@ -456,15 +476,19 @@ def prep_pixel_moments(
     units = unit or [None] * nmaps
     if np.ndim(sclip_iters) == 0:
         sclip_iters = [sclip_iters] * nmaps
+    # (the footprint, one for all, with the first map)
+    footprints = [file_f] + [None] * (nmaps - 1)
     outputs = [
-        output_files(output_dir, file_d[i], file_e[i], file_m[i])
+        output_files(
+            output_dir, file_d[i], file_e[i], file_m[i],
+            file_f=footprints[i])
         for i in range(nmaps)]
     _check_distinct([output[0] for output in outputs])
     maps = []
     for i in range(nmaps):
         arrays = FitsArrays.read(
             file_d[i], file_e[i], file_m[i], error_kind=error_kind,
-            mask_kind=mask_kind, unit=units[i])
+            mask_kind=mask_kind, unit=units[i], footprint=footprints[i])
         if roi_spat is not None:
             x0, x1, y0, y1 = roi_spat
             arrays = arrays.crop((slice(y0, y1), slice(x0, x1)))

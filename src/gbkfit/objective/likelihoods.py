@@ -226,9 +226,9 @@ class LikelihoodGauss(Likelihood):
     data are blank for free (e.g. a disk too large). The limits are for
     values of light (brightness, spectra, moment 0), not for velocities,
     of which a blank says nothing. The masked values outside the
-    footprint of their data item, if it has one (where the instrument
+    footprint of their dataset, if it has one (where the instrument
     looked, e.g. the field of an IFU, whose corners are blank but were
-    never observed; see Data), count nothing.
+    never observed; see DatasetGrid), count nothing.
 
     With fitted_noise, the noise of data items is fitted: the errors e of
     an item (1 where the data have none) are times a scale f, and a jitter

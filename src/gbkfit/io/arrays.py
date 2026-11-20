@@ -28,7 +28,7 @@ from gbkfit.config import (
 from gbkfit.grid import Coords, Rest
 from .beams import Beam, _oriented_beam
 from .coords import coords_from_header
-from .formats import read_image
+from .formats import read_header, read_image
 from .headers import (
     _with_shape, _with_wcs, data_unit, has_wcs, header_shape,
     ignoring_wcs_fixes, parse_wcs)
@@ -44,6 +44,7 @@ __all__ = [
     'MaskKind',
     'read_arrays',
     'read_data',
+    'read_footprint',
     'read_oriented',
     'read_sky_map'
 ]
@@ -96,9 +97,6 @@ class Arrays:
         The beam of the values, if they have one (see header_beam): of a
         cube of CASA, that of each of its channels, in the order of the
         channels of the values.
-    footprint : np.ndarray or None
-        Where the instrument looked, if given (see Data), on the pixels of
-        the values.
     orientation : Orientation or None
         How the file of the values was put in the orientation of the
         model, if they were read from one (see read_sky_map).
@@ -109,7 +107,6 @@ class Arrays:
     header: astropy.io.fits.Header
     unit: gbkfit.units.AnyUnit | None = None
     beam: Beam | None = None
-    footprint: np.ndarray | None = None
     orientation: Orientation | None = None
 
 
@@ -269,7 +266,6 @@ def read_arrays(
         error: DataFile | None = None,
         mask: DataFile | None = None,
         *,
-        footprint: DataFile | None = None,
         error_kind: ErrorKind = 'sigma',
         mask_kind: MaskKind = 'valid',
         unit: str | None = None,
@@ -282,15 +278,15 @@ def read_arrays(
         stated: Collection[str] = ()
 ) -> Arrays:
     """
-    Read data, and their errors, mask and footprint, from files in the
-    orientation of the model.
+    Read data, and their errors and mask, from files in the orientation of
+    the model.
 
     Each file is read by read_image (see DataFile) and put in the
     orientation of the model by its own world coordinates (see
-    model_header). The errors, the mask and the
-    footprint follow the axes of the file of the data, whose shape they
-    must have, if they or the data have no world coordinates; else theirs
-    must put their pixels on those of the data.
+    model_header). The errors and the mask follow the axes of the file of
+    the data, whose shape they must have, if they or the data have no
+    world coordinates; else theirs must put their pixels on those of the
+    data.
 
     The errors are standard deviations, variances or inverse variances
     (error_kind), and become standard deviations in the unit of the data.
@@ -315,8 +311,6 @@ def read_arrays(
         The file of the values.
     error, mask : DataFile, optional
         The files of the errors and of the mask.
-    footprint : DataFile, optional
-        The file of where the instrument looked (see Data).
     error_kind : str, optional
         What the errors are: 'sigma' (standard deviations), 'variance'
         or 'inverse_variance'.
@@ -386,14 +380,76 @@ def read_arrays(
         marked = masks != 0
         valid &= np.isfinite(masks) & (
             marked if mask_kind == 'valid' else ~marked)
-    footprints = None
-    if footprint is not None:
-        footprints, _ = _read_companion(
-            footprint, header, orientation, **read)
     return Arrays(
         np.where(valid, values, np.nan),
         None if errors is None else np.where(valid, errors, np.nan),
-        valid.astype(float), header, unit, beam, footprints, orientation)
+        valid.astype(float), header, unit, beam, orientation)
+
+
+def read_footprint(
+        file: DataFile,
+        data: DataFile,
+        *,
+        rest: Rest = None,
+        velocity: str | None = None,
+        spectral_type: str | None = None,
+        spectral_unit: str | None = None,
+        medium: str | None = None,
+        spectral_axis: int | None = None
+) -> np.ndarray:
+    """
+    Read where the instrument looked (a footprint: 1 inside, 0 outside)
+    on the pixels of data read from a file, in the orientation of the
+    model, as their errors and mask are read (see read_arrays): of the
+    shape of the data, or, of a cube (two axes on the sky and a spectral
+    axis), of its sky alone (an image of its sky, see read_sky_map), which
+    is then that of every channel.
+
+    Parameters
+    ----------
+    file : DataFile
+        The file of the footprint.
+    data : DataFile
+        The file of the data.
+    rest, velocity, spectral_type, spectral_unit, medium, spectral_axis :
+            optional
+        How the data are read (see read_arrays).
+
+    Returns
+    -------
+    np.ndarray
+        The footprint, of the shape of the data or of their sky.
+
+    Raises
+    ------
+    ValueError
+        If a file cannot be read, or the footprint is not on the pixels
+        of the data or of their sky.
+    """
+    read = dict(
+        rest=rest, velocity=velocity, spectral_type=spectral_type,
+        spectral_unit=spectral_unit, medium=medium,
+        spectral_axis=spectral_axis)
+    data_header = read_header(data)
+    header, orientation = model_header(
+        split_data_file(data)[0], data_header, header_shape(data_header),
+        **read)
+    shape = _squeezed_shape(header_shape(read_header(file)))
+    data_shape = _squeezed_shape(header_shape(header))
+    if len(shape) == len(data_shape):
+        return _read_companion(file, header, orientation, **read)[0]
+    # (of a cube, an image of its sky: see DatasetGrid)
+    if len(data_shape) == 3 and len(shape) == 2:
+        return _read_sky_image(file, header, orientation)[0]
+    raise InputError(
+        f"footprint {_shape_text(shape)} · data {_shape_text(data_shape)}"
+        + (f" or {_shape_text(data_shape[1:])}"
+           if len(data_shape) == 3 else ""), ['footprint'])
+
+
+def _shape_text(shape: tuple[int, ...]) -> str:
+    """Return a shape (numpy order) as said to users: 'nx×ny×nz'."""
+    return '×'.join(str(size) for size in shape[::-1])
 
 
 def read_sky_map(
@@ -435,12 +491,25 @@ def read_sky_map(
         raise InputError(
             "an image of the sky is read on the pixels of the file of the "
             "data, before they are cropped or padded")
-    orientation = data.orientation.sky()
-    shape = header_shape(data.header)[-2:]
-    header = _with_shape(data.header, shape)
-    if has_wcs(data.header):
+    return _read_sky_image(file, data.header, data.orientation, plane)
+
+
+def _read_sky_image(
+        file: DataFile,
+        data_header: astropy.io.fits.Header,
+        data_orientation: Orientation,
+        plane: int | None = None
+) -> tuple[np.ndarray, astropy.io.fits.Header]:
+    """
+    Return an image of the sky of data (see read_sky_map) on the pixels of
+    their sky, of their header and orientation in the model, and its
+    header.
+    """
+    orientation = data_orientation.sky()
+    header = _with_shape(data_header, header_shape(data_header)[-2:])
+    if has_wcs(data_header):
         filename = split_data_file(file)[0]
-        wcs = parse_wcs(filename, data.header)
+        wcs = parse_wcs(filename, data_header)
         if wcs.wcs.spec in (0, 1):
             raise InputError(
                 f"{filename}: the data have no sky of two axes to put an "
@@ -501,9 +570,10 @@ def _read_companion(
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
     Return the values of a file (of a plane of it, if given; see
-    read_sky_map) on the pixels of data (their errors, mask or footprint,
-    see read_arrays, or an image of their sky, see read_sky_map) in the
-    orientation of the model, and its header.
+    read_sky_map) on the pixels of data (their errors or mask, see
+    read_arrays; their footprint, see read_footprint; or an image of their
+    sky, see read_sky_map) in the orientation of the model, and its
+    header.
     """
     filename = split_data_file(file)[0]
     values, header = read_image(file)

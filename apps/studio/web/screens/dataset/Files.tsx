@@ -17,6 +17,7 @@ import {
   arrayRef,
   ERROR_KINDS,
   errorKindOf,
+  fitsFootprint,
   kept,
   KINDS,
   MASK_KINDS,
@@ -43,6 +44,7 @@ export function Files({
   onItem,
   onAdd,
   onRemove,
+  onFootprint,
 }: {
   project: string;
   resolved: Resolved;
@@ -50,6 +52,7 @@ export function Files({
   onItem?: (key: string, item: Item) => void;
   onAdd?: (key: string) => void;
   onRemove?: (key: string) => void;
+  onFootprint?: (file: FileArray | undefined) => void;
 }) {
   const { kind, draft, arrays } = resolved;
   const slots = presentSlots(kind, draft);
@@ -79,6 +82,11 @@ export function Files({
           />
         </div>
       ))}
+      <div className="ds-rows">
+        <Row title="Footprint" path={['footprint']}>
+          <FootprintSlot project={project} resolved={resolved} onFile={onFootprint} />
+        </Row>
+      </div>
       {onAdd && absent.length > 0 && (
         <ProblemField path={['files']} label="Maps">
           <DropMenu
@@ -214,62 +222,135 @@ function FileSlot({
   onValue?: (value: string) => void;
   extra?: ReactNode;
 }) {
-  const source = useFileSource(project, (file) => onFile?.({ file }));
   const chosen = item.files[role];
-  const inFile = arrays.inFile[role] ?? [];
   const found = arrays.found[role];
-  // (whether what GBKFIT reads of the header shows: as the user chose)
-  const [open, setOpen] = useState(false);
+  const name = ROLE_NAMES[role];
   if (chosen !== undefined) {
-    const name = chosen.file.split('/').pop();
     return (
       <>
-        <div className="ds-slot">
-          <button
-            type="button"
-            className="ds-chevron"
-            aria-expanded={open}
-            disabled={found === undefined}
-            title={open ? 'Hide' : 'What GBKFIT reads from the header'}
-            onClick={() => setOpen(!open)}
-          >
-            ▸
-          </button>
-          <span className="ds-file" title={chosen.file}>
-            {name}
-          </span>
-          {onFile && inFile.length > 1 ? (
-            <Choice
-              items={inFile.map((array) => {
-                const why = unusable(role, array, arrays.found.data, KINDS[kind].ndim);
-                return {
-                  value: String(array.index),
-                  label: arrayLabel(array),
-                  description: `${kept(array).join(' × ') || 'one value'}${why ? ` · ${why}` : ''}`,
-                  // (the one chosen stays, to show what is wrong with it)
-                  disabled: why !== null && array.index !== found?.index,
-                };
-              })}
-              value={String(found?.index ?? '')}
-              label={`The array of the ${role === 'data' ? 'data' : role === 'error' ? 'errors' : 'mask'}`}
-              onChange={(index) => {
-                const array = inFile.find((a) => a.index === Number(index));
-                if (array) onFile({ file: chosen.file, array: arrayRef(inFile, array) });
-              }}
-            />
-          ) : (
-            found && inFile.length > 1 && <span className="ds-array">{arrayLabel(found)}</span>
-          )}
-          {onFile && <Close label={`Remove the ${role === 'data' ? 'data' : role === 'error' ? 'errors' : 'mask'}`} onClick={() => onFile(undefined)} />}
-        </div>
-        {open && found && <HeaderOf role={role} array={found} data={arrays.found.data} header={header} />}
+        <ChosenFile
+          name={name}
+          chosen={chosen}
+          inFile={arrays.inFile[role] ?? []}
+          found={found}
+          why={(array) => unusable(role, array, arrays.found.data, KINDS[kind].ndim)}
+          facts={found ? <HeaderOf role={role} array={found} data={arrays.found.data} header={header} /> : null}
+          onFile={onFile}
+        />
         {extra}
       </>
     );
   }
   if (!onFile) return <span className="ds-none">{role === 'data' ? 'None' : '—'}</span>;
-  const others = role === 'data' ? [] : siblings(arrays);
-  const dataFile = item.files.data?.file;
+  const rms = arrays.found.data?.rms;
+  const more: MenuEntry[] = onValue
+    ? [
+        { section: 'Or' },
+        {
+          label: 'One value for all the data',
+          description: rms != null ? `The header says ${significant(rms, 3)}` : 'e.g. the rms of a radio cube',
+          onClick: () => onValue(rms != null ? String(rms) : ''),
+        },
+      ]
+    : [];
+  return (
+    <AddFile
+      project={project}
+      name={name}
+      dataFile={item.files.data?.file}
+      dataArrays={arrays.inFile.data ?? []}
+      others={role === 'data' ? [] : siblings(arrays)}
+      more={more}
+      onFile={onFile}
+    />
+  );
+}
+
+// How the page names the file of each role
+const ROLE_NAMES: Record<Role, string> = { data: 'data', error: 'errors', mask: 'mask' };
+
+// A file given: its name, its array (chosen among those of its file; why
+// one cannot be, if it cannot), and a way to remove it; a chevron opens
+// what GBKFIT reads from it (facts), if anything
+function ChosenFile({
+  name,
+  chosen,
+  inFile,
+  found,
+  why,
+  facts,
+  onFile,
+}: {
+  name: string;
+  chosen: FileArray;
+  inFile: ArrayInfo[];
+  found: ArrayInfo | undefined;
+  why: (array: ArrayInfo) => string | null;
+  facts?: ReactNode;
+  onFile?: (file: FileArray | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className="ds-slot">
+        {facts !== undefined && (
+          <button type="button" className="ds-chevron" aria-expanded={open} disabled={!facts} title={open ? 'Hide' : 'What GBKFIT reads from the header'} onClick={() => setOpen(!open)}>
+            ▸
+          </button>
+        )}
+        <span className="ds-file" title={chosen.file}>
+          {chosen.file.split('/').pop()}
+        </span>
+        {onFile && inFile.length > 1 ? (
+          <Choice
+            items={inFile.map((array) => {
+              const reason = why(array);
+              return {
+                value: String(array.index),
+                label: arrayLabel(array),
+                description: `${kept(array).join(' × ') || 'one value'}${reason ? ` · ${reason}` : ''}`,
+                // (the one chosen stays, to show what is wrong with it)
+                disabled: reason !== null && array.index !== found?.index,
+              };
+            })}
+            value={String(found?.index ?? '')}
+            label={`The array of the ${name}`}
+            onChange={(index) => {
+              const array = inFile.find((a) => a.index === Number(index));
+              if (array) onFile({ file: chosen.file, array: arrayRef(inFile, array) });
+            }}
+          />
+        ) : (
+          found && inFile.length > 1 && <span className="ds-array">{arrayLabel(found)}</span>
+        )}
+        {onFile && <Close label={`Remove the ${name}`} onClick={() => onFile(undefined)} />}
+      </div>
+      {open && facts}
+    </>
+  );
+}
+
+// The ways to give a file: of the workspace, of this computer (each copied
+// into the project), another array of the file of the data (others), and
+// any more (e.g. one value instead)
+function AddFile({
+  project,
+  name,
+  dataFile,
+  dataArrays,
+  others,
+  more,
+  onFile,
+}: {
+  project: string;
+  name: string;
+  dataFile: string | undefined;
+  dataArrays: ArrayInfo[];
+  others: ArrayInfo[];
+  more: MenuEntry[];
+  onFile: (file: FileArray) => void;
+}) {
+  const source = useFileSource(project, (file) => onFile({ file }));
   const entries: MenuEntry[] = [
     { label: 'A file of the workspace…', description: 'The project keeps a copy', onClick: source.fromWorkspace },
     { label: 'A file of this computer…', description: 'Uploaded into the project', onClick: source.fromComputer },
@@ -277,28 +358,50 @@ function FileSlot({
   if (others.length > 0 && dataFile !== undefined) {
     entries.push({
       label: `An array of ${dataFile.split('/').pop()}`,
-      entries: others.map((array) => ({ label: arrayLabel(array), onClick: () => onFile({ file: dataFile, array: arrayRef(arrays.inFile.data ?? [], array) }) })),
-    });
-  }
-  if (onValue) {
-    const rms = arrays.found.data?.rms;
-    entries.push({ section: 'Or' });
-    entries.push({
-      label: 'One value for all the data',
-      description: rms != null ? `The header says ${significant(rms, 3)}` : 'e.g. the rms of a radio cube',
-      onClick: () => onValue(rms != null ? String(rms) : ''),
+      entries: others.map((array) => ({ label: arrayLabel(array), onClick: () => onFile({ file: dataFile, array: arrayRef(dataArrays, array) }) })),
     });
   }
   return (
     <>
-      <DropMenu
-        label={`Add the ${role === 'data' ? 'data' : role === 'error' ? 'errors' : 'mask'}`}
-        entries={entries}
-        target={<button className="ds-add-file">+ Add</button>}
-      />
+      <DropMenu label={`Add the ${name}`} entries={[...entries, ...more]} target={<button className="ds-add-file">+ Add</button>} />
       {source.status}
       {source.hidden}
     </>
+  );
+}
+
+// The footprint of a dataset (one for all its items: see the library's
+// DatasetGrid): its file, or the ways to give one (an array of the file of
+// the data offered if of their shape, or of the sky of a cube)
+function FootprintSlot({ project, resolved, onFile }: { project: string; resolved: Resolved; onFile?: (file: FileArray | undefined) => void }) {
+  const { kind, draft, arrays, footprint } = resolved;
+  const first = presentSlots(kind, draft)[0];
+  const of = first ? (arrays[first.key] ?? NO_ARRAYS) : NO_ARRAYS;
+  const data = of.found.data;
+  if (draft.footprint !== undefined) {
+    return (
+      <ChosenFile
+        name="footprint"
+        chosen={draft.footprint}
+        inFile={footprint.inFile}
+        found={footprint.found}
+        why={(array) => (data !== undefined && !fitsFootprint(array, data) ? 'another shape' : null)}
+        onFile={onFile}
+      />
+    );
+  }
+  if (!onFile) return <span className="ds-none">—</span>;
+  const others = data === undefined ? [] : (of.inFile.data ?? []).filter((array) => array.index !== data.index && fitsFootprint(array, data));
+  return (
+    <AddFile
+      project={project}
+      name="footprint"
+      dataFile={first ? draft.items[first.key].files.data?.file : undefined}
+      dataArrays={of.inFile.data ?? []}
+      others={others}
+      more={[]}
+      onFile={onFile}
+    />
   );
 }
 

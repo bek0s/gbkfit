@@ -10,8 +10,8 @@ from astropy.io import fits
 
 from gbkfit.config import ConfigError
 from gbkfit.io import (
-    coords_from_header, describe_fits, read_arrays, read_data, read_oriented,
-    spectral_points)
+    coords_from_header, describe_fits, read_arrays, read_data,
+    read_footprint, read_oriented, spectral_points)
 
 
 # A cube of 5 channels of radio velocities that decrease along the file,
@@ -119,10 +119,33 @@ def test_a_footprint_follows_the_data(tmp_path):
     footprint = np.zeros(SHAPE)
     footprint[0] = 1
     write(tmp_path / 'footprint.fits', footprint)
-    arrays = read_arrays(
-        str(tmp_path / 'data.fits'),
-        footprint=str(tmp_path / 'footprint.fits'))
-    np.testing.assert_array_equal(arrays.footprint, footprint[::-1])
+    read = read_footprint(
+        str(tmp_path / 'footprint.fits'), str(tmp_path / 'data.fits'))
+    np.testing.assert_array_equal(read, footprint[::-1])
+
+
+def test_the_footprint_of_a_cube_can_be_of_its_sky(tmp_path):
+    # (of every channel: as that of the cube of it in each, on the pixels
+    # of the data)
+    write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
+    sky = np.zeros(SHAPE[1:])
+    sky[0, :2] = 1
+    write(tmp_path / 'sky.fits', sky)
+    write(tmp_path / 'cube.fits', np.broadcast_to(sky, SHAPE))
+    data = str(tmp_path / 'data.fits')
+    of_sky = read_footprint(str(tmp_path / 'sky.fits'), data)
+    of_cube = read_footprint(str(tmp_path / 'cube.fits'), data)
+    assert of_sky.shape == SHAPE[1:]
+    np.testing.assert_array_equal(np.broadcast_to(of_sky, SHAPE), of_cube)
+
+
+def test_a_footprint_of_another_shape_is_an_error(tmp_path):
+    write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
+    write(tmp_path / 'footprint.fits', np.ones((2, 2, 2, 2)))
+    with pytest.raises(
+            ValueError, match=r"footprint 2×2×2×2 · data 4×3×5 or 4×3"):
+        read_footprint(
+            str(tmp_path / 'footprint.fits'), str(tmp_path / 'data.fits'))
 
 
 def test_errors_on_other_pixels_are_an_error(tmp_path):

@@ -11,6 +11,7 @@ import {
   EMPTY_ITEM,
   headerProblems,
   NO_EDITS,
+  NO_FOOTPRINT,
   NO_SPECTRAL,
   preparedOptions,
   prepRequest,
@@ -30,7 +31,13 @@ function resolve(kind: Kind, draft: Draft, files: Record<string, ArrayInfo[]>, s
   const describe = (path: string) => ({ arrays: files[path], current: !stale.includes(path) });
   const ndim = kind === 'cube' ? 3 : 2;
   const reading = { rest: null, velocity: null, type: null, spectralUnit: null, dataUnit: null };
-  return { kind, draft, arrays: Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, ndim)])), reading };
+  return {
+    kind,
+    draft,
+    arrays: Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, ndim)])),
+    footprint: NO_FOOTPRINT,
+    reading,
+  };
 }
 
 describe('a draft prepared and edited again', () => {

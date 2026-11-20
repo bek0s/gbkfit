@@ -422,7 +422,7 @@ def test_data_and_errors_can_be_hdus_of_one_file():
     options = [None] * 9, False, None, 'float32'
     prep.prep_pixel_spectra(
         *files, *options[0], *options[1:], error_kind='variance')
-    data_out, error_out, _ = prep.output_files('.', *files)
+    data_out, error_out, _, _ = prep.output_files('.', *files)
     assert (data_out, error_out) == (
         './prep_cube_DATA.fits', './prep_cube_DATA_error.fits')
     np.testing.assert_array_equal(fits.getdata(data_out), 1)
@@ -430,6 +430,26 @@ def test_data_and_errors_can_be_hdus_of_one_file():
     assert fits.getheader(error_out)['BUNIT'] == 'Jy beam-1'
     with pytest.raises(ValueError, match="error_kind: variance"):
         prep.prep_pixel_spectra(*files, *options[0], *options[1:])
+
+
+def test_the_footprint_of_the_sky_of_a_cube_is_cropped_with_it():
+    # (written as a map of the sky, with its world coordinates; a dataset
+    # of the prepared files reads it)
+    from gbkfit.dataset import dataset_parser
+    write_cube('cube.fits')
+    footprint = np.zeros(SHAPE[2:], np.float32)
+    footprint[4:16, 2:20] = 1
+    fits.writeto('field.fits', footprint, fits.Header(
+        {k: v for k, v in HEADER.items() if k[-1] in '12'}))
+    prep_pixel_spectra(
+        'cube.fits', roi_spat=[3, 21, 2, 18], file_f='field.fits')
+    written = fits.getdata('prep_cube_footprint.fits')
+    assert written.shape == (16, 18)
+    np.testing.assert_array_equal(written, footprint[2:18, 3:21])
+    dataset = dataset_parser.load(dict(
+        type='pixel_spectra', data='prep_cube.fits',
+        footprint='prep_cube_footprint.fits'))
+    np.testing.assert_array_equal(dataset.footprint(), written)
 
 
 def test_velocity_axis_gets_the_rest():

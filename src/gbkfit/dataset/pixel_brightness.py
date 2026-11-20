@@ -5,6 +5,8 @@ The dataset of brightness on a grid of pixels: an image.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
+
 from gbkfit.config import DataFile, check_options
 from gbkfit.instrument import PSF
 from gbkfit.io import ErrorKind, MaskKind
@@ -34,6 +36,8 @@ class DatasetPixelBrightness(DatasetGrid):
         defaults are those of make_grid.
     rota : float, optional
         The rotation of the grid on the sky (see Coords).
+    footprint : ndarray, optional
+        Where the instrument looked (see DatasetGrid).
     """
 
     # An image has no spectral axis
@@ -110,7 +114,7 @@ class DatasetPixelBrightness(DatasetGrid):
             What the file of the mask marks with values other than 0:
             'valid' (by default) or 'invalid' values (see read_arrays).
         footprint : str or tuple, optional
-            The file of where the instrument looked (see Data).
+            The file of where the instrument looked (see DatasetGrid).
 
         Returns
         -------
@@ -121,9 +125,11 @@ class DatasetPixelBrightness(DatasetGrid):
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam,
             spatial_correlation=spatial_correlation, error_kind=error_kind,
-            mask_kind=mask_kind, footprint=footprint,
+            mask_kind=mask_kind,
             stated=_grids.stated_options(step, rpix, rval))
-        dataset = cls(item, **_grids.grid_coords(coords, step, rota))
+        dataset = cls(
+            item, **_grids.grid_coords(coords, step, rota),
+            footprint=_grids.read_footprint(footprint, data))
         return cleaned(dataset, outliers)
 
     def dump(
@@ -140,10 +146,13 @@ class DatasetPixelBrightness(DatasetGrid):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rota: float | None = None,
+            footprint: np.ndarray | None = None
     ):
         check_options(DatasetPixelBrightness.__init__, locals())
-        super().__init__(dict(brightness=brightness), step, rpix, rval, rota)
+        super().__init__(
+            dict(brightness=brightness), step, rpix, rval, rota,
+            footprint=footprint)
 
     def noise_correlation(self, key: str) -> NoiseCorrelation | None:
         """

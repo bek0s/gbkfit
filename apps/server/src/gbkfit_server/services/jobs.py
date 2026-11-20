@@ -40,8 +40,8 @@ __all__ = [
 # (in the folder of their option output_dir), and those of prep, which
 # prepare files of data (their options file_d, file_e and file_m: a path,
 # or a path and an HDU, {file, hdu}; of moment maps, a list of them, one
-# for each map) into the folder of their option output_dir (see
-# gbkfit.tasks.prep)
+# for each map; and file_f, one footprint for all) into the folder of
+# their option output_dir (see gbkfit.tasks.prep)
 _MAKE_RUN = ('eval', 'fit')
 _CONTINUE_RUN = ('resume',)
 _PREPARE = ('prep_pixel_brightness', 'prep_pixel_spectra', 'prep_pixel_moments')
@@ -50,8 +50,11 @@ TASKS = _MAKE_RUN + _CONTINUE_RUN + _PREPARE
 # The tasks of prep whose files are lists (one for each map)
 _PREPARE_MAPS = ('prep_pixel_moments',)
 
-# The options of the files that prep prepares
-_FILES = ('file_d', 'file_e', 'file_m')
+# The options of the files that prep prepares: of each map of the tasks
+# of maps (see _PREPARE_MAPS), and their footprint, one for all
+_MAP_FILES = ('file_d', 'file_e', 'file_m')
+_FOOTPRINT = 'file_f'
+_FILES = (*_MAP_FILES, _FOOTPRINT)
 
 # The previews of prep (see Jobs.submit) of a folder kept at most: the
 # older ones are removed as a new one ends
@@ -343,7 +346,7 @@ class Jobs:
         options = dict(job.options)
         if job.task in _PREPARE:
             for key in _FILES:
-                if job.task not in _PREPARE_MAPS:
+                if job.task not in _PREPARE_MAPS or key == _FOOTPRINT:
                     options[key] = self._fits_file(options.get(key))
                     continue
                 files = options.get(key)
@@ -422,24 +425,30 @@ class Jobs:
                         return self._workspace.relative(output)
                     return self._workspace.keep_data(output, target)
                 if job.task in _PREPARE_MAPS:
-                    # (of each map, its files; those of a role, a list)
+                    # (of each map, its files; those of a role, a list;
+                    # the footprint, one for all, after the first)
                     nmaps = len(options['file_d'])
+                    footprint = options.get(_FOOTPRINT)
                     outputs = [
                         gbkfit.tasks.prep.output_files(folder, *(
                             (options[key] or [None] * nmaps)[i]
-                            for key in _FILES))
+                            for key in _MAP_FILES),
+                            file_f=footprint if i == 0 else None)
                         for i in range(nmaps)]
                     job.files = {
                         key: [keep(output[k]) for output in outputs]
-                        for k, key in enumerate(_FILES)
+                        for k, key in enumerate(_MAP_FILES)
                         if any(output[k] is not None for output in outputs)}
+                    if footprint is not None:
+                        job.files[_FOOTPRINT] = keep(outputs[0][3])
                 else:
                     # (of the errors that the preparation makes: of the
                     # noise of the data, or of the noise it adds)
                     outputs = gbkfit.tasks.prep.output_files(
-                        folder, *(options[key] for key in _FILES),
+                        folder, *(options[key] for key in _MAP_FILES),
                         options.get('noise_error', False)
-                        or options.get('add_noise') is not None)
+                        or options.get('add_noise') is not None,
+                        options.get(_FOOTPRINT))
                     job.files = {
                         key: keep(output)
                         for key, output in zip(_FILES, outputs)

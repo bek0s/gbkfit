@@ -361,7 +361,7 @@ def fingerprint(datasets: Sequence[Dataset]) -> str:
     """
     Return the fingerprint of the data of a fit (see EvaluationLog): of
     the arrays of each data item of each dataset (values, mask, errors
-    and footprint).
+    and the footprint of the dataset on them).
     """
     digest = hashlib.sha256()
     for dataset in datasets:
@@ -369,7 +369,7 @@ def fingerprint(datasets: Sequence[Dataset]) -> str:
             item = dataset[key]
             digest.update(key.encode())
             for array in (item.data(), item.mask(), item.error(),
-                          item.footprint()):
+                          dataset.footprint_of(key)):
                 if array is not None:
                     digest.update(f'{array.dtype}{array.shape}'.encode())
                     digest.update(np.ascontiguousarray(array).tobytes())

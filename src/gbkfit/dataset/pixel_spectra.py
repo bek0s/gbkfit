@@ -5,6 +5,8 @@ The dataset of spectra on a grid of pixels: a spectral cube.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
+
 from gbkfit.config import DataFile, check_options
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSF, PSF
@@ -39,6 +41,9 @@ class DatasetPixelSpectra(DatasetGrid):
         The spectral axis (see make_cube_grid): its world
         coordinates, the convention of its velocities, its rest and its
         medium; the data give its size.
+    footprint : ndarray, optional
+        Where the instrument looked, of the shape of the cube or of its
+        sky (see DatasetGrid).
     """
 
     # The axes of a spectral cube: x, y and the spectral axis
@@ -131,7 +136,8 @@ class DatasetPixelSpectra(DatasetGrid):
             What the file of the mask marks with values other than 0:
             'valid' (by default) or 'invalid' values (see read_arrays).
         footprint : str or tuple, optional
-            The file of where the instrument looked (see Data).
+            The file of where the instrument looked (see DatasetGrid): of
+            the shape of the cube, or of its sky.
 
         Returns
         -------
@@ -144,12 +150,14 @@ class DatasetPixelSpectra(DatasetGrid):
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
             unit, beam, spatial_correlation, spectral_correlation,
-            references['velocity'], error_kind, footprint,
+            references['velocity'], error_kind,
             spectral_type=references['spectral_type'],
             spectral_unit=references['spectral_unit'], mask_kind=mask_kind,
             stated=_grids.stated_options(step, rpix, rval, spectral))
         dataset = cls(
-            item, **_grids.cube_coords(coords, step, rota, spectral))
+            item, **_grids.cube_coords(coords, step, rota, spectral),
+            footprint=_grids.read_footprint(
+                footprint, data, cls.spectral_axis, references))
         return cleaned(dataset, outliers, mask_whole_spectra)
 
     def dump(
@@ -167,11 +175,13 @@ class DatasetPixelSpectra(DatasetGrid):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            spectral: SpectralAxis | None = None
+            spectral: SpectralAxis | None = None,
+            footprint: np.ndarray | None = None
     ):
         check_options(DatasetPixelSpectra.__init__, locals())
         super().__init__(
-            dict(spectra=spectra), step, rpix, rval, rota, spectral)
+            dict(spectra=spectra), step, rpix, rval, rota, spectral,
+            footprint)
 
     def mask_whole_spectra(self) -> 'DatasetPixelSpectra':
         """

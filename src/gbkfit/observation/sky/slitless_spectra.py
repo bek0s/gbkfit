@@ -576,7 +576,8 @@ class ObservationSlitlessSpectra(ObservationSky):
             self, items: Mapping[str, Data]
     ) -> DatasetSlitlessSpectra:
         return DatasetSlitlessSpectra(
-            items['spectra'], **grid_options(self.grid(), sizes=False))
+            items['spectra'], **grid_options(self.grid(), sizes=False),
+            footprint=self.footprint())
 
     def _data_unit(
             self,

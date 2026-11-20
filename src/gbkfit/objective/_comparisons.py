@@ -475,8 +475,8 @@ class ComparisonGauss(Comparison):
     flux), the residual is the missing_residual of the likelihood (times
     the weight of the item): a model must not lower the chi-square by
     having no values. A data item with an upper limit gives its masked
-    values the residual of a non-detection instead (within its footprint,
-    if it has one; see Data).
+    values the residual of a non-detection instead (within the footprint
+    of its dataset, if it has one; see DatasetGrid).
 
     With a fitted noise, the residuals of its data items are over their
     noise in place of their errors, and each such item has a noise
@@ -521,7 +521,7 @@ class ComparisonGauss(Comparison):
             if (limit := likelihood.upper_limit(key)) is not None}
         self._footprints = {
             key: footprint for key in self._upper_limits
-            if (footprint := self._dataset[key].footprint()) is not None}
+            if (footprint := self._dataset.footprint_of(key)) is not None}
         # The parameters of the noise of the data items whose noise is
         # fitted, by name, and their noise residuals, in float64 (each sums
         # a term of every value of its item: float32 would round it off)

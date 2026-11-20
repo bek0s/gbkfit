@@ -54,8 +54,8 @@ _DATA_FILES = ('.fits', '.fit', '.fts', '.fits.gz')
 _PREPARED = '.prepared.json'
 
 # The options of prep that name files of data (a path, or a path and an
-# HDU, {file, hdu}; of moment maps, a list of them)
-_PREP_FILES = ('file_d', 'file_e', 'file_m')
+# HDU, {file, hdu}; of moment maps, a list of them; of the footprint, one)
+_PREP_FILES = ('file_d', 'file_e', 'file_m', 'file_f')
 # The form of each: a file (see DataFile), a list of them (one for each
 # map), or none
 _PREP_FILE = DataFile | Sequence[DataFile | None] | None

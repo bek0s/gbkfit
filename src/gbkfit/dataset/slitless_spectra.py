@@ -6,6 +6,8 @@ exposure.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
+
 from gbkfit.config import DataFile, check_options
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids
@@ -40,6 +42,8 @@ class DatasetSlitlessSpectra(DatasetGrid):
         defaults are those of make_grid.
     rota : float, optional
         The rotation of the grid on the sky (see Coords).
+    footprint : ndarray, optional
+        Where the instrument looked (see DatasetGrid).
     """
 
     # An image of dispersed light has no spectral axis: wavelength and
@@ -114,7 +118,7 @@ class DatasetSlitlessSpectra(DatasetGrid):
             What the file of the mask marks with values other than 0:
             'valid' (by default) or 'invalid' values (see read_arrays).
         footprint : str or tuple, optional
-            The file of where the instrument looked (see Data).
+            The file of where the instrument looked (see DatasetGrid).
 
         Returns
         -------
@@ -124,9 +128,11 @@ class DatasetSlitlessSpectra(DatasetGrid):
         check_options(DatasetSlitlessSpectra.from_files, locals())
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam,
-            error_kind=error_kind, mask_kind=mask_kind, footprint=footprint,
+            error_kind=error_kind, mask_kind=mask_kind,
             stated=_grids.stated_options(step, rpix, rval))
-        dataset = cls(item, **_grids.grid_coords(coords, step, rota))
+        dataset = cls(
+            item, **_grids.grid_coords(coords, step, rota),
+            footprint=_grids.read_footprint(footprint, data))
         return cleaned(dataset, outliers)
 
     def dump(
@@ -143,7 +149,10 @@ class DatasetSlitlessSpectra(DatasetGrid):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rota: float | None = None,
+            footprint: np.ndarray | None = None
     ):
         check_options(DatasetSlitlessSpectra.__init__, locals())
-        super().__init__(dict(spectra=spectra), step, rpix, rval, rota)
+        super().__init__(
+            dict(spectra=spectra), step, rpix, rval, rota,
+            footprint=footprint)

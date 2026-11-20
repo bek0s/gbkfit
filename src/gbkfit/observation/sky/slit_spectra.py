@@ -232,7 +232,7 @@ class ObservationSlitSpectra(ObservationSky):
     def make_dataset(self, items: Mapping[str, Data]) -> DatasetSlitSpectra:
         return DatasetSlitSpectra(
             items['spectra'], **_slit_grid_options(self.grid(), sizes=False),
-            slit_pa=self._slit_pa)
+            slit_pa=self._slit_pa, footprint=self.footprint())
 
     def _data_unit(
             self,

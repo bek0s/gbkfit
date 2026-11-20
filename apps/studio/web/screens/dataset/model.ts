@@ -236,6 +236,10 @@ export interface Draft {
   items: Record<string, Item>;
   spectral: Spectral;
   edits: Edits;
+  // Where the instrument looked, one file for the dataset (see the
+  // library's DatasetGrid): of the shape of its data, or of the sky of a
+  // cube
+  footprint?: FileArray;
 }
 
 export function newDraft(kind: Kind): Draft {
@@ -285,6 +289,33 @@ export function arraysOf(item: Item, described: (path: string) => Described, ndi
     arrays.found[role] = chosen.array === undefined ? likeliest(role, inFile, arrays.found.data, ndim) : findArray(inFile, chosen.array);
   }
   return arrays;
+}
+
+// The footprint of a draft as the server describes its file: its array
+// (that chosen, or the first of the shape of the data or of their sky),
+// the arrays of its file, why it cannot be described, and whether that is
+// of the inputs given
+export interface Footprint {
+  found?: ArrayInfo;
+  inFile: ArrayInfo[];
+  error?: string;
+  current: boolean;
+}
+
+export const NO_FOOTPRINT: Footprint = { inFile: [], current: true };
+
+export function footprintOf(file: FileArray | undefined, described: (path: string) => Described, data: ArrayInfo | undefined): Footprint {
+  if (file === undefined) return NO_FOOTPRINT;
+  const { arrays: inFile = [], error, current } = described(file.file);
+  const found = file.array === undefined ? (inFile.find((array) => data !== undefined && fitsFootprint(array, data)) ?? inFile[0]) : findArray(inFile, file.array);
+  return { found, inFile, error, current };
+}
+
+// Whether an array can be the footprint of data: of their shape, or, of a
+// cube, of its sky
+export function fitsFootprint(array: ArrayInfo, data: ArrayInfo): boolean {
+  const shape = kept(array).join();
+  return shape === kept(data).join() || (kept(data).length === 3 && shape === kept(data).slice(0, 2).join());
 }
 
 // The shape of an array without its axes of length 1, as GBKFIT reads it
@@ -487,6 +518,7 @@ export interface Resolved {
   kind: Kind;
   draft: Draft;
   arrays: Record<string, Arrays>;
+  footprint: Footprint;
   // How the spectral axis of its cube is read (see useResolved)
   reading: Reading;
 }
@@ -494,11 +526,12 @@ export interface Resolved {
 // The problems of a draft, at the paths of the fields that fix them (see
 // components/Problems): of an item, under its key ([key, 'data'], [key,
 // 'error'], [key, 'mask'], and the library's paths under [key], e.g.
-// [key, 'spectral', 'unit']); of the edits, ['prepare']; with no item,
-// ['files']. The library's keep its severity; what the user is still to
-// give is an error. The name is the caller's.
+// [key, 'spectral', 'unit']); of its footprint, ['footprint']; of the
+// edits, ['prepare']; with no item, ['files']. The library's keep its
+// severity; what the user is still to give is an error. The name is the
+// caller's.
 export function problemsOf(resolved: Resolved): Problem[] {
-  const problems = inputProblems(resolved);
+  const problems = [...inputProblems(resolved), ...footprintProblems(resolved)];
   for (const [key, found] of Object.entries(headerProblems(resolved))) {
     for (const problem of found) problems.push({ severity: problem.severity, path: [key, ...problem.path], message: problem.message });
   }
@@ -508,11 +541,27 @@ export function problemsOf(resolved: Resolved): Problem[] {
 }
 
 // Whether a draft waits for the header of a file it names
-export function isReading({ kind, draft, arrays }: Resolved): boolean {
-  return presentSlots(kind, draft).some((slot) => {
-    const of = arrays[slot.key] ?? NO_ARRAYS;
-    return draft.items[slot.key].files.data !== undefined && !of.errors.data && (of.found.data === undefined || !of.current);
-  });
+export function isReading({ kind, draft, arrays, footprint }: Resolved): boolean {
+  const footprintPending = draft.footprint !== undefined && !footprint.error && (footprint.found === undefined || !footprint.current);
+  return (
+    footprintPending ||
+    presentSlots(kind, draft).some((slot) => {
+      const of = arrays[slot.key] ?? NO_ARRAYS;
+      return draft.items[slot.key].files.data !== undefined && !of.errors.data && (of.found.data === undefined || !of.current);
+    })
+  );
+}
+
+// The problems of the footprint of a draft: of its file, and of its shape
+// (that of the data, or of the sky of a cube)
+function footprintProblems(resolved: Resolved): Problem[] {
+  const { draft, footprint } = resolved;
+  const data = firstData(resolved);
+  if (draft.footprint === undefined) return [];
+  if (footprint.error) return [error(['footprint'], `'${draft.footprint.file.split('/').pop()}' unreadable`)];
+  if (footprint.found === undefined || data === undefined || fitsFootprint(footprint.found, data)) return [];
+  const sky = kept(data).length === 3 ? ` or ${kept(data).slice(0, 2).join('×')}` : '';
+  return [error(['footprint'], `footprint ${shapeText(footprint.found)} · data ${shapeText(data)}${sky}`)];
 }
 
 // The problems the library finds of the data of each item (by its key),
@@ -636,8 +685,13 @@ function prepFile(item: Item, arrays: Arrays, role: Role): PrepFile | null {
   const array = arrays.found[role];
   if (chosen === undefined || array === undefined) return null;
   if (role === 'error' && item.errorValue !== null) return null;
-  const inFile = arrays.inFile[role] ?? [];
-  return inFile.length === 1 ? chosen.file : { file: chosen.file, hdu: arrayRef(inFile, array) };
+  return arrayFile(chosen.file, arrays.inFile[role] ?? [], array);
+}
+
+// A file as prep takes it: its path, or its path and its array if it has
+// others
+function arrayFile(file: string, inFile: ArrayInfo[], array: ArrayInfo): PrepFile {
+  return inFile.length === 1 ? file : { file, hdu: arrayRef(inFile, array) };
 }
 
 // A path of the workspace relative to a project, and back
@@ -668,15 +722,25 @@ function itemOptions(item: Item, arrays: Arrays, project: string): Record<string
   return options;
 }
 
+// The option of the footprint of a draft ({file, hdu}, relative to the
+// project), if it has one
+function footprintOption({ draft, footprint }: Resolved, project: string): Record<string, unknown> {
+  const { found, inFile } = footprint;
+  if (draft.footprint === undefined || found === undefined) return {};
+  return { footprint: { file: inProject(draft.footprint.file, project), hdu: arrayRef(inFile, found) } };
+}
+
 // The options of the dataset of a draft as its files are (no prep)
-export function datasetOptions({ kind, draft, arrays }: Resolved, project: string): Record<string, unknown> {
+export function datasetOptions(resolved: Resolved, project: string): Record<string, unknown> {
+  const { kind, draft, arrays } = resolved;
   const options: Record<string, unknown> = { type: KINDS[kind].type };
   if (kind === 'moments') {
     for (const slot of presentSlots(kind, draft)) options[slot.key] = itemOptions(draft.items[slot.key], arrays[slot.key] ?? NO_ARRAYS, project);
-    return options;
+    return { ...options, ...footprintOption(resolved, project) };
   }
   const key = KINDS[kind].first[0];
   Object.assign(options, itemOptions(draft.items[key], arrays[key] ?? NO_ARRAYS, project));
+  Object.assign(options, footprintOption(resolved, project));
   if (kind === 'cube') {
     const spectral: Record<string, unknown> = {};
     const data = arrays[key]?.found.data;
@@ -702,7 +766,7 @@ export interface PrepRequest {
 
 // The job of prep of a draft (its edits), writing into the folder data of
 // the project. The draft has no error (see problemsOf).
-export function prepRequest({ kind, draft, arrays }: Resolved, project: string): PrepRequest {
+export function prepRequest({ kind, draft, arrays, footprint }: Resolved, project: string): PrepRequest {
   const { edits } = draft;
   const slots = presentSlots(kind, draft);
   const first = arrays[slots[0].key]?.found.data;
@@ -719,6 +783,7 @@ export function prepRequest({ kind, draft, arrays }: Resolved, project: string):
     nanpad: integerOf(edits.pad),
     dtype: 'float32',
     output_dir: inWorkspace('data', project),
+    file_f: draft.footprint && footprint.found ? arrayFile(draft.footprint.file, footprint.inFile, footprint.found) : null,
   };
   const files = (key: string) => {
     const item = draft.items[key];
@@ -807,6 +872,7 @@ export function preparedOptions({ kind, draft }: Resolved, prepared: Prepared, p
     if (kind === 'moments') options[slot.key] = item;
     else Object.assign(options, item);
   });
+  if (typeof prepared.file_f === 'string') options.footprint = inProject(prepared.file_f, project);
   return options;
 }
 
@@ -859,7 +925,12 @@ export function draftOfDataset(kind: Kind, options: Record<string, unknown>, pro
     }
   } else items[KINDS[kind].first[0]] = itemOfOptions(options, project);
   const spectral = (options.spectral ?? {}) as { rest?: unknown; convention?: unknown; type?: unknown; unit?: unknown };
-  return { items, spectral: spectralOfRest(spectral.rest, spectral.convention, spectral.type, spectral.unit), edits: NO_EDITS };
+  return {
+    items,
+    spectral: spectralOfRest(spectral.rest, spectral.convention, spectral.type, spectral.unit),
+    edits: NO_EDITS,
+    footprint: fileArrayOf(options.footprint, (path) => inWorkspace(path, project)),
+  };
 }
 
 // How the files of a dataset were prepared (see the server's
@@ -925,6 +996,7 @@ export function draftOfPreparation(kind: Kind, dataset: Record<string, unknown>,
   return {
     items,
     spectral: spectralOfRest(options.velocity_rest, options.velocity, options.spectral_type, options.spectral_unit),
+    footprint: fileArrayOf(options.file_f, base),
     edits: {
       x: range(options.roi_spat, 0),
       y: range(options.roi_spat, 2),
@@ -996,7 +1068,8 @@ export function draftOfPrepared(kind: Kind, draft: Draft, prepared: Prepared): D
     const own = draft.items[slot.key];
     items[slot.key] = { files, errorValue: files.error ? null : own.errorValue, errorKind: 'sigma', maskKind: 'valid', unit: '' };
   });
-  return { items, spectral: NO_SPECTRAL, edits: NO_EDITS };
+  const footprint = typeof prepared.file_f === 'string' ? { file: prepared.file_f, array: 0 } : undefined;
+  return { items, spectral: NO_SPECTRAL, edits: NO_EDITS, footprint };
 }
 
 // A name for a dataset of a file (e.g. NGC2403 of NGC2403.cube.fits), not

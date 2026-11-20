@@ -80,12 +80,13 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
     block_axes: tuple[str, ...] | None = None
 
     # The titles of the options of several kinds: those of the files of a
-    # data item (see DataFiles), of the kinds of one item, and those of
-    # the reading and cleaning of the data
+    # data item (see DataFiles), of the kinds of one item, of where the
+    # instrument looked (see DatasetGrid), and those of the reading and
+    # cleaning of the data
     config_titles = DataFiles.config_titles | dict(
         file='File', format='Format', regions='Regions',
-        spectral='Spectral axis', outliers='Outlier screening',
-        mask_whole_spectra='Mask whole spectra')
+        footprint='Footprint', spectral='Spectral axis',
+        outliers='Outlier screening', mask_whole_spectra='Mask whole spectra')
 
     def __init__(self, items: Mapping[str, Data]):
         if not items:
@@ -339,6 +340,24 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         raise ValueError(
             f"the noise of {self.type()} data cannot be correlated")
 
+    def footprint_of(self, key: str) -> np.ndarray | None:
+        """
+        Return where the instrument looked (1 inside, 0 outside) on the
+        values of a data item, as its dataset says (see DatasetGrid); None
+        if it says nothing (everywhere).
+
+        Parameters
+        ----------
+        key : str
+            The name of the data item.
+
+        Returns
+        -------
+        np.ndarray or None
+            The footprint, of the shape of the item.
+        """
+        return None
+
     def mask_whole_spectra(self) -> Self:
         """
         Return a copy of it with each spectrum of its data items masked
@@ -376,6 +395,15 @@ class DatasetGrid(Dataset):
     its residuals are redrawn in blocks along them (see block_axes,
     screen_outliers and resample_blocks).
 
+    Its footprint says where the instrument looked (e.g. the field of an
+    IFU, whose corners are blank but were never observed): 1 inside, 0
+    outside, where the values of its items are masked too; of the shape of
+    its items, or, of a cube (two axes on the sky and a spectral axis), of
+    its sky alone, for every channel. Of the masked values, those inside
+    are non-detections, which an upper limit of their likelihood takes
+    (see LikelihoodGauss), and those outside say nothing; without a
+    footprint, every masked value is inside.
+
     Parameters
     ----------
     items : Mapping
@@ -389,12 +417,16 @@ class DatasetGrid(Dataset):
         The spectral axis of the kinds of data with one (see
         make_cube_grid): its world coordinates, the convention of its
         velocities, its rest and its medium; the data give its size.
+    footprint : ndarray, optional
+        Where the instrument looked; by default, everywhere.
 
     Raises
     ------
     ValueError
         If the items are not valid (see Dataset), the spectral axis has
-        another number of channels, or the grid is not valid.
+        another number of channels, the grid is not valid, or the
+        footprint is not of the shape of the items or of their sky, or has
+        values other than 0 and 1.
     """
 
     config_titles = dict(
@@ -412,14 +444,44 @@ class DatasetGrid(Dataset):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            spectral: SpectralAxis | None = None
+            spectral: SpectralAxis | None = None,
+            footprint: np.ndarray | None = None
     ):
         super().__init__(items)
+        self._footprint = None if footprint is None \
+            else self._checked_footprint(footprint)
+        if self._footprint is not None:
+            self._items = {
+                key: item.masked(self._footprint)
+                for key, item in self._items.items()}
         if self.spectral_axis is None:
             self._grid = _grids.dataset_grid(self, step, rpix, rval, rota)
         else:
             self._grid = _grids.cube_grid(
                 self, step, rpix, rval, rota, spectral)
+
+    def _checked_footprint(self, footprint: np.ndarray) -> np.ndarray:
+        """
+        Return a footprint as a copy of floats, or raise ValueError if it
+        is not of the shape of the items or of their sky (see DatasetGrid),
+        or has values other than 0 and 1.
+        """
+        footprint = np.array(footprint, dtype=self.dtype())
+        shape = self.shape()
+        shapes = [shape]
+        if self.spectral_axis is not None and len(shape) == 3:
+            shapes.append(shape[1:])
+        if footprint.shape not in shapes:
+            raise ValueError(
+                f"the footprint must be of the shape of the data items"
+                f"{' or of their sky' if len(shapes) > 1 else ''}, "
+                f"{' or '.join(map(str, shapes))}; it is of "
+                f"{footprint.shape}")
+        if not np.all(np.isin(footprint, (0, 1))):
+            raise ValueError(
+                "the footprint must be 1 where the instrument looked and 0 "
+                "elsewhere")
+        return footprint
 
     def grid(self) -> Grid:
         """
@@ -432,6 +494,18 @@ class DatasetGrid(Dataset):
             The grid.
         """
         return self._grid
+
+    def footprint(self) -> np.ndarray | None:
+        """
+        Return where the instrument looked (1 inside, 0 outside), if
+        given: of the shape of the items, or of their sky.
+        """
+        return self._footprint
+
+    def footprint_of(self, key: str) -> np.ndarray | None:
+        if self._footprint is None:
+            return None
+        return np.broadcast_to(self._footprint, self[key].shape())
 
     def screen_outliers(self, size: Sequence[float], nsigma: float) -> Self:
         """

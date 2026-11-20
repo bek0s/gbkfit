@@ -175,6 +175,29 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
         assert objective.nindependent() < objective.nresiduals()
 
 
+def test_mocks_keep_where_the_instrument_looked(driver, tmp_path):
+    # A mock of an observation of data with a footprint (of the sky of a
+    # cube) has it, its values masked outside it as those of the data
+    from astropy.io import fits
+    from gbkfit.dataset import Data, dataset_parser
+    plan = plan_of(driver, dict(
+        type='pixel_spectra', noise=NoiseGauss(rms=0.01))
+        | RECORDED['pixel_spectra'])
+    model, _, params = evaluate(plan)
+    observation = plan.group().observations()[0]
+    made = observation.make_dataset({'spectra': Data(
+        model['spectra'], error=np.full_like(model['spectra'], 0.01))})
+    footprint = np.ones(made.shape()[1:], np.float32)
+    footprint[:, :3] = 0
+    fits.writeto(tmp_path / 'field.fits', footprint)
+    data = dataset_parser.load(
+        made.dump(prefix=str(tmp_path / '')) | dict(
+            footprint=str(tmp_path / 'field.fits')))
+    [mock] = mock_data(plan.with_datasets({0: data}), params, seed=1)
+    np.testing.assert_array_equal(mock.footprint(), footprint)
+    assert not mock['spectra'].mask()[:, :, :3].any()
+
+
 @pytest.mark.parametrize('psf', [
     dict(type='gauss', sigma=1.5), dict(type='moffat', alpha=2, beta=3)])
 def test_mocks_without_data_have_the_unit_and_beam_of_their_model(

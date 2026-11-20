@@ -134,7 +134,7 @@ def read_moments(
             beam=item.beam, spatial_correlation=item.spatial_correlation,
             spectral_correlation=item.spectral_correlation,
             error_kind=item.error_kind, mask_kind=item.mask_kind,
-            footprint=item.footprint, stated=stated)
+            stated=stated)
     if not coords:
         raise ValueError("a dataset needs at least one moment")
     (first, first_coords), *others = coords.items()

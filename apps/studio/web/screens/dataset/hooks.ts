@@ -6,12 +6,14 @@ import { useMemo, useState } from 'react';
 import { useDescriptions, useJob, useSubmitJob, type Reading } from '../../api/queries';
 import {
   arraysOf,
+  footprintOf,
   KINDS,
   NO_EDITS,
   NO_SPECTRAL,
   restOf,
   type Draft,
   type Edits,
+  type FileArray,
   type Item,
   type Kind,
   type PrepRequest,
@@ -28,7 +30,7 @@ import {
 // each). The data of each item are described with the unit given of them.
 export function useResolved(kind: Kind, draft: Draft): Resolved {
   const items = Object.values(draft.items);
-  const paths = items.flatMap((item) => Object.values(item.files).map((file) => file.file));
+  const paths = [...items.flatMap((item) => Object.values(item.files).map((file) => file.file)), ...(draft.footprint ? [draft.footprint.file] : [])];
   const cube = kind === 'cube';
   const [rest] = useDebouncedValue(cube ? restOf(draft.spectral) : null, TYPED_MS);
   const [units] = useDebouncedValue(JSON.stringify(items.map((item) => [item.files.data?.file ?? null, item.unit.trim() || null])), TYPED_MS);
@@ -43,7 +45,8 @@ export function useResolved(kind: Kind, draft: Draft): Resolved {
   const reading = useMemo<Reading>(() => ({ ...base, dataUnit: first ? (unitOf.get(first) ?? null) : null }), [base, first, unitOf]);
   const describe = useDescriptions(paths, readingOf);
   const arrays = Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, KINDS[kind].ndim)]));
-  return { kind, draft, arrays, reading };
+  const footprint = footprintOf(draft.footprint, describe, Object.values(arrays)[0]?.found.data);
+  return { kind, draft, arrays, footprint, reading };
 }
 
 // (how long a value typed stands before it is used, ms)
@@ -56,6 +59,7 @@ export interface DraftState {
   removeItem: (key: string) => void;
   setSpectral: (spectral: Spectral) => void;
   setEdits: (edits: Edits) => void;
+  setFootprint: (footprint: FileArray | undefined) => void;
   reset: (draft: Draft) => void;
 }
 
@@ -77,6 +81,7 @@ export function useDraftState(initial: Draft): DraftState {
       }),
     setSpectral: (spectral) => setDraft((now) => ({ ...now, spectral })),
     setEdits: (edits) => setDraft((now) => ({ ...now, edits })),
+    setFootprint: (footprint) => setDraft((now) => ({ ...now, footprint })),
     reset: setDraft,
   };
 }
@@ -88,18 +93,18 @@ export function dataKey(items: Record<string, Item>): string {
   return JSON.stringify(Object.entries(items).map(([key, item]) => [key, item.files.data?.file ?? null, item.files.data?.array ?? null]));
 }
 
-// A draft with other items. Its spectral axis and its edits are of the
-// data of its items (what their headers leave to say, their pixels and
-// channels): if the data of an item are another file or array, or go,
-// they start again, so that nothing said of one file is taken for another
-// (an item added keeps them).
+// A draft with other items. Its spectral axis, its edits and its footprint
+// are of the data of its items (what their headers leave to say, their
+// pixels and channels): if the data of an item are another file or array,
+// or go, they start again, so that nothing said of one file is taken for
+// another (an item added keeps them).
 function withItems(now: Draft, items: Record<string, Item>): Draft {
   const changed = Object.entries(now.items).some(([key, item]) => {
     const before = item.files.data;
     const after = items[key]?.files.data;
     return before !== undefined && (after?.file !== before.file || after?.array !== before.array);
   });
-  return changed ? { ...now, items, spectral: NO_SPECTRAL, edits: NO_EDITS } : { ...now, items };
+  return changed ? { items, spectral: NO_SPECTRAL, edits: NO_EDITS } : { ...now, items };
 }
 
 // A job of prep that the screen starts and follows: the request it ran

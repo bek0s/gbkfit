@@ -16,8 +16,8 @@ import numpy.typing as npt
 
 from gbkfit.config import DataFile
 from gbkfit.io import (
-    Arrays, Beam, ErrorKind, MaskKind, read_arrays, read_sky_map,
-    shifted_header, write_image)
+    Arrays, Beam, ErrorKind, MaskKind, read_arrays, read_footprint,
+    read_sky_map, shifted_header, write_image)
 from .masks import bounding_box
 
 
@@ -33,7 +33,8 @@ _TASK_OPTIONS = {
     ('spectral', 'rest'): 'velocity_rest',
     ('spectral', 'convention'): 'velocity',
     ('spectral', 'type'): 'spectral_type',
-    ('spectral', 'unit'): 'spectral_unit'}
+    ('spectral', 'unit'): 'spectral_unit',
+    ('footprint',): 'file_f'}
 
 
 @contextlib.contextmanager
@@ -60,13 +61,16 @@ class FitsArrays(Arrays):
     Data read from files (see Arrays), being prepared for a dataset: in
     the orientation of the model (see read_arrays; e.g. RA before Dec,
     and velocities increasing), the data and errors NaN where the mask is
-    0.
+    0, with where the instrument looked, if given (footprint, see
+    read_footprint: of the shape of the data, or of the sky of a cube).
 
     The methods return new arrays; those that move the first pixel
     (crop, minified, padded) keep the world coordinates of the pixels,
     and have no orientation (they are no longer on the pixels of the
     file, see read_sky_map).
     """
+
+    footprint: np.ndarray | None = None
 
     @classmethod
     def read(
@@ -81,11 +85,13 @@ class FitsArrays(Arrays):
             mask_kind: MaskKind = 'valid',
             spectral_type: str | None = None,
             spectral_unit: str | None = None,
-            unit: str | None = None
+            unit: str | None = None,
+            footprint: DataFile | None = None
     ) -> 'FitsArrays':
         """
-        Read the data, errors and mask from files in the orientation of
-        the model, as the model reads them (see read_arrays):
+        Read the data, errors, mask and footprint from files in the
+        orientation of the model, as the model reads them (see read_arrays
+        and read_footprint):
         ranges of pixels (see crop) are those of the data it sees, with
         the spectral axis in velocities of the rest, if given.
 
@@ -116,6 +122,8 @@ class FitsArrays(Arrays):
         unit : str, optional
             The unit of the data, which replaces that of their header
             (BUNIT; see read_arrays).
+        footprint : DataFile, optional
+            The file of where the instrument looked (see read_footprint).
 
         Returns
         -------
@@ -125,23 +133,26 @@ class FitsArrays(Arrays):
         Raises
         ------
         ValueError
-            If the files cannot be read as data, errors and mask (see
-            read_arrays; its errors at the options of the prep tasks, see
-            _TASK_OPTIONS), or the rest is given for data without a
-            spectral axis.
+            If the files cannot be read as data, errors, mask and
+            footprint (see read_arrays and read_footprint; their errors at
+            the options of the prep tasks, see _TASK_OPTIONS), or the rest
+            is given for data without a spectral axis.
         """
+        reading = dict(
+            rest=rest, velocity=velocity, spectral_type=spectral_type,
+            spectral_unit=spectral_unit)
         with _at_task_options():
             arrays = read_arrays(
                 data, error, mask, error_kind=error_kind,
-                mask_kind=mask_kind, unit=unit, rest=rest,
-                velocity=velocity, spectral_type=spectral_type,
-                spectral_unit=spectral_unit)
+                mask_kind=mask_kind, unit=unit, **reading)
+            footprints = None if footprint is None \
+                else read_footprint(footprint, data, **reading)
         header = arrays.header
         # (a header without world coordinates has no spectral axis)
         if rest is not None and astropy.wcs.WCS(header).wcs.spec < 0:
             raise ValueError(
                 f"the data have no spectral axis to give the rest {rest}")
-        return cls(**vars(arrays))
+        return cls(**vars(arrays), footprint=footprints)
 
     def read_sky_map(
             self, file: DataFile, plane: int | None = None
@@ -183,8 +194,9 @@ class FitsArrays(Arrays):
             error=None if self.error is None else self.error[slices],
             mask=self.mask[slices], header=shifted_header(self.header, offset),
             beam=self._channels(lambda values: values[slices[0]]),
+            # (of the sky of a cube, its slices on the sky)
             footprint=None if self.footprint is None
-            else self.footprint[slices],
+            else self.footprint[slices[-self.footprint.ndim:]],
             orientation=None)
 
     def minified(self) -> 'FitsArrays':
@@ -233,19 +245,21 @@ class FitsArrays(Arrays):
             data: str,
             error: str | None = None,
             mask: str | None = None,
+            footprint: str | None = None,
             dtype: npt.DTypeLike = np.float32
     ) -> None:
         """
-        Write the data, errors and mask (if given filenames) as FITS
-        files, with the header of the data and their unit (the mask
-        without one).
+        Write the data, errors, mask and footprint (if given filenames) as
+        FITS files, with the header of the data (of their sky, for the
+        footprint of the sky of a cube) and their unit (the mask and the
+        footprint without one).
 
         Parameters
         ----------
         data : str
             The file of the data.
-        error, mask : str, optional
-            The files of the errors and the mask.
+        error, mask, footprint : str, optional
+            The files of the errors, the mask and the footprint.
         dtype : DTypeLike, optional
             The type of the values.
         """
@@ -261,3 +275,9 @@ class FitsArrays(Arrays):
                 write_image(
                     filename, array.astype(dtype), header, unit=unit,
                     overwrite=True)
+        if footprint is not None and self.footprint is not None:
+            sky = self.footprint.ndim < self.data.ndim
+            write_image(
+                footprint, self.footprint.astype(dtype),
+                astropy.wcs.WCS(header).celestial.to_header() if sky
+                else header, overwrite=True)

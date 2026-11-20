@@ -1,21 +1,22 @@
 """
 Helpers of the datasets on grids (see DatasetGrid): the world
 coordinates of their files and their grids (and of the spectral axis of
-the spectra of regions), their dumps, the correlations of their noise,
-and their spectra masked whole.
+the spectra of regions), their footprints, their dumps, the correlations
+of their noise, and their spectra masked whole.
 """
 
-from collections.abc import Sequence
+import os
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from gbkfit.config import warn
+from gbkfit.config import DataFile, warn
 from gbkfit.grid import (
     Coords, Grid, SpectralAxis, grid_options, make_cube_grid, make_grid,
     per_axis, rest_of_convention)
 from gbkfit.instrument import LSF, Channel
-from gbkfit.io import write_data
+from gbkfit.io import read_footprint as read_footprint_file, write_data
 from .data import dump_data, item_filenames
 
 if TYPE_CHECKING:
@@ -108,6 +109,29 @@ def file_references(
         rest=spectral.rest(), medium=spectral.medium(),
         velocity=spectral.convention(), spectral_type=spectral.type(),
         spectral_unit=spectral.unit())
+
+
+def read_footprint(
+        file: DataFile | None,
+        data: DataFile,
+        spectral_axis: int | None = None,
+        references: Mapping[str, Any] | None = None
+) -> np.ndarray | None:
+    """
+    Return the footprint of a dataset on a grid (see DatasetGrid), read
+    from its file on the pixels of the file of the data of its items, as
+    they are read (see read_footprint; references: the options of their
+    reading, see file_references), or None if it has no file.
+    """
+    if file is None:
+        return None
+    references = references or {}
+    return read_footprint_file(
+        file, data, rest=references.get('rest'),
+        velocity=references.get('velocity'),
+        spectral_type=references.get('spectral_type'),
+        spectral_unit=references.get('spectral_unit'),
+        medium=references.get('medium'), spectral_axis=spectral_axis)
 
 
 def cube_coords(
@@ -214,9 +238,10 @@ def dump_grid_dataset(
     """
     Return the configuration of a dataset whose data items are on a grid:
     the world coordinates of the grid (and of its spectral axis, if any,
-    but its convention, which the headers of the files give), and the
-    items, written to FITS files named after the prefix and their names
-    (with their world coordinates).
+    but its convention, which the headers of the files give), the items,
+    written to FITS files named after the prefix and their names (with
+    their world coordinates), and its footprint, if any, written so too
+    (of the sky of a cube, without its spectral axis).
     """
     grid = dataset.grid()
     info = dict(type=dataset.type(), **grid_options(grid, sizes=False))
@@ -233,6 +258,15 @@ def dump_grid_dataset(
         info[key] = dump_data(
             item, item_filenames(prefix, key), write, dump_path,
             f'{prefix}{key}_', overwrite)
+    footprint = dataset.footprint()
+    if footprint is not None:
+        filename = f'{prefix}footprint.fits'
+        write_data(
+            filename, footprint, grid.coords,
+            grid.spectral_axis if footprint.ndim == dataset.ndim else None,
+            overwrite=overwrite)
+        info['footprint'] = filename if dump_path \
+            else os.path.basename(filename)
     return info
 
 

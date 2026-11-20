@@ -19,7 +19,7 @@ import gbkfit.units
 from gbkfit.config import (
     Choices, check_name, config_path, load_option_and_update_info,
     make_typed_desc)
-from gbkfit.dataset import Dataset, dataset_parser
+from gbkfit.dataset import Dataset, DatasetGrid, dataset_parser
 from gbkfit.driver import Driver
 from gbkfit.grid import (
     Grid, GridData, SpectraData, SpectralAxis, check_convention,
@@ -811,7 +811,8 @@ class ObservationSky(Observation, abc.ABC):
         """
         Make the dataset of data items measured as this observation (e.g.
         mock data), where its model is: the inverse of its options from
-        data (see _options_from_data).
+        data (see _options_from_data), where its data say the instrument
+        looked (see footprint).
 
         Parameters
         ----------
@@ -823,6 +824,15 @@ class ObservationSky(Observation, abc.ABC):
         Dataset
             The dataset, of the dataset class of its kind.
         """
+
+    def footprint(self) -> np.ndarray | None:
+        """
+        Return where the instrument looked, as its data say (see
+        DatasetGrid); None without data on a grid, or without a footprint.
+        """
+        dataset = self._dataset
+        return dataset.footprint() if isinstance(dataset, DatasetGrid) \
+            else None
 
     def data_unit(self) -> DataUnit | None:
         """

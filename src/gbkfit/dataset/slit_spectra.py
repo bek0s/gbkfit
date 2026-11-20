@@ -5,6 +5,8 @@ The dataset of spectra along a long slit.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import numpy as np
+
 from gbkfit.config import DataFile, check_options
 from gbkfit.grid import SpectralAxis, x_axis_pa, x_axis_rota
 from gbkfit.instrument import LSF
@@ -52,6 +54,8 @@ class DatasetSlitSpectra(DatasetGrid):
         The spectral axis (see make_cube_grid): its world
         coordinates, the convention of its velocities, its rest and its
         medium; the data give its size.
+    footprint : ndarray, optional
+        Where the instrument looked (see DatasetGrid).
     """
 
     # The axes of a long-slit spectrum: the position along the slit and
@@ -147,7 +151,7 @@ class DatasetSlitSpectra(DatasetGrid):
             What the file of the mask marks with values other than 0:
             'valid' (by default) or 'invalid' values (see read_arrays).
         footprint : str or tuple, optional
-            The file of where the instrument looked (see Data).
+            The file of where the instrument looked (see DatasetGrid).
 
         Returns
         -------
@@ -161,7 +165,7 @@ class DatasetSlitSpectra(DatasetGrid):
             references['rest'], cls.spectral_axis, references['medium'],
             unit, beam, spectral_correlation=spectral_correlation,
             velocity=references['velocity'], error_kind=error_kind,
-            mask_kind=mask_kind, footprint=footprint,
+            mask_kind=mask_kind,
             spectral_type=references['spectral_type'],
             spectral_unit=references['spectral_unit'],
             stated=_grids.stated_options(step, rpix, rval, spectral))
@@ -170,7 +174,9 @@ class DatasetSlitSpectra(DatasetGrid):
         rota = options.pop('rota')
         dataset = cls(
             item, **options,
-            slit_pa=x_axis_pa(rota) if slit_pa is None else slit_pa)
+            slit_pa=x_axis_pa(rota) if slit_pa is None else slit_pa,
+            footprint=_grids.read_footprint(
+                footprint, data, cls.spectral_axis, references))
         return cleaned(dataset, outliers, mask_whole_spectra)
 
     def dump(
@@ -192,12 +198,14 @@ class DatasetSlitSpectra(DatasetGrid):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             slit_pa: float | None = None,
-            spectral: SpectralAxis | None = None
+            spectral: SpectralAxis | None = None,
+            footprint: np.ndarray | None = None
     ):
         check_options(DatasetSlitSpectra.__init__, locals())
         super().__init__(
             dict(spectra=spectra), step, rpix, rval,
-            None if slit_pa is None else x_axis_rota(slit_pa), spectral)
+            None if slit_pa is None else x_axis_rota(slit_pa), spectral,
+            footprint)
         self._slit_pa = x_axis_pa(self.grid().coords.rota) \
             if slit_pa is None else float(slit_pa)
 

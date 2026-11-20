@@ -32,13 +32,15 @@ GALAXY = dict(components=[dict(
 PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, rpt_a=1, rpt_s=2)
 
 
-def make_objective(driver, data, likelihood=None, name=None, **values):
+def make_objective(
+        driver, data, likelihood=None, name=None, footprint=None, **values):
     """
     The objective of an observation of the given name under a likelihood
-    (Gaussian by default), and the values of the parameters (PROPERTIES
+    (Gaussian by default), of data where the instrument looked (footprint;
+    by default, everywhere), and the values of the parameters (PROPERTIES
     and the given values).
     """
-    dataset = DatasetPixelBrightness(data)
+    dataset = DatasetPixelBrightness(data, footprint=footprint)
     observation = ObservationPixelBrightness(
         dataset=dataset,
         name=name)
@@ -241,7 +243,7 @@ def test_masked_values_with_an_upper_limit_are_non_detections(driver):
 
 
 def test_upper_limits_count_within_their_footprint(driver):
-    # The masked values outside the footprint of their data (e.g. the
+    # The masked values outside the footprint of their dataset (e.g. the
     # corners of the field of an IFU, never observed) count nothing
     mask = np.ones((24, 32))
     mask[:, :8] = 0
@@ -249,17 +251,19 @@ def test_upper_limits_count_within_their_footprint(driver):
     footprint[:, :4] = 0
     limits = dict(brightness=UpperLimit(limit=0.01, error=0.2))
     data = Data(
-        np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5),
-        footprint=footprint)
+        np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5))
     objective, params = make_objective(
-        driver, data, LikelihoodGauss(upper_limits=limits))
+        driver, data, LikelihoodGauss(upper_limits=limits),
+        footprint=footprint)
     residuals = objective.residuals(params).reshape(24, 32)
     np.testing.assert_array_equal(residuals[:, :4], 0)
     assert np.all(residuals[:, 4:8] > 0)
     assert objective.nresiduals() == 24 * 28
     # (values outside it are masked: nothing was observed there)
-    outside = Data(np.ones((2, 2)), footprint=[[1, 0], [1, 1]])
-    np.testing.assert_array_equal(outside.mask(), [[1, 0], [1, 1]])
+    outside = DatasetPixelBrightness(
+        Data(np.ones((2, 2))), footprint=np.array([[1, 0], [1, 1]]))
+    np.testing.assert_array_equal(
+        outside['brightness'].mask(), [[1, 0], [1, 1]])
 
 
 def test_a_fitted_noise_is_exact_to_a_constant(driver):

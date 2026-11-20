@@ -2229,3 +2229,30 @@ def test_the_parameters_of_a_lens_of_one_piece_are_named_after_it():
             lens_sie_theta_e=1, lens_sie_q='lens_sie_theta_e * 0.5',
             far_main_slope=2, lens_b_gas_vsys=3, pair_main_q=0.8),
         priors=[dict(type='joint', expr='far_main_slope - lens_sie_q')])
+
+
+def test_the_footprint_of_moment_maps_is_one_of_their_dataset():
+    # Version 20: the footprint of the maps of moments, the same for all,
+    # is that of the dataset (in place in an observation, or a piece);
+    # those of moments of regions go; different ones stop the migration
+    maps = dict(
+        type='pixel_moments',
+        moment0=dict(data='m0.fits', footprint='field.fits'),
+        moment1=dict(data='m1.fits', footprint='field.fits'))
+    regions = dict(
+        type='region_moments', moment1=dict(data='m1.fits', footprint='f'))
+    config = dict(
+        observations=[dict(type='pixel_moments', dataset=copy.deepcopy(maps))],
+        dataset=[regions])
+    changes = rewritten(config, 19, 20)
+    assert config['observations'][0]['dataset'] == dict(
+        type='pixel_moments', moment0=dict(data='m0.fits'),
+        moment1=dict(data='m1.fits'), footprint='field.fits')
+    assert config['dataset'] == [
+        dict(type='region_moments', moment1=dict(data='m1.fits'))]
+    assert [change.path for change in changes] == [
+        ['dataset', 0, 'moment1', 'footprint'],
+        ['observations', 0, 'dataset', 'footprint']]
+    maps['moment1']['footprint'] = 'other.fits'
+    with pytest.raises(ValueError, match="different footprints"):
+        rewritten(dict(dataset=[maps]), 19, 20)

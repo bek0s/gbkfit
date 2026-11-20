@@ -245,9 +245,10 @@ def _data_options(
     """
     Return the options of the mock data of each data item of an
     observation (see draw_mocks): the unit and the beam of its model
-    (see Observation.model_unit), the footprint of its data, if any, and
-    the correlation of the noise of those that are what the instrument
-    records plus the noise (exact errors).
+    (see Observation.model_unit), and the correlation of the noise of
+    those that are what the instrument records plus the noise (exact
+    errors). Where the instrument looked is that of the data of the
+    observation, which its datasets keep (see make_dataset).
 
     Raises
     ------
@@ -275,14 +276,12 @@ def _data_options(
             "instrument), but the errors of data take one correlation for "
             "all the channels: give the noise a correlation that does not "
             "vary")
-    data = observation.dataset()
     options = {}
     for key in observation.keys():
         unit, beam = observation.model_unit(key)
         options[key] = dict(
-            unit=unit, beam=beam,
-            footprint=None if data is None else data[key].footprint(),
-            spatial_correlation=spatial, spectral_correlation=spectral)
+            unit=unit, beam=beam, spatial_correlation=spatial,
+            spectral_correlation=spectral)
     return options
 
 

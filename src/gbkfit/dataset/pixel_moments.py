@@ -5,7 +5,9 @@ The dataset of moments of the spectra on a grid of pixels: moment maps.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from gbkfit.config import check_options
+import numpy as np
+
+from gbkfit.config import DataFile, check_options
 from gbkfit.moments import moment_orders, split_moments
 from . import _detail, _grids
 from .base import DatasetGrid, NoiseCorrelation, cleaned
@@ -26,7 +28,8 @@ class DatasetPixelMoments(DatasetGrid):
     _detail.moment_items).
 
     Its configuration has those data items (the files of each: data,
-    mask, error; see from_files) and the world coordinates.
+    mask, error; see from_files), the world coordinates and the footprint,
+    one for all the maps (see DatasetGrid).
 
     Parameters
     ----------
@@ -40,6 +43,8 @@ class DatasetPixelMoments(DatasetGrid):
         defaults are those of make_grid.
     rota : float, optional
         The rotation of the grid on the sky (see Coords).
+    footprint : ndarray, optional
+        Where the instrument looked, of shape (ny, nx) (see DatasetGrid).
     """
 
     # Moment maps have no spectral axis
@@ -79,7 +84,8 @@ class DatasetPixelMoments(DatasetGrid):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            outliers: Mapping[str, Any] | None = None
+            outliers: Mapping[str, Any] | None = None,
+            footprint: DataFile | None = None
     ) -> 'DatasetPixelMoments':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -102,6 +108,9 @@ class DatasetPixelMoments(DatasetGrid):
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma
             (see screen_outliers), which are masked.
+        footprint : str or tuple, optional
+            The file of where the instrument looked, one for all the maps
+            (see DatasetGrid).
 
         Returns
         -------
@@ -109,12 +118,14 @@ class DatasetPixelMoments(DatasetGrid):
             The dataset.
         """
         check_options(DatasetPixelMoments.from_files, locals())
+        files = _detail.moment_options(locals())
         items, coords = _detail.read_moments(
-            _detail.moment_options(locals()), rpix, rval,
-            _grids.stated_options(step, rpix, rval))
+            files, rpix, rval, _grids.stated_options(step, rpix, rval))
         dataset = cls(
             *split_moments(items),
-            **_grids.grid_coords(coords, step, rota))
+            **_grids.grid_coords(coords, step, rota),
+            footprint=_grids.read_footprint(
+                footprint, next(iter(files.values())).data))
         return cleaned(dataset, outliers)
 
     def dump(
@@ -130,11 +141,13 @@ class DatasetPixelMoments(DatasetGrid):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rota: float | None = None,
+            footprint: np.ndarray | None = None
     ):
         check_options(DatasetPixelMoments.__init__, locals())
         super().__init__(
-            _detail.moment_items(moments, hermite), step, rpix, rval, rota)
+            _detail.moment_items(moments, hermite), step, rpix, rval, rota,
+            footprint=footprint)
 
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments."""

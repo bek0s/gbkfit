@@ -218,7 +218,8 @@ class ObservationPixelMoments(ObservationSky):
 
     def make_dataset(self, items: Mapping[str, Data]) -> DatasetPixelMoments:
         return DatasetPixelMoments(
-            *split_moments(items), **grid_options(self.grid(), sizes=False))
+            *split_moments(items), **grid_options(self.grid(), sizes=False),
+            footprint=self.footprint())
 
     def _data_unit(
             self,
