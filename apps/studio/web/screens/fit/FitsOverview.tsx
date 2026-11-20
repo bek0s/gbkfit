@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { useFileText, usePiece, useProject, useRun, useStopJob, useSubmitJob } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
 import { Button } from '../../components/ui/basics';
+import { ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
 import { isObject } from '../galaxy/options';
 import { itemsOf } from './recipe';
@@ -19,17 +20,11 @@ export function FitsOverview() {
   if (project === null) return null;
   return (
     <section className="screen fx-overview">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">Fit</div>
-          <h1>All fits</h1>
-        </div>
-        <div className="head-actions">
-          <Button kind="primary" onClick={() => startAdding('setups')}>
-            + New fit
-          </Button>
-        </div>
-      </div>
+      <ScreenHead eyebrow="Fit" title="All fits">
+        <Button kind="primary" onClick={() => startAdding('setups')}>
+          + New fit
+        </Button>
+      </ScreenHead>
       <div className="fx-scroll">
         {fits.length === 0 ? (
           <p className="ob-text">The project has no fit yet: a fit puts galaxies and observations together, with a fitter.</p>

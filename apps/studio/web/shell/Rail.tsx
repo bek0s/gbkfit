@@ -2,9 +2,10 @@
 // sections.ts). Home on top; the blocks a project is built of; a divider;
 // the tools that use them; the settings at the foot. A section of blocks
 // opens the block of it seen last, or else its first, or else itself,
-// empty; clicked or hovered a moment, it also shows its list (onPeek),
-// until the mouse leaves the rail (onLeave).
-import { useRef, type ReactNode } from 'react';
+// empty; clicked, it also shows its list (onPeek), until the mouse leaves
+// the rail and the list (onLeave). (Hovering shows nothing: the mouse
+// crosses the rail on its way to other things.)
+import type { ReactNode } from 'react';
 import { useProject } from '../api/queries';
 import { CompareIcon, DataIcon, FitIcon, HomeIcon, LensIcon, ModelIcon, ObservationIcon } from '../components/icons';
 import { SettingsButton } from '../components/ui/settings';
@@ -22,14 +23,10 @@ const ICONS: Record<SectionKey, ReactNode> = {
   fit: <FitIcon />,
 };
 
-// The moment a section is hovered before its list shows (ms)
-const PEEK = 280;
-
 export function Rail({ onPeek, onLeave }: { onPeek: (key: SectionKey) => void; onLeave: () => void }) {
   const { project, screen } = useStudio();
   const current = sectionOf(screen);
   const open = useOpenSection();
-  const hovering = useRef<number | undefined>(undefined);
   const button = (section: Section) => (
     <button
       key={section.key}
@@ -40,15 +37,9 @@ export function Rail({ onPeek, onLeave }: { onPeek: (key: SectionKey) => void; o
       disabled={project === null}
       title={section.title}
       onClick={() => {
-        window.clearTimeout(hovering.current);
         open(section.key);
         onPeek(section.key);
       }}
-      onMouseEnter={() => {
-        window.clearTimeout(hovering.current);
-        hovering.current = window.setTimeout(() => onPeek(section.key), PEEK);
-      }}
-      onMouseLeave={() => window.clearTimeout(hovering.current)}
     >
       {ICONS[section.key]}
       <span>{section.title}</span>

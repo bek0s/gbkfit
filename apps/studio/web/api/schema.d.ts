@@ -1846,6 +1846,10 @@ export interface components {
          * @description A project: its path, the names of its pieces and setups by folder
          *     (e.g. 'galaxies'), the paths of its runs, and its links: each piece or
          *     setup that names a piece, with the piece it names (see PieceLink).
+         *     Also whether it has notes (its README.md), the type of each piece that
+         *     has one (its option 'type'), by folder and name, and the status of the
+         *     latest run of each setup that has run ('running', 'complete' or
+         *     'failed'), by name.
          */
         ProjectInfo: {
             /** Path */
@@ -1858,6 +1862,27 @@ export interface components {
             runs: string[];
             /** Links */
             links: components["schemas"]["PieceLink"][];
+            /**
+             * Notes
+             * @default false
+             */
+            notes: boolean;
+            /**
+             * Types
+             * @default {}
+             */
+            types: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            /**
+             * Latest
+             * @default {}
+             */
+            latest: {
+                [key: string]: string;
+            };
         };
         /**
          * ProjectRename

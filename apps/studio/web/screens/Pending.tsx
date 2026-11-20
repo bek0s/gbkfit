@@ -3,6 +3,7 @@
 // menu: rename, delete).
 import { BlockLinks } from '../shell/BlockLinks';
 import { useBlockHead } from '../shell/BlockMenu';
+import { ScreenHead } from '../shell/ScreenHead';
 import { useStudio } from '../studio';
 
 export function Pending({ eyebrow, title, folder }: { eyebrow: string; title: string; folder?: string }) {
@@ -11,14 +12,9 @@ export function Pending({ eyebrow, title, folder }: { eyebrow: string; title: st
   const block = folder !== undefined && project !== null;
   return (
     <section className="screen">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">{eyebrow}</div>
-          {block ? head.title : <h1>{title}</h1>}
-        </div>
-        {block && <BlockLinks folder={folder} name={title} />}
-        {block && <div className="head-actions">{head.menu}</div>}
-      </div>
+      <ScreenHead eyebrow={eyebrow} title={block ? head.title : title} links={block ? <BlockLinks folder={folder} name={title} /> : undefined}>
+        {block ? head.menu : undefined}
+      </ScreenHead>
       <div className="screen-body">
         <p className="note">This screen comes in a later step.</p>
       </div>

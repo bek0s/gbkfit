@@ -12,10 +12,11 @@ import { joinPath } from '../../components/FilePicker';
 import { membersOf, SchemaForm, titleOf, typeOf, type Options } from '../../components/SchemaForm';
 import { Dock, DockSection, NeedsNote } from '../../components/ui/dock';
 import { useBlockHead } from '../../shell/BlockMenu';
+import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
 import { BlockLinks } from '../../shell/BlockLinks';
 import { arraysOf, draftOfDataset, EMPTY_ITEM, kept, KINDS, kindOfType } from '../dataset/model';
-import { SaveActions, useEditedBlock } from '../editing';
+import { useEditedBlock } from '../editing';
 import { ACCURACY_KEYS, checksOf, datasetHasErrors, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, noiseText, objectAt, psfEllipse, skyKeys, textAt } from './model';
 import { AccuracyFields, DataFields, InstrumentFields, NoiseFields, OptionFields, RecordsFields, SeesFields } from './Sections';
 import { Checks, NoisePatch, Resolution, Sky, Stages, type SkyData } from './View';
@@ -82,18 +83,15 @@ export function ObservationScreen({ name }: { name: string }) {
 
   return (
     <section className="screen ob-screen">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">Observation{options ? ` · ${title('observation', options.type)}` : ''}</div>
-          {head.title}
-        </div>
-        <BlockLinks folder="observations" name={name} />
-        <div className="head-actions">
-          <NeedsNote needs={needs.map((need) => ({ text: need.text, at: need.section }))} />
-          <SaveActions edited={edited} />
-          {head.menu}
-        </div>
-      </div>
+      <ScreenHead
+        eyebrow={`Observation${options ? ` · ${title('observation', options.type)}` : ''}`}
+        title={head.title}
+        links={<BlockLinks folder="observations" name={name} />}
+      >
+        <NeedsNote needs={needs.map((need) => ({ text: need.text, at: need.section }))} />
+        <SaveControls saving={edited} />
+        {head.menu}
+      </ScreenHead>
       {edited.error && <p className="error screen-error">{edited.error.message}</p>}
       {!options || !common ? (
         <p className="note screen-error">Reading the observation…</p>

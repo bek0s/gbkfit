@@ -2,7 +2,7 @@
 // (grouped like the rail), the dialog that names a new block (or the flow
 // of its own of a dataset; see SectionList's adders), and Go to (Ctrl+K),
 // which finds a section, a block of the project or an action by name.
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useCreateBlock, useProject } from '../api/queries';
 import { Button, TextField } from '../components/ui/basics';
 import { Dialog, DropMenu, type MenuEntry } from '../components/ui/overlays';
@@ -21,14 +21,12 @@ export interface AdderProps {
 
 const ADDERS: Record<string, ComponentType<AdderProps>> = { datasets: DataKindDialog };
 
-// The new blocks the menu makes, by the section they are in
-const MADE: { section: string; folders: string[] }[] = [
-  { section: 'Datasets', folders: ['datasets'] },
-  { section: 'Galaxies', folders: ['galaxies'] },
-  { section: 'Observations', folders: ['observations', 'psfs', 'lsfs', 'noise'] },
-  { section: 'Compare', folders: ['comparisons'] },
-  { section: 'Fit', folders: ['setups', 'fitters'] },
-];
+// The new blocks the menu makes, by the section they are in (as the rail
+// shows them)
+const MADE: { section: string; folders: string[] }[] = SECTIONS.filter((section) => section.groups.length > 0).map((section) => ({
+  section: section.title,
+  folders: section.groups.map((group) => group.folder),
+}));
 
 export function NewMenu() {
   const { project, startAdding } = useStudio();
@@ -119,16 +117,23 @@ function inSentence(kind: string): string {
 
 interface Found {
   key: string;
+  // The group it is shown in (e.g. 'Galaxies'), and what it is
+  group: string;
   kind: string;
   title: string;
   note?: string;
   run: () => void;
 }
 
-// Go to (Ctrl+K): the sections, the blocks of the project and the actions
-// whose names hold what is typed; arrows choose, Enter goes
+// The things Go to shows of a group (all, of what is typed), and of all
+const PER_GROUP = 6;
+const SHOWN = 40;
+
+// Go to (Ctrl+K): the blocks of the project, the sections and the actions
+// whose names hold what is typed, under the title of their group; with
+// nothing typed, the blocks opened last first. Arrows choose, Enter goes.
 export function GoTo() {
-  const { project, go, startAdding } = useStudio();
+  const { project, go, startAdding, visited } = useStudio();
   const openSection = useOpenSection();
   const info = useProject(project);
   const [open, setOpen] = useState(false);
@@ -147,6 +152,7 @@ export function GoTo() {
   const all = useMemo<Found[]>(() => {
     const sections = SECTIONS.map((section) => ({
       key: `section/${section.key}`,
+      group: 'Sections',
       kind: 'Section',
       title: section.title,
       run: () => openSection(section.key as SectionKey),
@@ -155,6 +161,7 @@ export function GoTo() {
       section.groups.flatMap((group) =>
         (info.data?.pieces[group.folder] ?? []).map((name) => ({
           key: `${group.folder}/${name}`,
+          group: group.title,
           kind: group.kind,
           title: name,
           run: () => go({ kind: 'block', folder: group.folder, name }),
@@ -164,6 +171,7 @@ export function GoTo() {
     const actions = MADE.flatMap(({ folders }) =>
       folders.map((folder) => ({
         key: `new/${folder}`,
+        group: 'New',
         kind: 'New',
         title: `${kindOf(folder)}…`,
         note: `a new ${inSentence(kindOf(folder))}`,
@@ -173,7 +181,17 @@ export function GoTo() {
     return [...blocks, ...sections, ...actions];
   }, [info.data, go, openSection, startAdding]);
   const query = text.trim().toLowerCase();
-  const found = (query ? all.filter((item) => `${item.kind} ${item.title}`.toLowerCase().includes(query)) : all).slice(0, 12);
+  const found = useMemo(() => {
+    if (query) return all.filter((item) => `${item.kind} ${item.title}`.toLowerCase().includes(query)).slice(0, SHOWN);
+    // (nothing typed: the blocks opened last, then the first of each group)
+    const recent = visited
+      .flatMap((seen) => (seen.kind === 'block' ? all.filter((item) => item.key === `${seen.folder}/${seen.name}`) : []))
+      .slice(0, PER_GROUP)
+      .map((item) => ({ ...item, key: `recent/${item.key}`, group: 'Opened last', note: item.kind }));
+    const counts: Record<string, number> = {};
+    const firsts = all.filter((item) => (counts[item.group] = (counts[item.group] ?? 0) + 1) <= PER_GROUP);
+    return [...recent, ...firsts].slice(0, SHOWN);
+  }, [query, all, visited]);
   const input = useRef<HTMLInputElement>(null);
   if (project === null) return null;
   const run = (item: Found | undefined) => {
@@ -211,19 +229,17 @@ export function GoTo() {
             />
             <div className="goto-list" role="listbox">
               {found.map((item, i) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  role="option"
-                  aria-selected={i === chosen}
-                  className="goto-item"
-                  onMouseEnter={() => setChosen(i)}
-                  onClick={() => run(item)}
-                >
-                  <small>{item.kind}</small>
-                  <b>{item.title}</b>
-                  {item.note && <span>{item.note}</span>}
-                </button>
+                <Fragment key={item.key}>
+                  {item.group !== found[i - 1]?.group && (
+                    <div className="goto-group" role="presentation">
+                      {item.group}
+                    </div>
+                  )}
+                  <button type="button" role="option" aria-selected={i === chosen} className="goto-item" onMouseEnter={() => setChosen(i)} onClick={() => run(item)}>
+                    <b>{item.title}</b>
+                    {item.note && <span>{item.note}</span>}
+                  </button>
+                </Fragment>
               ))}
               {found.length === 0 && <p className="goto-none">Nothing by that name.</p>}
             </div>

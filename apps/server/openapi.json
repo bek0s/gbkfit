@@ -4050,6 +4050,30 @@
             },
             "type": "array",
             "title": "Links"
+          },
+          "notes": {
+            "type": "boolean",
+            "title": "Notes",
+            "default": false
+          },
+          "types": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Types",
+            "default": {}
+          },
+          "latest": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Latest",
+            "default": {}
           }
         },
         "type": "object",
@@ -4060,7 +4084,7 @@
           "links"
         ],
         "title": "ProjectInfo",
-        "description": "A project: its path, the names of its pieces and setups by folder\n(e.g. 'galaxies'), the paths of its runs, and its links: each piece or\nsetup that names a piece, with the piece it names (see PieceLink)."
+        "description": "A project: its path, the names of its pieces and setups by folder\n(e.g. 'galaxies'), the paths of its runs, and its links: each piece or\nsetup that names a piece, with the piece it names (see PieceLink).\nAlso whether it has notes (its README.md), the type of each piece that\nhas one (its option 'type'), by folder and name, and the status of the\nlatest run of each setup that has run ('running', 'complete' or\n'failed'), by name."
       },
       "ProjectRename": {
         "properties": {

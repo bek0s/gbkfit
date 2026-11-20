@@ -8,6 +8,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { components } from '../api/schema';
 import { useJobs, useNotes, useProject, useRenders, useSaveNotes } from '../api/queries';
 import { Button } from '../components/ui/basics';
+import { ScreenHead } from '../shell/ScreenHead';
 import { kindOf } from '../shell/sections';
 import { useStudio } from '../studio';
 
@@ -53,20 +54,13 @@ export function Home() {
   ] as const;
   return (
     <section className="screen home-screen">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">Project</div>
-          <h1>{project}</h1>
-        </div>
-        <span className="home-counts">{counts.map(([n, one, many]) => `${n} ${n === 1 ? one : many}`).join(' · ')}</span>
-        <div className="head-actions">
-          {MAKE.map(({ folder, label }) => (
-            <Button key={folder} kind={folder === next ? 'primary' : undefined} onClick={() => startAdding(folder)}>
-              {label}
-            </Button>
-          ))}
-        </div>
-      </div>
+      <ScreenHead eyebrow="Project" title={project ?? ''} links={<span className="home-counts">{counts.map(([n, one, many]) => `${n} ${n === 1 ? one : many}`).join(' · ')}</span>}>
+        {MAKE.map(({ folder, label }) => (
+          <Button key={folder} kind={folder === next ? 'primary' : undefined} onClick={() => startAdding(folder)}>
+            {label}
+          </Button>
+        ))}
+      </ScreenHead>
       {info.error && <p className="error screen-error">{info.error.message}</p>}
       {info.data && (empty ? <Start /> : <Overview />)}
     </section>
@@ -105,15 +99,17 @@ function Start() {
 function Overview() {
   return (
     <div className="home-grid">
-      <ProjectMap />
+      <div className="home-main">
+        <ProjectMap />
+        <div className="home-row">
+          <Runs />
+          <Recent />
+        </div>
+      </div>
       <div className="home-side">
         <Now />
         <NextSteps />
         <Notes />
-      </div>
-      <div className="home-row">
-        <Runs />
-        <Recent />
       </div>
     </div>
   );
@@ -426,7 +422,8 @@ function Recent() {
 // The notes of the project (its README.md): what it asks, and what next
 function Notes() {
   const { project } = useStudio();
-  const notes = useNotes(project);
+  // (asked for only of a project that has them)
+  const notes = useNotes(useProject(project).data?.notes ? project : null);
   const save = useSaveNotes(project ?? '');
   const [text, setText] = useState<string | null>(null);
   useEffect(() => setText(null), [notes.data]);

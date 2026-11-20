@@ -6,12 +6,12 @@
 //
 // Keys: Ctrl+Z undoes, Ctrl+Shift+Z (or Ctrl+Y) redoes, Ctrl+S saves.
 import { useDebouncedValue } from '@mantine/hooks';
-import { useEffect, useMemo, useState } from 'react';
-import { useProject } from '../../api/queries';
-import { Button } from '../../components/ui/basics';
+import { useMemo, useState } from 'react';
+import { RenderLabel, useProject } from '../../api/queries';
 import { SheetLayout } from '../../components/ui/sheet';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { BlockLinks } from '../../shell/BlockLinks';
+import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useRemembered } from '../../shell/remember';
 import { useStudio } from '../../studio';
 import { useUnsaved } from '../editing';
@@ -81,32 +81,6 @@ export function GalaxyScreen({ name }: { name: string }) {
   const something = (galaxy: Options) => componentsOf(galaxy).length > 0 || asList(galaxy.mass).length > 0;
   const renderProperties = useMemo(() => (rendered ? forRender(rendered.properties, draft.params) : {}), [rendered, draft.params]);
 
-  // (keys: undo, redo and save, but in a field of text, whose own undo it is)
-  const { undo, redo, save } = draft;
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
-      const key = event.key.toLowerCase();
-      if (key === 's') {
-        event.preventDefault();
-        void save();
-        return;
-      }
-      const typing =
-        event.target instanceof HTMLElement &&
-        event.target.closest('input:not([type=radio]):not([type=checkbox]):not([type=range]):not([type=button]), textarea, [contenteditable]:not([contenteditable=false])');
-      if (typing) return;
-      if (key === 'z' && !event.shiftKey) {
-        event.preventDefault();
-        undo();
-      } else if ((key === 'z' && event.shiftKey) || key === 'y') {
-        event.preventDefault();
-        redo();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo, save]);
 
   if (project === null) return null;
 
@@ -120,41 +94,13 @@ export function GalaxyScreen({ name }: { name: string }) {
   const rings = openComponent === null ? null : ringRadii(components[openComponent]?.rnodes);
 
   return (
+    // (its renders are of it, in the Activity drawer)
+    <RenderLabel.Provider value={name}>
     <section className="screen gx-screen">
-      <div className="screen-head gx-head">
-        <div>
-          <div className="eyebrow">Galaxy</div>
-          {head.title}
-        </div>
-        <BlockLinks folder="galaxies" name={name} />
-        <div className="head-actions">
-          <div className="gx-history" role="group" aria-label="History">
-            <button onClick={draft.undo} disabled={!draft.canUndo} title="Undo (Ctrl+Z)" aria-label="Undo">
-              <svg className="icon" viewBox="0 0 24 24">
-                <path d="M9 14 4 9l5-5" />
-                <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
-              </svg>
-            </button>
-            <button onClick={draft.redo} disabled={!draft.canRedo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
-              <svg className="icon" viewBox="0 0 24 24">
-                <path d="m15 14 5-5-5-5" />
-                <path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" />
-              </svg>
-            </button>
-          </div>
-          <span className="gx-status" data-dirty={draft.dirty || undefined}>
-            {draft.saving ? 'Saving…' : draft.dirty ? 'Not saved' : 'Saved'}
-          </span>
-          {draft.saveError && <span className="error">{draft.saveError.message}</span>}
-          <Button disabled={!draft.dirty} onClick={draft.revert}>
-            Revert
-          </Button>
-          <Button kind="primary" disabled={!draft.dirty || draft.saving} onClick={() => void draft.save()} title="Save (Ctrl+S)">
-            Save
-          </Button>
-          {head.menu}
-        </div>
-      </div>
+      <ScreenHead eyebrow="Galaxy" title={head.title} links={<BlockLinks folder="galaxies" name={name} />}>
+        <SaveControls saving={draft} />
+        {head.menu}
+      </ScreenHead>
       {draft.error && <p className="error screen-error">{draft.error.message}</p>}
       {!draft.loaded ? (
         <div className="gx-loading" aria-busy="true">
@@ -204,6 +150,7 @@ export function GalaxyScreen({ name }: { name: string }) {
         />
       )}
     </section>
+    </RenderLabel.Provider>
   );
 }
 

@@ -398,7 +398,9 @@ async def view_galaxy(
     render = await server.renders.render('galaxy', dict(
         project=request.project, options=request.galaxy,
         properties=request.properties, view=request.view,
-        size=request.size), _what(request.label), connection.is_disconnected)
+        size=request.size),
+        f"{_what(request.label)}, {request.view}",
+        connection.is_disconnected)
     header = dict(
         step=render.step, size=render.size, curves=render.curves,
         problems=render.problems, extras=render.extras)
@@ -447,7 +449,8 @@ async def view_galaxy_extra(
         project=request.project, options=request.galaxy,
         properties=request.properties, name=request.name, ids=request.ids,
         view=request.view, size=request.size),
-        f"{_what(request.label)}: {request.name}", connection.is_disconnected)
+        f"{_what(request.label)}, {request.name} {request.view}",
+        connection.is_disconnected)
     header = dict(
         name=extra.name, ids=extra.ids, title=extra.title,
         description=extra.description, unit=extra.unit, step=extra.step,
@@ -470,7 +473,9 @@ async def view_galaxy_cube(
     cube = await server.renders.render('cube', dict(
         project=request.project, options=request.galaxy,
         properties=request.properties, view=request.view,
-        size=request.size), _what(request.label), connection.is_disconnected)
+        size=request.size),
+        f"{_what(request.label)}, cube {request.view}",
+        connection.is_disconnected)
     path = server.views.put(cube)
     nchannels, ny, nx = cube.values.shape
     return CubeRenderInfo(

@@ -60,6 +60,22 @@ def test_the_workspace_has_projects_and_stays_in_its_folder(root):
         server.workspace.read_text('../elsewhere.yaml')
 
 
+def test_a_project_says_its_notes_types_and_latest_runs(root):
+    server = Server(root, LocalExecutor())
+    study = pathlib.Path(root, 'study')
+    for run, status in [('1', 'complete'), ('2', 'failed'), ('old', 'x')]:
+        pathlib.Path(study, 'runs/disk', run).mkdir(parents=True)
+        pathlib.Path(study, 'runs/disk', run, 'gbkfit.json').write_text(
+            f'{{"status": "{status}"}}')
+    project = server.workspace.project('study')
+    assert not project.notes
+    assert project.types['observations'] == {'image': 'pixel_brightness'}
+    assert 'setups' not in project.types
+    assert project.latest == {'disk': 'failed'}
+    pathlib.Path(study, 'README.md').write_text('')
+    assert server.workspace.project('study').notes
+
+
 def test_a_job_runs_a_setup_into_its_runs(root, setup):
     async def run():
         server = Server(root, LocalExecutor())

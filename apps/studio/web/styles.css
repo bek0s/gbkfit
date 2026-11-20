@@ -34,7 +34,7 @@ h2 { margin: 0; font: var(--text-heading); }
 .logo-text span { color: var(--muted); font-weight: 400; }
 @media (max-width: 1100px) { .logo-text { display: none; } .logo { padding: 0 14px 0 26px; } }
 .logo-mark { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.6; }
-.bar-project { flex: none; width: clamp(150px, 15vw, 240px); }
+.bar-project { flex: none; width: clamp(130px, 11vw, 190px); }
 .ui-settings-button { flex: none; color: var(--muted); }
 .ui-settings-button:hover { color: var(--fg); }
 .ui-menu .icon { width: 16px; height: 16px; }
@@ -58,9 +58,19 @@ h2 { margin: 0; font: var(--text-heading); }
 .rail-foot { margin-top: auto; }
 
 /* the list of a section */
-.list { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--panel); }
-.list-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 4px 14px; }
-.list-head b { font: var(--text-subtitle); }
+.list { position: relative; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--panel); }
+.list-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 4px 14px; }
+.list-head b { margin-right: auto; font: var(--text-subtitle); }
+/* (a word on what a block is: quiet, and coloured only by how a run went) */
+.list-detail { max-width: 9.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font: var(--text-caption); }
+.list-detail[data-state="none"] { font-style: italic; }
+.list-detail[data-state="complete"] { color: var(--ok); }
+.list-detail[data-state="running"] { color: var(--accent-text); }
+.list-detail[data-state="failed"] { color: var(--err); }
+/* (the edge of a pinned list: dragged to make it wider) */
+.list-edge { position: absolute; top: 0; right: -3px; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; }
+.list-edge:hover, .list-edge:focus-visible, body[data-resizing] .list-edge { outline: none; background: color-mix(in srgb, var(--accent) 50%, transparent); }
+body[data-resizing] { cursor: col-resize; user-select: none; }
 .list-find { padding: 4px 10px 6px; }
 .list-groups { flex: 1; min-height: 0; overflow: auto; padding: 0 6px 12px; }
 .list-group { padding-top: 6px; }
@@ -70,13 +80,14 @@ h2 { margin: 0; font: var(--text-heading); }
 .list-note { margin: 0; padding: 4px 8px 8px; color: var(--faint); font: var(--text-label); }
 .list .error { padding: 4px 8px; }
 .stage { position: relative; }
-.list-flyout { position: absolute; left: 0; top: 0; bottom: 0; z-index: 30; width: var(--list); display: flex; box-shadow: 18px 0 40px -18px var(--shadow); animation: list-in .15s ease-out; }
+.list-flyout { position: absolute; left: 0; top: 0; bottom: 0; z-index: 30; width: var(--list); display: flex; box-shadow: 4px 0 10px -2px var(--shadow), 22px 0 48px -10px var(--shadow); animation: list-in .15s ease-out; }
 /* (the list slides out of the rail as it opens; things that move in space
    move, screens that change do not, and nothing moves for those who ask
    for less motion) */
 @keyframes list-in { from { transform: translateX(-14px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .list-flyout { animation: none; } }
-.list-flyout .list { flex: 1; border: 1px solid var(--line2); border-left: 0; }
+/* (over the screen, the list is raised: a lighter pane with a clear edge) */
+.list-flyout .list { flex: 1; border: 1px solid var(--line2); border-left: 0; background: var(--panel2); }
 
 /* making and finding: the naming dialog, Go to */
 .naming { display: grid; gap: 10px; }
@@ -89,9 +100,9 @@ h2 { margin: 0; font: var(--text-heading); }
 .goto-input { width: 100%; padding: 14px 16px; border: 0; border-bottom: 1px solid var(--line2); background: transparent; font: var(--text-data); color: var(--fg); }
 .goto-input:focus { outline: none; }
 .goto-list { max-height: 50vh; overflow: auto; padding: 6px 0; }
-.goto-item { width: 100%; display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 16px; border: 0; background: none; color: var(--fg); text-align: left; cursor: pointer; }
+.goto-group { padding: 10px 16px 3px; font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
+.goto-item { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 6px 16px 6px 24px; border: 0; background: none; color: var(--fg); text-align: left; cursor: pointer; }
 .goto-item[aria-selected="true"] { background: var(--sel); }
-.goto-item small { font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
 .goto-item b { font: var(--text-data); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .goto-item span { color: var(--faint); font: var(--text-caption); }
 .goto-none { margin: 0; padding: 10px 16px; color: var(--faint); font: var(--text-label); }
@@ -139,9 +150,11 @@ h2 { margin: 0; font: var(--text-heading); }
 .empty-section-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 
 /* the stage and its screens */
-.stage { min-width: 0; min-height: 0; background: var(--bg); }
+/* (a screen fits the stage: nothing scrolls the page sideways) */
+.stage { min-width: 0; min-height: 0; overflow: hidden; background: var(--bg); }
 .screen { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .screen-head { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px 18px; padding: 14px 18px 12px; border-bottom: 1px solid var(--line); }
+.screen-title { min-width: 0; }
 .eyebrow { font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
 .screen-body { flex: 1; min-height: 0; display: grid; gap: 14px; align-content: start; padding: 14px 18px 18px; overflow: auto; }
 .card { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
@@ -351,13 +364,16 @@ h2 { margin: 0; font: var(--text-heading); }
    notes; or the four steps of a new project */
 .home-counts { padding-bottom: 3px; color: var(--faint); font: var(--text-data-small); }
 .home-screen { container-type: inline-size; }
-.home-grid { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-auto-rows: min-content; gap: 14px; padding: 14px 18px 18px; align-items: start; }
-.home-side { grid-row: span 2; display: grid; gap: 14px; }
+/* (two columns, each a stack of its panels: the map with the runs and the
+   recent under it, and the side) */
+.home-grid { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 14px; padding: 14px 18px 18px; align-items: start; }
+.home-main { min-width: 0; display: grid; gap: 14px; }
+.home-side { display: grid; gap: 14px; }
 .home-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; }
 /* (narrower: the side panels go under the map, side by side as they fit) */
 @container (max-width: 1250px) {
   .home-grid { grid-template-columns: minmax(0, 1fr); }
-  .home-side { grid-row: auto; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
+  .home-side { grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); align-items: start; }
 }
 @container (max-width: 700px) {
   .home-grid { padding: 10px; }
@@ -648,16 +664,15 @@ h2 { margin: 0; font: var(--text-heading); }
    its picture, the views, as tall as the stage; each scrolls on its own.
    The view is the largest: its map as large as its place, its curves
    under it. */
-.gx-head .head-actions { gap: 10px; }
-.gx-history { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line2); border-radius: 7px; }
-.gx-history button { width: 26px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); }
-.gx-history button:hover:not(:disabled) { background: var(--panel2); color: var(--fg); }
-.gx-history button:disabled { opacity: .35; }
-.gx-history .icon { width: 15px; height: 15px; }
-.gx-status { display: inline-flex; align-items: center; gap: 6px; font: var(--text-data-small); color: var(--faint); }
-.gx-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ok-fill); }
-.gx-status[data-dirty] { color: var(--fg2); }
-.gx-status[data-dirty]::before { background: var(--warn-fill); }
+.head-history { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line2); border-radius: 7px; }
+.head-history button { width: 26px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); }
+.head-history button:hover:not(:disabled) { background: var(--panel2); color: var(--fg); }
+.head-history button:disabled { opacity: .35; }
+.head-history .icon { width: 15px; height: 15px; }
+.head-status { display: inline-flex; align-items: center; gap: 6px; font: var(--text-data-small); color: var(--faint); }
+.head-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--ok-fill); }
+.head-status[data-dirty] { color: var(--fg2); }
+.head-status[data-dirty]::before { background: var(--warn-fill); }
 
 /* the view */
 .gx-view { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 14px; }
@@ -766,7 +781,11 @@ h2 { margin: 0; font: var(--text-heading); }
 .gv-status { margin-left: auto; font: var(--text-data-small); color: var(--muted); }
 .gv-empty { display: grid; place-items: center; min-height: 0; padding: 14px; }
 .gv-empty > .gx-map-wait { width: 100%; height: 100%; border-radius: 8px; }
-.gv-dock { min-height: 0; padding: 8px; }
+/* (the views shrink with the screen: the dock lays them out again in the
+   width it is given, never wider; it takes the size of its own element,
+   so the margin is its frame's) */
+.gv-dock-frame { min-width: 0; min-height: 0; display: grid; padding: 8px; }
+.gv-dock { min-width: 0; min-height: 0; overflow: hidden; }
 .dockview-theme-studio {
   --dv-paneview-active-outline-color: var(--accent);
   --dv-tabs-and-actions-container-font-size: 12px;

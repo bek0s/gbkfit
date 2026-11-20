@@ -174,14 +174,18 @@ export function Views(props: ViewsProps) {
         {galaxy === undefined ? (
           <div className="gv-empty">{props.why === 'waiting' ? <div className="gx-map-wait" /> : <EmptyNote why={props.why} />}</div>
         ) : (
-          <DockviewReact
-            className="gv-dock"
-            theme={{ name: 'studio', className: 'dockview-theme-studio', gap: 8 }}
-            components={{ view: ViewBody }}
-            defaultTabComponent={ViewHead}
-            singleTabMode="fullwidth"
-            onReady={onReady}
-          />
+          // (the dock takes the size of its own element, padding and all: the
+          // margin around it is its frame's)
+          <div className="gv-dock-frame">
+            <DockviewReact
+              className="gv-dock"
+              theme={{ name: 'studio', className: 'dockview-theme-studio', gap: 8 }}
+              components={{ view: ViewBody }}
+              defaultTabComponent={ViewHead}
+              singleTabMode="fullwidth"
+              onReady={onReady}
+            />
+          </div>
         )}
       </div>
     </ViewsContext.Provider>

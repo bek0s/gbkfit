@@ -20,6 +20,7 @@ import { Segments } from '../../components/ui/inputs';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
 import { BlockLinks } from '../../shell/BlockLinks';
+import { ScreenHead } from '../../shell/ScreenHead';
 import { useUnsaved } from '../editing';
 import { Files } from './Files';
 import { requestKey, useDraftState, usePrepJob, useResolved, type DraftState } from './hooks';
@@ -102,9 +103,9 @@ export function NewDataset({ kind }: { kind: Kind }) {
   if (project === null) return null;
   return (
     <section className="screen ds-screen">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">New dataset · {KINDS[kind].title}</div>
+      <ScreenHead
+        eyebrow={`New dataset · ${KINDS[kind].title}`}
+        title={
           <input
             id={PLACES.name}
             className="name-input"
@@ -116,15 +117,14 @@ export function NewDataset({ kind }: { kind: Kind }) {
               setNamed(true);
             }}
           />
-        </div>
-        <div className="head-actions">
-          {commit.phase ? <span className="note">{commit.phase}</span> : <NeedsNote needs={needs} />}
-          <Button onClick={() => go({ kind: 'home' })}>Cancel</Button>
-          <Button kind="primary" disabled={needs.length > 0 || commit.busy} title={needs.map((need) => need.text).join('\n') || undefined} onClick={commit.commit}>
-            Add to the project
-          </Button>
-        </div>
-      </div>
+        }
+      >
+        {commit.phase ? <span className="note">{commit.phase}</span> : <NeedsNote needs={needs} />}
+        <Button onClick={() => go({ kind: 'home' })}>Cancel</Button>
+        <Button kind="primary" disabled={needs.length > 0 || commit.busy} title={needs.map((need) => need.text).join('\n') || undefined} onClick={commit.commit}>
+          Add to the project
+        </Button>
+      </ScreenHead>
       {commit.error && <pre className="error screen-error">{commit.error}</pre>}
       <EditorBody project={root} editor={editor} />
     </section>
@@ -163,17 +163,10 @@ export function Dataset({ name }: { name: string }) {
   };
   return (
     <section className="screen ds-screen">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">Dataset{kind ? ` · ${KINDS[kind].title}` : ''}</div>
-          {head.title}
-        </div>
-        <BlockLinks folder="datasets" name={name} />
-        <div className="head-actions">
-          {kind && <Button onClick={startEditing}>Edit</Button>}
-          {head.menu}
-        </div>
-      </div>
+      <ScreenHead eyebrow={`Dataset${kind ? ` · ${KINDS[kind].title}` : ''}`} title={head.title} links={<BlockLinks folder="datasets" name={name} />}>
+        {kind && <Button onClick={startEditing}>Edit</Button>}
+        {head.menu}
+      </ScreenHead>
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
       {options && !kind && <p className="note screen-error">Datasets of the type {String(options.type)} have no screen yet.</p>}
       {kind && options && (
@@ -246,19 +239,13 @@ function EditDataset({
   const needs = editor.needs;
   return (
     <section className="screen ds-screen">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">Dataset · {KINDS[kind].title} · editing</div>
-          <h1>{name}</h1>
-        </div>
-        <div className="head-actions">
-          {commit.phase ? <span className="note">{commit.phase}</span> : <NeedsNote needs={needs} />}
-          <Button onClick={onDone}>Cancel</Button>
-          <Button kind="primary" disabled={needs.length > 0 || commit.busy || !dirty} title={needs.map((need) => need.text).join('\n') || undefined} onClick={commit.commit}>
-            Save
-          </Button>
-        </div>
-      </div>
+      <ScreenHead eyebrow={`Dataset · ${KINDS[kind].title} · editing`} title={name}>
+        {commit.phase ? <span className="note">{commit.phase}</span> : <NeedsNote needs={needs} />}
+        <Button onClick={onDone}>Cancel</Button>
+        <Button kind="primary" disabled={needs.length > 0 || commit.busy || !dirty} title={needs.map((need) => need.text).join('\n') || undefined} onClick={commit.commit}>
+          Save
+        </Button>
+      </ScreenHead>
       {commit.error && <pre className="error screen-error">{commit.error}</pre>}
       <EditorBody project={root} editor={editor} dataset={dataset} />
     </section>

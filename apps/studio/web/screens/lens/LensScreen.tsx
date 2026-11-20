@@ -11,13 +11,13 @@
 import { useMemo, useState } from 'react';
 import { useLensDescription, useLensView } from '../../api/queries';
 import { titleOf, type Options } from '../../components/SchemaForm';
-import { Button } from '../../components/ui/basics';
 import { Dock, DockSection } from '../../components/ui/dock';
 import { NumberField } from '../../components/ui/inputs';
 import { DropMenu } from '../../components/ui/overlays';
 import { SheetLayout } from '../../components/ui/sheet';
 import { BlockLinks } from '../../shell/BlockLinks';
 import { useBlockHead } from '../../shell/BlockMenu';
+import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
 import { typesOf } from '../galaxy/schema';
 import { isObject, useLensDraft, type LensDraft } from './draft';
@@ -51,26 +51,14 @@ export function LensScreen({ name }: { name: string }) {
   const pieces = asList(options?.pieces);
   return (
     <section className="screen ln-screen">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">
-            Lens · {pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'}
-          </div>
-          {head.title}
-        </div>
-        <BlockLinks folder="lenses" name={name} />
-        <div className="head-actions">
-          {draft.dirty && <span className="why">Not saved</span>}
-          {draft.saveError && <span className="error">{draft.saveError.message}</span>}
-          <Button disabled={!draft.dirty} onClick={draft.revert}>
-            Revert
-          </Button>
-          <Button kind="primary" disabled={!draft.dirty || draft.saving} onClick={() => void draft.save()}>
-            Save
-          </Button>
-          {head.menu}
-        </div>
-      </div>
+      <ScreenHead
+        eyebrow={`Lens · ${pieces.length} ${pieces.length === 1 ? 'piece' : 'pieces'}`}
+        title={head.title}
+        links={<BlockLinks folder="lenses" name={name} />}
+      >
+        <SaveControls saving={draft} />
+        {head.menu}
+      </ScreenHead>
       {draft.error && <p className="error screen-error">{draft.error.message}</p>}
       {!draft.loaded || !options ? (
         <p className="note screen-error">Reading the lens…</p>

@@ -15,6 +15,7 @@ import { useDescription, useLsfView, usePiece, useProject, usePsfView, useRefere
 import { ColourBar } from '../components/ColourBar';
 import { UNSTRETCHED, type Stretch } from '../components/colours';
 import { joinPath } from '../components/FilePicker';
+import { useEdits } from '../components/history';
 import { significant } from '../components/format';
 import { CutPlot } from '../components/CutPlot';
 import { contourPath, widthAt, type Width } from '../components/contour';
@@ -22,10 +23,11 @@ import { LinkIcon, UnlinkIcon } from '../components/icons';
 import { MapView } from '../components/MapView';
 import { SchemaForm, titleOf, unitKinds, type Defs, type Options } from '../components/SchemaForm';
 import { SpectrumPlot } from '../components/SpectrumPlot';
-import { Button, NavItem } from '../components/ui/basics';
+import { NavItem } from '../components/ui/basics';
 import { Choice, NumberField, QuantityInput, Segments, splitQuantity } from '../components/ui/inputs';
 import { Dock, DockSection } from '../components/ui/dock';
 import { useBlockHead } from '../shell/BlockMenu';
+import { SaveControls, ScreenHead } from '../shell/ScreenHead';
 import { kindOf } from '../shell/sections';
 import { BlockLinks } from '../shell/BlockLinks';
 import { useStudio } from '../studio';
@@ -122,10 +124,12 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
   const piece = usePiece(path);
   const schema = useSchema();
   const update = useUpdateBlock();
-  // The options as edited (null: as saved)
-  const [draft, setDraft] = useState<Options | null>(null);
   const [drawn, setDrawn] = useState<Drawn>({ source: 'own' });
   const saved = piece.data as Options | undefined;
+  // The options as edited (null: as saved), with a history
+  const edits = useEdits(saved);
+  const draft = edits.value;
+  const setDraft = edits.set;
   const options = draft ?? saved;
   // (drawn as they settle while they change)
   const [settled] = useDebouncedValue(options, 120);
@@ -133,18 +137,18 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
   const shown = settled ?? options;
   const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
   useUnsaved(dirty);
-  const save = () => draft && path && update.mutate({ path, content: draft }, { onSuccess: () => setDraft(null) });
-  // (Ctrl+S, or Cmd+S, saves)
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
-        event.preventDefault();
-        if (dirty && !update.isPending) save();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
+  const save = () => draft && path && update.mutate({ path, content: draft }, { onSuccess: edits.settle });
+  const saving = {
+    dirty,
+    saving: update.isPending,
+    saveError: update.error,
+    save,
+    revert: () => setDraft(null),
+    undo: edits.undo,
+    redo: edits.redo,
+    canUndo: edits.canUndo,
+    canRedo: edits.canRedo,
+  };
   const defs = (schema.data?.$defs ?? {}) as Defs;
   // (what it is drawn on, of an observation or a dataset)
   const of = drawn.source === 'dataset' || drawn.source === 'observation' ? drawn : null;
@@ -194,27 +198,14 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
   if (project === null || path === null) return null;
   return (
     <section className="screen response-screen">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">
-            {kindOf(folder)}
-            {options && typeof options.type === 'string' ? ` · ${titleOf(defs, family, options.type)}` : ''}
-          </div>
-          {head.title}
-        </div>
-        <BlockLinks folder={folder} name={name} />
-        <div className="head-actions">
-          {dirty && <span className="why">Not saved</span>}
-          {update.error && <span className="error">{update.error.message}</span>}
-          <Button disabled={!dirty} onClick={() => setDraft(null)}>
-            Revert
-          </Button>
-          <Button kind="primary" title="Save (Ctrl+S)" disabled={!dirty || update.isPending} onClick={save}>
-            Save
-          </Button>
-          {head.menu}
-        </div>
-      </div>
+      <ScreenHead
+        eyebrow={`${kindOf(folder)}${options && typeof options.type === 'string' ? ` · ${titleOf(defs, family, options.type)}` : ''}`}
+        title={head.title}
+        links={<BlockLinks folder={folder} name={name} />}
+      >
+        <SaveControls saving={saving} />
+        {head.menu}
+      </ScreenHead>
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
       {schema.error && <p className="error screen-error">{schema.error.message}</p>}
       {options !== undefined && shown !== undefined && (

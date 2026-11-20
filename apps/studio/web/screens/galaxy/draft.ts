@@ -11,10 +11,9 @@
 // others; resampled to a new number of rings; those of parameters gone,
 // removed). The step of history of the edit is updated in place.
 import { useDebouncedValue } from '@mantine/hooks';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, data } from '../../api/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { keys, useCreateBlock, useGalaxyParameters, usePiece, useSchema, useUpdateBlock } from '../../api/queries';
+import { keys, useCreateBlock, useGalaxyParameters, useOptionalPiece, usePiece, useProject, useSchema, useUpdateBlock } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
 import type { Defs } from '../../components/SchemaForm';
 import { getAt, isObject, ringRadii, withOpacitiesInStep, type Options, type Path } from './options';
@@ -49,12 +48,9 @@ export function useGalaxyDraft(project: string, name: string) {
   const galaxyPath = joinPath(project, `galaxies/${name}.yaml`);
   const paramsPath = joinPath(project, `params/${name}.yaml`);
   const galaxyPiece = usePiece(galaxyPath);
-  // (a params block that is not there yet is not asked for again)
-  const paramsPiece = useQuery({
-    queryKey: keys.piece(paramsPath),
-    retry: false,
-    queryFn: () => data(api.GET('/api/v1/pieces/{path}', { params: { path: { path: paramsPath } } })),
-  });
+  // (its params block, if the project has one; made as it is saved)
+  const paramsBlocks = useProject(project).data?.pieces.params;
+  const paramsPiece = useOptionalPiece(paramsPath, paramsBlocks && paramsBlocks.includes(name));
   const schema = useSchema();
   const client = useQueryClient();
   const updateBlock = useUpdateBlock();

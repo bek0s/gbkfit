@@ -1,7 +1,7 @@
 // What the page reads from the server and changes on it, with the keys of
 // its cache (which the events of the server refresh, see events.ts).
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { createContext, useContext, useRef } from 'react';
 import { api, data, errorMessage } from './client';
 import { decodeFrame } from './frames';
 import type { components, operations } from './schema';
@@ -21,6 +21,19 @@ export const keys = {
 // The paths of the projects of the workspace
 export function useProjects() {
   return useQuery({ queryKey: keys.projects, queryFn: () => data(api.GET('/api/v1/projects')) });
+}
+
+// A piece that a project may not have (e.g. the params block of the same
+// name as a galaxy): asked for only if the project has it (exists;
+// undefined: not known yet), so that a missing one is no error
+export function useOptionalPiece(path: string, exists: boolean | undefined) {
+  const piece = useQuery({
+    queryKey: keys.piece(path),
+    enabled: exists === true,
+    retry: false,
+    queryFn: () => data(api.GET('/api/v1/pieces/{path}', { params: { path: { path } } })),
+  });
+  return { data: exists ? piece.data : undefined, isPending: exists === undefined || (exists && piece.isPending), error: exists ? piece.error : null };
 }
 
 // A project: its blocks by folder (their names), and its runs
@@ -462,7 +475,8 @@ export function useSaveNotes(project: string) {
       });
       if (!response.ok) throw new Error(errorMessage(error, response.status, response.statusText));
     },
-    onSuccess: () => client.invalidateQueries({ queryKey: ['notes', project] }),
+    // (the project says whether it has notes)
+    onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: ['notes', project] }), client.invalidateQueries({ queryKey: keys.project(project) })]),
   });
 }
 
@@ -587,14 +601,19 @@ export interface GalaxyVolume {
   zero: number;
 }
 
+// What the renders of a screen are of, for the Activity drawer (e.g. the
+// name of a galaxy): given by the screen, and no part of their keys
+export const RenderLabel = createContext<string | undefined>(undefined);
+
 export function useGalaxyVolume(project: string, galaxy: Record<string, unknown> | undefined, properties: Record<string, unknown>, size = 96, enabled = true) {
+  const label = useContext(RenderLabel);
   return useQuery({
     queryKey: keys.view('galaxy-volume', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), size),
     enabled: enabled && galaxy !== undefined,
     placeholderData: keepPreviousData,
     retry: false,
     queryFn: async ({ signal }): Promise<GalaxyVolume> => {
-      const frame = decodeFrame(await data(api.POST('/api/v1/views/galaxy-volume', { signal, body: { project, galaxy: galaxy ?? {}, properties, size }, parseAs: 'arrayBuffer' })));
+      const frame = decodeFrame(await data(api.POST('/api/v1/views/galaxy-volume', { signal, body: { project, galaxy: galaxy ?? {}, properties, size, label }, parseAs: 'arrayBuffer' })));
       const header = frame.header as { step: number; depth_step: number; zero: number };
       const [array] = frame.arrays;
       return { values: array.values, shape: array.shape as [number, number, number], step: header.step, depthStep: header.depth_step, zero: header.zero };
@@ -621,6 +640,7 @@ export function useGalaxyExtra(
   view: 'sky' | 'face-on' | 'edge-on' = 'sky',
   size = 128,
 ) {
+  const label = useContext(RenderLabel);
   return useQuery({
     queryKey: keys.view('galaxy-extra', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), JSON.stringify(extra), view, size),
     enabled: galaxy !== undefined && extra !== null,
@@ -628,7 +648,7 @@ export function useGalaxyExtra(
     retry: false,
     queryFn: async ({ signal }): Promise<GalaxyExtra> => {
       const frame = decodeFrame(
-        await data(api.POST('/api/v1/views/galaxy-extra', { signal, body: { project, galaxy: galaxy ?? {}, properties, name: extra?.name ?? '', ids: extra?.ids ?? {}, view, size }, parseAs: 'arrayBuffer' })),
+        await data(api.POST('/api/v1/views/galaxy-extra', { signal, body: { project, galaxy: galaxy ?? {}, properties, name: extra?.name ?? '', ids: extra?.ids ?? {}, view, size, label }, parseAs: 'arrayBuffer' })),
       );
       const header = frame.header as { title: string; description: string; unit: string; step: number; depth_step: number | null };
       const [array] = frame.arrays;
@@ -675,6 +695,7 @@ export function useGalaxyCube(
   view: 'sky' | 'face-on' | 'edge-on',
   size = 160,
 ) {
+  const label = useContext(RenderLabel);
   return useQuery({
     queryKey: keys.view('galaxy-cube', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), view, size),
     enabled: galaxy !== undefined,
@@ -682,7 +703,7 @@ export function useGalaxyCube(
     retry: false,
     // (a cube is kept by the server for a while only)
     gcTime: 0,
-    queryFn: ({ signal }) => data(api.POST('/api/v1/views/galaxy-cube', { signal, body: { project, galaxy: galaxy ?? {}, properties, view, size } })),
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/galaxy-cube', { signal, body: { project, galaxy: galaxy ?? {}, properties, view, size, label } })),
   });
 }
 
@@ -693,6 +714,7 @@ export function useGalaxyRender(
   view: 'sky' | 'face-on' | 'edge-on',
   size = 160,
 ) {
+  const label = useContext(RenderLabel);
   return useQuery({
     queryKey: keys.view('galaxy', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), view, size),
     enabled: galaxy !== undefined,
@@ -703,7 +725,7 @@ export function useGalaxyRender(
         await data(
           api.POST('/api/v1/views/galaxy', {
             signal,
-            body: { project, galaxy: galaxy ?? {}, properties, view, size },
+            body: { project, galaxy: galaxy ?? {}, properties, view, size, label },
             parseAs: 'arrayBuffer',
           }),
         ),
@@ -757,7 +779,11 @@ export function useObserved(
   // (the options of the observation, so that it is asked again as they
   // change)
   seen: unknown,
+  // (what it is of, for the Activity drawer: else as the screen says)
+  of?: string,
 ) {
+  const screen = useContext(RenderLabel);
+  const label = of ?? screen;
   return useQuery({
     queryKey: keys.view('observed', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), observation ?? '', JSON.stringify(seen ?? null)),
     enabled: galaxy !== undefined && observation !== null,
@@ -765,6 +791,6 @@ export function useObserved(
     retry: false,
     // (its arrays are kept by the server for a while only)
     gcTime: 0,
-    queryFn: ({ signal }) => data(api.POST('/api/v1/views/observed', { signal, body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '' } })),
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/observed', { signal, body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '', label } })),
   });
 }

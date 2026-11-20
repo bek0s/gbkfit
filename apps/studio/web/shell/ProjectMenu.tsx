@@ -1,17 +1,26 @@
-// The project button at the top of the tree. Its menu makes a new
-// project, opens one of the workspace, renames, deletes or closes the open
-// one, and lists the recent ones. Its dialogs serve the start (no project)
-// too.
+// The project button of the bar. Its menu lists the projects to switch
+// to (those opened last first, then the others of the workspace), makes a
+// new project or opens one by its folder, and renames, deletes or closes
+// the open one. Its dialogs serve the start (no project) too.
 import { useState } from 'react';
 import { useCreateProject, useDeleteProject, useProject, useProjects, useRenameProject } from '../api/queries';
 import { Button, NavItem, TextField } from '../components/ui/basics';
 import { Dialog, DropMenu, type MenuEntry } from '../components/ui/overlays';
 import { useStudio } from '../studio';
 
+// The projects the menu lists to switch to
+const SWITCH = 8;
+
 export function ProjectMenu() {
   const { project, openProject, recent } = useStudio();
+  const others = useProjects().data ?? [];
   const [dialog, setDialog] = useState<'new' | 'open' | 'rename' | 'delete' | null>(null);
+  // (the projects to switch to, at most SWITCH)
+  const listed = [...recent, ...others.filter((path) => !recent.includes(path))].slice(0, SWITCH);
   const entries: MenuEntry[] = [
+    ...(listed.length > 0 ? [{ section: 'Projects' }] : []),
+    ...listed.map((path) => ({ label: path, onClick: () => openProject(path), current: path === project })),
+    { section: 'More' },
     { label: 'New project…', onClick: () => setDialog('new') },
     { label: 'Open a project…', onClick: () => setDialog('open') },
     ...(project !== null
@@ -21,8 +30,6 @@ export function ProjectMenu() {
           { label: 'Close the project', onClick: () => openProject(null) },
         ]
       : []),
-    ...(recent.length > 0 ? [{ section: 'Recent' }] : []),
-    ...recent.map((path) => ({ label: path, onClick: () => openProject(path), current: path === project })),
   ];
   return (
     <div className="project-menu">

@@ -1,8 +1,9 @@
 // The Studio: the bar (the project, Go to in the middle, New and the
 // activity of the server), the rail of its sections down the left, the
-// list of a section (opened over the stage from the rail, or pinned
-// beside it), and the stage, with one screen at a time.
-import { useCallback, useEffect, useRef, useState } from 'react';
+// list of a section (opened over the stage by a click on the rail, or
+// pinned beside it, as wide as its edge is dragged), and the stage, with
+// one screen at a time.
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Logo } from './components/icons';
 import { Button } from './components/ui/basics';
 import { Dataset, NewDataset } from './screens/dataset/DatasetScreen';
@@ -22,7 +23,7 @@ import { Adding, GoTo, NewMenu } from './shell/Making';
 import { address, type Screen } from './shell/navigation';
 import { ProjectMenu } from './shell/ProjectMenu';
 import { Rail } from './shell/Rail';
-import { hasList, SectionList, useCtrlKey } from './shell/SectionList';
+import { hasList, LIST_WIDTHS, SectionList, useCtrlKey } from './shell/SectionList';
 import { useRemembered } from './shell/remember';
 import { kindOf, sectionNamed, sectionOf, type SectionKey } from './shell/sections';
 import { StudioProvider, useStudio } from './studio';
@@ -38,6 +39,7 @@ export function App() {
 function Layout() {
   const { project, screen } = useStudio();
   const [pinned, setPinned] = useRemembered('list-pinned', false);
+  const [width, setWidth] = useRemembered('list-width', LIST_WIDTHS.start);
   const [peeking, setPeeking] = useState<SectionKey | null>(null);
   const closing = useRef<number | undefined>(undefined);
   const current = sectionOf(screen);
@@ -49,9 +51,11 @@ function Layout() {
     stay();
     closing.current = window.setTimeout(() => setPeeking(null), 300);
   };
+  // (a click on the rail shows the list of its section over the screen; a
+  // second click on it hides it)
   const peek = (key: SectionKey) => {
     stay();
-    setPeeking(!pinned && project !== null && hasList(key) ? key : null);
+    setPeeking((was) => (!pinned && project !== null && hasList(key) && was !== key ? key : null));
   };
   const pin = (next: boolean) => {
     setPinned(next);
@@ -64,7 +68,7 @@ function Layout() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   return (
-    <div className="app" data-list={listed ? 'pinned' : 'none'}>
+    <div className="app" data-list={listed ? 'pinned' : 'none'} style={{ '--list': `${width}px` } as CSSProperties}>
       <header className="bar">
         <div className="bar-start">
           <div className="logo">
@@ -84,7 +88,7 @@ function Layout() {
         </div>
       </header>
       <Rail onPeek={peek} onLeave={leave} />
-      {listed && <SectionList section={current} pinned onPin={pin} onOpen={() => undefined} />}
+      {listed && <SectionList section={current} pinned onPin={pin} onOpen={() => undefined} width={width} onWidth={setWidth} />}
       <main className="stage">
         {peeking !== null && (
           <div className="list-flyout" onMouseEnter={stay} onMouseLeave={leave}>

@@ -83,12 +83,18 @@ class ProjectInfo:
     its runs, and its links: each piece or setup that names a piece, with
     the piece it names and whether that piece is missing ({source:
     {folder, name}, target: {folder, name}, missing}; see
-    gbkfit.project.Project.links).
+    gbkfit.project.Project.links). Also: whether it has notes (its
+    README.md), the type of each piece that has one (its option 'type'),
+    by folder and name, and the status of the latest run of each setup
+    that has run ('running', 'complete' or 'failed'), by name.
     """
     path: str
     pieces: dict[str, list[str]]
     runs: list[str]
     links: list[dict[str, Any]] = dataclasses.field(default_factory=list)
+    notes: bool = False
+    types: dict[str, dict[str, str]] = dataclasses.field(default_factory=dict)
+    latest: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass
@@ -180,16 +186,20 @@ class Workspace:
                 .as_posix()
                 for file in Path(path, folder).rglob('*.yaml'))
             for folder in (*_PIECES, *_STUDIO_PIECES)}
-        runs = sorted(
-            self.relative(manifest.parent)
-            for manifest in Path(path, 'runs').rglob(gbkfit.outputs.MANIFEST))
+        manifests = sorted(
+            Path(path, 'runs').rglob(gbkfit.outputs.MANIFEST))
+        runs = [self.relative(manifest.parent) for manifest in manifests]
         links = [
             dict(source=dict(folder=source[0], name=source[1]),
                  target=dict(folder=folder, name=name),
                  missing=name not in pieces.get(folder, ()))
             for source, (folder, name)
             in [*target.links(), *_studio_links(path)]]
-        return ProjectInfo(self.relative(path), pieces, runs, links)
+        return ProjectInfo(
+            self.relative(path), pieces, runs, links,
+            notes=Path(path, 'README.md').is_file(),
+            types=_types(path, pieces),
+            latest=_latest_runs(Path(path, 'runs'), manifests))
 
     def create_project(self, relative: str) -> ProjectInfo:
         """
@@ -929,6 +939,46 @@ def _names(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [name for name in value if isinstance(name, str)]
+
+
+def _types(
+        project: str, pieces: dict[str, list[str]]
+) -> dict[str, dict[str, str]]:
+    """
+    Return the type of each piece of a project that has one (its option
+    'type'), by folder and name.
+    """
+    types: dict[str, dict[str, str]] = {}
+    for folder, names in pieces.items():
+        for name in names:
+            options = _read_yaml_quietly(Path(project, folder, f'{name}.yaml'))
+            if isinstance(options, dict) \
+                    and isinstance(kind := options.get('type'), str):
+                types.setdefault(folder, {})[name] = kind
+    return types
+
+
+def _latest_runs(runs: Path, manifests: Sequence[Path]) -> dict[str, str]:
+    """
+    Return the status of the latest run of each setup that has run, by
+    name, of the manifests of the runs of a project (in its runs/, see
+    gbkfit.project.next_run_path: runs/<setup>/<n>/).
+    """
+    latest: dict[str, tuple[int, Path]] = {}
+    for manifest in manifests:
+        *setup, number = manifest.parent.relative_to(runs).parts
+        if not setup or not number.isdigit():
+            continue
+        name = '/'.join(setup)
+        if name not in latest or int(number) > latest[name][0]:
+            latest[name] = (int(number), manifest)
+    statuses = {}
+    for name, (_, manifest) in latest.items():
+        try:
+            statuses[name] = str(json.loads(manifest.read_text())['status'])
+        except (OSError, ValueError, KeyError):
+            continue
+    return statuses
 
 
 def _read_yaml_quietly(path: Path) -> Any:

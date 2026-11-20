@@ -25,6 +25,7 @@ import { Segments } from '../../components/ui/inputs';
 import { SheetLayout } from '../../components/ui/sheet';
 import { BlockLinks } from '../../shell/BlockLinks';
 import { useBlockHead } from '../../shell/BlockMenu';
+import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
 import { isObject, type Options } from '../galaxy/options';
 import { forRender, type Param, type Properties } from '../galaxy/params';
@@ -83,17 +84,10 @@ export function CompareScreen({ name }: { name: string }) {
   const count = comparison ? `${comparison.galaxies.length} × ${comparison.observations.length}` : '';
   return (
     <section className="screen cmp-screen">
-      <div className="screen-head">
-        <div>
-          <div className="eyebrow">Comparison{count && ` · ${count}`}</div>
-          {head.title}
-        </div>
-        <BlockLinks folder="comparisons" name={name} />
-        <div className="head-actions">
-          {update.error && <span className="error">{update.error.message}</span>}
-          {head.menu}
-        </div>
-      </div>
+      <ScreenHead eyebrow={`Comparison${count && ` · ${count}`}`} title={head.title} links={<BlockLinks folder="comparisons" name={name} />}>
+        <SaveControls auto saving={{ dirty: false, saving: update.isPending, saveError: update.error, save: () => undefined, revert: () => undefined }} />
+        {head.menu}
+      </ScreenHead>
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
       {comparison === null ? (
         <p className="note screen-error">Reading the comparison…</p>
@@ -376,7 +370,7 @@ function Cell({
 }) {
   const saved = useSavedGalaxy(project, galaxy);
   const seen = usePiece(joinPath(project, `observations/${observation}.yaml`));
-  const observed = useObserved(project, saved.options, saved.properties, observation, seen.data);
+  const observed = useObserved(project, saved.options, saved.properties, observation, seen.data, galaxy);
   const model = useObservedMap(observed.data, 'model', show);
   const measured = useObservedMap(observed.data, 'data', show);
   const values = useMemo(() => {

@@ -3,10 +3,9 @@
 // params/<name>, by the names of the lens: e.g. sie_theta_e), edited as one
 // and saved together, as a galaxy and its parameters are (see the galaxy
 // screen's draft).
-import { useQuery } from '@tanstack/react-query';
 import { useCallback, useMemo, useState } from 'react';
-import { api, data } from '../../api/client';
-import { keys, useCreateBlock, usePiece, useSchema, useUpdateBlock } from '../../api/queries';
+import { useCreateBlock, useOptionalPiece, usePiece, useProject, useSchema, useUpdateBlock } from '../../api/queries';
+import { useEdits } from '../../components/history';
 import { joinPath } from '../../components/FilePicker';
 import type { Defs, Options } from '../../components/SchemaForm';
 import { useUnsaved } from '../editing';
@@ -20,12 +19,9 @@ export function useLensDraft(project: string, name: string) {
   const lensPath = joinPath(project, `lenses/${name}.yaml`);
   const paramsPath = joinPath(project, `params/${name}.yaml`);
   const lensPiece = usePiece(lensPath);
-  // (a params block that is not there yet is not asked for again)
-  const paramsPiece = useQuery({
-    queryKey: keys.piece(paramsPath),
-    retry: false,
-    queryFn: () => data(api.GET('/api/v1/pieces/{path}', { params: { path: { path: paramsPath } } })),
-  });
+  // (its params block, if the project has one; made as it is saved)
+  const paramsBlocks = useProject(project).data?.pieces.params;
+  const paramsPiece = useOptionalPiece(paramsPath, paramsBlocks && paramsBlocks.includes(name));
   const schema = useSchema();
   const updateBlock = useUpdateBlock();
   const createBlock = useCreateBlock(project);
@@ -34,7 +30,8 @@ export function useLensDraft(project: string, name: string) {
     () => (isObject(lensPiece.data) ? { options: lensPiece.data, properties: isObject(paramsBlock?.properties) ? paramsBlock.properties : {} } : undefined),
     [lensPiece.data, paramsBlock],
   );
-  const [draft, setDraft] = useState<LensState | null>(null);
+  const edits = useEdits(saved);
+  const draft = edits.value;
   const state = draft ?? saved;
   const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
   useUnsaved(dirty);
@@ -51,21 +48,25 @@ export function useLensDraft(project: string, name: string) {
       const content = { ...(paramsBlock ?? {}), properties: draft.properties };
       if (paramsBlock) await updateBlock.mutateAsync({ path: paramsPath, content });
       else await createBlock.mutateAsync({ folder: 'params', name, content });
-      setDraft(null);
+      edits.settle();
     } catch (e) {
       setSaveError(e as Error);
     } finally {
       setSaving(false);
     }
-  }, [draft, lensPath, paramsPath, paramsBlock, updateBlock, createBlock, name]);
+  }, [draft, lensPath, paramsPath, paramsBlock, updateBlock, createBlock, name, edits]);
   return {
     state,
     loaded: saved !== undefined && !paramsPiece.isPending,
     error: lensPiece.error ?? schema.error,
     defs: schema.data?.$defs as Defs | undefined,
     dirty,
-    edit: (next: (state: LensState) => LensState) => state && setDraft(next(state)),
-    revert: () => setDraft(null),
+    edit: (next: (state: LensState) => LensState) => saved && edits.set((current) => next(current ?? saved)),
+    revert: () => edits.set(null),
+    undo: edits.undo,
+    redo: edits.redo,
+    canUndo: edits.canUndo,
+    canRedo: edits.canRedo,
     save,
     saving,
     saveError,
