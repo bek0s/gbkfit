@@ -98,6 +98,7 @@ def model_header(
         rest: Rest = None,
         velocity: str | None = None,
         spectral_type: str | None = None,
+        spectral_unit: str | None = None,
         medium: str | None = None,
         spectral_axis: int | None = None
 ) -> tuple[astropy.io.fits.Header, Orientation]:
@@ -105,9 +106,11 @@ def model_header(
     Return the header of an array of a file in the orientation of the
     model, and how the array is put in it (see Orientation).
 
-    An axis whose type FITS does not define (e.g. CTYPE3 = 'WAVELENGTH',
-    as CALIFA writes) is read as the type given (see _with_spectral_type),
-    and is refused without one: nothing else says what its values are.
+    A spectral axis whose type does not say what its values are, one FITS
+    does not define (e.g. CTYPE3 = 'WAVELENGTH', as CALIFA writes) or
+    none (CTYPE3 left out; see unstated_spectral_axis), is read as the
+    type given (see _with_spectral_type), and is refused without one:
+    nothing else says what its values are.
 
     The orientation of the model has the celestial axes first, longitude
     (e.g. RA) then latitude, and the spectral axis last (see
@@ -154,8 +157,13 @@ def model_header(
         header leaves ambiguous: 'radio' or 'optical' (see
         _with_velocity_convention); it is not used for others.
     spectral_type : str, optional
-        The type of an axis whose header gives one that FITS does not
-        define (see _with_spectral_type); it is not used for others.
+        The type of a spectral axis whose type does not say what its
+        values are, one FITS does not define or none (see
+        _with_spectral_type); it is not used for others.
+    spectral_unit : str, optional
+        The unit of a spectral axis whose header gives none or one that
+        is not valid (see SpectralAxis, option unit); it is not used for
+        others.
     medium : str, optional
         The medium of the wavelengths of an axis of optical velocities and
         of their rest, if AIRORVAC does not state it: 'vacuum' (by
@@ -180,11 +188,15 @@ def model_header(
         If the world coordinates are invalid, or of fewer axes than the
         array, or the header does not say whether its velocities are radio
         or optical and velocity is not given; or the rest is given for a
-        spectral axis that does not take one (see above); or an axis has a
-        type that FITS does not define and spectral_type is not given; or
-        the medium is not valid or not the one AIRORVAC states.
+        spectral axis that does not take one (see above); or a spectral
+        axis has a type that FITS does not define, or none, and
+        spectral_type is not given; or
+        the spectral unit is not a unit of a spectral axis, or the header
+        has no spectral axis to give it to; or the medium is not valid or
+        not the one AIRORVAC states.
     """
-    header = _stated_header(source, header, shape, spectral_type, velocity)
+    header = _stated_header(
+        source, header, shape, spectral_type, velocity, spectral_unit)
     ndim = None if spectral_axis is None else spectral_axis + 1
     return _oriented_header(source, header, shape, rest, medium, ndim)
 

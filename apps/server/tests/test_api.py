@@ -582,7 +582,9 @@ def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
     # problem of its axis)
     (array,) = client.get('/api/v1/describe/study/data/ifu.fits').json()
     assert array['step'] == pytest.approx([0.2, 0.2])
-    assert len(array['problems']) == 1 and 'AWAV' in array['problems'][0]
+    assert array['problems'] == [dict(
+        severity='error', path=['spectral', 'rest'],
+        message='AWAV axis: rest missing')]
     assert array['rest'] is None
     (array,) = client.get(
         '/api/v1/describe/study/data/ifu.fits',
@@ -599,12 +601,13 @@ def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
     rest = dict(rest='6562.8 Angstrom')
     (array,) = client.get(
         '/api/v1/describe/study/data/califa.fits', params=rest).json()
-    assert array['nonstandard_type'] == 'WAVELENGTH'
-    assert 'is not one FITS defines' in array['problems'][0]
+    assert array['problems'] == [dict(
+        severity='error', path=['spectral', 'type'],
+        message="CTYPE3 'WAVELENGTH' not FITS")]
     (array,) = client.get(
         '/api/v1/describe/study/data/califa.fits',
         params=rest | dict(spectral_type='AWAV')).json()
-    assert array['problems'] == [] and array['nonstandard_type'] == 'WAVELENGTH'
+    assert array['problems'] == []
     assert abs(array['step'][2]) == pytest.approx(
         299792.458 * 1.25 / 6562.8, rel=1e-3)
     assert client.get(
@@ -813,6 +816,72 @@ def test_cubes_are_viewed_by_channel_spectrum_and_moments(client, root):
     assert client.get(
         f'/api/v1/views/channel/{path}', params=query | dict(channel=5)
     ).status_code == 400
+
+
+def test_every_view_of_a_cube_reads_its_spectral_axis_as_given(
+        client, root):
+    # A line in the second channel of a cube of frequencies that rise along
+    # the file: seen in GHz as they are; of a rest, in velocities, its
+    # channels reversed to increase (as a dataset of it has them), in every
+    # view alike
+    rest = 1420.405752e6
+    values = np.zeros((5, 3, 4), np.float32)
+    values[1] = 1
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600, CTYPE3='FREQ', CRVAL3=rest, CRPIX3=3, CDELT3=1e5,
+        CUNIT3='Hz'))
+    fits.writeto(pathlib.Path(root, 'study/data/hi.fits'), values, header)
+    views = '/api/v1/views/{}/study/data/hi.fits'
+    spectrum = client.get(
+        views.format('spectrum'), params=dict(hdu=0)).json()
+    assert spectrum['unit'] == 'GHz'
+    assert spectrum['values'] == [0, 12, 0, 0, 0]
+    reading = dict(hdu=0, rest='1420.405752 MHz')
+    spectrum = client.get(views.format('spectrum'), params=reading).json()
+    width = 299792.458 * 1e5 / rest
+    assert spectrum['unit'] == 'km/s'
+    assert spectrum['values'] == [0, 0, 0, 12, 0]
+    assert spectrum['spectral'] == pytest.approx(width * np.arange(-2, 3))
+    header, data = frames.decode(client.get(
+        views.format('channel'), params=reading | dict(channel=3)).content)
+    (channel,) = frames.arrays(header, data)
+    assert np.all(channel == 1)
+    assert header['spectral'] == pytest.approx(width)
+    header, data = frames.decode(client.get(
+        views.format('moments'), params=reading | dict(snr=0)).content)
+    np.testing.assert_allclose(frames.arrays(header, data)[1], width)
+    # Velocities in km/s in a header without a unit: in m/s (SI) as FITS
+    # reads them, or in the unit given
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600, CTYPE3='VRAD', CRVAL3=0, CRPIX3=1, CDELT3=10))
+    fits.writeto(pathlib.Path(root, 'study/data/kms.fits'), values, header)
+    path = '/api/v1/views/spectrum/study/data/kms.fits'
+    assert client.get(path, params=dict(hdu=0)).json()['spectral'] == \
+        pytest.approx([0, 0.01, 0.02, 0.03, 0.04])
+    assert client.get(
+        path, params=dict(hdu=0, spectral_unit='km/s')
+    ).json()['spectral'] == pytest.approx([0, 10, 20, 30, 40])
+    response = client.get(path, params=dict(hdu=0, spectral_unit='Jy'))
+    assert response.status_code == 400 and 'Jy' in response.text
+    response = client.get(
+        path, params=dict(hdu=0, spectral_unit='Angstrom'))
+    assert response.status_code == 400
+    assert response.json()['detail'] == "CUNIT3 'Angstrom' not of VRAD"
+    # A cube without CTYPE3: described as one whose type must be given; seen
+    # in channels alone until it is, then as of the type and unit given
+    del header['CTYPE3']
+    fits.writeto(pathlib.Path(root, 'study/data/untyped.fits'), values, header)
+    (array,) = client.get(
+        '/api/v1/describe/study/data/untyped.fits').json()
+    assert array['problems'][0] == dict(
+        severity='error', path=['spectral', 'type'], message='CTYPE3 missing')
+    path = '/api/v1/views/spectrum/study/data/untyped.fits'
+    assert client.get(path, params=dict(hdu=0)).json()['spectral'] is None
+    assert client.get(path, params=dict(
+        hdu=0, spectral_type='VRAD', spectral_unit='km/s'
+    )).json()['spectral'] == pytest.approx([0, 10, 20, 30, 40])
 
 
 def test_a_map_is_viewed_as_a_cube_of_one_channel(client, root):

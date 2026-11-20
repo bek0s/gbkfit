@@ -205,13 +205,13 @@ def test_hdu_can_be_chosen():
      (20, 24), "skewed"),
     (CELESTIAL | dict(
         CDELT1=-1 / 3600, CDELT2=1 / 3600, CTYPE3='WAVE', CUNIT3='um',
-        CRVAL3=1.5, CDELT3=0.001), (6, 20, 24), "type 'WAVE'"),
+        CRVAL3=1.5, CDELT3=0.001), (6, 20, 24), "WAVE axis: rest missing"),
     (CELESTIAL | dict(
         CDELT1=-1 / 3600, CDELT2=1 / 3600, CTYPE3='FREQ', CUNIT3='Hz',
-        CRVAL3=1.4e9, CDELT3=1e4), (6, 20, 24), "type 'FREQ'"),
+        CRVAL3=1.4e9, CDELT3=1e4), (6, 20, 24), "FREQ axis: rest missing"),
     (CELESTIAL | dict(
         CDELT1=-1 / 3600, CDELT2=1 / 3600, CTYPE3='VRAD', CUNIT3='KM/S',
-        CRVAL3=1.0, CDELT3=1.0), (6, 20, 24), "CUNIT3: 'KM/S' is not a valid"),
+        CRVAL3=1.0, CDELT3=1.0), (6, 20, 24), "CUNIT3 'KM/S' invalid"),
     (dict(CDELT1=1.0, CDELT2=1.0, CDELT3=1.0, PC3_1=0.5), (6, 20, 24),
      "couple axes")])
 def test_coordinates_the_model_cannot_represent(header, shape, message):
@@ -444,7 +444,7 @@ def test_rest_can_be_given():
     fits.writeto('plain.fits', np.zeros((6, 20, 24), np.float32))
     coords = read_data('plain.fits', rest='6562.8 Angstrom')[1]
     assert coords.rest == 6562.8 * u.Angstrom
-    with pytest.raises(ValueError, match="relativistic velocities"):
+    with pytest.raises(ValueError, match="takes no rest"):
         fits.writeto('velo.fits', np.zeros((6, 20, 24), np.float32),
                      fits.Header(_spectral_header('VELO')))
         read_data('velo.fits', rest='6562.8 Angstrom')
@@ -746,7 +746,7 @@ def test_the_header_of_a_frequency_axis_names_its_rest_if_not_given(
     path = write_map(tmp_path / 'cube.fits', SKY | dict(
         CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.42e9, CDELT3=1e5, CRPIX3=1,
         RESTFRQ=1420405752.0), (3, 20, 24))
-    with pytest.raises(ValueError, match="states '1420405752 Hz', RESTFRQ"):
+    with pytest.raises(ValueError, match="RESTFRQ 1420405752 Hz"):
         read_data(path)
 
 

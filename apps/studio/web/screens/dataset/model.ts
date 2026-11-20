@@ -8,8 +8,8 @@
 // A dataset holds items: a cube, a flux map, or moment maps (one item per
 // map). An item is a file of data, with its errors (a file, or one value)
 // and its mask, each an array of a FITS file.
-import type { ArrayInfo, CatalogueLine } from '../../api/client';
-import type { Velocity } from '../../api/queries';
+import type { ArrayInfo, ArrayProblem, CatalogueLine } from '../../api/client';
+import type { Reading, Velocity } from '../../api/queries';
 
 export type Kind = 'cube' | 'moments' | 'image';
 export type Role = 'data' | 'error' | 'mask';
@@ -144,9 +144,12 @@ export interface Spectral {
   line: string;
   unit: string;
   redshift: string;
+  // The unit of the axis, where its header gives none or one that is not
+  // valid ('' : that of the header; see the library's SpectralAxis.unit)
+  axisUnit: string;
 }
 
-export const NO_SPECTRAL: Spectral = { type: null, convention: null, line: '', unit: '', redshift: '' };
+export const NO_SPECTRAL: Spectral = { type: null, convention: null, line: '', unit: '', redshift: '', axisUnit: '' };
 
 // What a spectral axis whose header gives it a type FITS does not define
 // can be said to be (the types of FITS that GBKFIT reads it as; see
@@ -280,6 +283,10 @@ export function keptAxes(array: ArrayInfo): string[] {
   return array.axes.filter((_, i) => array.shape[i] > 1);
 }
 
+export function keptAxisUnits(array: ArrayInfo): string[] {
+  return array.axis_units.filter((_, i) => array.shape[i] > 1);
+}
+
 export function sameShape(a: ArrayInfo, b: ArrayInfo): boolean {
   return kept(a).join() === kept(b).join();
 }
@@ -346,13 +353,14 @@ export type Spectrum = 'wave' | 'freq';
 export const LINE_UNITS: Record<Spectrum, string[]> = { wave: ['Angstrom', 'nm', 'micron'], freq: ['GHz', 'MHz'] };
 
 // Whether the channels of an array are of wavelengths or frequencies,
-// which a rest makes velocities (null: velocities, no spectral axis, or one
-// whose type FITS does not define and that is not said: then nothing is
-// known of it); by the type of its header, or else the type given
+// which a rest makes velocities (null: velocities, no spectral axis, or
+// one of no type): by the type given (that of an axis whose own does not
+// say what it is), or else that of its header
 export function spectrumOf(array: ArrayInfo | undefined, type: SpectralType | null): Spectrum | null {
-  const axis = array && (array.nonstandard_type ? type : keptAxes(array)[2])?.slice(0, 4);
+  const axis = array && (type ?? keptAxes(array)[2])?.slice(0, 4);
   return axis === 'WAVE' || axis === 'AWAV' ? 'wave' : axis === 'FREQ' ? 'freq' : null;
 }
+
 
 // The rest of the spectral axis as GBKFIT takes it (e.g. '6628.43
 // Angstrom'): the line at its redshift, if a line is typed
@@ -394,9 +402,16 @@ export function catalogueLineOf(rests: { name: string; rest: string }[], line: s
 }
 
 // The spectral axis of a rest as GBKFIT writes it ('6628.43 Angstrom')
-function spectralOfRest(rest: unknown, convention: unknown, type: unknown): Spectral {
+function spectralOfRest(rest: unknown, convention: unknown, type: unknown, axisUnit: unknown = null): Spectral {
   const [line = '', unit = ''] = typeof rest === 'string' ? rest.trim().split(/\s+/, 2) : [];
-  return { type: spectralTypeOption(type), convention: convention === 'radio' || convention === 'optical' ? convention : null, line, unit, redshift: '' };
+  return {
+    type: spectralTypeOption(type),
+    convention: convention === 'radio' || convention === 'optical' ? convention : null,
+    line,
+    unit,
+    redshift: '',
+    axisUnit: typeof axisUnit === 'string' ? axisUnit : '',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -482,29 +497,32 @@ export interface Resolved {
   kind: Kind;
   draft: Draft;
   arrays: Record<string, Arrays>;
+  // How the spectral axis of its cube is read (see useResolved)
+  reading: Reading;
 }
 
 // What the draft still needs before it can be a dataset, the most basic
-// first (none: it can be one): what the user is to give, then the problems
-// of the headers (see headerProblems), then of the edits. The name is the
-// caller's.
+// first (none: it can be one): what the user is to give of its files, then
+// the problems the library finds of them (see headerProblems: of an option
+// of the spectral axis of a cube, given there), then of the edits. The
+// name is the caller's.
 export function needsOf(resolved: Resolved): Need[] {
   const needs = inputNeeds(resolved);
-  for (const problems of Object.values(headerProblems(resolved, needs))) if (problems[0]) needs.push({ place: 'files', text: problems[0] });
+  for (const problems of Object.values(headerProblems(resolved))) {
+    for (const problem of problems) needs.push({ place: resolved.kind === 'cube' && problem.path[0] === 'spectral' ? 'spectral' : 'files', text: problem.message });
+  }
   const first = firstData(resolved);
   if (first) needs.push(...editNeeds(resolved.kind, resolved.draft, resolved.arrays, first));
   return needs;
 }
 
-// The problems of the header of the data of each item that a dataset of
-// them has (by its key): once nothing the user is to give is missing (until
-// then, they are those of what is missing, e.g. the line of an axis of
-// wavelengths, which is asked for) and every description is of what is
-// given (one read again for a line just typed is of the line before)
-export function headerProblems(resolved: Resolved, needs: Need[] = inputNeeds(resolved)): Record<string, string[]> {
+// The problems the library finds of the data of each item (by its key),
+// once every description is of what is given (one read again for a line
+// just typed is of the line before)
+export function headerProblems(resolved: Resolved): Record<string, ArrayProblem[]> {
   const { kind, draft, arrays } = resolved;
   const slots = presentSlots(kind, draft);
-  if (needs.length > 0 || slots.some((slot) => !(arrays[slot.key] ?? NO_ARRAYS).current)) return {};
+  if (slots.some((slot) => !(arrays[slot.key] ?? NO_ARRAYS).current)) return {};
   return Object.fromEntries(slots.map((slot) => [slot.key, arrays[slot.key]?.found.data?.problems ?? []]));
 }
 
@@ -516,7 +534,8 @@ function firstData({ kind, draft, arrays }: Resolved): ArrayInfo | undefined {
 }
 
 // What the user is to give before the draft can be a dataset
-function inputNeeds({ kind, draft, arrays }: Resolved): Need[] {
+function inputNeeds(resolved: Resolved): Need[] {
+  const { kind, draft, arrays } = resolved;
   const info = KINDS[kind];
   const slots = presentSlots(kind, draft);
   const needs: Need[] = [];
@@ -543,24 +562,13 @@ function inputNeeds({ kind, draft, arrays }: Resolved): Need[] {
       if (item.errorValue !== null && !(Number(item.errorValue) > 0)) needs.push({ place: 'files', text: 'Give the error a value above 0' });
     }
   }
-  const first = firstData({ kind, draft, arrays });
+  const first = firstData(resolved);
   if (kind === 'moments' && first) {
     const misfit = slots.find((slot) => {
       const data = arrays[slot.key]?.found.data;
       return data !== undefined && kept(data).length === 2 && !sameShape(data, first);
     });
     if (misfit) needs.push({ place: 'files', text: `The map of ${misfit.title.toLowerCase()} is not of the shape of the others` });
-  }
-  if (kind === 'cube' && first) {
-    if (first.nonstandard_type && draft.spectral.type === null) {
-      needs.push({ place: 'spectral', text: `Say what the spectral axis is (${first.nonstandard_type} is not a FITS type)` });
-    }
-    if (first.ambiguous_velocity && draft.spectral.convention === null) {
-      needs.push({ place: 'spectral', text: 'Say whether the velocities are radio or optical' });
-    }
-    if (spectrumOf(first, draft.spectral.type) !== null && restOf(draft.spectral) === null) {
-      needs.push({ place: 'spectral', text: 'Give the line, for the velocities of the channels' });
-    }
   }
   return needs;
 }
@@ -665,7 +673,7 @@ export function datasetOptions({ kind, draft, arrays }: Resolved, project: strin
   if (kind === 'cube') {
     const spectral: Record<string, unknown> = {};
     const data = arrays[key]?.found.data;
-    if (data?.nonstandard_type && draft.spectral.type !== null) spectral.type = draft.spectral.type;
+    if (draft.spectral.type !== null) spectral.type = draft.spectral.type;
     if (draft.spectral.convention !== null) spectral.convention = draft.spectral.convention;
     const rest = spectrumOf(data, draft.spectral.type) !== null ? restOf(draft.spectral) : null;
     if (rest !== null) spectral.rest = rest;
@@ -754,7 +762,8 @@ export function prepRequest({ kind, draft, arrays }: Resolved, project: string):
       roi_spec: channels && [channels[0], channels[1] + 1],
       velocity_rest: spectrumOf(first, draft.spectral.type) !== null ? restOf(draft.spectral) : null,
       velocity: draft.spectral.convention,
-      spectral_type: first?.nonstandard_type ? draft.spectral.type : null,
+      spectral_type: draft.spectral.type,
+      spectral_unit: draft.spectral.axisUnit || null,
       noise_error: noise,
       ...adding,
     },
@@ -834,8 +843,8 @@ export function draftOfDataset(kind: Kind, options: Record<string, unknown>, pro
       if (item !== null && typeof item === 'object') items[slot.key] = itemOfOptions(item as Record<string, unknown>, project);
     }
   } else items[KINDS[kind].first[0]] = itemOfOptions(options, project);
-  const spectral = (options.spectral ?? {}) as { rest?: unknown; convention?: unknown; type?: unknown };
-  return { items, spectral: spectralOfRest(spectral.rest, spectral.convention, spectral.type), edits: NO_EDITS };
+  const spectral = (options.spectral ?? {}) as { rest?: unknown; convention?: unknown; type?: unknown; unit?: unknown };
+  return { items, spectral: spectralOfRest(spectral.rest, spectral.convention, spectral.type, spectral.unit), edits: NO_EDITS };
 }
 
 // How the files of a dataset were prepared (see the server's
@@ -891,7 +900,7 @@ export function draftOfPreparation(kind: Kind, dataset: Record<string, unknown>,
   const text = (value: unknown) => (typeof value === 'number' ? String(value) : '');
   return {
     items,
-    spectral: spectralOfRest(options.velocity_rest, options.velocity, options.spectral_type),
+    spectral: spectralOfRest(options.velocity_rest, options.velocity, options.spectral_type, options.spectral_unit),
     edits: {
       x: range(options.roi_spat, 0),
       y: range(options.roi_spat, 2),
@@ -942,6 +951,7 @@ export function editsInWords(kind: Kind, draft: Draft): string[] {
   if (draft.spectral.convention) lines.push(`Velocities read as ${draft.spectral.convention}`);
   const said = SPECTRAL_TYPES.find(({ type }) => type === draft.spectral.type);
   if (said) lines.push(`Spectral axis read as ${said.text.toLowerCase()} (${said.type})`);
+  if (draft.spectral.axisUnit) lines.push(`Spectral axis read in ${draft.spectral.axisUnit}`);
   return lines;
 }
 

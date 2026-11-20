@@ -105,15 +105,15 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     [leaving],
   );
 
-  const go = useCallback(
-    (next: Screen) =>
-      show(next, () => {
-        if (project !== null && next.kind === 'block') {
-          setVisited((all) => ({ ...all, [project]: latestFirst(all[project] ?? [], next, RECENT, sameScreen) }));
-        }
-      }),
-    [show, project, setVisited],
-  );
+  const go = useCallback((next: Screen) => show(next), [show]);
+
+  // (a block shown is a block visited, however it came: by a click, by
+  // the address, or back and forth in the history)
+  useEffect(() => {
+    if (project !== null && screen.kind === 'block') {
+      setVisited((all) => ({ ...all, [project]: latestFirst(all[project] ?? [], screen, RECENT, sameScreen) }));
+    }
+  }, [project, screen, setVisited]);
 
   const openProject = useCallback(
     (path: string | null) =>

@@ -52,8 +52,11 @@ def file_references(
     Data.from_files): the reference pixels and values given, for each
     axis (None where not given), and the rest, the medium and the
     convention of the spectral axis (velocity: how an ambiguous header is
-    read, see model_header), and its type (spectral_type: how an axis whose
-    header gives a type FITS does not define is read, see model_header).
+    read, see model_header), its type (spectral_type: how an axis whose
+    header gives a type FITS does not define, or none, is read, see
+    model_header),
+    and its unit (spectral_unit: of an axis whose header gives none, or
+    one that is not valid).
 
     Raises
     ------
@@ -80,7 +83,8 @@ def file_references(
         rpix=with_spectral('rpix', rpix, spectral.rpix()),
         rval=with_spectral('rval', rval, spectral.rval()),
         rest=spectral.rest(), medium=spectral.medium(),
-        velocity=spectral.convention(), spectral_type=spectral.type())
+        velocity=spectral.convention(), spectral_type=spectral.type(),
+        spectral_unit=spectral.unit())
 
 
 def cube_coords(

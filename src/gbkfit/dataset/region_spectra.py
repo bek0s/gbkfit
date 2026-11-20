@@ -150,7 +150,8 @@ class DatasetRegionSpectra(Dataset):
             references['rest'], cls.spectral_axis, references['medium'],
             unit, beam, spectral_correlation=spectral_correlation,
             velocity=references['velocity'], error_kind=error_kind,
-            mask_kind=mask_kind, spectral_type=references['spectral_type'])
+            mask_kind=mask_kind, spectral_type=references['spectral_type'],
+            spectral_unit=references['spectral_unit'])
         dataset = cls(
             spectra, regions,
             _grids.cube_coords(coords, None, None, spectral)['spectral'])

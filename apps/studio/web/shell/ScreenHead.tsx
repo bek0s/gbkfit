@@ -1,19 +1,62 @@
-// The head of a screen, the same on every screen: what it is (its kind,
-// and a word on it), its name, the blocks it uses and those that use it,
-// and its actions at the end. A screen that edits a block says there
-// whether its edits are saved, with undo and redo, Revert and Save (see
-// SaveControls).
+// The head of a screen, the same height on every screen, its name always
+// in the same place: above the name, the way back to the overview of its
+// section (an arrow and the overview's name, e.g. "← Datasets", as Apple's
+// and GitHub's back links name the page they go to), or what it is (its
+// eyebrow, of a block of a section with no overview yet), or nothing (a
+// page of the top: Home, an overview); beside the name, what the block is
+// in tags (e.g. "Cube"), or a note (e.g. the counts of a project); and its
+// actions at the end. (What a block uses and what uses it are no part of
+// the head: they belong to the body of its screen.) A screen that edits a block says there whether its
+// edits are saved, with undo and redo, Revert and Save (see SaveControls).
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Button } from '../components/ui/basics';
+import { useStudio } from '../studio';
+import { sectionNamed, type SectionKey } from './sections';
 
-export function ScreenHead({ eyebrow, title, links, children }: { eyebrow: ReactNode; title: ReactNode; links?: ReactNode; children?: ReactNode }) {
+export function ScreenHead({
+  eyebrow,
+  title,
+  tags = [],
+  note,
+  up,
+  children,
+}: {
+  // What it is, above its name (of a screen with no way back)
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  // What it is, beside its name (e.g. the kind of a dataset)
+  tags?: string[];
+  // A word beside the name (e.g. how many blocks a page of them lists)
+  note?: ReactNode;
+  // The section whose overview the screen goes back to
+  up?: SectionKey;
+  children?: ReactNode;
+}) {
+  const { go } = useStudio();
+  const overview = up === undefined ? undefined : sectionNamed(up).overview;
   return (
     <div className="screen-head">
       <div className="screen-title">
-        <div className="eyebrow">{eyebrow}</div>
-        {typeof title === 'string' ? <h1>{title}</h1> : title}
+        {overview && up !== undefined ? (
+          <button className="screen-up" onClick={() => go({ kind: 'section', key: up })}>
+            <svg className="icon" viewBox="0 0 16 16" aria-hidden>
+              <path d="M13 8H3.5M7.5 4 3.5 8l4 4" />
+            </svg>
+            {overview.title}
+          </button>
+        ) : (
+          eyebrow !== undefined && <div className="eyebrow">{eyebrow}</div>
+        )}
+        <div className="screen-name">
+          {typeof title === 'string' ? <h1>{title}</h1> : title}
+          {tags.map((tag) => (
+            <span key={tag} className="screen-tag">
+              {tag}
+            </span>
+          ))}
+        </div>
       </div>
-      {links}
+      {note}
       {children !== undefined && <div className="head-actions">{children}</div>}
     </div>
   );

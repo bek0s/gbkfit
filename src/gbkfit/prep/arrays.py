@@ -50,7 +50,8 @@ class FitsArrays(Arrays):
             rest: str | astropy.units.Quantity | None = None,
             error_kind: ErrorKind = 'sigma',
             mask_kind: MaskKind = 'valid',
-            spectral_type: str | None = None
+            spectral_type: str | None = None,
+            spectral_unit: str | None = None
     ) -> 'FitsArrays':
         """
         Read the data, errors and mask from files in the orientation of
@@ -76,8 +77,12 @@ class FitsArrays(Arrays):
         mask_kind : str, optional
             What the file of the mask marks (see read_arrays).
         spectral_type : str, optional
-            The type of an axis whose header gives one that FITS does not
-            define (see model_header).
+            The type of a spectral axis whose header gives one that FITS
+            does not define, or none (see model_header).
+        spectral_unit : str, optional
+            The unit of a spectral axis whose header gives none or one that
+            is not valid (see SpectralAxis, option unit); it is not used for
+            others.
 
         Returns
         -------
@@ -94,7 +99,8 @@ class FitsArrays(Arrays):
         arrays = read_arrays(
             data, error, mask, error_kind=error_kind, mask_kind=mask_kind,
             rest=rest,
-            velocity=velocity, spectral_type=spectral_type)
+            velocity=velocity, spectral_type=spectral_type,
+            spectral_unit=spectral_unit)
         header = arrays.header
         # (a header without world coordinates has no spectral axis)
         if rest is not None and astropy.wcs.WCS(header).wcs.spec < 0:

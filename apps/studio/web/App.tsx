@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import { Logo } from './components/icons';
 import { Button } from './components/ui/basics';
 import { Dataset, NewDataset } from './screens/dataset/DatasetScreen';
+import { DatasetsOverview } from './screens/dataset/DatasetsOverview';
 import { isKind } from './screens/dataset/model';
 import { GalaxyScreen } from './screens/galaxy/GalaxyScreen';
 import { Home } from './screens/Home';
@@ -108,6 +109,7 @@ function ScreenView({ screen }: { screen: Screen }) {
       return <Home />;
     case 'section':
       if (screen.key === 'fit') return <FitsOverview />;
+      if (screen.key === 'data') return <DatasetsOverview />;
       return <EmptySection section={screen.key} />;
     case 'block':
       if (screen.folder === 'datasets') return <Dataset key={address(screen)} name={screen.name} />;

@@ -22,14 +22,15 @@ import {
 } from './model';
 
 function array(index: number, name: string, shape: number[], axes = ['RA---TAN', 'DEC--TAN', 'VRAD']): ArrayInfo {
-  return { index, name, shape, axes: axes.slice(0, shape.length), unit: 'Jy/beam', step: null, beam: null, rms: null, ambiguous_velocity: false, problems: [] };
+  return { index, name, shape, axes: axes.slice(0, shape.length), axis_units: axes.slice(0, shape.length).map(() => ''), unit: 'Jy/beam', step: null, beam: null, rms: null, ambiguous_velocity: false, problems: [] };
 }
 
 // (stale: the files described for other inputs, being read again)
 function resolve(kind: Kind, draft: Draft, files: Record<string, ArrayInfo[]>, stale: string[] = []): Resolved {
   const describe = (path: string) => ({ arrays: files[path], current: !stale.includes(path) });
   const ndim = kind === 'cube' ? 3 : 2;
-  return { kind, draft, arrays: Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, ndim)])) };
+  const reading = { rest: null, velocity: null, type: null, unit: null };
+  return { kind, draft, arrays: Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, ndim)])), reading };
 }
 
 describe('a draft prepared and edited again', () => {
@@ -38,7 +39,7 @@ describe('a draft prepared and edited again', () => {
     const files = { 'p/data/cube.fits': [array(0, 'PRIMARY', [40, 30, 20]), { ...array(1, 'STAT', [40, 30, 20]), holds: 'variance' as const }] };
     const draft: Draft = {
       items: { cube: { files: { data: { file: 'p/data/cube.fits' }, error: { file: 'p/data/cube.fits', array: 'STAT' } }, errorValue: null, errorKind: null } },
-      spectral: { type: null, convention: 'radio', line: '', unit: '', redshift: '' },
+      spectral: { type: null, convention: 'radio', line: '', unit: '', redshift: '', axisUnit: '' },
       edits: { ...NO_EDITS, x: ['2', '30'], channels: ['5', '14'], values: { cube: { below: '0.001', above: '', sigma: '' } }, regions: '1', minify: true },
     };
     const request = prepRequest(resolve('cube', draft, files), 'p');
@@ -79,22 +80,25 @@ describe('the spectral axis of a cube', () => {
   });
   const ifu = { 'ifu.fits': [array(1, 'DATA', [80, 70, 240], ['RA---TAN', 'DEC--TAN', 'AWAV'])] };
 
-  it('needs a line for channels of wavelengths, and not once it has one', () => {
-    expect(needsOf(resolve('cube', draft(''), ifu)).map((need) => need.place)).toEqual(['spectral']);
+  // (the library's problem of the file, of the option that fixes it)
+  const restMissing = { severity: 'error' as const, path: ['spectral', 'rest'], message: 'AWAV axis: rest missing' };
+  const missing = { 'ifu.fits': [{ ...ifu['ifu.fits'][0], problems: [restMissing] }] };
+  const other = { severity: 'error' as const, path: ['unit'], message: "BUNIT 'JY/BEAM' invalid" };
+  const unit = { 'ifu.fits': [{ ...ifu['ifu.fits'][0], problems: [other] }] };
+
+  it('needs what the library finds of the files, where it is given', () => {
+    expect(needsOf(resolve('cube', draft(''), missing))).toEqual([{ place: 'spectral', text: 'AWAV axis: rest missing' }]);
+    expect(needsOf(resolve('cube', draft(''), unit))).toEqual([{ place: 'files', text: "BUNIT 'JY/BEAM' invalid" }]);
+    // (none found: nothing of its own)
     expect(needsOf(resolve('cube', draft('6562.8'), ifu))).toEqual([]);
   });
 
-  it('judges the problems of a header once nothing is missing and it is of what is given', () => {
-    const problem = 'the spectral axis is of type AWAV: give a rest';
-    const described = { 'ifu.fits': [{ ...ifu['ifu.fits'][0], problems: [problem] }] };
-    // (the line missing: its problem is the line asked for)
-    expect(headerProblems(resolve('cube', draft(''), described))).toEqual({});
+  it('judges the problems of a header once it is of what is given', () => {
     // (the line typed, the header read again for it: not judged yet)
-    expect(headerProblems(resolve('cube', draft('6562.8'), described, ['ifu.fits']))).toEqual({});
-    expect(needsOf(resolve('cube', draft('6562.8'), described, ['ifu.fits']))).toEqual([]);
+    expect(headerProblems(resolve('cube', draft('6562.8'), missing, ['ifu.fits']))).toEqual({});
+    expect(needsOf(resolve('cube', draft('6562.8'), missing, ['ifu.fits']))).toEqual([]);
     // (read for it: its own)
-    expect(headerProblems(resolve('cube', draft('6562.8'), described))).toEqual({ cube: [problem] });
-    expect(needsOf(resolve('cube', draft('6562.8'), described))).toEqual([{ place: 'files', text: problem }]);
+    expect(headerProblems(resolve('cube', draft('6562.8'), unit))).toEqual({ cube: [other] });
   });
 });
 

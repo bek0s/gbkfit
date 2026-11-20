@@ -19,11 +19,10 @@ import { Dock, DockSection, NeedsNote as DockNeeds } from '../../components/ui/d
 import { Segments } from '../../components/ui/inputs';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
-import { BlockLinks } from '../../shell/BlockLinks';
 import { ScreenHead } from '../../shell/ScreenHead';
 import { useUnsaved } from '../editing';
 import { Files } from './Files';
-import { requestKey, useDraftState, usePrepJob, useResolved, type DraftState } from './hooks';
+import { dataKey, requestKey, useDraftState, usePrepJob, useResolved, type DraftState } from './hooks';
 import { MadeFrom, originalsOf, preparedFilesOf } from './MadeFrom';
 import {
   dataFiles,
@@ -104,7 +103,8 @@ export function NewDataset({ kind }: { kind: Kind }) {
   return (
     <section className="screen ds-screen">
       <ScreenHead
-        eyebrow={`New dataset · ${KINDS[kind].title}`}
+        up="data"
+        tags={[`New ${KINDS[kind].title.toLowerCase()}`]}
         title={
           <input
             id={PLACES.name}
@@ -163,7 +163,7 @@ export function Dataset({ name }: { name: string }) {
   };
   return (
     <section className="screen ds-screen">
-      <ScreenHead eyebrow={`Dataset${kind ? ` · ${KINDS[kind].title}` : ''}`} title={head.title} links={<BlockLinks folder="datasets" name={name} />}>
+      <ScreenHead up="data" title={head.title} tags={kind ? [KINDS[kind].title] : []}>
         {kind && <Button onClick={startEditing}>Edit</Button>}
         {head.menu}
       </ScreenHead>
@@ -239,7 +239,7 @@ function EditDataset({
   const needs = editor.needs;
   return (
     <section className="screen ds-screen">
-      <ScreenHead eyebrow={`Dataset · ${KINDS[kind].title} · editing`} title={name}>
+      <ScreenHead up="data" title={name} tags={[KINDS[kind].title, 'Editing']}>
         {commit.phase ? <span className="note">{commit.phase}</span> : <NeedsNote needs={needs} />}
         <Button onClick={onDone}>Cancel</Button>
         <Button kind="primary" disabled={needs.length > 0 || commit.busy || !dirty} title={needs.map((need) => need.text).join('\n') || undefined} onClick={commit.commit}>
@@ -276,7 +276,7 @@ function useEditor(project: string, kind: Kind, initial: Draft): Editor {
   const resolved = useResolved(kind, state.draft);
   const needs = needsOf(resolved);
   const request = needs.length === 0 && needsPrep(resolved) ? prepRequest(resolved, project) : null;
-  const preview = usePrepJob();
+  const preview = usePrepJob(dataKey(state.draft.items));
   const files = preview.job?.state === 'complete' && preview.job.preview ? (preview.job.files as Prepared | null) : null;
   const prepared = useResolved(kind, files ? draftOfPrepared(kind, state.draft, files) : NOTHING);
   const previewStatus: PreviewStatus = preview.running
@@ -297,7 +297,7 @@ function useEditor(project: string, kind: Kind, initial: Draft): Editor {
 // of the copies of its preview (kept), or of copies that prep writes now
 function useCommit(project: string, editor: Editor, write: (content: Record<string, unknown>) => Promise<void>) {
   const keep = useKeepJob();
-  const run = usePrepJob();
+  const run = usePrepJob(dataKey(editor.state.draft.items));
   const [writing, setWriting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const finished = useRef<string | null>(null);
@@ -346,9 +346,11 @@ function EditorBody({ project, editor, dataset }: { project: string; editor: Edi
   const { kind, state, resolved, needs, prepared, previewStatus } = editor;
   const { draft } = state;
   const [showing, setShowing] = useState<'original' | 'prepared'>('original');
-  // (a selection of each view: their pixels differ, e.g. cropped; the crop
-  // is set from that of the original)
-  const [selections, setSelections] = useState({ original: NO_SELECTION, prepared: NO_SELECTION });
+  // (a selection of each view, of the data it was made on: their pixels
+  // differ, e.g. cropped; the crop is set from that of the original)
+  const files = dataKey(draft.items);
+  const [made, setSelections] = useState({ files, original: NO_SELECTION, prepared: NO_SELECTION });
+  const selections = made.files === files ? made : { files, original: NO_SELECTION, prepared: NO_SELECTION };
   const selection = selections.original;
   // (a preview shows as it is ready)
   const previewId = editor.preview.job?.id;
@@ -395,7 +397,7 @@ function EditorBody({ project, editor, dataset }: { project: string; editor: Edi
             resolved={shown}
             edits={view === 'original' ? draft.edits : null}
             selection={selections[view]}
-            onSelection={(next) => setSelections((all) => ({ ...all, [view]: next }))}
+            onSelection={(next) => setSelections({ ...selections, [view]: next })}
             actions={toggle}
           />
         </div>

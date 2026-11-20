@@ -493,14 +493,17 @@ class Workspace:
 
     def describe(
             self, relative: str, velocity: str | None = None,
-            rest: str | None = None, spectral_type: str | None = None
+            rest: str | None = None, spectral_type: str | None = None,
+            spectral_unit: str | None = None
     ) -> list[dict[str, Any]]:
         """
         Describe a file of data from its headers (see
         gbkfit.io.describe_fits), with the convention of velocities
         that its headers leave ambiguous, the rest of its spectral axis
-        (which makes wavelengths or frequencies velocities) and what a
-        spectral axis of a type FITS does not define is, if given: each
+        (which makes wavelengths or frequencies velocities), what a
+        spectral axis whose type does not say it, one FITS does not define
+        or none, is, and the unit of a spectral axis whose header gives
+        none (or one not valid), if given: each
         of its arrays (its index, name, shape and axes, in the order of the
         model, unit, the size of its pixels in that order (only the
         spatial ones while its spectral axis cannot be read: velocities of
@@ -522,12 +525,13 @@ class Workspace:
                 f"FITS ({', '.join(_DATA_FILES)})")
         try:
             hdus = gbkfit.io.describe_fits(
-                path, velocity, rest, spectral_type)
+                path, velocity, rest, spectral_type, spectral_unit)
         except OSError as e:
             raise Invalid(f"cannot read '{relative}': {e}") from e
         return [
             dict(index=hdu.index, name=hdu.name, shape=list(hdu.shape),
-                 axes=list(hdu.axes), unit=_readable_unit(hdu.unit),
+                 axes=list(hdu.axes), axis_units=list(hdu.axis_units),
+                 unit=_readable_unit(hdu.unit),
                  step=_spatial_step(path, hdu.index) if hdu.coords is None
                  else [float(step) for step in hdu.coords.step],
                  # (the pixel the model measures x and y from: 0-based)
@@ -538,9 +542,12 @@ class Workspace:
                      bmin=np.asarray(hdu.beam.bmin).tolist(),
                      bpa=np.asarray(hdu.beam.bpa).tolist()),
                  rms=hdu.rms, ambiguous_velocity=hdu.ambiguous_velocity,
-                 # (the paths of the problems in the workspace)
-                 problems=[p.replace(path, relative) for p in hdu.problems],
-                 holds=hdu.error_kind, nonstandard_type=hdu.nonstandard_type,
+                 # (the paths of files in the problems: in the workspace)
+                 problems=[
+                     dict(severity=p.severity, path=p.path,
+                          message=p.message.replace(path, relative))
+                     for p in hdu.problems],
+                 holds=hdu.error_kind,
                  rest=None if hdu.coords is None or hdu.coords.rest is None
                  else rest_text(hdu.coords.rest))
             for hdu in hdus]

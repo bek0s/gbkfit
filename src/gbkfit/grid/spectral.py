@@ -39,6 +39,7 @@ __all__ = [
     'make_rest',
     'rest_of_convention',
     'spectral_axis_parser',
+    'spectral_unit',
     'vacuum_wavelength'
 ]
 
@@ -65,7 +66,7 @@ FRAMES = (
 
 # The types (FITS 4.0, Table 25, and WCS Paper III) that the spectral
 # axis of data whose header gives it a type FITS does not define (e.g.
-# CTYPE3 = 'WAVELENGTH') is read as (see SpectralAxis, and
+# CTYPE3 = 'WAVELENGTH'), or none, is read as (see SpectralAxis, and
 # gbkfit.io.model_header): linear wavelengths in vacuum or in air,
 # logarithmic wavelengths in vacuum or in air, frequencies, and radio or
 # optical velocities
@@ -619,6 +620,22 @@ class VelocityConvention:
         return value
 
 
+def spectral_unit(unit: str) -> str:
+    """
+    Return a unit of a spectral axis (see SpectralAxis, option unit) in
+    the FITS notation (e.g. 'km s-1' for 'km/s'), or raise ValueError if
+    it is not a unit of velocities, wavelengths or frequencies.
+    """
+    parsed = gbkfit.units.parse_unit(unit)
+    if not any(parsed.is_equivalent(of) for of in (
+            _KMS, astropy.units.m, astropy.units.Hz)):
+        raise ValueError(
+            f"the unit of a spectral axis is of velocities, wavelengths or "
+            f"frequencies (e.g. 'km/s', 'Angstrom' or 'MHz'); it is "
+            f"{unit!r}")
+    return parsed.to_string('fits')
+
+
 class SpectralAxis(Serializable):
     """
     The spectral axis of an observation or of data: its channels, of
@@ -656,9 +673,15 @@ class SpectralAxis(Serializable):
         What the spectral axis of data is (see SPECTRAL_TYPES: e.g.
         'AWAV', linear wavelengths in air), where their header gives it a
         type that FITS does not define (e.g. CTYPE3 = 'WAVELENGTH', as
-        CALIFA writes): such a header does not say what its values are,
-        and data of one are not read without it (see
-        gbkfit.io.model_header).
+        CALIFA writes), or none (CTYPE3 left out): such a header does not
+        say what its values are, and data of one are not read without it
+        (see gbkfit.io.model_header).
+    unit : str, optional
+        The unit of the spectral axis of data, where their header gives
+        none (FITS then reads its values in SI units: m/s, m or Hz,
+        which makes no sense of values written in km/s or Angstrom) or
+        one that is not valid (e.g. 'KMS'): e.g. 'km/s' or 'Angstrom'
+        (see gbkfit.io.model_header).
 
     Raises
     ------
@@ -672,7 +695,7 @@ class SpectralAxis(Serializable):
         size='Channels', step='Channel width', rpix='Reference channel',
         rval='Reference velocity', convention='Velocity convention',
         rest='Rest', medium='Medium', frame='Reference frame',
-        type='Spectral type')
+        type='Spectral type', unit='Spectral unit')
 
     @classmethod
     def of(cls, grid: Grid) -> 'SpectralAxis':
@@ -690,7 +713,8 @@ class SpectralAxis(Serializable):
             rval=self._rval, convention=self._convention,
             rest=None if self._rest is None
             else gbkfit.units.format_quantity(self._rest),
-            medium=self._medium, frame=self._frame, type=self._type)
+            medium=self._medium, frame=self._frame, type=self._type,
+            unit=self._unit)
         return {k: v for k, v in options.items() if v is not None}
 
     def __init__(
@@ -703,7 +727,8 @@ class SpectralAxis(Serializable):
             rest: Rest = None,
             medium: _Medium | None = None,
             frame: _Frame | None = None,
-            type: _Type | None = None
+            type: _Type | None = None,
+            unit: str | None = None
     ):
         check_options(SpectralAxis.__init__, locals())
         self._rest = make_rest(rest)
@@ -717,6 +742,7 @@ class SpectralAxis(Serializable):
         self._medium = medium
         self._frame = frame
         self._type = type
+        self._unit = None if unit is None else spectral_unit(unit)
 
     def size(self) -> int | None:
         """Return the number of channels, if given."""
@@ -756,6 +782,13 @@ class SpectralAxis(Serializable):
         not say (see SPECTRAL_TYPES), if given.
         """
         return self._type
+
+    def unit(self) -> str | None:
+        """
+        Return the unit of the spectral axis of data, where their header
+        gives none or one that is not valid, if given.
+        """
+        return self._unit
 
     def given(self) -> tuple[str, ...]:
         """Return the names of its options that are given."""

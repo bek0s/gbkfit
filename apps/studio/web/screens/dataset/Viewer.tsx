@@ -18,7 +18,6 @@ import {
   NO_ARRAYS,
   presentSlots,
   rangeOf,
-  restOf,
   ROLES,
   type Arrays,
   type Edits,
@@ -76,7 +75,7 @@ export function DatasetViewer({
         cropChannels={channels}
         kept={edits ? keptValues(edits, key) : null}
         actions={actions}
-        reading={{ rest: restOf(draft.spectral), velocity: draft.spectral.convention, type: draft.spectral.type }}
+        reading={resolved.reading}
       />
     );
   }

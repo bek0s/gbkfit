@@ -54,7 +54,7 @@ export function Home() {
   ] as const;
   return (
     <section className="screen home-screen">
-      <ScreenHead eyebrow="Project" title={project ?? ''} links={<span className="home-counts">{counts.map(([n, one, many]) => `${n} ${n === 1 ? one : many}`).join(' · ')}</span>}>
+      <ScreenHead title={project ?? ''} note={<span className="home-counts">{counts.map(([n, one, many]) => `${n} ${n === 1 ? one : many}`).join(' · ')}</span>}>
         {MAKE.map(({ folder, label }) => (
           <Button key={folder} kind={folder === next ? 'primary' : undefined} onClick={() => startAdding(folder)}>
             {label}

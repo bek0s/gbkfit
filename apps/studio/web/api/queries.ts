@@ -11,7 +11,7 @@ export const keys = {
   project: (path: string) => ['project', path],
   piece: (path: string) => ['piece', path],
   folder: (path: string) => ['folder', path],
-  description: (path: string, velocity: string | null, rest: string | null = null, type: string | null = null) => ['description', path, velocity, rest, type],
+  description: (path: string, reading: string) => ['description', path, reading],
   preparation: (path: string) => ['preparation', path],
   view: (...parts: (string | number)[]) => ['view', ...parts],
   jobs: ['jobs'],
@@ -69,18 +69,39 @@ export type Velocity = 'radio' | 'optical';
 // is said to be; see the server's describe)
 export type SpectralTypeOption = NonNullable<NonNullable<operations['describe_api_v1_describe__path__get']['parameters']['query']>['spectral_type']>;
 
-// The arrays of a file of data, from its headers, its ambiguous velocities
-// read by a convention, its wavelengths or frequencies as velocities of a
-// rest, and its spectral axis of a type FITS does not define as what it
-// is, if given
-export function useDescription(path: string | null, velocity: Velocity | null = null, rest: string | null = null, type: SpectralTypeOption | null = null) {
+// How the spectral axis of a cube is read, as a dataset of it reads it:
+// in a unit its header gives none of (or one not valid), as the type of
+// an axis FITS does not define, of a convention of velocities its header
+// leaves ambiguous, and as velocities of a rest (of wavelengths or
+// frequencies); null: as its header says. Every view of a cube reads it
+// alike, so that their channels are the same (a rest may reverse them).
+export type Reading = { rest: string | null; velocity: Velocity | null; type: SpectralTypeOption | null; unit: string | null };
+
+// The query of a reading (see the server's _reading), and its part of the
+// keys of the views
+function readingQuery(reading: Reading | null): { rest?: string; velocity?: Velocity; spectral_type?: SpectralTypeOption; spectral_unit?: string } {
+  return {
+    ...(reading?.rest ? { rest: reading.rest } : {}),
+    ...(reading?.velocity ? { velocity: reading.velocity } : {}),
+    ...(reading?.type ? { spectral_type: reading.type } : {}),
+    ...(reading?.unit ? { spectral_unit: reading.unit } : {}),
+  };
+}
+
+function readingKey(reading: Reading | null): string {
+  return JSON.stringify(readingQuery(reading));
+}
+
+// The arrays of a file of data, from its headers, its spectral axis read
+// so (see Reading)
+export function useDescription(path: string | null, reading: Reading | null = null) {
   return useQuery({
-    queryKey: keys.description(path ?? '', velocity, rest, type),
+    queryKey: keys.description(path ?? '', readingKey(reading)),
     enabled: path !== null,
     // (the description of the same file stays while another convention or
     // rest is read; never that of another file)
     placeholderData: (previous, query) => (query?.queryKey[1] === path ? previous : undefined),
-    queryFn: () => describe(path ?? '', velocity, rest, type),
+    queryFn: () => describe(path ?? '', reading),
   });
 }
 
@@ -100,12 +121,12 @@ export function useHeader(path: string | null, hdu: number) {
 // with another rest), its last description stays, not current: what shows
 // it stays, and nothing judges it (e.g. its problems are of the inputs it
 // was read with).
-export function useDescriptions(paths: string[], velocity: Velocity | null = null, rest: string | null = null, type: SpectralTypeOption | null = null) {
+export function useDescriptions(paths: string[], reading: Reading | null = null) {
   const unique = [...new Set(paths)];
   const results = useQueries({
     queries: unique.map((path) => ({
-      queryKey: keys.description(path, velocity, rest, type),
-      queryFn: () => describe(path, velocity, rest, type),
+      queryKey: keys.description(path, readingKey(reading)),
+      queryFn: () => describe(path, reading),
     })),
   });
   const last = useRef(new Map<string, NonNullable<(typeof results)[number]['data']>>());
@@ -117,12 +138,8 @@ export function useDescriptions(paths: string[], velocity: Velocity | null = nul
   };
 }
 
-function describe(path: string, velocity: Velocity | null, rest: string | null, type: SpectralTypeOption | null = null) {
-  const query: { velocity?: Velocity; rest?: string; spectral_type?: SpectralTypeOption } = {};
-  if (velocity) query.velocity = velocity;
-  if (rest) query.rest = rest;
-  if (type) query.spectral_type = type;
-  return data(api.GET('/api/v1/describe/{path}', { params: { path: { path }, query } }));
+function describe(path: string, reading: Reading | null) {
+  return data(api.GET('/api/v1/describe/{path}', { params: { path: { path }, query: readingQuery(reading) } }));
 }
 
 // How a file of data was prepared by the server (null: it was not)
@@ -134,18 +151,18 @@ export function usePreparation(path: string | null) {
   });
 }
 
-// A channel of a cube (an array of a file of data): its values (ny, nx),
-// the number of channels of the cube, the coordinate of the channel along
-// its spectral axis and its unit (null if unknown), and the range of the
-// values of the cube for colours.
+// A channel of a cube (an array of a file of data, its spectral axis read
+// so): its values (ny, nx), the number of channels of the cube, the
+// coordinate of the channel along its spectral axis and its unit (null if
+// unknown), and the range of the values of the cube for colours.
 // The channel shown before stays while the next one comes; without a
 // path, none.
-export function useChannel(path: string | null, hdu: number, channel: number) {
+export function useChannel(path: string | null, hdu: number, channel: number, reading: Reading | null = null) {
   return useQuery({
-    queryKey: keys.view('channel', path ?? '', hdu, channel),
+    queryKey: keys.view('channel', path ?? '', hdu, channel, readingKey(reading)),
     enabled: path !== null,
     placeholderData: keepPreviousData,
-    queryFn: () => readChannel(path ?? '', hdu, channel),
+    queryFn: () => readChannel(path ?? '', hdu, channel, reading),
   });
 }
 
@@ -154,17 +171,17 @@ export function useChannel(path: string | null, hdu: number, channel: number) {
 export function useMaps(maps: { path: string; hdu: number }[]) {
   return useQueries({
     queries: maps.map(({ path, hdu }) => ({
-      queryKey: keys.view('channel', path, hdu, 0),
-      queryFn: () => readChannel(path, hdu, 0),
+      queryKey: keys.view('channel', path, hdu, 0, readingKey(null)),
+      queryFn: () => readChannel(path, hdu, 0, null),
     })),
   }).map((result) => result.data?.plane.values);
 }
 
-async function readChannel(path: string, hdu: number, channel: number) {
+async function readChannel(path: string, hdu: number, channel: number, reading: Reading | null) {
   const frame = decodeFrame(
     await data(
       api.GET('/api/v1/views/channel/{path}', {
-        params: { path: { path }, query: { hdu, channel } },
+        params: { path: { path }, query: { hdu, channel, ...readingQuery(reading) } },
         parseAs: 'arrayBuffer',
       }),
     ),
@@ -181,44 +198,32 @@ async function readChannel(path: string, hdu: number, channel: number) {
 // The spectrum of a pixel of a cube, or (none) its total spectrum: the sum
 // of its pixels in each channel, of all of them or of a region (x0, x1,
 // y0, y1, inclusive); and the coordinates of its channels along its
-// spectral axis, with their unit
+// spectral axis, read so, with their unit
 export function useSpectrum(
   path: string,
   hdu: number,
   pixel: [number, number] | null,
   region: [number, number, number, number] | null,
+  reading: Reading | null = null,
 ) {
-  const query =
-    pixel !== null
-      ? { hdu, x: pixel[0], y: pixel[1] }
-      : region !== null
-        ? { hdu, x0: region[0], x1: region[1], y0: region[2], y1: region[3] }
-        : { hdu };
+  const where = pixel !== null ? { x: pixel[0], y: pixel[1] } : region !== null ? { x0: region[0], x1: region[1], y0: region[2], y1: region[3] } : {};
+  const query = { hdu, ...where, ...readingQuery(reading) };
   return useQuery({
-    queryKey: keys.view('spectrum', path, hdu, pixel?.join() ?? '', region?.join() ?? ''),
+    queryKey: keys.view('spectrum', path, hdu, pixel?.join() ?? '', region?.join() ?? '', readingKey(reading)),
     placeholderData: keepPreviousData,
     queryFn: () => data(api.GET('/api/v1/views/spectrum/{path}', { params: { path: { path }, query } })),
   });
 }
 
-// How the channels of a cube are read, as a dataset of it reads them: as
-// velocities of a rest (of wavelengths or frequencies), of a convention
-// its header leaves ambiguous, and of a type an axis FITS does not define
-// is (see the server's describe; null: none given)
-export type Reading = { rest: string | null; velocity: Velocity | null; type: SpectralTypeOption | null };
-
 // The quick moment maps of a cube, by name, of the voxels where the cube,
 // smoothed, is above a signal-to-noise ratio (0: all of them): measured as
 // moments, its flux, velocity, dispersion, skewness and kurtosis; or of a
 // Gauss-Hermite series fitted to each spectrum, its h3 and h4; its
-// channels read as given, if they are (e.g. as of a dataset of the cube)
+// spectral axis read so (its channels must be velocities)
 export function useMoments(path: string, hdu: number, snr: number, enabled: boolean, method: 'moments' | 'gauss_hermite' = 'moments', reading: Reading | null = null) {
-  const query: { hdu: number; snr: number; method: typeof method; rest?: string; velocity?: Velocity; spectral_type?: SpectralTypeOption } = { hdu, snr, method };
-  if (reading?.rest) query.rest = reading.rest;
-  if (reading?.velocity) query.velocity = reading.velocity;
-  if (reading?.type) query.spectral_type = reading.type;
+  const query = { hdu, snr, method, ...readingQuery(reading) };
   return useQuery({
-    queryKey: keys.view('moments', path, hdu, snr, method, reading?.rest ?? '', reading?.velocity ?? '', reading?.type ?? ''),
+    queryKey: keys.view('moments', path, hdu, snr, method, readingKey(reading)),
     enabled,
     placeholderData: keepPreviousData,
     queryFn: async () =>

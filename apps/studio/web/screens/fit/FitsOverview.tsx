@@ -9,6 +9,7 @@ import { useFileText, usePiece, useProject, useRun, useStopJob, useSubmitJob } f
 import { joinPath } from '../../components/FilePicker';
 import { Button } from '../../components/ui/basics';
 import { ScreenHead } from '../../shell/ScreenHead';
+import { sectionNamed } from '../../shell/sections';
 import { useStudio } from '../../studio';
 import { isObject } from '../galaxy/options';
 import { itemsOf } from './recipe';
@@ -20,7 +21,7 @@ export function FitsOverview() {
   if (project === null) return null;
   return (
     <section className="screen fx-overview">
-      <ScreenHead eyebrow="Fit" title="All fits">
+      <ScreenHead title={sectionNamed('fit').overview?.title ?? 'Fits'} note={<span className="ov-count">{fits.length === 1 ? '1 fit' : `${fits.length} fits`}</span>}>
         <Button kind="primary" onClick={() => startAdding('setups')}>
           + New fit
         </Button>

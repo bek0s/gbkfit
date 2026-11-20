@@ -10,7 +10,6 @@ import { useMemo, useState } from 'react';
 import { RenderLabel, useProject } from '../../api/queries';
 import { SheetLayout } from '../../components/ui/sheet';
 import { useBlockHead } from '../../shell/BlockMenu';
-import { BlockLinks } from '../../shell/BlockLinks';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useRemembered } from '../../shell/remember';
 import { useStudio } from '../../studio';
@@ -97,7 +96,7 @@ export function GalaxyScreen({ name }: { name: string }) {
     // (its renders are of it, in the Activity drawer)
     <RenderLabel.Provider value={name}>
     <section className="screen gx-screen">
-      <ScreenHead eyebrow="Galaxy" title={head.title} links={<BlockLinks folder="galaxies" name={name} />}>
+      <ScreenHead eyebrow="Galaxy" title={head.title}>
         <SaveControls saving={draft} />
         {head.menu}
       </ScreenHead>

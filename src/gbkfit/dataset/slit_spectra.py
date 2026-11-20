@@ -162,7 +162,8 @@ class DatasetSlitSpectra(DatasetGrid):
             unit, beam, spectral_correlation=spectral_correlation,
             velocity=references['velocity'], error_kind=error_kind,
             mask_kind=mask_kind, footprint=footprint,
-            spectral_type=references['spectral_type'])
+            spectral_type=references['spectral_type'],
+            spectral_unit=references['spectral_unit'])
         options = _grids.cube_coords(coords, step, None, spectral)
         # (the slit along the x axis of the files, unless its angle is given)
         rota = options.pop('rota')

@@ -5,7 +5,7 @@
 // largest regions of the pixels left, crop to the pixels left, and pad.
 // The originals stay in the project; the dataset is of the prepared
 // copies. Of moment maps, a pixel left out of one map is left out of all.
-import { useMaps, useSpectrum } from '../../api/queries';
+import { useMaps, useSpectrum, type Reading } from '../../api/queries';
 import { significant } from '../../components/format';
 import { Button } from '../../components/ui/basics';
 import { Check, NumberField } from '../../components/ui/inputs';
@@ -71,7 +71,7 @@ export function PrepareForm({
       {kind === 'cube' && (
         <>
           <CropRow label="Channels" range={edits.channels} size={nz} unit="" onChange={(range) => set({ channels: range })} />
-          {channels && cube && <ChannelSpan path={cube.file} hdu={first.index} channels={channels} />}
+          {channels && cube && <ChannelSpan path={cube.file} hdu={first.index} channels={channels} reading={resolved.reading} />}
         </>
       )}
       {(noiseErrors || addNoise) && (
@@ -231,9 +231,9 @@ function valueRange(values: Float32Array | undefined): [number, number] | null {
 }
 
 // What a range of channels spans along the spectral axis (e.g. in km/s),
-// from the total spectrum of the cube (that of its view)
-function ChannelSpan({ path, hdu, channels }: { path: string; hdu: number; channels: [number, number] }) {
-  const spectrum = useSpectrum(path, hdu, null, null).data;
+// from the total spectrum of the cube (that of its view), read so
+function ChannelSpan({ path, hdu, channels, reading }: { path: string; hdu: number; channels: [number, number]; reading: Reading }) {
+  const spectrum = useSpectrum(path, hdu, null, null, reading).data;
   const [a, b] = channels.map((channel) => spectrum?.spectral?.[channel]);
   if (a === undefined || b === undefined || a === null || b === null) return null;
   return (

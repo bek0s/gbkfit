@@ -60,7 +60,10 @@ h2 { margin: 0; font: var(--text-heading); }
 /* the list of a section */
 .list { position: relative; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--panel); }
 .list-head { display: flex; align-items: center; gap: 4px; padding: 10px 8px 4px 14px; }
-.list-head b { margin-right: auto; font: var(--text-subtitle); }
+.list-head b, .list-title { margin-right: auto; font: var(--text-subtitle); }
+/* (the title of a section with an overview: it opens it) */
+.list-title { padding: 0; border: 0; background: none; color: var(--fg); cursor: pointer; }
+.list-title:hover, .list-title[aria-current="page"] { color: var(--accent-text); }
 /* (a word on what a block is: quiet, and coloured only by how a run went) */
 .list-detail { max-width: 9.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font: var(--text-caption); }
 .list-detail[data-state="none"] { font-style: italic; }
@@ -128,15 +131,6 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .activity-item[data-state="failed"] em { color: var(--err); }
 .activity-note { margin: 0; color: var(--faint); font: var(--text-caption); }
 
-/* the links of a block in the head of its screen: what it uses, what
-   uses it */
-.block-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding-bottom: 3px; min-width: 0; }
-.link-side { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.link-label { color: var(--faint); font: var(--text-caption); }
-.link-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 9px; border: 1px solid var(--line2); border-radius: 99px; background: none; color: var(--fg2); font: var(--text-data-small); cursor: pointer; }
-.link-chip small { color: var(--faint); font: var(--text-caption); }
-.link-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--fg); }
-.link-chip[data-missing] { border-style: dashed; color: var(--warn); cursor: default; }
 .link-more { color: var(--faint); font: var(--text-caption); }
 
 /* the body of a screen that edits a block: its sheet beside its picture
@@ -154,7 +148,29 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .stage { min-width: 0; min-height: 0; overflow: hidden; background: var(--bg); }
 .screen { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .screen-head { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px 18px; padding: 14px 18px 12px; border-bottom: 1px solid var(--line); }
-.screen-title { min-width: 0; }
+/* (the title of a screen, of two lines of fixed heights, so that the head
+   is as tall on every screen: what it is, or the way back; and the name) */
+.screen-title { min-width: 0; display: grid; grid-template-rows: 20px 28px; row-gap: 3px; }
+.screen-title > .eyebrow { grid-row: 1; display: flex; align-items: center; min-width: 0; white-space: nowrap; overflow: hidden; }
+/* (the way back from a block to the overview of its section: an arrow and
+   the overview's name, a link in the case of a link (never small
+   capitals, which read as a heading); it wakes up under the mouse) */
+.screen-up { grid-row: 1; justify-self: start; display: inline-flex; align-items: center; gap: 6px; height: 20px; margin-left: -5px; padding: 0 8px 0 5px; border: 0; border-radius: 5px; background: none; color: var(--muted); font: var(--text-label); cursor: pointer; }
+.screen-up .icon { width: 14px; height: 14px; stroke-width: 1.7; transition: transform .12s ease-out; }
+.screen-up:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 7%, transparent); }
+.screen-up:hover .icon { color: var(--accent-text); transform: translateX(-2px); }
+@media (prefers-reduced-motion: reduce) { .screen-up .icon { transition: none; } }
+/* (the name, and what the block is in tags beside it) */
+/* (the name, always on the second line: on a page of the top, with nothing
+   above it, it stays where it is on every other screen) */
+.screen-name { grid-row: 2; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.screen-name > h1, .screen-name > .name-input { margin: 0; }
+/* (a title that is not renamed in place has the frame of one that is,
+   unseen, so that its text sits at the same height) */
+.screen-name > h1:not(.block-title) { border-block: 1px solid transparent; }
+/* (a label, not a link: filled, square-ish, no outline, unlike the chips of
+   the blocks it uses) */
+.screen-tag { padding: 2px 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg) 8%, transparent); color: var(--fg2); font: var(--text-caption); white-space: nowrap; }
 .eyebrow { font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
 .screen-body { flex: 1; min-height: 0; display: grid; gap: 14px; align-content: start; padding: 14px 18px 18px; overflow: auto; }
 .card { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
@@ -1248,9 +1264,28 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-error-kind .ui-choice { flex: 1; }
 .ds-warn { margin: 0; padding: 6px 9px; border-left: 3px solid var(--warn-fill); border-radius: 4px; background: color-mix(in srgb, var(--warn-fill) 11%, transparent); font: var(--text-label); }
 
+/* (the spectral axis: a row for each of its options, a value or a field;
+   a problem of one shows in its field (as its placeholder) or beside it,
+   never under it: nothing moves as problems come and go) */
+.sp-rows { display: grid; gap: 8px; }
+.sp-row { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; }
+.sp-label { display: flex; align-items: center; gap: 5px; min-height: 30px; font: var(--text-label); color: var(--muted); }
+.sp-row[data-attention] .sp-label { color: var(--fg); }
+.sp-row[data-attention] .sp-label::after { content: '!'; flex: none; width: 14px; height: 14px; display: grid; place-items: center; border-radius: 50%; background: var(--warn-fill); color: var(--on-warn); font: var(--text-caption); font-size: 10px; font-weight: 700; }
+.sp-value { min-width: 0; }
+.sp-row[data-attention] .ui-choice input { border-color: var(--warn-fill); }
+.sp-row[data-attention] .ui-choice input::placeholder { color: var(--warn); opacity: 1; font-family: var(--mono); }
+.sp-inline { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sp-flag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warn); font: var(--text-data-small); }
+.sp-fixed { display: flex; align-items: center; min-height: 30px; font: var(--text-data); color: var(--fg2); }
+.sp-pair { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.sp-result { color: var(--muted); font: var(--text-data-small); white-space: nowrap; }
+.sp-near { min-height: 1lh; margin: -4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font: var(--text-caption); }
+
 /* (forms of the dock: a label and a field a row) */
 .ds-form { display: grid; gap: 10px; }
 .ds-text { margin: 0; color: var(--muted); font: var(--text-label); }
+.ds-hint { margin: -4px 0 0; color: var(--faint); font: var(--text-caption); }
 .ds-field { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; }
 .ds-field .ui-segments { justify-self: start; }
 .ds-label { font: var(--text-label); color: var(--muted); }
@@ -1617,6 +1652,26 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .fx-fit-row { cursor: pointer; }
 .fx-fit-row:hover td { background: var(--panel2); }
 .fx-fit-name { font: var(--text-data); color: var(--fg); white-space: nowrap; }
-.fx-eyebrow-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
-.fx-eyebrow-link:hover { text-decoration: underline; }
 .fx-edits-to { display: flex; align-items: center; gap: 10px; }
+
+/* overviews: the screen of all the blocks of a section, a table of them */
+.ov-count { padding-bottom: 3px; color: var(--faint); font: var(--text-data-small); }
+.ov-scroll { flex: 1; min-height: 0; overflow: auto; display: grid; align-content: start; gap: 12px; padding: 12px 18px 24px; }
+.ov-last { justify-self: start; display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 12px; border: 1px solid var(--line2); border-radius: 7px; background: var(--panel); color: var(--muted); font: var(--text-label); cursor: pointer; }
+.ov-last b { color: var(--fg); font: var(--text-data); font-weight: 400; }
+.ov-last:hover { border-color: var(--accent); color: var(--accent-text); }
+.ov-empty { margin: 0; color: var(--faint); font: var(--text-body); }
+.ov-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.ov-table th { padding: 6px 10px; text-align: left; white-space: nowrap; font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--line); }
+.ov-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--fg2); font: var(--text-label); vertical-align: middle; }
+.ov-table th.ov-num, .ov-table td.ov-num { text-align: right; white-space: nowrap; }
+.ov-table td.ov-num, .ov-table .ov-unit { font: var(--text-data-small); }
+.ov-row { cursor: pointer; }
+.ov-row:hover td { background: var(--panel2); }
+.ov-table .ov-name { color: var(--fg); font: var(--text-data); white-space: nowrap; }
+.ov-faint { color: var(--faint); }
+.ov-warn { color: var(--warn); }
+.ov-table .ov-problem { color: var(--err); font: var(--text-caption); }
+.ov-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.ov-chip { padding: 1px 8px; border: 1px solid var(--line2); border-radius: 99px; background: none; color: var(--fg2); font: var(--text-data-small); cursor: pointer; }
+.ov-chip:hover { border-color: var(--accent); color: var(--accent-text); }

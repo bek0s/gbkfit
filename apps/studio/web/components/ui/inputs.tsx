@@ -21,6 +21,7 @@ export function Choice({
   label,
   title,
   placeholder,
+  disabled = false,
 }: {
   items: { value: string; label: string; disabled?: boolean; description?: string; group?: string }[];
   // (none of the items: the placeholder shows)
@@ -29,6 +30,8 @@ export function Choice({
   label: string;
   title?: string;
   placeholder?: string;
+  // (none can be chosen yet: e.g. until another field is)
+  disabled?: boolean;
 }) {
   const described = new Map(items.map((item) => [item.value, item.description]));
   // (the choices of no group, and the groups of the others, in order)
@@ -69,6 +72,7 @@ export function Choice({
       aria-label={label}
       title={title}
       placeholder={placeholder}
+      disabled={disabled}
       size="xs"
       className="ui-choice"
       classNames={{ dropdown: 'ui-menu ui-choice-dropdown' }}

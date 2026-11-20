@@ -12,6 +12,7 @@ from gbkfit_server.services.jobs import TASKS
 
 __all__ = [
     'ArrayInfo',
+    'ArrayProblem',
     'CheckRequest',
     'CheckResult',
     'ComponentPartInfo',
@@ -454,11 +455,25 @@ class FolderInfo(BaseModel):
     files: list[FileEntry]
 
 
+class ArrayProblem(BaseModel):
+    """
+    A problem of an array of a file (see gbkfit's describe_fits): an error
+    (a dataset of it refuses it) or a warning (it is read as FITS says,
+    but may not be meant), the option of a dataset of it that fixes it
+    (e.g. ['spectral', 'unit']; [] if none) and its message (e.g. "CUNIT3
+    'KMS' invalid").
+    """
+    severity: Literal['error', 'warning']
+    path: list[str | int]
+    message: str
+
+
 class ArrayInfo(BaseModel):
     """
     An array of a file of data (e.g. an HDU of a FITS file), from its
-    header: its index and name in the file, its shape and the types of
-    its axes, in the order of the model (x, y, then the spectral axis),
+    header: its index and name in the file, its shape and the types and
+    units of its axes as written (CTYPE and CUNIT; '' none), in the
+    order of the model (x, y, then the spectral axis),
     the unit of its values, the size of its pixels in that order (arcsec,
     and km/s along a velocity axis; the spatial ones alone while its
     spectral axis cannot be read, e.g. velocities of no convention or
@@ -468,30 +483,27 @@ class ArrayInfo(BaseModel):
     beam (bmaj and bmin in arcsec, bpa in degrees; lists
     for a beam of each channel), the noise of its values that its header
     states (keyword RMS or NOISE), whether its header leaves it open
-    whether its velocities are radio or optical (a dataset of it gives
-    their convention), what a dataset of it refuses or needs given, and
-    what its values are as errors, if its header states it ('sigma',
-    'variance' or 'inverse_variance'; see gbkfit's HDUDescription.error_kind),
-    and the type its header gives a spectral axis that FITS does not
-    define (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see
-    gbkfit's HDUDescription.nonstandard_type), and the rest of its
-    spectral axis (e.g. '6562.8 Angstrom': its header's, RESTWAV or
-    RESTFRQ, or that given; none if none, or while the axis cannot be
-    read).
+    whether its velocities are radio or optical, its problems, each at
+    the option of a dataset of it that fixes it (see ArrayProblem), what
+    its values are as errors, if its header states it ('sigma',
+    'variance' or 'inverse_variance'; see gbkfit's
+    HDUDescription.error_kind), and the rest of its spectral axis (e.g.
+    '6562.8 Angstrom': its header's, RESTWAV or RESTFRQ, or that given;
+    none if none, or while the axis cannot be read).
     """
     index: int
     name: str
     shape: list[int]
     axes: list[str]
+    axis_units: list[str]
     unit: str | None
     step: list[float] | None
     rpix: list[float] | None = None
     beam: dict[str, float | list[float]] | None
     rms: float | None
     ambiguous_velocity: bool
-    problems: list[str]
+    problems: list[ArrayProblem]
     holds: Literal['sigma', 'variance', 'inverse_variance'] | None = None
-    nonstandard_type: str | None = None
     rest: str | None = None
 
 

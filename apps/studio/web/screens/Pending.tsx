@@ -1,7 +1,6 @@
 // A screen not built yet: its title, and that it comes in a later step;
 // of a block of the project, its head (its name renamed in place, its
 // menu: rename, delete).
-import { BlockLinks } from '../shell/BlockLinks';
 import { useBlockHead } from '../shell/BlockMenu';
 import { ScreenHead } from '../shell/ScreenHead';
 import { useStudio } from '../studio';
@@ -12,7 +11,7 @@ export function Pending({ eyebrow, title, folder }: { eyebrow: string; title: st
   const block = folder !== undefined && project !== null;
   return (
     <section className="screen">
-      <ScreenHead eyebrow={eyebrow} title={block ? head.title : title} links={block ? <BlockLinks folder={folder} name={title} /> : undefined}>
+      <ScreenHead eyebrow={eyebrow} title={block ? head.title : title}>
         {block ? head.menu : undefined}
       </ScreenHead>
       <div className="screen-body">

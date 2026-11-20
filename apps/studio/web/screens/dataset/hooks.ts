@@ -2,11 +2,13 @@
 // descriptions of its files, the state of a draft as the user edits it,
 // and a job of prep that the screen follows.
 import { useDebouncedValue } from '@mantine/hooks';
-import { useState } from 'react';
-import { useDescriptions, useJob, useSubmitJob } from '../../api/queries';
+import { useMemo, useState } from 'react';
+import { useDescriptions, useJob, useSubmitJob, type Reading } from '../../api/queries';
 import {
   arraysOf,
   KINDS,
+  NO_EDITS,
+  NO_SPECTRAL,
   restOf,
   type Draft,
   type Edits,
@@ -18,16 +20,24 @@ import {
 } from './model';
 
 // A draft with the arrays of the files of its items, as the server
-// describes them: with the convention of velocities given, and the rest
-// of the spectral axis of a cube (as it is typed: once it has stood a
-// while, not at each key, which would read the files again at each)
+// describes them, and how the spectral axis of their cube is read (by
+// those descriptions and by the views of the cube): of the convention of
+// velocities given, and of a cube, the type and the unit of its axis and
+// its rest (as it is typed: once it has stood a while, not at each key,
+// which would read the files again at each)
 export function useResolved(kind: Kind, draft: Draft): Resolved {
   const items = Object.values(draft.items);
   const paths = items.flatMap((item) => Object.values(item.files).map((file) => file.file));
-  const [rest] = useDebouncedValue(kind === 'cube' ? restOf(draft.spectral) : null, TYPED_MS);
-  const describe = useDescriptions(paths, draft.spectral.convention, rest, kind === 'cube' ? draft.spectral.type : null);
+  const cube = kind === 'cube';
+  const [rest] = useDebouncedValue(cube ? restOf(draft.spectral) : null, TYPED_MS);
+  const { convention, type, axisUnit } = draft.spectral;
+  const reading = useMemo<Reading>(
+    () => ({ rest, velocity: convention, type: cube ? type : null, unit: cube ? axisUnit || null : null }),
+    [rest, convention, cube, type, axisUnit],
+  );
+  const describe = useDescriptions(paths, reading);
   const arrays = Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, KINDS[kind].ndim)]));
-  return { kind, draft, arrays };
+  return { kind, draft, arrays, reading };
 }
 
 // (how long a value typed stands before it is used, ms)
@@ -49,15 +59,15 @@ export function useDraftState(initial: Draft): DraftState {
     draft,
     setItem: (key, item) =>
       setDraft((now) => {
+        const next = withItems(now, { ...now.items, [key]: item });
         // (errors of a file: none made from the noise)
-        const edits = item.files.error !== undefined && now.edits.noise ? { ...now.edits, noise: false } : now.edits;
-        return { ...now, items: { ...now.items, [key]: item }, edits };
+        return item.files.error !== undefined && next.edits.noise ? { ...next, edits: { ...next.edits, noise: false } } : next;
       }),
-    addItem: (key, item) => setDraft((now) => ({ ...now, items: { ...now.items, [key]: item } })),
+    addItem: (key, item) => setDraft((now) => withItems(now, { ...now.items, [key]: item })),
     removeItem: (key) =>
       setDraft((now) => {
         const { [key]: _gone, ...items } = now.items;
-        return { ...now, items };
+        return withItems(now, items);
       }),
     setSpectral: (spectral) => setDraft((now) => ({ ...now, spectral })),
     setEdits: (edits) => setDraft((now) => ({ ...now, edits })),
@@ -65,15 +75,38 @@ export function useDraftState(initial: Draft): DraftState {
   };
 }
 
+// The data of the items of a draft (the file and the array of each), as
+// a key: what its spectral axis, its edits, its jobs of prep and the
+// selections of its view are of
+export function dataKey(items: Record<string, Item>): string {
+  return JSON.stringify(Object.entries(items).map(([key, item]) => [key, item.files.data?.file ?? null, item.files.data?.array ?? null]));
+}
+
+// A draft with other items. Its spectral axis and its edits are of the
+// data of its items (what their headers leave to say, their pixels and
+// channels): if the data of an item are another file or array, or go,
+// they start again, so that nothing said of one file is taken for another
+// (an item added keeps them).
+function withItems(now: Draft, items: Record<string, Item>): Draft {
+  const changed = Object.entries(now.items).some(([key, item]) => {
+    const before = item.files.data;
+    const after = items[key]?.files.data;
+    return before !== undefined && (after?.file !== before.file || after?.array !== before.array);
+  });
+  return changed ? { ...now, items, spectral: NO_SPECTRAL, edits: NO_EDITS } : { ...now, items };
+}
+
 // A job of prep that the screen starts and follows: the request it ran
-// (to tell whether it is still that of the edits), and the job
-export function usePrepJob() {
+// (to tell whether it is still that of the edits), and the job; of the
+// data it was started for (see dataKey): of other data, none
+export function usePrepJob(of: string) {
   const submit = useSubmitJob();
-  const [started, setStarted] = useState<{ id: string; key: string } | null>(null);
+  const [begun, setStarted] = useState<{ id: string; key: string; of: string } | null>(null);
+  const started = begun?.of === of ? begun : null;
   const job = useJob(started?.id ?? null).data;
   const start = (request: PrepRequest, preview: boolean) => {
     const key = requestKey(request);
-    submit.mutate({ task: request.task, options: request.options, preview }, { onSuccess: (submitted) => setStarted({ id: submitted.id, key }) });
+    submit.mutate({ task: request.task, options: request.options, preview }, { onSuccess: (submitted) => setStarted({ id: submitted.id, key, of }) });
   };
   const running = submit.isPending || job?.state === 'queued' || job?.state === 'running';
   return {

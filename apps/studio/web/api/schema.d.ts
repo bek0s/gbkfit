@@ -164,13 +164,8 @@ export interface paths {
         /**
          * Describe
          * @description Describe a file of data from its headers, without reading its data:
-         *     each of its arrays, and what a dataset of it refuses or needs given;
-         *     velocity is the convention of velocities that its headers leave
-         *     ambiguous, rest the rest of its spectral axis (e.g. '6562.8
-         *     Angstrom'), which makes wavelengths or frequencies velocities, as a
-         *     dataset with that rest reads them, and spectral_type what a spectral
-         *     axis whose header gives a type FITS does not define is (e.g. 'AWAV';
-         *     see ArrayInfo).
+         *     each of its arrays (see ArrayInfo), and what a dataset of it refuses
+         *     or needs given, its spectral axis read so (see _reading).
          */
         get: operations["describe_api_v1_describe__path__get"];
         put?: never;
@@ -213,11 +208,12 @@ export interface paths {
         /**
          * View Channel
          * @description Return a channel of a cube (an array of a file of data, in the
-         *     orientation of the model) as a frame of one array (ny, nx), with the
-         *     number of channels of the cube, the coordinate of the channel along
-         *     the spectral axis and its unit (null if unknown; see SpectrumView),
-         *     the range of the values of the cube for colours, and the least and
-         *     the greatest of its values (extent; null if it has none).
+         *     orientation of the model, its spectral axis read so, see _reading) as
+         *     a frame of one array (ny, nx), with the number of channels of the
+         *     cube, the coordinate of the channel along the spectral axis and its
+         *     unit (null if unknown; see SpectrumView), the range of the values of
+         *     the cube for colours, and the least and the greatest of its values
+         *     (extent; null if it has none).
          */
         get: operations["view_channel_api_v1_views_channel__path__get"];
         put?: never;
@@ -239,7 +235,8 @@ export interface paths {
          * View Spectrum
          * @description Return the spectrum of a pixel (x, y) of a cube, or its total spectrum
          *     (the sum of its pixels in each channel): of all of them, or of a region
-         *     (x0 to x1, y0 to y1, inclusive).
+         *     (x0 to x1, y0 to y1, inclusive); its spectral axis read so (see
+         *     _reading).
          */
         get: operations["view_spectrum_api_v1_views_spectrum__path__get"];
         put?: never;
@@ -265,8 +262,8 @@ export interface paths {
          *     (0: of all of them; see Views.moments): measured as moments, its
          *     flux, velocity, dispersion, skewness and kurtosis; or of a
          *     Gauss-Hermite series fitted to each spectrum, its h3 and h4. Its
-         *     channels are read as a dataset of it reads them, of a rest, a
-         *     convention and a type, if given (see describe).
+         *     spectral axis is read so (see _reading): its channels must be
+         *     velocities.
          */
         get: operations["view_moments_api_v1_views_moments__path__get"];
         put?: never;
@@ -293,7 +290,8 @@ export interface paths {
          *     the slit has no pixel), whose header has the positions (pixels from
          *     the centre, positive towards pa), the coordinates of the channels and
          *     their unit (none without them), and the size of the pixels of the
-         *     cube (arcsec; none if not known).
+         *     cube (arcsec; none if not known); its spectral axis read so (see
+         *     _reading).
          */
         get: operations["view_pv_api_v1_views_pv__path__get"];
         put?: never;
@@ -1090,8 +1088,9 @@ export interface components {
         /**
          * ArrayInfo
          * @description An array of a file of data (e.g. an HDU of a FITS file), from its
-         *     header: its index and name in the file, its shape and the types of
-         *     its axes, in the order of the model (x, y, then the spectral axis),
+         *     header: its index and name in the file, its shape and the types and
+         *     units of its axes as written (CTYPE and CUNIT; '' none), in the
+         *     order of the model (x, y, then the spectral axis),
          *     the unit of its values, the size of its pixels in that order (arcsec,
          *     and km/s along a velocity axis; the spatial ones alone while its
          *     spectral axis cannot be read, e.g. velocities of no convention or
@@ -1101,16 +1100,13 @@ export interface components {
          *     beam (bmaj and bmin in arcsec, bpa in degrees; lists
          *     for a beam of each channel), the noise of its values that its header
          *     states (keyword RMS or NOISE), whether its header leaves it open
-         *     whether its velocities are radio or optical (a dataset of it gives
-         *     their convention), what a dataset of it refuses or needs given, and
-         *     what its values are as errors, if its header states it ('sigma',
-         *     'variance' or 'inverse_variance'; see gbkfit's HDUDescription.error_kind),
-         *     and the type its header gives a spectral axis that FITS does not
-         *     define (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see
-         *     gbkfit's HDUDescription.nonstandard_type), and the rest of its
-         *     spectral axis (e.g. '6562.8 Angstrom': its header's, RESTWAV or
-         *     RESTFRQ, or that given; none if none, or while the axis cannot be
-         *     read).
+         *     whether its velocities are radio or optical, its problems, each at
+         *     the option of a dataset of it that fixes it (see ArrayProblem), what
+         *     its values are as errors, if its header states it ('sigma',
+         *     'variance' or 'inverse_variance'; see gbkfit's
+         *     HDUDescription.error_kind), and the rest of its spectral axis (e.g.
+         *     '6562.8 Angstrom': its header's, RESTWAV or RESTFRQ, or that given;
+         *     none if none, or while the axis cannot be read).
          */
         ArrayInfo: {
             /** Index */
@@ -1121,6 +1117,8 @@ export interface components {
             shape: number[];
             /** Axes */
             axes: string[];
+            /** Axis Units */
+            axis_units: string[];
             /** Unit */
             unit: string | null;
             /** Step */
@@ -1136,13 +1134,30 @@ export interface components {
             /** Ambiguous Velocity */
             ambiguous_velocity: boolean;
             /** Problems */
-            problems: string[];
+            problems: components["schemas"]["ArrayProblem"][];
             /** Holds */
             holds?: ("sigma" | "variance" | "inverse_variance") | null;
-            /** Nonstandard Type */
-            nonstandard_type?: string | null;
             /** Rest */
             rest?: string | null;
+        };
+        /**
+         * ArrayProblem
+         * @description A problem of an array of a file (see gbkfit's describe_fits): an error
+         *     (a dataset of it refuses it) or a warning (it is read as FITS says,
+         *     but may not be meant), the option of a dataset of it that fixes it
+         *     (e.g. ['spectral', 'unit']; [] if none) and its message (e.g. "CUNIT3
+         *     'KMS' invalid").
+         */
+        ArrayProblem: {
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "error" | "warning";
+            /** Path */
+            path: (string | number)[];
+            /** Message */
+            message: string;
         };
         /**
          * CatalogueLine
@@ -2455,9 +2470,10 @@ export interface operations {
     describe_api_v1_describe__path__get: {
         parameters: {
             query?: {
-                velocity?: ("radio" | "optical") | null;
                 rest?: string | null;
+                velocity?: ("radio" | "optical") | null;
                 spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
+                spectral_unit?: string | null;
             };
             header?: never;
             path: {
@@ -2525,6 +2541,10 @@ export interface operations {
             query: {
                 hdu: number;
                 channel: number;
+                rest?: string | null;
+                velocity?: ("radio" | "optical") | null;
+                spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
+                spectral_unit?: string | null;
             };
             header?: never;
             path: {
@@ -2564,6 +2584,10 @@ export interface operations {
                 x1?: number | null;
                 y0?: number | null;
                 y1?: number | null;
+                rest?: string | null;
+                velocity?: ("radio" | "optical") | null;
+                spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
+                spectral_unit?: string | null;
             };
             header?: never;
             path: {
@@ -2602,6 +2626,7 @@ export interface operations {
                 rest?: string | null;
                 velocity?: ("radio" | "optical") | null;
                 spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
+                spectral_unit?: string | null;
             };
             header?: never;
             path: {
@@ -2639,6 +2664,10 @@ export interface operations {
                 x?: number | null;
                 y?: number | null;
                 width?: number;
+                rest?: string | null;
+                velocity?: ("radio" | "optical") | null;
+                spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
+                spectral_unit?: string | null;
             };
             header?: never;
             path: {

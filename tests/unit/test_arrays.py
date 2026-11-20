@@ -10,7 +10,8 @@ from astropy.io import fits
 
 from gbkfit.config import ConfigError
 from gbkfit.io import (
-    coords_from_header, describe_fits, read_arrays, read_data, read_oriented)
+    coords_from_header, describe_fits, read_arrays, read_data, read_oriented,
+    spectral_points)
 
 
 # A cube of 5 channels of radio velocities that decrease along the file,
@@ -222,6 +223,72 @@ def test_world_axes_beyond_the_array_are_flat(tmp_path):
     assert read_oriented(filename)[0].shape == SHAPE[1:]
     description, = describe_fits(filename)
     assert description.problems == ()
+
+
+def test_an_array_to_look_at_reads_its_spectral_axis_as_given(tmp_path):
+    # Frequencies that rise along the file: as they are without a rest;
+    # of a rest, radio velocities, reversed to increase as read_data
+    # reverses them, and the values with them
+    rest = 1420.405752e6
+    filename = str(tmp_path / 'frequencies.fits')
+    header = CUBE | dict(
+        CTYPE3='FREQ', CRVAL3=rest, CRPIX3=3.0, CDELT3=1e5, CUNIT3='Hz')
+    write(filename, np.arange(5.0)[:, None, None] * np.ones(SHAPE), header)
+    values, wcs = read_oriented(filename)
+    np.testing.assert_allclose(
+        spectral_points(wcs, 5).to_value('Hz'), rest + 1e5 * np.arange(-2, 3))
+    assert values[:, 0, 0].tolist() == [0, 1, 2, 3, 4]
+    values, wcs = read_oriented(filename, rest=f'{rest} Hz')
+    width = 299792.458 * 1e5 / rest
+    np.testing.assert_allclose(
+        spectral_points(wcs, 5).to_value('km/s'), width * np.arange(-2, 3),
+        rtol=1e-6)
+    assert values[:, 0, 0].tolist() == [4, 3, 2, 1, 0]
+    # Velocities in km/s without a unit in the header: in m/s (SI) as FITS
+    # reads them, or in the unit given
+    filename = str(tmp_path / 'no-unit.fits')
+    write(filename, np.ones(SHAPE), {
+        key: value for key, value in CUBE.items() if key != 'CUNIT3'})
+    _, wcs = read_oriented(filename)
+    np.testing.assert_allclose(
+        spectral_points(wcs, 5).to_value('km/s'), [0.96, 0.97, 0.98, 0.99, 1])
+    _, wcs = read_oriented(filename, spectral_unit='km/s')
+    np.testing.assert_allclose(
+        spectral_points(wcs, 5).to_value('km/s'), [960, 970, 980, 990, 1000])
+    with pytest.raises(ValueError, match='Jy'):
+        read_oriented(filename, spectral_unit='Jy')
+    # (a unit given of another kind than the axis: refused, at its option)
+    with pytest.raises(ValueError, match="not of VRAD") as caught:
+        read_oriented(filename, spectral_unit='Angstrom')
+    assert caught.value.config_path == ['spectral', 'unit']
+    # An axis of a type FITS does not define: not spectral, unless its type
+    # is given (unlike read_data, which refuses it without one)
+    filename = str(tmp_path / 'wavelengths.fits')
+    write(filename, np.ones(SHAPE), CUBE | dict(
+        CTYPE3='WAVELENGTH', CRVAL3=6563.0, CDELT3=1.0, CUNIT3='Angstrom'))
+    assert read_oriented(filename)[1].wcs.spec < 0
+    _, wcs = read_oriented(filename, spectral_type='AWAV')
+    np.testing.assert_allclose(
+        spectral_points(wcs, 5).to(astropy.units.Angstrom).value,
+        6563 + np.arange(5))
+    # An axis of no type (CTYPE3 left out): not spectral, unless its type
+    # is given, then in the unit given
+    filename = str(tmp_path / 'untyped.fits')
+    write(filename, np.ones(SHAPE), {
+        key: value for key, value in CUBE.items()
+        if key not in ('CTYPE3', 'CUNIT3')})
+    assert read_oriented(filename)[1].wcs.spec < 0
+    _, wcs = read_oriented(
+        filename, spectral_type='VRAD', spectral_unit='km/s')
+    np.testing.assert_allclose(
+        spectral_points(wcs, 5).to_value('km/s'), [960, 970, 980, 990, 1000])
+    # An array without a spectral axis (e.g. errors without world
+    # coordinates): as it is, whatever is given of one
+    filename = str(tmp_path / 'plain.fits')
+    write(filename, np.ones(SHAPE))
+    values, wcs = read_oriented(
+        filename, rest='6563 Angstrom', spectral_unit='km/s')
+    assert values.shape == SHAPE and wcs is None
 
 
 # A cube of the sky (0.1 arcsec pixels, rotated by 30 degrees) and of

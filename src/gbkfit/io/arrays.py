@@ -33,6 +33,7 @@ from .headers import (
     ignoring_wcs_fixes, parse_wcs)
 from .orientation import (
     Orientation, _oriented_header, _squeezed_shape, model_header)
+from .spectral import _stated_header, _warn_of_missing_unit
 
 
 __all__ = [
@@ -118,6 +119,7 @@ def read_data(
         rest: Rest = None,
         velocity: str | None = None,
         spectral_type: str | None = None,
+        spectral_unit: str | None = None,
         medium: str | None = None,
         spectral_axis: int | None = None
 ) -> tuple[np.ndarray, Coords]:
@@ -143,8 +145,12 @@ def read_data(
         The convention of the velocities of a spectral axis that the
         header leaves ambiguous: 'radio' or 'optical' (see model_header).
     spectral_type : str, optional
-        The type of an axis whose header gives one that FITS does not
-        define (see model_header).
+        The type of a spectral axis whose header gives one that FITS does
+        not define, or none (see model_header).
+    spectral_unit : str, optional
+        The unit of a spectral axis whose header gives none or one that
+        is not valid (see SpectralAxis, option unit); it is not used for
+        others.
     medium : str, optional
         The medium of the wavelengths of the spectral axis and of the
         rest, if the header does not state it (see model_header and
@@ -171,57 +177,80 @@ def read_data(
     """
     filename = split_data_file(file)[0]
     data, header = read_image(file)
-    header, orientation = model_header(
+    model, orientation = model_header(
         filename, header, data.shape, rest=rest, velocity=velocity,
-        spectral_type=spectral_type, medium=medium,
+        spectral_type=spectral_type, spectral_unit=spectral_unit,
+        medium=medium,
         spectral_axis=spectral_axis)
+    _warn_of_missing_unit(
+        filename, header, data.shape, spectral_type, spectral_unit)
     coords = coords_from_header(
-        filename, header, rpix=rpix, rval=rval, spectral_axis=spectral_axis,
+        filename, model, rpix=rpix, rval=rval, spectral_axis=spectral_axis,
         medium=medium, rest=rest)
     return orientation.apply(data), coords
 
 
 def read_oriented(
-        file: DataFile
+        file: DataFile,
+        *,
+        rest: Rest = None,
+        velocity: str | None = None,
+        spectral_type: str | None = None,
+        spectral_unit: str | None = None,
+        medium: str | None = None
 ) -> tuple[np.ndarray, astropy.wcs.WCS | None]:
     """
     Read the array of a file in the orientation of the model (see
     model_header), without its axes of length 1, with its world
-    coordinates in that orientation, to look at it: unlike read_data, its
-    coordinates need not be ones the model can represent (e.g. of
-    wavelengths, or of velocities whose convention the header does not
-    state).
+    coordinates in that orientation, to look at it: its spectral axis is
+    read as read_data reads it, of what is given of it, but unlike
+    read_data, its coordinates need not be ones the model can represent
+    (e.g. of wavelengths without a rest, or of velocities whose convention
+    the header does not state and that is not given).
 
     Parameters
     ----------
     file : DataFile
         The file of the array, and where it is in it (see read_image).
+    rest, velocity, spectral_type, spectral_unit, medium : optional
+        As read_data: each, if given, is how the spectral axis is read (a
+        rest, its velocities; see model_header); an array without a
+        spectral axis is read as it is.
 
     Returns
     -------
     np.ndarray
         The array; as it is in the file (without its axes of length 1) if
-        its header has no world coordinates that astropy reads.
+        its header has no world coordinates that astropy reads and no rest
+        is given.
     astropy.wcs.WCS or None
         Its world coordinates, if any.
 
     Raises
     ------
     ValueError
-        If the file has no such array (see read_image).
+        If the file has no such array (see read_image), or what is given
+        of its spectral axis is not valid or does not apply to it (see
+        model_header).
     """
     filename = split_data_file(file)[0]
     data, header = read_image(file)
+    header = _stated_header(
+        filename, header, data.shape, spectral_type, velocity,
+        spectral_unit, unstated='keep')
     try:
         # (the fixes of astropy to the header are not of the orientation)
         with ignoring_wcs_fixes():
             header, orientation = _oriented_header(
-                filename, header, data.shape)
+                filename, header, data.shape, rest, medium)
             wcs = astropy.wcs.WCS(header) if has_wcs(header) else None
     except ValueError:
         # (world coordinates that astropy cannot read, or that cannot be
         # put in the orientation of the model, leave the array as it is;
-        # the errors of astropy's WCS are ValueErrors)
+        # the errors of astropy's WCS are ValueErrors) but of a rest, the
+        # velocities asked for cannot be read
+        if rest is not None:
+            raise
         return data.reshape(_squeezed_shape(data.shape)), None
     return orientation.apply(data), wcs
 
@@ -238,6 +267,7 @@ def read_arrays(
         rest: Rest = None,
         velocity: str | None = None,
         spectral_type: str | None = None,
+        spectral_unit: str | None = None,
         medium: str | None = None,
         spectral_axis: int | None = None
 ) -> Arrays:
@@ -286,7 +316,8 @@ def read_arrays(
     unit : str, optional
         The unit of the values, as gbkfit.units.parse_unit reads it; by
         default, that of their header (BUNIT), if it is a unit.
-    rest, velocity, spectral_type, medium, spectral_axis : optional
+    rest, velocity, spectral_type, spectral_unit, medium, spectral_axis :
+            optional
         As read_data, for the headers of all the files (the spectral axis
         is not checked: see coords_from_header).
 
@@ -314,6 +345,7 @@ def read_arrays(
             f"is {mask_kind!r}")
     read = dict(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
+        spectral_unit=spectral_unit,
         medium=medium, spectral_axis=spectral_axis)
     values, header, orientation, beam = _read(data, **read)
     given = unit is not None
@@ -401,7 +433,8 @@ def read_sky_map(
         header = _with_wcs(header, wcs.sub(2))
     return _read_companion(
         file, header, orientation, rest=None, velocity=None,
-        spectral_type=None, medium=None, spectral_axis=None, plane=plane)
+        spectral_type=None, spectral_unit=None, medium=None,
+        spectral_axis=None, plane=plane)
 
 
 def _read(
@@ -409,6 +442,7 @@ def _read(
         rest: Rest,
         velocity: str | None,
         spectral_type: str | None,
+        spectral_unit: str | None,
         medium: str | None,
         spectral_axis: int | None
 ) -> tuple[np.ndarray, astropy.io.fits.Header, Orientation, Beam | None]:
@@ -421,8 +455,11 @@ def _read(
     values, header = read_image(file)
     model, orientation = model_header(
         filename, header, values.shape, rest=rest, velocity=velocity,
-        spectral_type=spectral_type, medium=medium,
+        spectral_type=spectral_type, spectral_unit=spectral_unit,
+        medium=medium,
         spectral_axis=spectral_axis)
+    _warn_of_missing_unit(
+        filename, header, values.shape, spectral_type, spectral_unit)
     return (_floats(orientation.apply(values)), model, orientation,
             _oriented_beam(filename, header, model, orientation))
 
@@ -434,6 +471,7 @@ def _read_companion(
         rest: Rest,
         velocity: str | None,
         spectral_type: str | None,
+        spectral_unit: str | None,
         medium: str | None,
         spectral_axis: int | None,
         plane: int | None = None
@@ -451,7 +489,8 @@ def _read_companion(
     if has_wcs(header) and has_wcs(data_header):
         header, orientation = model_header(
             filename, header, values.shape, rest=rest, velocity=velocity,
-            spectral_type=spectral_type, medium=medium,
+            spectral_type=spectral_type, spectral_unit=spectral_unit,
+            medium=medium,
             spectral_axis=spectral_axis)
         values = orientation.apply(values)
         _check_same_pixels(filename, header, values.shape, data_header)

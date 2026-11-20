@@ -23,7 +23,6 @@ import { frameOf } from '../../components/sky';
 import { Dock, DockSection } from '../../components/ui/dock';
 import { Segments } from '../../components/ui/inputs';
 import { SheetLayout } from '../../components/ui/sheet';
-import { BlockLinks } from '../../shell/BlockLinks';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
@@ -84,7 +83,7 @@ export function CompareScreen({ name }: { name: string }) {
   const count = comparison ? `${comparison.galaxies.length} × ${comparison.observations.length}` : '';
   return (
     <section className="screen cmp-screen">
-      <ScreenHead eyebrow={`Comparison${count && ` · ${count}`}`} title={head.title} links={<BlockLinks folder="comparisons" name={name} />}>
+      <ScreenHead eyebrow={`Comparison${count && ` · ${count}`}`} title={head.title}>
         <SaveControls auto saving={{ dirty: false, saving: update.isPending, saveError: update.error, save: () => undefined, revert: () => undefined }} />
         {head.menu}
       </ScreenHead>

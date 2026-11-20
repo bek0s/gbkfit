@@ -4,7 +4,7 @@
 // this computer (each copied into the project), or is another array of
 // the file of the data. Read only, the rows say what the dataset reads.
 import { useState, type ReactNode } from 'react';
-import type { ArrayInfo } from '../../api/client';
+import type { ArrayInfo, ArrayProblem } from '../../api/client';
 import { useHeader } from '../../api/queries';
 import { useFileSource } from '../../components/FileSources';
 import { significant } from '../../components/format';
@@ -97,7 +97,7 @@ export function Files({
 interface HeaderContext {
   rest: string | null;
   type: SpectralType | null;
-  problems: string[];
+  problems: ArrayProblem[];
 }
 
 function ItemRows({

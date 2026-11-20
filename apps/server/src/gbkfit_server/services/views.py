@@ -2,11 +2,12 @@
 Views of the cubes of files of data of the workspace, to look at them: a
 channel, the spectrum of a pixel, and their quick moment maps, by the
 tools of the library (read_oriented, prep.signal_mask,
-moments.moment_maps). A cube is read once, in the orientation of the
-model, and kept for the next views (the latest few cubes). Its spectral
-axis is that of its header, in a unit to read (km/s, GHz or micron),
-whatever the model makes of it: a cube of wavelengths is seen before it
-is made one of velocities. Cubes made here (e.g. a render of a galaxy, see
+moments.moment_maps). A cube is read once for each reading of its
+spectral axis (see Reading), in the orientation of the model, and kept
+for the next views (the latest few cubes). Its spectral axis is read as a
+dataset of it reads it, of what is given of it, in a unit to read (km/s,
+GHz or micron): a cube of wavelengths is seen before it is made one of
+velocities, with a rest. Cubes made here (e.g. a render of a galaxy, see
 Views.put) are kept the same way, at paths of their own ('@render/1').
 """
 
@@ -25,7 +26,7 @@ import gbkfit.moments
 from gbkfit import prep
 from gbkfit.analysis import PVDiagram, pv_diagram
 from gbkfit.config import ConfigError
-from gbkfit.io import describe_fits, read_oriented
+from gbkfit.io import read_oriented, spectral_points
 
 from .errors import Invalid
 from .workspace import Workspace
@@ -34,6 +35,7 @@ from .workspace import Workspace
 __all__ = [
     'MADE_PREFIX',
     'Cube',
+    'Reading',
     'Views'
 ]
 
@@ -63,6 +65,23 @@ _REGIONS = 0.1
 # lines; below it, the colour of the background), up to its brightest
 _SAMPLES = 1_000_000
 _PERCENTILES = (50, 99.9)
+
+
+@dataclasses.dataclass(frozen=True)
+class Reading:
+    """
+    How the spectral axis of a cube of a file is read, as a dataset of it
+    reads it (see read_oriented; None: as its header says): as velocities
+    of the rest of a line (of wavelengths or frequencies), of the
+    convention of velocities its header leaves ambiguous ('radio' or
+    'optical'), as the type given of an axis whose type FITS does not
+    define, or that has none, and in the unit given of an axis whose
+    header gives none or one that is not valid.
+    """
+    rest: str | None = None
+    velocity: str | None = None
+    spectral_type: str | None = None
+    spectral_unit: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -161,29 +180,31 @@ class Views:
                 self._moments.pop((old, 0, 0), None)
         return path
 
-    def cube(self, path: str, hdu: int) -> Cube:
+    def cube(self, path: str, hdu: int, reading: Reading = Reading()) -> Cube:
         """
-        Return a cube: an array of a file of data of the workspace.
+        Return a cube: an array of a file of data of the workspace, its
+        spectral axis read so (see Reading; of a cube made here, as it was
+        made).
 
         Raises
         ------
         NotFound
             If the file does not exist.
         Invalid
-            If the array is not a cube, or a cube made here is no longer
-            kept.
+            If the array cannot be read so or is not a cube, or a cube made
+            here is no longer kept.
         """
         if path.startswith(MADE_PREFIX):
             with self._lock:
                 if path in self._made and hdu == 0:
                     return self._made[path]
             raise Invalid(f"the cube {path} is no longer kept; make it again")
-        key = self._key(path, hdu)
+        key = self._key(path, hdu, reading)
         with self._lock:
             if key in self._cubes:
                 self._cubes.move_to_end(key)
                 return self._cubes[key]
-        cube = _read(self._workspace.file(path), hdu)
+        cube = _read(self._workspace.file(path), hdu, reading)
         with self._lock:
             self._cubes[key] = cube
             while len(self._cubes) > _KEPT:
@@ -191,16 +212,20 @@ class Views:
                 self._moments.pop(old, None)
         return cube
 
-    def channel(self, path: str, hdu: int, channel: int) -> np.ndarray:
+    def channel(
+            self, path: str, hdu: int, channel: int,
+            reading: Reading = Reading()
+    ) -> np.ndarray:
         """
-        Return a channel of a cube (ny, nx).
+        Return a channel of a cube (ny, nx), of its channels as read so
+        (see cube).
 
         Raises
         ------
         Invalid
             If the cube has no such channel (or as cube).
         """
-        values = self.cube(path, hdu).values
+        values = self.cube(path, hdu, reading).values
         if not 0 <= channel < values.shape[0]:
             raise Invalid(
                 f"the cube has {values.shape[0]} channels; not {channel}")
@@ -209,20 +234,22 @@ class Views:
     def spectrum(
             self, path: str, hdu: int, x: int | None = None,
             y: int | None = None,
-            region: tuple[int, int, int, int] | None = None
+            region: tuple[int, int, int, int] | None = None,
+            reading: Reading = Reading()
     ) -> np.ndarray:
         """
-        Return the spectrum of a pixel (x, y) of a cube (its channels), or,
-        without one, its total spectrum: the sum of the values of its
-        pixels in each channel (NaN left out; NaN where all are), of all
-        its pixels or of those of a region (x0, x1, y0, y1, inclusive).
+        Return the spectrum of a pixel (x, y) of a cube (its channels, as
+        read so, see cube), or, without one, its total spectrum: the sum of
+        the values of its pixels in each channel (NaN left out; NaN where
+        all are), of all its pixels or of those of a region (x0, x1, y0,
+        y1, inclusive).
 
         Raises
         ------
         Invalid
             If the pixel or the region is not in the cube (or as cube).
         """
-        values = self.cube(path, hdu).values
+        values = self.cube(path, hdu, reading).values
         _, ny, nx = values.shape
         if x is not None or y is not None:
             if x is None or y is None or not (0 <= x < nx and 0 <= y < ny):
@@ -240,7 +267,8 @@ class Views:
 
     def pv(
             self, path: str, hdu: int, pa: float,
-            centre: tuple[float, float] | None = None, width: int = 1
+            centre: tuple[float, float] | None = None, width: int = 1,
+            reading: Reading = Reading()
     ) -> PVDiagram:
         """
         Return the position-velocity diagram of a cube along a slit (see
@@ -248,14 +276,15 @@ class Views:
         y; by default that of the cube) at the position angle pa (degrees,
         as the posa of the models), of the width (pixels), every pixel.
         Its positions are in pixels from the centre, and its velocities
-        the coordinates of the channels (or their indices without them).
+        the coordinates of the channels, as read so (see cube; or their
+        indices without them).
 
         Raises
         ------
         Invalid
             If the width is less than 1 (or as cube).
         """
-        cube = self.cube(path, hdu)
+        cube = self.cube(path, hdu, reading)
         nchannels, ny, nx = cube.values.shape
         if centre is None:
             centre = ((nx - 1) / 2, (ny - 1) / 2)
@@ -269,8 +298,7 @@ class Views:
     def moments(
             self, path: str, hdu: int, snr: float,
             method: Literal['moments', 'gauss_hermite'] = 'moments',
-            rest: str | None = None, velocity: str | None = None,
-            spectral_type: str | None = None
+            reading: Reading = Reading()
     ) -> dict[str, np.ndarray]:
         """
         Return the quick moment maps of a cube, by name, of the voxels of
@@ -278,28 +306,22 @@ class Views:
         (see prep.signal_mask; 0: of all of them): measured as moments,
         its flux, velocity, dispersion, skewness and kurtosis; or of a
         Gauss-Hermite series fitted to each spectrum (slower), its h3 and
-        h4 (see gbkfit.moments.moment_maps). Channels of wavelengths or
-        frequencies are of the velocities of a rest, as a dataset of the
-        cube with it, the convention of velocities its header leaves
-        ambiguous and the type of an axis FITS does not define reads them
-        (see Workspace.describe).
+        h4 (see gbkfit.moments.moment_maps); of its channels as read so
+        (see cube: those of wavelengths or frequencies are velocities of
+        the rest given).
 
         Raises
         ------
         Invalid
-            If its channels are not of velocities, of the rest given if any
-            (or as cube).
+            If its channels are not of velocities, as read so (or as cube).
         """
-        cube = self.cube(path, hdu)
-        key = self._key(path, hdu)
-        kept = (snr, method, rest, velocity, spectral_type)
+        cube = self.cube(path, hdu, reading)
+        key = self._key(path, hdu, reading)
+        kept = (snr, method)
         with self._lock:
             if kept in self._moments.get(key, {}):
                 return self._moments[key][kept]
         velocities = cube.velocities()
-        if velocities is None and not path.startswith(MADE_PREFIX):
-            velocities = self._velocities(
-                path, hdu, cube, rest, velocity, spectral_type)
         if velocities is None:
             raise Invalid(
                 f"the channels of '{path}' are not of velocities: its "
@@ -330,62 +352,38 @@ class Views:
                 self._moments.setdefault(key, {})[kept] = result
         return result
 
-    def _velocities(
-            self, path: str, hdu: int, cube: Cube, rest: str | None,
-            velocity: str | None, spectral_type: str | None
-    ) -> np.ndarray | None:
+    def _key(self, path: str, hdu: int, reading: Reading) -> tuple:
         """
-        Return the velocities of the channels of a cube of a file as a
-        dataset of it reads them, with a rest, a convention and a type, if
-        given (see gbkfit.io.describe_fits; none if they are not read
-        so), in the order of the channels of the cube.
-        """
-        if cube.spectral is None:
-            return None
-        try:
-            hdus = describe_fits(
-                self._workspace.file(path), velocity, rest, spectral_type)
-        except OSError:
-            return None
-        coords = next((h.coords for h in hdus if h.index == hdu), None)
-        if coords is None or len(coords.step) < 3:
-            return None
-        channels = np.arange(cube.values.shape[0])
-        velocities = \
-            coords.rval[2] + (channels - coords.rpix[2]) * coords.step[2]
-        # (those of the dataset go to greater velocities, as the model's
-        # channels do; those of the cube, as its file has them, to longer
-        # wavelengths or lower frequencies, or the other way)
-        rising = cube.spectral[-1] > cube.spectral[0]
-        return velocities if rising == (cube.unit == 'micron') \
-            else velocities[::-1]
-
-    def _key(self, path: str, hdu: int) -> tuple:
-        """
-        Return the key of a cube: its file and array, and when the file
-        changed (a file written again is read again); of a cube made here,
-        its path.
+        Return the key of a cube: its file and array, when the file changed
+        (a file written again is read again), and how its spectral axis is
+        read; of a cube made here, its path.
         """
         if path.startswith(MADE_PREFIX):
             return path, hdu, 0
         filename = self._workspace.file(path)
-        return filename, hdu, os.stat(filename).st_mtime_ns
+        return filename, hdu, os.stat(filename).st_mtime_ns, reading
 
 
-def _read(filename: str, hdu: int) -> Cube:
+def _read(filename: str, hdu: int, reading: Reading) -> Cube:
     """
-    Read a cube: an array of a FITS file, as read_oriented reads
-    it, with the coordinates of its channels if its header gives them; a
-    map (e.g. a moment map) is read as a cube of one channel, without them.
+    Read a cube: an array of a FITS file, as read_oriented reads it, its
+    spectral axis read so (see Reading), with the coordinates of its
+    channels if its header gives them; a map (e.g. a moment map) is read
+    as a cube of one channel, without them.
 
     Raises
     ------
     Invalid
-        If the file cannot be read, or the array is neither a cube nor a
-        map.
+        If the file cannot be read, or not so, or the array is neither a
+        cube nor a map.
     """
     try:
-        values, wcs = read_oriented((filename, hdu))
+        values, wcs = read_oriented(
+            (filename, hdu), **dataclasses.asdict(reading))
+    except ValueError as e:
+        # (of what the header says, or the reading: as the library says it,
+        # e.g. "CUNIT3 'km s-1' not of AWAV")
+        raise Invalid(str(e).removeprefix(f"{filename}: ")) from e
     except (OSError, IndexError, ConfigError) as e:
         raise Invalid(f"cannot read the array {hdu} of {filename}: {e}") \
             from e
@@ -410,13 +408,11 @@ def _spectral(
     """
     if wcs is None or wcs.wcs.spec < 0:
         return None, None
-    axis = wcs.sub([wcs.wcs.spec + 1])
-    unit = _SPECTRAL_UNITS.get(str(axis.wcs.ctype[0])[:4])
+    unit = _SPECTRAL_UNITS.get(str(wcs.wcs.ctype[wcs.wcs.spec])[:4])
     if unit is None:
         return None, None
     try:
-        values = axis.all_pix2world(np.arange(nchannels), 0)[0]
-        return (values * u.Unit(axis.wcs.cunit[0])).to_value(unit), unit
+        return spectral_points(wcs, nchannels).to_value(unit), unit
     except (ValueError, u.UnitsError):
         return None, None
 

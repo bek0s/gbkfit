@@ -15,7 +15,6 @@ import { joinPath } from '../../components/FilePicker';
 import { useEdits } from '../../components/history';
 import { Button } from '../../components/ui/basics';
 import { SheetLayout } from '../../components/ui/sheet';
-import { BlockLinks } from '../../shell/BlockLinks';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
@@ -63,7 +62,7 @@ function useSetupDraft(path: string) {
 export type SetupDraft = ReturnType<typeof useSetupDraft>;
 
 export function FitScreen({ name }: { name: string }) {
-  const { project, go } = useStudio();
+  const { project } = useStudio();
   const root = project ?? '.';
   const path = joinPath(root, `setups/${name}.yaml`);
   const draft = useSetupDraft(path);
@@ -102,16 +101,9 @@ export function FitScreen({ name }: { name: string }) {
   return (
     <section className="screen fx-screen">
       <ScreenHead
-        eyebrow={
-          <>
-            <button className="fx-eyebrow-link" title="All the fits of the project" onClick={() => go({ kind: 'section', key: 'fit' })}>
-              Fit
-            </button>{' '}
-            · {observations} {observations === 1 ? 'observation' : 'observations'} · {fitterText}
-          </>
-        }
+        up="fit"
+        tags={[`${observations} ${observations === 1 ? 'observation' : 'observations'}`, fitterText]}
         title={head.title}
-        links={<BlockLinks folder="setups" name={name} />}
       >
         <SaveControls saving={draft} primary={false} />
         {submit.error && <span className="error">{submit.error.message}</span>}

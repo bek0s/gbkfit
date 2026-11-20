@@ -2,8 +2,9 @@
 The spectral axes of FITS headers: their types and the conventions of
 their velocities (FITS WCS Paper III, and those of AIPS and MIRIAD),
 their rests and the medium of their wavelengths, and their reading as
-velocities of a rest. An axis of a type that FITS does not define is
-read as the type given (see _with_spectral_type).
+velocities of a rest. An axis whose type does not say what its values
+are, one FITS does not define or none, is read as the type given (see
+unstated_spectral_axis).
 
 A rest wavelength is in the medium of the wavelengths of its axis, as
 the model takes it (see VelocityConvention), and in vacuum in headers
@@ -12,6 +13,8 @@ turned from the one to the other where headers are read and written
 (see _set_rest and _rest_in_medium).
 """
 
+from typing import Literal
+
 import astropy.constants
 import astropy.io.fits
 import astropy.units as u
@@ -19,15 +22,18 @@ import astropy.wcs
 import numpy as np
 
 from gbkfit.config import warn
+import gbkfit.units
 from gbkfit.grid import (
     FRAMES, Coords, Rest, SPECTRAL_TYPES, air_refractive_index,
-    make_convention, make_medium, make_rest, vacuum_wavelength)
-from .headers import has_wcs, ignoring_wcs_fixes
+    make_convention, make_medium, make_rest, spectral_unit,
+    vacuum_wavelength)
+from .headers import _option_error, has_wcs, ignoring_wcs_fixes
 
 
 __all__ = [
-    'nonstandard_spectral_axis',
+    'spectral_axis_index',
     'spectral_points',
+    'unstated_spectral_axis',
     'velocity_is_ambiguous'
 ]
 
@@ -70,28 +76,40 @@ _KM_S = u.km / u.s
 _SPECTRAL_UNITS = (u.m, u.Hz, _KM_S)
 
 
-def nonstandard_spectral_axis(
+def unstated_spectral_axis(
         header: astropy.io.fits.Header,
         shape: tuple[int, ...] | None = None
-) -> tuple[int, str] | None:
+) -> tuple[int, str | None] | None:
     """
-    Return the axis of a header whose type (CTYPE) is not one FITS
-    defines and whose unit is one of a spectral axis (of wavelengths,
-    frequencies or velocities), and that type (e.g. 2 and 'WAVELENGTH',
-    in Angstrom, as CALIFA writes the spectral axis of its cubes); None if
-    no axis is one.
+    Return the spectral axis of a header whose type (CTYPE) does not say
+    what its values are, and that type: one of a type FITS does not
+    define (e.g. 2 and 'WAVELENGTH', in Angstrom, as CALIFA writes the
+    spectral axis of its cubes), or one of none (e.g. 2 and None: CTYPE3
+    left out); None if no axis is one. Such an axis is read as the type
+    given (see _with_spectral_type), and refused without one.
 
-    The type of such an axis says nothing of what its values are
-    (astropy and wcslib read it as an axis of no kind): FITS defines the
-    spectral types (FITS 4.0, Table 25), and any other is a name alone
-    (e.g. 'WAVELENGTH' says neither air or vacuum, nor linear or
-    logarithmic). Its unit says that it is spectral, not what it is.
-    Other axes of types FITS does not define (e.g. LINEAR or OFFSET, of
-    positions along a slit, in angles or of no unit) are positions, as
-    they are read, and VLOG is GBKFIT's own (its log velocities without a
-    rest, see _CONVENTIONS_OF_TYPES); axes without a type, and axes of
-    length 1 of an array of the given shape (numpy order) or beyond its
-    axes, which reading leaves out, are not looked at.
+    FITS defines the spectral types (FITS 4.0, Table 25); any other is a
+    name alone (e.g. 'WAVELENGTH' says neither air or vacuum, nor linear
+    or logarithmic), and an axis of none is "a linear, undefined axis"
+    (FITS 4.0, Sect. 8.2): astropy and wcslib read both as axes of no
+    kind, whose values the model would take as velocities in km/s.
+
+    - An axis of a type FITS does not define is spectral if its unit is
+      one of a spectral axis (of wavelengths, frequencies or velocities),
+      or, of a header with no spectral axis of a type FITS defines, if it
+      has no unit or one that is not valid (as 'VELOCITY' with no unit).
+      Others are positions, as they are read (e.g. LINEAR or OFFSET, of
+      positions along a slit, in angles or of no unit), and VLOG is
+      GBKFIT's own (its log velocities without a rest, see
+      _CONVENTIONS_OF_TYPES).
+    - An axis of no type is spectral if it is the only one of the array,
+      the header gives its others theirs, and none of them is spectral
+      (e.g. the third axis of a cube of RA and Dec); an array none of
+      whose axes has a type (e.g. of a simulation, of pixels alone) is
+      read as it is.
+
+    Axes of length 1 of an array of the given shape (numpy order), or
+    beyond its axes, which reading leaves out, are not looked at.
 
     Parameters
     ----------
@@ -102,8 +120,8 @@ def nonstandard_spectral_axis(
 
     Returns
     -------
-    tuple of int and str, or None
-        The axis (FITS order, from 0) and its type.
+    tuple of int and str or None, or None
+        The axis (FITS order, from 0) and its type (None: it has none).
     """
     if not has_wcs(header):
         return None
@@ -114,17 +132,172 @@ def nonstandard_spectral_axis(
         # (the errors of astropy's WCS: the world coordinates are reported
         # as invalid where they are read, see parse_wcs)
         return None
-    for axis, kind in enumerate(wcs.wcs.axis_types):
-        ctype = str(wcs.wcs.ctype[axis]).strip()
-        if kind != 0 or not ctype or ctype in _CONVENTIONS_OF_TYPES:
-            continue
+    typed, untyped, unknown = [], [], []
+    for axis in range(wcs.naxis):
         if shape is not None and (
                 axis >= len(shape) or shape[len(shape) - 1 - axis] == 1):
             continue
-        unit = wcs.wcs.cunit[axis]
-        if any(unit.is_equivalent(of) for of in _SPECTRAL_UNITS):
+        ctype = str(wcs.wcs.ctype[axis]).strip()
+        if not ctype:
+            untyped.append(axis)
+            continue
+        typed.append(axis)
+        if wcs.wcs.axis_types[axis] != 0 or ctype in _CONVENTIONS_OF_TYPES \
+                or ctype.upper() in _OTHER_TYPES:
+            continue
+        unit = _axis_unit(header, axis)
+        if unit is None:
+            unknown.append((axis, ctype))
+        elif any(unit.is_equivalent(of) for of in _SPECTRAL_UNITS):
             return axis, ctype
+    # (a spectral axis of a type FITS defines, of a length above 1)
+    if wcs.wcs.spec in typed:
+        return None
+    if unknown:
+        return unknown[0]
+    if len(untyped) == 1 and typed:
+        return untyped[0], None
     return None
+
+
+def _axis_unit(
+        header: astropy.io.fits.Header, axis: int
+) -> gbkfit.units.AnyUnit | None:
+    """
+    Return the unit of an axis (FITS order, from 0) of a header (CUNIT),
+    or None if it has none, or one that is not a unit.
+    """
+    given = str(header.get(f'CUNIT{axis + 1}', '')).strip()
+    if not given:
+        return None
+    try:
+        return gbkfit.units.parse_unit(given)
+    except ValueError:
+        return None
+
+
+
+# The kinds (the first four letters of their types, CTYPE) of the spectral
+# axes that FITS defines (FITS 4.0, Table 25) whose values have a unit,
+# and what they are; and the types of axes that are not spectral, of
+# positions or of polarisations, whose kinds FITS does not define as
+# spectral either
+_SPECTRAL_KINDS = dict(
+    FREQ='frequency', WAVE='wavelength', AWAV='wavelength',
+    VRAD='velocity', VOPT='velocity', VELO='velocity', FELO='velocity')
+_POSITION_PREFIXES = (
+    'RA--', 'DEC-', 'GLON', 'GLAT', 'ELON', 'ELAT', 'SLON', 'SLAT',
+    'HPLN', 'HPLT')
+_OTHER_TYPES = ('LINEAR', 'OFFSET', 'STOKES', 'VLOG')
+
+# The units FITS reads the values of a spectral axis of each kind in,
+# without a unit (SI; FITS WCS Paper III, Table 1), and those of each
+_SI_UNITS = dict(velocity='m/s', wavelength='m', frequency='Hz')
+_KIND_UNITS = dict(velocity=u.m / u.s, wavelength=u.m, frequency=u.Hz)
+
+
+def spectral_axis_index(
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...] | None = None
+) -> int | None:
+    """
+    Return the axis (FITS order, from 0) of a header that is spectral by
+    its type alone (CTYPE): of a kind FITS defines (e.g. FREQ, WAVE-LOG,
+    or VELO-HEL as AIPS writes), or of a type it does not define that is
+    not a position or a polarisation (e.g. 'WAVELENGTH', as CALIFA
+    writes); None if no axis is one. Its unit is not looked at, so that a
+    spectral axis without one, or with one that is not valid, is found
+    (see _with_spectral_unit); axes of length 1 of an array of the given
+    shape (numpy order) are not.
+    """
+    naxis = int(header.get('WCSAXES', header.get('NAXIS', 0)) or 0)
+    for axis in range(naxis):
+        ctype = str(header.get(f'CTYPE{axis + 1}', '')).strip().upper()
+        if shape is not None and (
+                axis >= len(shape) or shape[len(shape) - 1 - axis] == 1):
+            continue
+        if not ctype or ctype in _OTHER_TYPES \
+                or ctype.startswith(_POSITION_PREFIXES):
+            continue
+        return axis
+    return None
+
+
+def _warn_of_missing_unit(
+        source: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...] | None,
+        spectral_type: str | None,
+        unit: str | None
+) -> None:
+    """
+    Warn if the spectral axis of a header (of the type given, if its own
+    does not say; see spectral_axis_index) has no unit (CUNIT) and none is
+    given: FITS reads its values in SI units (e.g. m/s), which may not be
+    those they were written in. The header is that of the file (once
+    read, its world coordinates have the SI unit written in).
+    """
+    found = None if unit is not None \
+        else _missing_unit(source, header, shape, spectral_type)
+    if found is not None:
+        n, si = found
+        warn(f"{source}: CUNIT{n} missing: read in {si} (FITS default)")
+
+
+def _missing_unit(
+        source: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...] | None,
+        spectral_type: str | None
+) -> tuple[int, str] | None:
+    """
+    Return the spectral axis (FITS order, from 1) of a header (of the type
+    given, if its own does not say; see spectral_axis_index) that has no
+    unit (CUNIT), and the unit FITS reads it in (SI); None if it has one,
+    or there is no such axis.
+    """
+    header = _with_spectral_type(source, header, shape, spectral_type)
+    axis = spectral_axis_index(header, shape)
+    if axis is None or str(header.get(f'CUNIT{axis + 1}', '')).strip():
+        return None
+    kind = _SPECTRAL_KINDS.get(
+        str(header.get(f'CTYPE{axis + 1}', '')).upper()[:4])
+    return axis + 1, _SI_UNITS[kind] if kind else 'SI units'
+
+
+def _with_spectral_unit(
+        source: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...] | None,
+        unit: str | None
+) -> astropy.io.fits.Header:
+    """
+    Return the header with the unit of its spectral axis (CUNIT; see
+    spectral_axis_index) replaced by the unit given (see SpectralAxis,
+    option unit), or as it is if none is given: for an axis whose header
+    gives no unit, and whose values FITS then reads in SI units (m/s, m
+    or Hz), or one that is not valid.
+
+    Raises
+    ------
+    ValueError
+        If the unit is not one of velocities, wavelengths or frequencies,
+        or the header has no spectral axis (of the option spectral.unit).
+    """
+    if unit is None:
+        return header
+    try:
+        unit = spectral_unit(unit)
+    except ValueError as e:
+        raise _option_error(str(e), 'spectral', 'unit') from None
+    axis = spectral_axis_index(header, shape)
+    if axis is None:
+        raise _option_error(
+            f"{source}: no spectral axis for the unit {unit!r}",
+            'spectral', 'unit')
+    header = header.copy()
+    header[f'CUNIT{axis + 1}'] = unit
+    return header
 
 
 def _with_spectral_type(
@@ -134,14 +307,16 @@ def _with_spectral_type(
         spectral_type: str | None
 ) -> astropy.io.fits.Header:
     """
-    Return the header with the type of its spectral axis whose type is not
-    one FITS defines (see nonstandard_spectral_axis) replaced by the type
-    given, or as it is if it has no such axis.
+    Return the header with the type of its spectral axis whose type does
+    not say what its values are, one FITS does not define or none (see
+    unstated_spectral_axis), replaced by the type given, or as it is if
+    it has no such axis.
 
-    Such an axis cannot be read without its type: its name (e.g.
+    Such an axis cannot be read without its type: a name (e.g.
     'WAVELENGTH') does not say whether its values are wavelengths in
     vacuum or in air, linear or logarithmic, and nothing in the header
-    has to; the type is given, never taken from its name.
+    has to; and no type says nothing at all. The type is given, never
+    taken from a name, or from a unit.
 
     Parameters
     ----------
@@ -150,8 +325,7 @@ def _with_spectral_type(
     header : Header
         The header.
     shape : tuple of int, optional
-        The shape of its array (numpy order; see
-        nonstandard_spectral_axis).
+        The shape of its array (numpy order; see unstated_spectral_axis).
     spectral_type : str, optional
         The type the axis is read as: one of SPECTRAL_TYPES (e.g. 'AWAV'
         for linear wavelengths in air).
@@ -160,24 +334,23 @@ def _with_spectral_type(
     ------
     ValueError
         If the type given is not one of SPECTRAL_TYPES, or the header has
-        an axis of a type FITS does not define and no type is given.
+        an axis whose type does not say what its values are and no type
+        is given.
     """
     if spectral_type is not None and spectral_type not in SPECTRAL_TYPES:
-        raise ValueError(
+        raise _option_error(
             f"the type of the spectral axis must be one of "
-            f"{list(SPECTRAL_TYPES)}; it is {spectral_type!r}")
-    found = nonstandard_spectral_axis(header, shape)
+            f"{list(SPECTRAL_TYPES)}; it is {spectral_type!r}",
+            'spectral', 'type')
+    found = unstated_spectral_axis(header, shape)
     if found is None:
         return header
     axis, ctype = found
     if spectral_type is None:
-        unit = str(header.get(f'CUNIT{axis + 1}', '')).strip()
-        raise ValueError(
-            f"{source}: the type of the axis {axis + 1}, {ctype!r}"
-            f"{f' (in {unit})' if unit else ''}, is not one FITS defines: "
-            f"it does not say what its values are; give the type of the "
-            f"spectral axis (spectral: {{type: ...}}), one of "
-            f"{', '.join(SPECTRAL_TYPES)}")
+        n = axis + 1
+        said = f"CTYPE{n} missing" if ctype is None \
+            else f"CTYPE{n} {ctype!r} not FITS"
+        raise _option_error(f"{source}: {said}", 'spectral', 'type')
     header = header.copy()
     header[f'CTYPE{axis + 1}'] = spectral_type
     return header
@@ -228,19 +401,14 @@ def _with_velocity_convention(
         return header
     frame = _aips_frame(header)
     if velocity is None:
-        raise ValueError(
-            f"{source}: the velocities of the spectral axis (VELO-{frame}"
-            f", without VELREF) may be radio or optical: AIPS reads them "
-            f"as optical, but MIRIAD writes radio ones (e.g. LVHIS). Say "
-            f"which, where the data are read (the spectral convention of "
-            f"a dataset, spectral: {{convention: radio}}; the velocity "
-            f"of prep), or add VELREF to the header "
-            f"({_AIPS_FRAMES[frame]} for optical, "
-            f"{_AIPS_FRAMES[frame] + 256} for radio)")
+        raise _option_error(
+            f"{source}: VELREF missing",
+            'spectral', 'convention')
     if velocity not in _VELOCITY_CONVENTIONS:
-        raise ValueError(
+        raise _option_error(
             f"the convention of velocities must be one of "
-            f"{list(_VELOCITY_CONVENTIONS)}; it is {velocity!r}")
+            f"{list(_VELOCITY_CONVENTIONS)}; it is {velocity!r}",
+            'spectral', 'convention')
     header = header.copy()
     radio = 256 if velocity == 'radio' else 0
     header['VELREF'] = _AIPS_FRAMES[frame] + radio
@@ -286,19 +454,104 @@ def _stated_header(
         header: astropy.io.fits.Header,
         shape: tuple[int, ...],
         spectral_type: str | None,
-        velocity: str | None
+        velocity: str | None,
+        spectral_unit: str | None = None,
+        *,
+        unstated: Literal['refuse', 'keep'] = 'refuse'
 ) -> astropy.io.fits.Header:
     """
     Return a header (of an array of the given shape, numpy order) whose
     spectral axis states what its values are: of the type given, if its
-    own is not one FITS defines (see _with_spectral_type), and of the
-    convention of velocities given, if the header leaves it ambiguous
-    (see _with_velocity_convention); with a warning if AIRORVAC
-    contradicts its type (see _check_header_medium).
+    own does not say (see _with_spectral_type), then in the unit given, if
+    any (see _with_spectral_unit), and of the convention of velocities
+    given, if the header leaves it ambiguous (see
+    _with_velocity_convention); with a warning if AIRORVAC contradicts
+    its type (see _check_header_medium). A type or a convention that the
+    header needs and is not given is refused; or, of a header to look at
+    (unstated 'keep', see read_oriented), what is given alone is stated,
+    and the rest left as the header has it, as is a header without a
+    spectral axis (e.g. of the errors of a cube, without world
+    coordinates).
     """
+    if unstated == 'keep':
+        if spectral_type is not None:
+            header = _with_spectral_type(
+                source, header, shape, spectral_type)
+        if spectral_axis_index(header, shape) is None:
+            return header
+        header = _with_spectral_unit(source, header, shape, spectral_unit)
+        # (a type or a unit given must fit the axis, as of data)
+        if spectral_type is not None or spectral_unit is not None:
+            _check_spectral_unit(source, header, shape)
+        if velocity is not None:
+            header = _with_velocity_convention(source, header, velocity)
+        return header
     header = _with_spectral_type(source, header, shape, spectral_type)
+    header = _with_spectral_unit(source, header, shape, spectral_unit)
+    _check_spectral_unit(source, header, shape)
     _check_header_medium(source, header)
     return _with_velocity_convention(source, header, velocity)
+
+
+def _statement_errors(
+        source: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...],
+        spectral_type: str | None,
+        velocity: str | None,
+        spectral_unit: str | None
+) -> list[ValueError]:
+    """
+    Return the errors of what the spectral axis of a header needs stated
+    (see _stated_header), each as it raises it, of those that do not
+    depend on one another: its type; its unit (of the type, once it has
+    one); and the convention of its velocities.
+    """
+    errors = []
+    try:
+        typed = _with_spectral_type(source, header, shape, spectral_type)
+    except ValueError as e:
+        errors.append(e)
+    else:
+        try:
+            united = _with_spectral_unit(source, typed, shape, spectral_unit)
+            _check_spectral_unit(source, united, shape)
+        except ValueError as e:
+            errors.append(e)
+    try:
+        _with_velocity_convention(source, header, velocity)
+    except ValueError as e:
+        errors.append(e)
+    return errors
+
+
+def _check_spectral_unit(
+        source: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...] | None
+) -> None:
+    """
+    Raise ValueError (of the option spectral.unit) if the unit the header
+    gives its spectral axis (see spectral_axis_index) is not a unit, or
+    not one of its type (e.g. Angstrom of velocities, VRAD).
+    """
+    axis = spectral_axis_index(header, shape)
+    if axis is None:
+        return
+    n = axis + 1
+    given = str(header.get(f'CUNIT{n}', '')).strip()
+    if not given:
+        return
+    unit = _axis_unit(header, axis)
+    if unit is None:
+        raise _option_error(
+            f"{source}: CUNIT{n} {given!r} invalid", 'spectral', 'unit')
+    ctype = str(header.get(f'CTYPE{n}', '')).strip()
+    kind = _SPECTRAL_KINDS.get(ctype.upper()[:4])
+    if kind is not None and not unit.is_equivalent(_KIND_UNITS[kind]):
+        raise _option_error(
+            f"{source}: CUNIT{n} {given!r} not of {ctype}",
+            'spectral', 'unit')
 
 
 def _aips_frame(header: astropy.io.fits.Header) -> str | None:
@@ -518,10 +771,9 @@ def _log_velocity_axis(
         return wcs, None
     log_medium = _MEDIUMS_OF_LOG_TYPES[wcs.wcs.ctype[spec]]
     if not wcs.wcs.restwav > 0:
-        raise ValueError(
-            f"{source}: the spectral axis of logarithmic wavelengths "
-            f"({wcs.wcs.ctype[spec]}) needs a rest wavelength (RESTWAV, or "
-            f"the rest)")
+        raise _option_error(
+            f"{source}: {wcs.wcs.ctype[spec]} axis: rest missing",
+            'spectral', 'rest')
     vacuum = float(wcs.wcs.restwav)
     rest = _rest_in_medium(vacuum * u.m, log_medium)
     wcs = wcs.deepcopy()
@@ -756,15 +1008,13 @@ def _velocity_scale(source: str, wcs: astropy.wcs.WCS) -> float:
     if ctype[:4] not in _VELOCITY_TYPES:
         # (the rest of the header, if any, which is not taken unless given)
         stated = (
-            f" (its header states '{wcs.wcs.restfrq:.10g} Hz', RESTFRQ)"
+            f" (header: RESTFRQ {wcs.wcs.restfrq:.10g} Hz)"
             if wcs.wcs.restfrq else
-            f" (its header states '{wcs.wcs.restwav:.10g} m', RESTWAV)"
+            f" (header: RESTWAV {wcs.wcs.restwav:.10g} m)"
             if wcs.wcs.restwav else "")
-        raise ValueError(
-            f"{source}: the spectral axis is of type '{ctype}'; only "
-            f"velocity axes ({', '.join(_VELOCITY_TYPES)}) are supported: "
-            f"give the rest frequency or wavelength of its line (spectral: "
-            f"{{rest: ...}}), which turns it into velocities{stated}")
+        raise _option_error(
+            f"{source}: {ctype} axis: rest missing{stated}",
+            'spectral', 'rest')
     if not _is_linear_type(ctype):
         raise ValueError(
             f"{source}: the spectral axis ({ctype}) is not linear in "
@@ -819,10 +1069,9 @@ def _set_rest(
 
 def _relativistic_rest_error(source: str) -> ValueError:
     """Return the error of a rest given to relativistic velocities."""
-    return ValueError(
-        f"{source}: the spectral axis has relativistic velocities (VELO), "
-        f"which have no rest; convert it to optical (VOPT) or radio (VRAD) "
-        f"velocities")
+    return _option_error(
+        f"{source}: VELO axis (relativistic): takes no rest",
+        'spectral', 'rest')
 
 
 def _velocity_axis_keywords(

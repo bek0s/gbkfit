@@ -500,12 +500,31 @@ def test_aips_velocity_axes_need_their_convention(velocity, ctype):
         RESTFREQ=1.420405752e9)
     write_cube('cube.fits', header)
     for read in (read_data, prep_pixel_spectra):
-        with pytest.raises(Exception, match="may be radio or optical"):
+        with pytest.raises(Exception, match="VELREF missing"):
             read('cube.fits')
     _, header_out = prep_pixel_spectra('cube.fits', velocity=velocity)
     assert header_out['CTYPE3'] == ctype
     _, coords = read_data('prep_cube.fits')
     assert coords.step[2] == pytest.approx(10)
+
+
+def test_an_axis_of_no_type_is_prepared_as_the_type_given():
+    # CTYPE3 left out (and CUNIT3): refused, as nothing says what its
+    # values are; of the type and the unit given, prepared with both in
+    # the header of the prepared file, which reads as it is
+    header = {
+        key: value for key, value in HEADER.items()
+        if key not in ('CTYPE3', 'CUNIT3')}
+    write_cube('cube.fits', header)
+    with pytest.raises(Exception, match='CTYPE3 missing'):
+        prep_pixel_spectra('cube.fits')
+    _, header_out = prep_pixel_spectra(
+        'cube.fits', spectral_type='VRAD', spectral_unit='km/s')
+    assert header_out['CTYPE3'] == 'VRAD'
+    _, coords = read_data('prep_cube.fits')
+    assert coords.step[2] == pytest.approx(10)
+    assert coords.rval[2] + (0 - coords.rpix[2]) * coords.step[2] == \
+        pytest.approx(1450)
 
 
 @pytest.mark.parametrize('header, message', [

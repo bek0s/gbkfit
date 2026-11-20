@@ -28,7 +28,7 @@ from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from gbkfit_server.services.units import rest_text
-from gbkfit_server.services.views import Cube
+from gbkfit_server.services.views import Cube, Reading
 from .models import (
     ArrayInfo, CatalogueLine, CheckRequest, CheckResult, ComponentPartInfo,
     ComponentType, CubeRenderInfo, FolderInfo, GalaxyExtraRequest,
@@ -58,6 +58,28 @@ def _server(connection: HTTPConnection) -> Server:
 
 
 ServerDep = Annotated[Server, Depends(_server)]
+
+
+def _reading(
+        rest: str | None = None,
+        velocity: Literal['radio', 'optical'] | None = None,
+        spectral_type: Literal[SPECTRAL_TYPES] | None = None,
+        spectral_unit: str | None = None
+) -> Reading:
+    """
+    Return how the spectral axis of a cube of a file is read, as a dataset
+    of it reads it (see Reading), of the query: rest, the rest of a line
+    (e.g. '6562.8 Angstrom'), which makes wavelengths or frequencies
+    velocities; velocity, the convention of velocities that its header
+    leaves ambiguous; spectral_type, what an axis whose header gives a
+    type FITS does not define, or none, is (e.g. 'AWAV'); and
+    spectral_unit, the unit of an axis whose header gives none, or one
+    that is not valid (e.g. 'km/s').
+    """
+    return Reading(rest, velocity, spectral_type, spectral_unit)
+
+
+ReadingDep = Annotated[Reading, Depends(_reading)]
 
 
 @router.get('/projects')
@@ -175,26 +197,18 @@ def folder(server: ServerDep, path: str) -> FolderInfo:
 
 @router.get('/describe/{path:path}')
 def describe(
-        server: ServerDep,
-        path: str,
-        velocity: Literal['radio', 'optical'] | None = None,
-        rest: str | None = None,
-        spectral_type: Literal[SPECTRAL_TYPES] | None = None
+        server: ServerDep, path: str, reading: ReadingDep
 ) -> list[ArrayInfo]:
     """
     Describe a file of data from its headers, without reading its data:
-    each of its arrays, and what a dataset of it refuses or needs given;
-    velocity is the convention of velocities that its headers leave
-    ambiguous, rest the rest of its spectral axis (e.g. '6562.8
-    Angstrom'), which makes wavelengths or frequencies velocities, as a
-    dataset with that rest reads them, and spectral_type what a spectral
-    axis whose header gives a type FITS does not define is (e.g. 'AWAV';
-    see ArrayInfo).
+    each of its arrays (see ArrayInfo), and what a dataset of it refuses
+    or needs given, its spectral axis read so (see _reading).
     """
     return [
         ArrayInfo.model_validate(array)
         for array in server.workspace.describe(
-            path, velocity, rest, spectral_type)]
+            path, reading.velocity, reading.rest, reading.spectral_type,
+            reading.spectral_unit)]
 
 
 @router.get('/header/{path:path}')
@@ -214,17 +228,20 @@ _FRAME = {200: {'content': {'application/octet-stream': {}}}}
 @router.get(
     '/views/channel/{path:path}', response_class=Response, responses=_FRAME)
 def view_channel(
-        server: ServerDep, path: str, hdu: int, channel: int) -> Response:
+        server: ServerDep, path: str, hdu: int, channel: int,
+        reading: ReadingDep
+) -> Response:
     """
     Return a channel of a cube (an array of a file of data, in the
-    orientation of the model) as a frame of one array (ny, nx), with the
-    number of channels of the cube, the coordinate of the channel along
-    the spectral axis and its unit (null if unknown; see SpectrumView),
-    the range of the values of the cube for colours, and the least and
-    the greatest of its values (extent; null if it has none).
+    orientation of the model, its spectral axis read so, see _reading) as
+    a frame of one array (ny, nx), with the number of channels of the
+    cube, the coordinate of the channel along the spectral axis and its
+    unit (null if unknown; see SpectrumView), the range of the values of
+    the cube for colours, and the least and the greatest of its values
+    (extent; null if it has none).
     """
-    cube = server.views.cube(path, hdu)
-    plane = server.views.channel(path, hdu, channel)
+    cube = server.views.cube(path, hdu, reading)
+    plane = server.views.channel(path, hdu, channel, reading)
     spectral = None if cube.spectral is None \
         else float(cube.spectral[channel])
     header = dict(
@@ -239,18 +256,19 @@ def view_channel(
 
 @router.get('/views/spectrum/{path:path}')
 def view_spectrum(
-        server: ServerDep, path: str, hdu: int, x: int | None = None,
-        y: int | None = None, x0: int | None = None, x1: int | None = None,
-        y0: int | None = None, y1: int | None = None
+        server: ServerDep, path: str, hdu: int, reading: ReadingDep,
+        x: int | None = None, y: int | None = None, x0: int | None = None,
+        x1: int | None = None, y0: int | None = None, y1: int | None = None
 ) -> SpectrumView:
     """
     Return the spectrum of a pixel (x, y) of a cube, or its total spectrum
     (the sum of its pixels in each channel): of all of them, or of a region
-    (x0 to x1, y0 to y1, inclusive).
+    (x0 to x1, y0 to y1, inclusive); its spectral axis read so (see
+    _reading).
     """
     region = None if None in (x0, x1, y0, y1) else (x0, x1, y0, y1)
-    values = server.views.spectrum(path, hdu, x, y, region)
-    cube = server.views.cube(path, hdu)
+    values = server.views.spectrum(path, hdu, x, y, region, reading)
+    cube = server.views.cube(path, hdu, reading)
     return SpectrumView(
         values=[float(v) if np.isfinite(v) else None for v in values],
         spectral=None if cube.spectral is None else cube.spectral.tolist(),
@@ -260,11 +278,9 @@ def view_spectrum(
 @router.get(
     '/views/moments/{path:path}', response_class=Response, responses=_FRAME)
 def view_moments(
-        server: ServerDep, path: str, hdu: int, snr: float = 5,
-        method: Literal['moments', 'gauss_hermite'] = 'moments',
-        rest: str | None = None,
-        velocity: Literal['radio', 'optical'] | None = None,
-        spectral_type: Literal[SPECTRAL_TYPES] | None = None
+        server: ServerDep, path: str, hdu: int, reading: ReadingDep,
+        snr: float = 5,
+        method: Literal['moments', 'gauss_hermite'] = 'moments'
 ) -> Response:
     """
     Return the quick moment maps of a cube (NaN where they are not
@@ -273,11 +289,10 @@ def view_moments(
     (0: of all of them; see Views.moments): measured as moments, its
     flux, velocity, dispersion, skewness and kurtosis; or of a
     Gauss-Hermite series fitted to each spectrum, its h3 and h4. Its
-    channels are read as a dataset of it reads them, of a rest, a
-    convention and a type, if given (see describe).
+    spectral axis is read so (see _reading): its channels must be
+    velocities.
     """
-    maps = server.views.moments(
-        path, hdu, snr, method, rest, velocity, spectral_type)
+    maps = server.views.moments(path, hdu, snr, method, reading)
     arrays = [(dict(name=name), data) for name, data in maps.items()]
     return Response(
         frames.array_frame(dict(path=path, hdu=hdu), arrays),
@@ -288,7 +303,8 @@ def view_moments(
     '/views/pv/{path:path}', response_class=Response, responses=_FRAME)
 def view_pv(
         server: ServerDep, path: str, hdu: int, pa: float,
-        x: float | None = None, y: float | None = None, width: int = 1
+        reading: ReadingDep, x: float | None = None, y: float | None = None,
+        width: int = 1
 ) -> Response:
     """
     Return the position-velocity diagram of a cube along a slit through
@@ -298,11 +314,12 @@ def view_pv(
     the slit has no pixel), whose header has the positions (pixels from
     the centre, positive towards pa), the coordinates of the channels and
     their unit (none without them), and the size of the pixels of the
-    cube (arcsec; none if not known).
+    cube (arcsec; none if not known); its spectral axis read so (see
+    _reading).
     """
     centre = None if x is None or y is None else (x, y)
-    diagram = server.views.pv(path, hdu, pa, centre, width)
-    cube = server.views.cube(path, hdu)
+    diagram = server.views.pv(path, hdu, pa, centre, width, reading)
+    cube = server.views.cube(path, hdu, reading)
     header = dict(
         positions=diagram.positions.tolist(),
         spectral=diagram.velocities.tolist(),

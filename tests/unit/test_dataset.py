@@ -395,7 +395,7 @@ def test_datasets_read_ambiguous_velocities_by_their_convention(tmp_path):
     fits.writeto(
         tmp_path / 'cube.fits', np.ones((5, 6, 7), np.float32), header)
     info = dict(type='pixel_spectra', data=str(tmp_path / 'cube.fits'))
-    with pytest.raises(ValueError, match="may be radio or optical"):
+    with pytest.raises(ValueError, match="VELREF missing"):
         dataset_parser.load(info)
     dataset = dataset_parser.load(
         info | dict(spectral=dict(convention='radio')))

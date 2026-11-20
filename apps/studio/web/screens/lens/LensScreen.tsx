@@ -15,7 +15,6 @@ import { Dock, DockSection } from '../../components/ui/dock';
 import { NumberField } from '../../components/ui/inputs';
 import { DropMenu } from '../../components/ui/overlays';
 import { SheetLayout } from '../../components/ui/sheet';
-import { BlockLinks } from '../../shell/BlockLinks';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
@@ -54,7 +53,6 @@ export function LensScreen({ name }: { name: string }) {
       <ScreenHead
         eyebrow={`Lens · ${pieces.length} ${pieces.length === 1 ? 'piece' : 'pieces'}`}
         title={head.title}
-        links={<BlockLinks folder="lenses" name={name} />}
       >
         <SaveControls saving={draft} />
         {head.menu}

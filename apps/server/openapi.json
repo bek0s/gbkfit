@@ -476,7 +476,7 @@
     "/api/v1/describe/{path}": {
       "get": {
         "summary": "Describe",
-        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays, and what a dataset of it refuses or needs given;\nvelocity is the convention of velocities that its headers leave\nambiguous, rest the rest of its spectral axis (e.g. '6562.8\nAngstrom'), which makes wavelengths or frequencies velocities, as a\ndataset with that rest reads them, and spectral_type what a spectral\naxis whose header gives a type FITS does not define is (e.g. 'AWAV';\nsee ArrayInfo).",
+        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays (see ArrayInfo), and what a dataset of it refuses\nor needs given, its spectral axis read so (see _reading).",
         "operationId": "describe_api_v1_describe__path__get",
         "parameters": [
           {
@@ -486,6 +486,22 @@
             "schema": {
               "type": "string",
               "title": "Path"
+            }
+          },
+          {
+            "name": "rest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rest"
             }
           },
           {
@@ -506,22 +522,6 @@
                 }
               ],
               "title": "Velocity"
-            }
-          },
-          {
-            "name": "rest",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Rest"
             }
           },
           {
@@ -547,6 +547,22 @@
                 }
               ],
               "title": "Spectral Type"
+            }
+          },
+          {
+            "name": "spectral_unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Unit"
             }
           }
         ],
@@ -631,7 +647,7 @@
     "/api/v1/views/channel/{path}": {
       "get": {
         "summary": "View Channel",
-        "description": "Return a channel of a cube (an array of a file of data, in the\norientation of the model) as a frame of one array (ny, nx), with the\nnumber of channels of the cube, the coordinate of the channel along\nthe spectral axis and its unit (null if unknown; see SpectrumView),\nthe range of the values of the cube for colours, and the least and\nthe greatest of its values (extent; null if it has none).",
+        "description": "Return a channel of a cube (an array of a file of data, in the\norientation of the model, its spectral axis read so, see _reading) as\na frame of one array (ny, nx), with the number of channels of the\ncube, the coordinate of the channel along the spectral axis and its\nunit (null if unknown; see SpectrumView), the range of the values of\nthe cube for colours, and the least and the greatest of its values\n(extent; null if it has none).",
         "operationId": "view_channel_api_v1_views_channel__path__get",
         "parameters": [
           {
@@ -660,6 +676,83 @@
               "type": "integer",
               "title": "Channel"
             }
+          },
+          {
+            "name": "rest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rest"
+            }
+          },
+          {
+            "name": "velocity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "radio",
+                    "optical"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Velocity"
+            }
+          },
+          {
+            "name": "spectral_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "WAVE",
+                    "AWAV",
+                    "WAVE-LOG",
+                    "AWAV-LOG",
+                    "FREQ",
+                    "VRAD",
+                    "VOPT"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Type"
+            }
+          },
+          {
+            "name": "spectral_unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Unit"
+            }
           }
         ],
         "responses": {
@@ -685,7 +778,7 @@
     "/api/v1/views/spectrum/{path}": {
       "get": {
         "summary": "View Spectrum",
-        "description": "Return the spectrum of a pixel (x, y) of a cube, or its total spectrum\n(the sum of its pixels in each channel): of all of them, or of a region\n(x0 to x1, y0 to y1, inclusive).",
+        "description": "Return the spectrum of a pixel (x, y) of a cube, or its total spectrum\n(the sum of its pixels in each channel): of all of them, or of a region\n(x0 to x1, y0 to y1, inclusive); its spectral axis read so (see\n_reading).",
         "operationId": "view_spectrum_api_v1_views_spectrum__path__get",
         "parameters": [
           {
@@ -801,6 +894,83 @@
               ],
               "title": "Y1"
             }
+          },
+          {
+            "name": "rest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rest"
+            }
+          },
+          {
+            "name": "velocity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "radio",
+                    "optical"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Velocity"
+            }
+          },
+          {
+            "name": "spectral_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "WAVE",
+                    "AWAV",
+                    "WAVE-LOG",
+                    "AWAV-LOG",
+                    "FREQ",
+                    "VRAD",
+                    "VOPT"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Type"
+            }
+          },
+          {
+            "name": "spectral_unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Unit"
+            }
           }
         ],
         "responses": {
@@ -830,7 +1000,7 @@
     "/api/v1/views/moments/{path}": {
       "get": {
         "summary": "View Moments",
-        "description": "Return the quick moment maps of a cube (NaN where they are not\ndefined) as a frame of arrays (ny, nx), named so, of the voxels of\nthe mask of its signal grown from seeds of signal-to-noise ratio snr\n(0: of all of them; see Views.moments): measured as moments, its\nflux, velocity, dispersion, skewness and kurtosis; or of a\nGauss-Hermite series fitted to each spectrum, its h3 and h4. Its\nchannels are read as a dataset of it reads them, of a rest, a\nconvention and a type, if given (see describe).",
+        "description": "Return the quick moment maps of a cube (NaN where they are not\ndefined) as a frame of arrays (ny, nx), named so, of the voxels of\nthe mask of its signal grown from seeds of signal-to-noise ratio snr\n(0: of all of them; see Views.moments): measured as moments, its\nflux, velocity, dispersion, skewness and kurtosis; or of a\nGauss-Hermite series fitted to each spectrum, its h3 and h4. Its\nspectral axis is read so (see _reading): its channels must be\nvelocities.",
         "operationId": "view_moments_api_v1_views_moments__path__get",
         "parameters": [
           {
@@ -935,6 +1105,22 @@
               ],
               "title": "Spectral Type"
             }
+          },
+          {
+            "name": "spectral_unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Unit"
+            }
           }
         ],
         "responses": {
@@ -960,7 +1146,7 @@
     "/api/v1/views/pv/{path}": {
       "get": {
         "summary": "View Pv",
-        "description": "Return the position-velocity diagram of a cube along a slit through\nthe pixel (x, y; by default its centre) at the position angle pa\n(degrees, as the posa of the models), of the width (pixels; see\nViews.pv): a frame of one array, 'pv' (channels, positions; NaN where\nthe slit has no pixel), whose header has the positions (pixels from\nthe centre, positive towards pa), the coordinates of the channels and\ntheir unit (none without them), and the size of the pixels of the\ncube (arcsec; none if not known).",
+        "description": "Return the position-velocity diagram of a cube along a slit through\nthe pixel (x, y; by default its centre) at the position angle pa\n(degrees, as the posa of the models), of the width (pixels; see\nViews.pv): a frame of one array, 'pv' (channels, positions; NaN where\nthe slit has no pixel), whose header has the positions (pixels from\nthe centre, positive towards pa), the coordinates of the channels and\ntheir unit (none without them), and the size of the pixels of the\ncube (arcsec; none if not known); its spectral axis read so (see\n_reading).",
         "operationId": "view_pv_api_v1_views_pv__path__get",
         "parameters": [
           {
@@ -1030,6 +1216,83 @@
               "type": "integer",
               "default": 1,
               "title": "Width"
+            }
+          },
+          {
+            "name": "rest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rest"
+            }
+          },
+          {
+            "name": "velocity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "radio",
+                    "optical"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Velocity"
+            }
+          },
+          {
+            "name": "spectral_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "WAVE",
+                    "AWAV",
+                    "WAVE-LOG",
+                    "AWAV-LOG",
+                    "FREQ",
+                    "VRAD",
+                    "VOPT"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Type"
+            }
+          },
+          {
+            "name": "spectral_unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Unit"
             }
           }
         ],
@@ -2486,6 +2749,13 @@
             "type": "array",
             "title": "Axes"
           },
+          "axis_units": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Axis Units"
+          },
           "unit": {
             "anyOf": [
               {
@@ -2566,7 +2836,7 @@
           },
           "problems": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ArrayProblem"
             },
             "type": "array",
             "title": "Problems"
@@ -2587,17 +2857,6 @@
             ],
             "title": "Holds"
           },
-          "nonstandard_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nonstandard Type"
-          },
           "rest": {
             "anyOf": [
               {
@@ -2616,6 +2875,7 @@
           "name",
           "shape",
           "axes",
+          "axis_units",
           "unit",
           "step",
           "beam",
@@ -2624,7 +2884,45 @@
           "problems"
         ],
         "title": "ArrayInfo",
-        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nspectral axis cannot be read, e.g. velocities of no convention or\nwavelengths without a rest; none if its header has no coordinates on\nthe sky), the pixel (x, y; 0-based) that the model measures positions\non the sky from (its reference pixel; none without coordinates), its\nbeam (bmaj and bmin in arcsec, bpa in degrees; lists\nfor a beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), what a dataset of it refuses or needs given, and\nwhat its values are as errors, if its header states it ('sigma',\n'variance' or 'inverse_variance'; see gbkfit's HDUDescription.error_kind),\nand the type its header gives a spectral axis that FITS does not\ndefine (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see\ngbkfit's HDUDescription.nonstandard_type), and the rest of its\nspectral axis (e.g. '6562.8 Angstrom': its header's, RESTWAV or\nRESTFRQ, or that given; none if none, or while the axis cannot be\nread)."
+        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types and\nunits of its axes as written (CTYPE and CUNIT; '' none), in the\norder of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nspectral axis cannot be read, e.g. velocities of no convention or\nwavelengths without a rest; none if its header has no coordinates on\nthe sky), the pixel (x, y; 0-based) that the model measures positions\non the sky from (its reference pixel; none without coordinates), its\nbeam (bmaj and bmin in arcsec, bpa in degrees; lists\nfor a beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical, its problems, each at\nthe option of a dataset of it that fixes it (see ArrayProblem), what\nits values are as errors, if its header states it ('sigma',\n'variance' or 'inverse_variance'; see gbkfit's\nHDUDescription.error_kind), and the rest of its spectral axis (e.g.\n'6562.8 Angstrom': its header's, RESTWAV or RESTFRQ, or that given;\nnone if none, or while the axis cannot be read)."
+      },
+      "ArrayProblem": {
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity"
+          },
+          "path": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "severity",
+          "path",
+          "message"
+        ],
+        "title": "ArrayProblem",
+        "description": "A problem of an array of a file (see gbkfit's describe_fits): an error\n(a dataset of it refuses it) or a warning (it is read as FITS says,\nbut may not be meant), the option of a dataset of it that fixes it\n(e.g. ['spectral', 'unit']; [] if none) and its message (e.g. \"CUNIT3\n'KMS' invalid\")."
       },
       "CatalogueLine": {
         "properties": {

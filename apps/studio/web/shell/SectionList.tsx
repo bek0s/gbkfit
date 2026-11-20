@@ -48,7 +48,7 @@ export function SectionList({
   width?: number;
   onWidth?: (width: number) => void;
 }) {
-  const { project, startAdding } = useStudio();
+  const { project, screen, go, startAdding } = useStudio();
   const section = sectionNamed(key);
   const [find, setFind] = useState('');
   const query = find.trim().toLowerCase();
@@ -57,7 +57,21 @@ export function SectionList({
   return (
     <nav className="list" aria-label={`The ${section.title.toLowerCase()} of the project`}>
       <div className="list-head">
-        <b>{section.title}</b>
+        {section.overview ? (
+          <button
+            className="list-title"
+            aria-current={screen.kind === 'section' && screen.key === key ? 'page' : undefined}
+            title={`All the ${section.title.toLowerCase()}, at a glance`}
+            onClick={() => {
+              go({ kind: 'section', key });
+              onOpen();
+            }}
+          >
+            {section.title}
+          </button>
+        ) : (
+          <b>{section.title}</b>
+        )}
         {single && (
           <Button
             kind="small"

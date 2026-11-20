@@ -7,14 +7,13 @@
 // the noise of its mock data, its data), and then how accurately and fast
 // its model is made. Its options are edited as a whole, and saved or
 // reverted (see editing).
-import { useDescriptions, useLsfView, usePiece, usePsfView, type SpectralTypeOption } from '../../api/queries';
+import { useDescriptions, useLsfView, usePiece, usePsfView, type Reading, type SpectralTypeOption } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
 import { membersOf, SchemaForm, titleOf, typeOf, type Options } from '../../components/SchemaForm';
 import { Dock, DockSection, NeedsNote } from '../../components/ui/dock';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
-import { BlockLinks } from '../../shell/BlockLinks';
 import { arraysOf, draftOfDataset, EMPTY_ITEM, kept, KINDS, kindOfType } from '../dataset/model';
 import { useEditedBlock } from '../editing';
 import { ACCURACY_KEYS, checksOf, datasetHasErrors, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, noiseText, objectAt, psfEllipse, skyKeys, textAt } from './model';
@@ -33,15 +32,17 @@ export function ObservationScreen({ name }: { name: string }) {
 
   // (the dataset it names, and the array of the data of its first item,
   // read as the dataset reads it: of its rest or that of the observation,
-  // the convention of velocities its header leaves ambiguous and the type
-  // of a spectral axis FITS does not define)
+  // the convention of velocities its header leaves ambiguous, the type of
+  // a spectral axis FITS does not define and the unit of one whose header
+  // gives none)
   const dataset = usePiece(named('datasets', options?.dataset)).data as Options | undefined;
   const kind = kindOfType(dataset?.type);
   const first = kind && dataset ? Object.values(draftOfDataset(kind, dataset, root).items)[0]?.files.data : undefined;
   const axis = dataset ? objectAt(dataset, 'spectral') : {};
   const given = textAt(objectAt(options ?? {}, 'spectral'), 'rest') ?? textAt(axis, 'rest');
   const velocity = axis.convention === 'radio' || axis.convention === 'optical' ? axis.convention : null;
-  const describe = useDescriptions(first ? [first.file] : [], velocity, given, textAt(axis, 'type') as SpectralTypeOption | null);
+  const reading: Reading = { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null, unit: textAt(axis, 'unit') };
+  const describe = useDescriptions(first ? [first.file] : [], reading);
   const array = kind && first ? arraysOf({ ...EMPTY_ITEM, files: { data: first } }, describe, KINDS[kind].ndim).found.data : undefined;
 
   // (its PSF and its LSF, of the project or given in place, as the server
@@ -68,7 +69,7 @@ export function ObservationScreen({ name }: { name: string }) {
   const lsfWidth = instrument.lsf == null ? null : (lsfView.data?.fwhm ?? null);
   const spectral = options ? objectAt(options, 'spectral') : {};
   const channel = array?.step?.length === 3 ? Math.abs(array.step[2]) : typeof spectral.step === 'number' ? spectral.step : null;
-  const skyData: SkyData | null = first && array ? { path: first.file, array, cube: kept(array).length === 3, reading: { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null } } : null;
+  const skyData: SkyData | null = first && array ? { path: first.file, array, cube: kept(array).length === 3, reading } : null;
   const grid = !withData && options && (Array.isArray(options.size) || typeof options.size === 'number') ? { size: pairOf(options.size), step: pairOf(options.step ?? 1) } : null;
   const errors = datasetHasErrors(dataset);
   const noise = noiseText(options?.noise, noiseOptions, title);
@@ -86,7 +87,6 @@ export function ObservationScreen({ name }: { name: string }) {
       <ScreenHead
         eyebrow={`Observation${options ? ` · ${title('observation', options.type)}` : ''}`}
         title={head.title}
-        links={<BlockLinks folder="observations" name={name} />}
       >
         <NeedsNote needs={needs.map((need) => ({ text: need.text, at: need.section }))} />
         <SaveControls saving={edited} />

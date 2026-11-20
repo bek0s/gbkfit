@@ -53,6 +53,20 @@ _NAXIS_KEYWORDS = re.compile(r'NAXIS\d+')
 _CUNIT_KEYWORDS = re.compile(r'CUNIT\d+')
 
 
+def _option_error(message: str, *path: str) -> ValueError:
+    """
+    Return an error of a header that an option of its data fixes, at its
+    path in the options (e.g. 'spectral', 'unit'): where the data are read
+    from a configuration, its path there (see gbkfit.config.config_path,
+    which adds the path of the data before it), and where a header is
+    described, the option of the problem (see describe_fits).
+    """
+    error = ValueError(message)
+    error.config_path = list(path)
+    error.config_context = None
+    return error
+
+
 def has_wcs(header: astropy.io.fits.Header) -> bool:
     """Return whether a header has world coordinates."""
     return any(_WCS_KEYWORDS.fullmatch(key) for key in header)
@@ -160,7 +174,9 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
 
     The unit of each axis (CUNITn) must be valid (see
     gbkfit.units.parse_unit): astropy would correct some, e.g. 'HZ'
-    to Hz, and no unit is corrected. A CUNITn that is not text (e.g. the
+    to Hz, and no unit is corrected (that of a spectral axis is given
+    instead, see model_header, which checks it first). A CUNITn that is
+    not text (e.g. the
     number 0, of the PSF images of KMOS3D) is no unit: astropy leaves it
     out, with a warning, as an axis without a unit.
     """
@@ -170,10 +186,9 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
             continue
         try:
             gbkfit.units.parse_unit(value.strip())
-        except ValueError as e:
+        except ValueError:
             raise ValueError(
-                f"{source}: {key}: {e}; correct it in a copy of the "
-                f"file") from None
+                f"{source}: {key} {value.strip()!r} invalid") from None
     try:
         return astropy.wcs.WCS(header)
     except ValueError as e:

@@ -119,8 +119,8 @@ export function CubeViewer({
   // dispersion alone (where the others are shown another way, e.g. the
   // maps of a galaxy), or none
   moments?: 'all' | 'higher' | 'none';
-  // How its channels are read, for its moments (e.g. as velocities of the
-  // rest of its dataset; none: as its file gives them)
+  // How its spectral axis is read, by every view of it (e.g. as velocities
+  // of the rest of its dataset; none: as its file says)
   reading?: Reading | null;
 }) {
   const [nx, ny, nchannels] = shape;
@@ -168,10 +168,10 @@ export function CubeViewer({
   const shown: View = withMoments && layer.key === 'data' ? view : 'channel';
   const ofData = layer.key === 'data';
   const more = MORE_MOMENTS.find((m) => m.view === shown);
-  const plane = useChannel(layer.path, layer.hdu, channel);
+  const plane = useChannel(layer.path, layer.hdu, channel, reading);
   const method = MOMENTS.find((m) => m.view === shown)?.method ?? 'moments';
   const moments = useMoments(data.path, data.hdu, snr, shown !== 'channel', method, reading);
-  const spectrum = useSpectrum(layer.path, layer.hdu, shownPixel, selection);
+  const spectrum = useSpectrum(layer.path, layer.hdu, shownPixel, selection, reading);
   // (a model without noise starts at the brightest channel of its total
   // spectrum, as its middle one may hold none of its light, e.g. between
   // two lines; once, before a channel is picked)

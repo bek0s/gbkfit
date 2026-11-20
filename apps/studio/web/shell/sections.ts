@@ -21,11 +21,16 @@ export interface Section {
   // Whether it is a tool (compare, fit) rather than blocks to build
   tool: boolean;
   groups: Group[];
+  // Its overview, if it has one: the screen of all its blocks, its title
+  // (the plural of its blocks, e.g. 'Datasets': also the way back to it),
+  // and whether the rail opens the section there first, or at the block
+  // of it seen last
+  overview?: { title: string; opens: 'first' | 'opened' };
 }
 
 export const SECTIONS: Section[] = [
   { key: 'home', title: 'Home', tool: false, groups: [] },
-  { key: 'data', title: 'Datasets', tool: false, groups: [{ folder: 'datasets', title: 'Datasets', kind: 'Dataset' }] },
+  { key: 'data', title: 'Datasets', tool: false, groups: [{ folder: 'datasets', title: 'Datasets', kind: 'Dataset' }], overview: { title: 'Datasets', opens: 'first' } },
   {
     key: 'observations',
     title: 'Observations',
@@ -44,6 +49,7 @@ export const SECTIONS: Section[] = [
     key: 'fit',
     title: 'Fit',
     tool: true,
+    overview: { title: 'Fits', opens: 'opened' },
     groups: [
       { folder: 'setups', title: 'Fits', kind: 'Fit' },
       { folder: 'fitters', title: 'Fitters', kind: 'Fitter' },

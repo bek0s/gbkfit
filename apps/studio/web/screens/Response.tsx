@@ -29,7 +29,6 @@ import { Dock, DockSection } from '../components/ui/dock';
 import { useBlockHead } from '../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../shell/ScreenHead';
 import { kindOf } from '../shell/sections';
-import { BlockLinks } from '../shell/BlockLinks';
 import { useStudio } from '../studio';
 import { useUnsaved } from './editing';
 import { objectAt, textAt } from './observation/model';
@@ -201,7 +200,6 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
       <ScreenHead
         eyebrow={`${kindOf(folder)}${options && typeof options.type === 'string' ? ` · ${titleOf(defs, family, options.type)}` : ''}`}
         title={head.title}
-        links={<BlockLinks folder={folder} name={name} />}
       >
         <SaveControls saving={saving} />
         {head.menu}
@@ -438,11 +436,13 @@ function useGridOf(project: string, family: Family, of: Of | null): Grid {
   const hdu = typeof data === 'object' ? data.hdu : undefined;
   // (its spectral axis as the dataset reads it: of the rest of the
   // observation or of the dataset, the convention of velocities its header
-  // leaves ambiguous and the type of an axis FITS does not define)
+  // leaves ambiguous, the type of an axis FITS does not define and the unit
+  // of one whose header gives none)
   const axis = objectAt(dataset ?? {}, 'spectral');
   const given = textAt(spectral, 'rest') ?? textAt(axis, 'rest');
   const velocity = axis.convention === 'radio' || axis.convention === 'optical' ? (axis.convention as Velocity) : null;
-  const arrays = useDescription(file ? joinPath(project, file) : null, velocity, given, textAt(axis, 'type') as SpectralTypeOption | null);
+  const reading = { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null, unit: textAt(axis, 'unit') };
+  const arrays = useDescription(file ? joinPath(project, file) : null, reading);
   const array = (arrays.data ?? []).find((a) => a.name === hdu || a.index === hdu) ?? arrays.data?.[0];
   const pending = observation.isLoading || datasetPiece.isLoading || arrays.isLoading;
   if (of === null) return { step: null, rest: null, pending: false, problem: null };

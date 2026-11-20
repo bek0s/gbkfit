@@ -275,6 +275,7 @@ class Data:
             error_kind: ErrorKind = 'sigma',
             footprint: DataFile | None = None,
             spectral_type: str | None = None,
+            spectral_unit: str | None = None,
             mask_kind: MaskKind = 'valid'
     ) -> tuple['Data', Coords]:
         """
@@ -325,8 +326,12 @@ class Data:
             The convention of the velocities of a spectral axis that the
             headers leave ambiguous (see model_header).
         spectral_type : str, optional
-            The type of an axis whose headers give one that FITS does not
-            define (see model_header).
+            The type of a spectral axis whose headers give one that FITS
+            does not define, or none (see model_header).
+        spectral_unit : str, optional
+            The unit of a spectral axis whose header gives none or one that
+            is not valid (see SpectralAxis, option unit); it is not used for
+            others.
         error_kind : str, optional
             What the file of the errors holds (see
             read_arrays).
@@ -368,7 +373,8 @@ class Data:
             data, error_file, mask, error_kind=error_kind,
             mask_kind=mask_kind, unit=unit,
             rest=rest, velocity=velocity, footprint=footprint,
-            spectral_type=spectral_type, medium=medium,
+            spectral_type=spectral_type, spectral_unit=spectral_unit,
+            medium=medium,
             spectral_axis=spectral_axis)
         coords = coords_from_header(
             split_data_file(data)[0], arrays.header, rpix=rpix, rval=rval,

@@ -1,7 +1,7 @@
 // What GBKFIT reads from the header of the data of a dataset (of its
 // first item): their shape, pixels, spectral axis, unit, beam and noise,
 // the axes it leaves out, and the problems a dataset of them has.
-import type { ArrayInfo } from '../../api/client';
+import type { ArrayInfo, ArrayProblem } from '../../api/client';
 import { significant } from '../../components/format';
 import { kept, keptAxes, SPECTRAL_TYPES, spectrumOf, type SpectralType } from './model';
 
@@ -14,11 +14,11 @@ export function HeaderFacts({
 }: {
   array: ArrayInfo | undefined;
   rest: string | null;
-  // (what the spectral axis is said to be, where its header gives it a
-  // type FITS does not define)
+  // (what the spectral axis is said to be, where its own type does not
+  // say what it is)
   type?: SpectralType | null;
-  // (the problems a dataset of them has, as judged: see headerProblems)
-  problems: string[];
+  // (the problems the library finds of them: see headerProblems)
+  problems: ArrayProblem[];
   waiting?: boolean;
 }) {
   if (array === undefined) {
@@ -28,7 +28,7 @@ export function HeaderFacts({
   const [nx, ny, nz] = kept(array);
   const axis = keptAxes(array)[2];
   const spectrum = spectrumOf(array, type);
-  const said = array.nonstandard_type ? SPECTRAL_TYPES.find((t) => t.type === type) : undefined;
+  const said = SPECTRAL_TYPES.find((t) => t.type === type);
   const step = array.step;
   return (
     <>
@@ -42,7 +42,7 @@ export function HeaderFacts({
             <dt>Channels</dt>
             <dd>
               {axis || 'no type'}
-              {array.nonstandard_type && (said ? ` → ${said.type}` : ' (not a FITS type)')}
+              {said && ` → ${said.type}`}
               {spectrum && (rest ? ` → velocities of ${rest}` : ' (needs a line)')}
               {step && step.length === 3 && ` · ${significant(Math.abs(step[2]), 3)} km/s`}
             </dd>
@@ -69,7 +69,7 @@ export function HeaderFacts({
       {problems.length > 0 && (
         <ul className="ds-problems">
           {problems.map((problem) => (
-            <li key={problem}>{problem}</li>
+            <li key={problem.message}>{problem.message}</li>
           ))}
         </ul>
       )}
