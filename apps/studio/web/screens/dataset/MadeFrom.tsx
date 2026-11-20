@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import { useDeleteData, useDescriptions } from '../../api/queries';
 import { Button } from '../../components/ui/basics';
-import { dataFiles, draftOfPreparation, editsInWords, inProject, type Kind, type Preparation } from './model';
+import { draftOfPreparation, editsInWords, inProject, type Kind, type Preparation } from './model';
 
 export function MadeFrom({
   project,
@@ -24,18 +24,9 @@ export function MadeFrom({
   const describe = useDescriptions(originals);
   const remove = useDeleteData();
   const [confirming, setConfirming] = useState(false);
-  if (record === null) {
-    // (prep names its files prep_<name>: such files were prepared before
-    // the server kept records, or by the command line)
-    const prepared = Object.values(dataFiles(kind, dataset, project)).some((path) => path.split('/').pop()?.startsWith('prep_'));
-    return (
-      <p className="ds-text">
-        {prepared
-          ? 'The files look prepared (prep_), but the project has no record of how: they were prepared elsewhere, or before records were kept.'
-          : 'The dataset reads its files as they are: no copies were prepared.'}
-      </p>
-    );
-  }
+  // (no record of a preparation: its files as they are; nothing is read
+  // from their names)
+  if (record === null) return <p className="ds-text">Original files</p>;
   const lines = editsInWords(kind, draftOfPreparation(kind, dataset, record, project));
   const present = originals.filter((path) => !describe(path).error);
   const deleteAll = async () => {
@@ -44,9 +35,7 @@ export function MadeFrom({
   };
   return (
     <div className="ds-made">
-      <p className="ds-text">
-        Prepared on {when(record.time)} from {originals.length === 1 ? 'the original' : 'the originals'}:
-      </p>
+      <p className="ds-text">Prepared {when(record.time)} from</p>
       <ul className="ds-originals">
         {originals.map((path) => (
           <li key={path} data-gone={describe(path).error ? true : undefined} title={path}>
@@ -62,7 +51,7 @@ export function MadeFrom({
           ))}
         </ul>
       ) : (
-        <p className="note">With no edits.</p>
+        <p className="note">No edits</p>
       )}
       {present.length > 0 &&
         (confirming ? (

@@ -1,14 +1,17 @@
 // The view of a dataset: its cube (see CubeViewer) or its maps (see
 // MapsViewer), as large as the screen allows, or what stops them from
-// showing (no data yet, data being read, data of the wrong kind). The
-// edits of a new dataset show over its data: the crop outlined, and the
-// values left out blank.
-import { useMemo, useRef, type ReactNode } from 'react';
+// showing (no data yet, data being read, data of the wrong kind); or the
+// header of its data, as it is in the file (see HeaderView). The edits of
+// a new dataset show over its data: the crop outlined, and the values
+// left out blank.
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMaps } from '../../api/queries';
 import { CubeViewer, type Layer } from '../../components/CubeViewer';
 import type { Region } from '../../components/MapView';
 import { MapsViewer, type MapItem } from '../../components/MapsViewer';
 import { frameOf } from '../../components/sky';
+import { Segments } from '../../components/ui/inputs';
+import { HeaderView, type HeaderSource } from './HeaderView';
 import {
   cropRegion,
   hasEdits,
@@ -35,7 +38,7 @@ export function DatasetViewer({
   edits,
   selection,
   onSelection,
-  actions,
+  actions: more,
 }: {
   resolved: Resolved;
   // The edits to show over the data (none: the data as they are)
@@ -56,6 +59,30 @@ export function DatasetViewer({
   // (maps of another shape than the first are not shown)
   const fitting = shown.filter((slot) => kept(arrays[slot.key].found.data!).join() === shape?.join());
   const out = useLeftOut(resolved, fitting.map((slot) => slot.key), edits);
+  const [showing, setShowing] = useState<'data' | 'header'>('data');
+  // (the header of the data of each item read)
+  const sources: HeaderSource[] = slots.flatMap((slot) => {
+    const data = arrays[slot.key]?.found.data;
+    const file = draft.items[slot.key].files.data?.file;
+    return data && file ? [{ key: slot.key, title: slot.title, path: file, hdu: data.index }] : [];
+  });
+  const actions = (
+    <>
+      {sources.length > 0 && (
+        <Segments
+          items={[
+            { value: 'data', label: 'Data' },
+            { value: 'header', label: 'Header' },
+          ]}
+          value={showing}
+          label="What the view shows"
+          onChange={setShowing}
+        />
+      )}
+      {more}
+    </>
+  );
+  if (showing === 'header' && sources.length > 0) return <HeaderView sources={sources} actions={actions} />;
   if (shape === null) return <Empty resolved={resolved} />;
   if (kind === 'cube') {
     const key = shown[0].key;
@@ -145,24 +172,21 @@ function Empty({ resolved }: { resolved: Resolved }) {
   const info = KINDS[kind];
   const slots = presentSlots(kind, draft);
   const chosen = slots.find((slot) => draft.items[slot.key].files.data !== undefined);
-  let title = kind === 'moments' ? 'No maps yet' : `No ${info.title.toLowerCase()} yet`;
-  let text = `Choose ${info.what} in Files, at the right.`;
+  let title = kind === 'moments' ? 'No maps' : `No ${info.title.toLowerCase()}`;
+  let text = '';
   if (chosen) {
     const of = arrays[chosen.key] ?? NO_ARRAYS;
     const file = draft.items[chosen.key].files.data!.file.split('/').pop();
     const data = of.found.data;
     if (of.errors.data) {
-      title = `${file} cannot be read`;
+      title = `'${file}' unreadable`;
       text = of.errors.data;
     } else if (data === undefined) {
       title = `Reading ${file}…`;
-      text = '';
     } else {
       const count = kept(data).length;
-      title = `${file} is not ${kind === 'cube' ? 'a cube' : 'a map'}`;
-      text =
-        `It has ${count} ${count === 1 ? 'axis' : 'axes'} of more than one pixel, not ${info.ndim}. ` +
-        (kind === 'cube' && count === 2 ? 'A map is a dataset of moment maps or of a flux map: add it as one of those.' : 'Choose another file, or another array of it.');
+      title = `'${file}' not ${kind === 'cube' ? 'a cube' : 'a map'}`;
+      text = `${count} ${count === 1 ? 'axis' : 'axes'} · needs ${info.ndim}`;
     }
   }
   return (

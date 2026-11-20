@@ -45,7 +45,9 @@ export function Rail({ onPeek, onLeave }: { onPeek: (key: SectionKey) => void; o
         if (section.overview && section.key === current && screen.kind === 'block') go({ kind: 'section', key: section.key });
         else {
           open(section.key);
-          onPeek(section.key);
+          // (a section that opens on its overview: that is its list, so no
+          // second list over it)
+          if (section.overview?.opens !== 'first') onPeek(section.key);
         }
       }}
     >

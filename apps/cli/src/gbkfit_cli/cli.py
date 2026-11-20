@@ -17,7 +17,7 @@ _log = logging.getLogger(__name__)
 # The options of prep pixel_moments and region_moments with one value for
 # each moment order
 _MOMENT_OPTIONS = (
-    'data_d', 'data_e', 'data_m',
+    'data_d', 'data_e', 'data_m', 'unit',
     'clip_min', 'clip_max', 'sclip_sigma', 'sclip_iters')
 
 
@@ -276,6 +276,9 @@ def _add_prep(
         "what the mask marks with values other than 0: the valid values "
         "(valid, the default) or the invalid ones (invalid, e.g. a mask of "
         "bad pixels or of flags)")
+    _UNIT_HELP = (
+        "the unit of the data, which replaces their BUNIT (e.g. 'Jy/beam' "
+        "for a BUNIT of 'JY/BEAM', which is not a unit of FITS)")
     _CLIP_MIN_HELP = "the values below MIN are set to NaN (invalid)"
     _CLIP_MAX_HELP = "the values above MAX are set to NaN (invalid)"
     _SCLIP_SIGMA_HELP = (
@@ -334,6 +337,9 @@ def _add_prep(
         '--mask-kind', type=str, default='valid',
         choices=['valid', 'invalid'],
         help=_MASK_KIND_HELP)
+    parser_prep_input_1.add_argument(
+        '--unit', type=str,
+        help=_UNIT_HELP)
     # ...
     parser_prep_input_n = argparse.ArgumentParser(add_help=False)
     parser_prep_input_n.add_argument(
@@ -356,6 +362,9 @@ def _add_prep(
         '--mask-kind', type=str, default='valid',
         choices=['valid', 'invalid'],
         help=_MASK_KIND_HELP)
+    parser_prep_input_n.add_argument(
+        '--unit', type=str, nargs='+',
+        help=_UNIT_HELP + "; one for each map")
     # ...
     parser_prep_rest = argparse.ArgumentParser(add_help=False)
     parser_prep_rest.add_argument(
@@ -688,13 +697,14 @@ def _run_prep(args: argparse.Namespace) -> None:
             ccl_pcount=args.ccl_pcount, ccl_lratio=args.ccl_lratio,
             sclip_sigma=args.sclip_sigma, sclip_iters=args.sclip_iters,
             minify=args.minify, nanpad=args.nanpad, dtype=args.dtype,
-            error_kind=args.error_kind, mask_kind=args.mask_kind)
+            error_kind=args.error_kind, mask_kind=args.mask_kind,
+            unit=args.unit)
     elif task in ('region_moments', 'region_spectra'):
         options = dict(
             file_bins=args.bins, bins_plane=args.bins_plane,
             file_d=args.data_d, file_e=args.data_e, file_m=args.data_m,
             dtype=args.dtype, error_kind=args.error_kind,
-            mask_kind=args.mask_kind)
+            mask_kind=args.mask_kind, unit=args.unit)
     elif task == 'gauss_hermite_moments':
         options = dict(
             file=args.table, columns=args.columns, errors=args.errors,

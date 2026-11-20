@@ -146,7 +146,8 @@ class DatasetPixelSpectra(DatasetGrid):
             unit, beam, spatial_correlation, spectral_correlation,
             references['velocity'], error_kind, footprint,
             spectral_type=references['spectral_type'],
-            spectral_unit=references['spectral_unit'], mask_kind=mask_kind)
+            spectral_unit=references['spectral_unit'], mask_kind=mask_kind,
+            stated=_grids.stated_options(step, rpix, rval, spectral))
         dataset = cls(
             item, **_grids.cube_coords(coords, step, rota, spectral))
         return cleaned(dataset, outliers, mask_whole_spectra)

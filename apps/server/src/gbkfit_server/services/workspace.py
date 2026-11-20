@@ -494,7 +494,8 @@ class Workspace:
     def describe(
             self, relative: str, velocity: str | None = None,
             rest: str | None = None, spectral_type: str | None = None,
-            spectral_unit: str | None = None
+            spectral_unit: str | None = None, unit: str | None = None,
+            stated: Sequence[str] = ()
     ) -> list[dict[str, Any]]:
         """
         Describe a file of data from its headers (see
@@ -502,8 +503,10 @@ class Workspace:
         that its headers leave ambiguous, the rest of its spectral axis
         (which makes wavelengths or frequencies velocities), what a
         spectral axis whose type does not say it, one FITS does not define
-        or none, is, and the unit of a spectral axis whose header gives
-        none (or one not valid), if given: each
+        or none, is, the unit of a spectral axis whose header gives none
+        (or one not valid), the unit of its values, which replaces BUNIT,
+        and the options of the grid that a dataset of it states (stated,
+        e.g. 'rpix'), if given: each
         of its arrays (its index, name, shape and axes, in the order of the
         model, unit, the size of its pixels in that order (only the
         spatial ones while its spectral axis cannot be read: velocities of
@@ -525,9 +528,11 @@ class Workspace:
                 f"FITS ({', '.join(_DATA_FILES)})")
         try:
             hdus = gbkfit.io.describe_fits(
-                path, velocity, rest, spectral_type, spectral_unit)
+                path, velocity, rest, spectral_type, spectral_unit, unit,
+                stated)
         except OSError as e:
-            raise Invalid(f"cannot read '{relative}': {e}") from e
+            raise Invalid(
+                f"{relative}: {str(e).removeprefix(f'{path}: ')}") from e
         return [
             dict(index=hdu.index, name=hdu.name, shape=list(hdu.shape),
                  axes=list(hdu.axes), axis_units=list(hdu.axis_units),
@@ -552,11 +557,15 @@ class Workspace:
                  else rest_text(hdu.coords.rest))
             for hdu in hdus]
 
-    def header(self, relative: str, hdu: int) -> list[str]:
+    def header(
+            self, relative: str, hdu: int | str | None = None
+    ) -> list[str]:
         """
-        Return the header of an array (an HDU) of a file of data as it is
-        in the file: its cards, as lines of text (their spaces at the end
-        left out; the END card too).
+        Return the header of an HDU of a file of data as it is in the
+        file: its cards, as lines of text (their spaces at the end left
+        out; the END card too). The HDU is that given, by its index (also
+        as text, e.g. '1') or its name (EXTNAME), or by default the first
+        with data (else the first).
 
         Raises
         ------
@@ -570,15 +579,25 @@ class Workspace:
             raise Invalid(
                 f"'{relative}' is not a file of data that GBKFIT reads: "
                 f"FITS ({', '.join(_DATA_FILES)})")
+        if isinstance(hdu, str) and hdu.isdigit():
+            hdu = int(hdu)
         try:
-            with fits.open(path) as hdus:
-                if not 0 <= hdu < len(hdus):
-                    raise NotFound(
-                        f"'{relative}' has no HDU {hdu} (it has "
-                        f"{len(hdus)})")
-                return [str(card).rstrip() for card in hdus[hdu].header.cards]
+            with gbkfit.io.open_fits(path) as hdus:
+                if hdu is None:
+                    found = next((
+                        each for each in hdus
+                        if each.is_image and each.header.get('NAXIS', 0)),
+                        hdus[0])
+                else:
+                    try:
+                        found = hdus[hdu]
+                    except (IndexError, KeyError):
+                        raise NotFound(
+                            f"{relative}: HDU {hdu!r} missing") from None
+                return [str(card).rstrip() for card in found.header.cards]
         except OSError as e:
-            raise Invalid(f"cannot read '{relative}': {e}") from e
+            raise Invalid(
+                f"{relative}: {str(e).removeprefix(f'{path}: ')}") from e
 
     def record_preparation(
             self, task: str, options: dict[str, Any],

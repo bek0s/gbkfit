@@ -41,7 +41,7 @@ export function ObservationScreen({ name }: { name: string }) {
   const axis = dataset ? objectAt(dataset, 'spectral') : {};
   const given = textAt(objectAt(options ?? {}, 'spectral'), 'rest') ?? textAt(axis, 'rest');
   const velocity = axis.convention === 'radio' || axis.convention === 'optical' ? axis.convention : null;
-  const reading: Reading = { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null, unit: textAt(axis, 'unit') };
+  const reading: Reading = { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null, spectralUnit: textAt(axis, 'unit'), dataUnit: null };
   const describe = useDescriptions(first ? [first.file] : [], reading);
   const array = kind && first ? arraysOf({ ...EMPTY_ITEM, files: { data: first } }, describe, KINDS[kind].ndim).found.data : undefined;
 

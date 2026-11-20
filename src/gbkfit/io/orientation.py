@@ -12,11 +12,12 @@ import astropy.io.fits
 import astropy.wcs
 import numpy as np
 
-from gbkfit.config import warn
+from gbkfit.config import InputError, warn
 from gbkfit.grid import Rest
 from .headers import (
     _centre_missing_crpix, _with_shape, _with_wcs, has_wcs, parse_wcs)
-from .spectral import _axis_of_rest, _read_as_velocities, _stated_header
+from .spectral import (
+    _axis_of_rest, _read_as_velocities, _stated_header, _with_stated_rest)
 
 
 __all__ = [
@@ -60,7 +61,7 @@ class Orientation(NamedTuple):
             If the array is not of file_shape.
         """
         if array.shape != self.file_shape:
-            raise ValueError(
+            raise InputError(
                 f"the array is of shape {array.shape}, not {self.file_shape}")
         array = array.reshape(self.shape)
         if self.order != tuple(range(array.ndim)):
@@ -82,7 +83,7 @@ class Orientation(NamedTuple):
             If the array has fewer than two axes in the model.
         """
         if len(self.order) < 2:
-            raise ValueError("the array has no sky of two axes")
+            raise InputError("the array has no sky of two axes")
         sky = sorted(self.order[:2])
         sizes = self.shape[::-1]
         shape = (sizes[sky[1]], sizes[sky[0]])
@@ -222,6 +223,7 @@ def _oriented_header(
         return (
             _with_shape(header, kept),
             Orientation(shape, kept, tuple(range(len(kept))), ()))
+    header = _with_stated_rest(header, rest)
     wcs, full = _file_wcs(source, header, shape)
     if wcs.has_distortion:
         warn(
@@ -417,7 +419,7 @@ def _squeezed_wcs(
         try:
             shift = np.linalg.solve(linear[np.ix_(kept, kept)], moved)
         except np.linalg.LinAlgError:
-            raise ValueError(
+            raise InputError(
                 "the world coordinates couple an axis of length 1 to the "
                 "others in a way that they alone cannot represent") from None
         wcs = wcs.deepcopy()
@@ -459,7 +461,7 @@ def _file_wcs(
     """
     naxis = parse_wcs(source, header).naxis
     if naxis < len(shape):
-        raise ValueError(
+        raise InputError(
             f"{source}: the header has world coordinates for {naxis} axes, "
             f"but the data have {len(shape)}")
     full = (1,) * (naxis - len(shape)) + tuple(shape)

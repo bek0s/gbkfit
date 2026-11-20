@@ -159,13 +159,18 @@ export function GoTo() {
     }));
     const blocks = SECTIONS.flatMap((section) =>
       section.groups.flatMap((group) =>
-        (info.data?.pieces[group.folder] ?? []).map((name) => ({
-          key: `${group.folder}/${name}`,
-          group: group.title,
-          kind: group.kind,
-          title: name,
-          run: () => go({ kind: 'block', folder: group.folder, name }),
-        })),
+        (info.data?.pieces[group.folder] ?? []).map((name) => {
+          // (its type, e.g. pixel_spectra, is found by what is typed too)
+          const type = info.data?.types?.[group.folder]?.[name];
+          return {
+            key: `${group.folder}/${name}`,
+            group: group.title,
+            kind: group.kind,
+            title: name,
+            note: type ?? undefined,
+            run: () => go({ kind: 'block', folder: group.folder, name }),
+          };
+        }),
       ),
     );
     const actions = MADE.flatMap(({ folders }) =>
@@ -182,7 +187,7 @@ export function GoTo() {
   }, [info.data, go, openSection, startAdding]);
   const query = text.trim().toLowerCase();
   const found = useMemo(() => {
-    if (query) return all.filter((item) => `${item.kind} ${item.title}`.toLowerCase().includes(query)).slice(0, SHOWN);
+    if (query) return all.filter((item) => `${item.kind} ${item.title} ${item.note ?? ''}`.toLowerCase().includes(query)).slice(0, SHOWN);
     // (nothing typed: the blocks opened last, then the first of each group)
     const recent = visited
       .flatMap((seen) => (seen.kind === 'block' ? all.filter((item) => item.key === `${seen.folder}/${seen.name}`) : []))

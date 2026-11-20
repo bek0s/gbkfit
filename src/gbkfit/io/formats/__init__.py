@@ -20,10 +20,11 @@ import numpy as np
 
 from gbkfit.config import DataFile, is_asdf_file, split_data_file
 from . import fits
-from .fits import write_image
+from .fits import open_fits, write_image
 
 
 __all__ = [
+    'open_fits',
     'read_header',
     'read_image',
     'write_image'

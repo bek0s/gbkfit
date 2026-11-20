@@ -140,3 +140,67 @@ def test_configuration_errors_are_reported_without_a_traceback(tmp_path):
     assert result.returncode == 1
     assert "error: the errors come from one of" in result.stderr
     assert 'Traceback' not in result.stderr
+
+
+def bad_header(**cards):
+    """
+    A header of the sky without CRPIX1, of a BUNIT that is not a unit
+    (as LVHIS writes it), and of the cards given.
+    """
+    return fits.Header(dict(
+        CTYPE1='RA---TAN', CRVAL1=150.0, CDELT1=-1 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--TAN', CRVAL2=2.0, CRPIX2=10.5, CDELT2=1 / 3600,
+        CUNIT2='deg', BUNIT='JY/BEAM', **cards))
+
+
+def errors(result):
+    """The lines of the errors of a run."""
+    return [
+        line[line.index('error: '):] for line in result.stderr.splitlines()
+        if 'error: ' in line]
+
+
+def test_a_bad_header_is_reported_one_line_per_problem(tmp_path):
+    # (each at the option of prep that fixes it, without a traceback)
+    fits.writeto(
+        tmp_path / 'cube.fits', np.ones((3, 20, 24), np.float32),
+        bad_header(CTYPE3='VELO-HEL', CRVAL3=0.0, CRPIX3=1, CDELT3=1e4,
+                   CUNIT3='m/s'))
+    result = run_cli(
+        tmp_path, 'prep', 'pixel_spectra', '--data-d', 'cube.fits')
+    assert result.returncode == 1 and 'Traceback' not in result.stderr
+    assert errors(result) == [
+        "error: velocity: cube.fits: VELREF missing",
+        "error: rpix: cube.fits: CRPIX1 missing",
+        "error: unit: cube.fits: BUNIT 'JY/BEAM' invalid"]
+    # (a unit stated replaces BUNIT)
+    result = run_cli(
+        tmp_path, 'prep', 'pixel_spectra', '--data-d', 'cube.fits',
+        '--velocity', 'radio', '--unit', 'Jy/beam')
+    assert errors(result) == ["error: rpix: cube.fits: CRPIX1 missing"]
+
+
+def test_a_bad_header_of_a_configuration_is_reported_at_its_options(
+        tmp_path):
+    from gbkfit.config import FORMAT_VERSION
+    fits.writeto(
+        tmp_path / 'image.fits', np.ones((20, 24), np.float32), bad_header())
+    config = dict(
+        version=FORMAT_VERSION,
+        driver=dict(type='host'),
+        galaxies=[dict(components=[dict(
+            type='thin_disk', loose=False, tilted=False, rnodes=list(range(8)),
+            rptraits=dict(type='exponential'),
+            emission=dict(type='band'))])],
+        observations=[dict(type='pixel_brightness', dataset=dict(
+            type='pixel_brightness', data='image.fits'))],
+        params=dict(properties=dict(
+            xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=3)))
+    (tmp_path / 'config.json').write_text(json.dumps(config))
+    result = run_cli(tmp_path, 'eval', 'model', 'config.json')
+    assert result.returncode == 1 and 'Traceback' not in result.stderr
+    image = str(tmp_path / 'image.fits')
+    assert errors(result) == [
+        f"error: observations[0].dataset.rpix: {image}: CRPIX1 missing",
+        f"error: observations[0].dataset.unit: {image}: BUNIT 'JY/BEAM' "
+        f"invalid"]

@@ -15,7 +15,7 @@ once a file states what it says of its array as a FITS header.
 """
 
 import dataclasses
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Annotated, Literal, TypeAlias
 
 import astropy.io.fits
@@ -23,17 +23,19 @@ import astropy.wcs
 import numpy as np
 
 import gbkfit.units
-from gbkfit.config import Choices, DataFile, split_data_file
+from gbkfit.config import (
+    Choices, DataFile, InputError, raise_all, split_data_file)
 from gbkfit.grid import Coords, Rest
 from .beams import Beam, _oriented_beam
 from .coords import coords_from_header
 from .formats import read_image
 from .headers import (
-    _with_shape, _with_wcs, has_wcs, header_shape, header_unit,
+    _with_shape, _with_wcs, data_unit, has_wcs, header_shape,
     ignoring_wcs_fixes, parse_wcs)
 from .orientation import (
     Orientation, _oriented_header, _squeezed_shape, model_header)
 from .spectral import _stated_header, _warn_of_missing_unit
+from .statements import statement_errors
 
 
 __all__ = [
@@ -197,7 +199,8 @@ def read_oriented(
         velocity: str | None = None,
         spectral_type: str | None = None,
         spectral_unit: str | None = None,
-        medium: str | None = None
+        medium: str | None = None,
+        unit: str | None = None
 ) -> tuple[np.ndarray, astropy.wcs.WCS | None]:
     """
     Read the array of a file in the orientation of the model (see
@@ -216,6 +219,10 @@ def read_oriented(
         As read_data: each, if given, is how the spectral axis is read (a
         rest, its velocities; see model_header); an array without a
         spectral axis is read as it is.
+    unit : str, optional
+        The unit of the values, as read_arrays takes it, which replaces
+        that of the header: it must be a unit (see data_unit); the values
+        are as they are.
 
     Returns
     -------
@@ -230,11 +237,13 @@ def read_oriented(
     ------
     ValueError
         If the file has no such array (see read_image), or what is given
-        of its spectral axis is not valid or does not apply to it (see
-        model_header).
+        of its spectral axis or of its unit is not valid or does not apply
+        to it (see model_header and data_unit).
     """
     filename = split_data_file(file)[0]
     data, header = read_image(file)
+    if unit is not None:
+        data_unit(filename, header, unit)
     header = _stated_header(
         filename, header, data.shape, spectral_type, velocity,
         spectral_unit, unstated='keep')
@@ -269,7 +278,8 @@ def read_arrays(
         spectral_type: str | None = None,
         spectral_unit: str | None = None,
         medium: str | None = None,
-        spectral_axis: int | None = None
+        spectral_axis: int | None = None,
+        stated: Collection[str] = ()
 ) -> Arrays:
     """
     Read data, and their errors, mask and footprint, from files in the
@@ -320,6 +330,10 @@ def read_arrays(
             optional
         As read_data, for the headers of all the files (the spectral axis
         is not checked: see coords_from_header).
+    stated : Collection of str, optional
+        The options of the grid of a dataset that it states (e.g. 'step'
+        or 'spectral.rval'), which the header of the values need not have
+        (see reference_errors).
 
     Returns
     -------
@@ -334,25 +348,26 @@ def read_arrays(
         one of its kinds; the errors are negative, or their unit is not
         that of their kind; the errors or the mask are not on the pixels
         of the data; or the beams of a cube are not one for each channel.
+        Of the header of the values, the errors of what it needs stated
+        are raised together (see statement_errors; an ExceptionGroup of
+        several).
     """
     if error_kind not in _ERROR_KINDS:
-        raise ValueError(
+        raise InputError(
             f"the kind of the errors must be one of {list(_ERROR_KINDS)}; "
             f"it is {error_kind!r}")
     if mask_kind not in _MASK_KINDS:
-        raise ValueError(
+        raise InputError(
             f"the kind of the mask must be one of {list(_MASK_KINDS)}; it "
             f"is {mask_kind!r}")
     read = dict(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
         spectral_unit=spectral_unit,
         medium=medium, spectral_axis=spectral_axis)
-    values, header, orientation, beam = _read(data, **read)
+    values, header, orientation, beam = _read(
+        data, **read, unit=unit, stated=stated)
     given = unit is not None
-    if given:
-        unit = gbkfit.units.parse_unit(unit)
-    else:
-        unit = _parsed_unit(split_data_file(data)[0], header)
+    unit = data_unit(split_data_file(data)[0], header, unit)
     errors = None
     if error is not None:
         error_name = split_data_file(error)[0]
@@ -417,7 +432,7 @@ def read_sky_map(
         sky, or the file has no such plane.
     """
     if data.orientation is None:
-        raise ValueError(
+        raise InputError(
             "an image of the sky is read on the pixels of the file of the "
             "data, before they are cropped or padded")
     orientation = data.orientation.sky()
@@ -427,7 +442,7 @@ def read_sky_map(
         filename = split_data_file(file)[0]
         wcs = parse_wcs(filename, data.header)
         if wcs.wcs.spec in (0, 1):
-            raise ValueError(
+            raise InputError(
                 f"{filename}: the data have no sky of two axes to put an "
                 f"image of the sky on")
         header = _with_wcs(header, wcs.sub(2))
@@ -444,15 +459,23 @@ def _read(
         spectral_type: str | None,
         spectral_unit: str | None,
         medium: str | None,
-        spectral_axis: int | None
+        spectral_axis: int | None,
+        unit: str | None,
+        stated: Collection[str]
 ) -> tuple[np.ndarray, astropy.io.fits.Header, Orientation, Beam | None]:
     """
     Return the values of a file in the orientation of the model, their
     header in it, how they were put in it (see model_header), and their
-    beam (see _oriented_beam).
+    beam (see _oriented_beam). The errors of what their header needs
+    stated, of the options given, are raised together, first (see
+    statement_errors).
     """
     filename = split_data_file(file)[0]
     values, header = read_image(file)
+    raise_all(statement_errors(
+        filename, header, values.shape, rest=rest, velocity=velocity,
+        spectral_type=spectral_type, spectral_unit=spectral_unit,
+        unit=unit, stated=stated), filename)
     model, orientation = model_header(
         filename, header, values.shape, rest=rest, velocity=velocity,
         spectral_type=spectral_type, spectral_unit=spectral_unit,
@@ -497,7 +520,7 @@ def _read_companion(
         return _floats(values), header
     shape = data_orientation.file_shape
     if values.shape != shape:
-        raise ValueError(
+        raise InputError(
             f"{filename}: without world coordinates (or with data without "
             f"them), its values must be of the shape of the data, {shape}, "
             f"in the axes of their file; they are of {values.shape}")
@@ -515,7 +538,7 @@ def _plane(
     order), and its header without that axis.
     """
     if values.ndim != 3 or not 0 <= plane < values.shape[0]:
-        raise ValueError(
+        raise InputError(
             f"{source}: plane {plane} is not one of its array of shape "
             f"{values.shape} (of planes along its first axis, numpy order)")
     header = _with_shape(header, values.shape[1:])
@@ -537,13 +560,13 @@ def _check_same_pixels(
     """
     data_shape = header_shape(data_header)
     if shape != data_shape:
-        raise ValueError(
+        raise InputError(
             f"{source}: its values must be of the shape of the data, "
             f"{data_shape} (in the orientation of the model); they are of "
             f"{shape}")
     wcs, data_wcs = astropy.wcs.WCS(header), astropy.wcs.WCS(data_header)
     if list(wcs.wcs.ctype) != list(data_wcs.wcs.ctype):
-        raise ValueError(
+        raise InputError(
             f"{source}: its world coordinates are of the axes "
             f"{list(wcs.wcs.ctype)}, those of the data of "
             f"{list(data_wcs.wcs.ctype)}")
@@ -552,7 +575,7 @@ def _check_same_pixels(
     world = data_wcs.pixel_to_world_values(*corners)
     pixels = np.array(wcs.world_to_pixel_values(*world)).reshape(corners.shape)
     if not np.allclose(pixels, corners, rtol=0, atol=_GRID_TOLERANCE):
-        raise ValueError(
+        raise InputError(
             f"{source}: its world coordinates do not put its pixels on "
             f"those of the data")
 
@@ -579,7 +602,7 @@ def _standard_deviations(
             hint = (
                 f"; it is that of {kinds[0]} (error_kind: {kinds[0]})"
                 if kinds else "")
-            raise ValueError(
+            raise InputError(
                 f"{source}: the unit of the errors "
                 f"({gbkfit.units.format_unit(unit)}) is not that of {kind} of "
                 f"the data ({gbkfit.units.format_unit(expected)}){hint}")
@@ -587,7 +610,7 @@ def _standard_deviations(
     with np.errstate(invalid='ignore'):
         negative = errors < 0
     if np.any(negative):
-        raise ValueError(
+        raise InputError(
             f"{source}: the errors cannot be negative; "
             f"{np.count_nonzero(negative)} are, down to {np.nanmin(errors):g}")
     if kind == 'variance':
@@ -602,24 +625,17 @@ def _parsed_unit(
         source: str, header: astropy.io.fits.Header, given: bool = False
 ) -> gbkfit.units.AnyUnit | None:
     """
-    Return the unit of the values of a header (BUNIT), if it has one.
-
-    Raise ValueError if it is not a unit (see
-    gbkfit.units.parse_unit), unless the unit of the data is given:
-    then return None, and the values are taken to be in that unit, as for
-    a header without BUNIT.
+    Return the unit of the values of a header (BUNIT), if it has one (see
+    data_unit), or None if it is not a unit and the unit of the data is
+    given: the values are then taken to be in that unit, as for a header
+    without BUNIT.
     """
-    text = header_unit(header)
-    if text is None:
-        return None
     try:
-        return gbkfit.units.parse_unit(text)
-    except ValueError as e:
+        return data_unit(source, header)
+    except InputError:
         if given:
             return None
-        raise ValueError(
-            f"{source}: BUNIT: {e}; give the unit of the data (option "
-            f"unit), or correct BUNIT in a copy of the file") from None
+        raise
 
 
 def _floats(values: np.ndarray) -> np.ndarray:

@@ -15,6 +15,7 @@ import astropy.wcs
 import astropy.wcs.utils
 import numpy as np
 
+from gbkfit.config import InputError
 from gbkfit.grid import Coords, Rest, per_axis
 from .headers import _centre_missing_crpix, header_shape, parse_wcs
 from .orientation import _model_axis_flips, model_axis_order
@@ -118,7 +119,7 @@ def coords_from_header(
     wcs, log = _log_velocity_axis(source, wcs)
     spec = wcs.wcs.spec
     if spectral_axis is not None and spec >= 0 and spec != spectral_axis:
-        raise ValueError(
+        raise InputError(
             f"{source}: the spectral axis must be the axis "
             f"{spectral_axis + 1}; it is the axis {spec + 1}")
     step, rpix, rval, rota = _grid_of_wcs(source, wcs, rpix=rpix, rval=rval)
@@ -141,7 +142,7 @@ def _grid_of_wcs(
     """
     naxis = wcs.naxis
     if model_axis_order(wcs) != tuple(range(naxis)) or _model_axis_flips(wcs):
-        raise ValueError(
+        raise InputError(
             f"{source}: the axes of the world coordinates are not in the "
             f"orientation of the model (see model_header)")
     lng, lat = wcs.wcs.lng, wcs.wcs.lat
@@ -233,7 +234,7 @@ def _check_unskewed(source: str, linear: np.ndarray) -> None:
     column_x, column_y = linear[:2, :2].T
     cosine = column_x @ column_y / np.hypot(*column_x) / np.hypot(*column_y)
     if abs(cosine) > _SKEW_TOLERANCE:
-        raise ValueError(
+        raise InputError(
             f"{source}: the pixel grid is skewed (its axes are not "
             f"perpendicular on the sky), which the model does not support")
 
@@ -252,7 +253,7 @@ def _check_celestial_pairs(
     """
     for name, values in (('rpix', rpix), ('rval', rval)):
         if np.isnan(values[lng]) != np.isnan(values[lat]):
-            raise ValueError(
+            raise InputError(
                 f"{source}: the reference of the celestial axes ({name}) "
                 f"must be given for both of them or for neither; it is for "
                 f"one")
@@ -265,7 +266,7 @@ def _celestial_frame(
     try:
         return astropy.wcs.utils.wcs_to_celestial_frame(wcs)
     except ValueError as e:
-        raise ValueError(
+        raise InputError(
             f"{source}: the celestial frame of the world coordinates is "
             f"not known: {e}") from None
 
@@ -331,7 +332,7 @@ def _check_uncoupled(
     np.fill_diagonal(coupled, 0)
     scale = np.abs(linear).max(axis=1, keepdims=True)
     if np.any(np.abs(coupled) > _COUPLING_TOLERANCE * scale):
-        raise ValueError(
+        raise InputError(
             f"{source}: the world coordinates couple axes that the model "
             f"keeps independent (e.g. the velocity varies along a spatial "
             f"axis)")

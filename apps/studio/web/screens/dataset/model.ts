@@ -9,11 +9,13 @@
 // map). An item is a file of data, with its errors (a file, or one value)
 // and its mask, each an array of a FITS file.
 import type { ArrayInfo, ArrayProblem, CatalogueLine } from '../../api/client';
+import type { Problem } from '../../components/Problems';
 import type { Reading, Velocity } from '../../api/queries';
 
 export type Kind = 'cube' | 'moments' | 'image';
 export type Role = 'data' | 'error' | 'mask';
 export type ErrorKind = 'sigma' | 'variance' | 'inverse_variance';
+export type MaskKind = 'valid' | 'invalid';
 export type Colours = 'sequential' | 'median' | 'zero';
 
 export const ROLES: { role: Role; title: string }[] = [
@@ -26,6 +28,12 @@ export const ERROR_KINDS: { kind: ErrorKind; title: string; text: string }[] = [
   { kind: 'sigma', title: 'σ', text: 'Standard deviations' },
   { kind: 'variance', title: 'σ²', text: 'Variances' },
   { kind: 'inverse_variance', title: '1/σ²', text: 'Inverse variances' },
+];
+
+// What a mask marks where it is not 0 (see the library's mask_kind)
+export const MASK_KINDS: { kind: MaskKind; text: string }[] = [
+  { kind: 'valid', text: 'Valid pixels' },
+  { kind: 'invalid', text: 'Invalid pixels' },
 ];
 
 // A place for an item in a dataset of a kind: its key in the options of
@@ -126,11 +134,16 @@ export interface Item {
   files: Partial<Record<Role, FileArray>>;
   // One error for all the values (as typed), instead of a file of errors
   errorValue: string | null;
-  // What the file of errors holds (null: as the name of its array says)
+  // What the file of errors holds (null: as its header states, if it does)
   errorKind: ErrorKind | null;
+  // What the mask marks where it is not 0
+  maskKind: MaskKind;
+  // The unit of the values of the data, instead of their BUNIT (as typed;
+  // '': that of the header)
+  unit: string;
 }
 
-export const EMPTY_ITEM: Item = { files: {}, errorValue: null, errorKind: null };
+export const EMPTY_ITEM: Item = { files: {}, errorValue: null, errorKind: null, maskKind: 'valid', unit: '' };
 
 // The spectral axis of a cube, as the user gives it: what the axis is
 // where its header gives it a type FITS does not define (e.g. CALIFA's
@@ -313,28 +326,13 @@ export function arrayLabel(array: ArrayInfo): string {
   return array.name || `array ${array.index}`;
 }
 
-// The names of arrays of errors, and of quality flags (e.g. the DQ of HST,
-// JWST and MUSE: 0 where the data are good)
-const ERROR_NAMES = '(ERR|ERROR|ERRORS|SIGMA|NOISE|STAT|VAR|IVAR|INVVAR|INV_VAR)';
-const FLAG_NAMES = /^(DQ|QUAL|QUALITY|FLAG|FLAGS)$/i;
-
-export function isFlags(array: ArrayInfo): boolean {
-  return FLAG_NAMES.test(array.name);
-}
-
-function looksLikeErrors(array: ArrayInfo): boolean {
-  return new RegExp(`(^|_)${ERROR_NAMES}`, 'i').test(array.name);
-}
-
-// The other arrays of the file of the data, of their shape: offered for
-// the errors (those named as errors first) and for the mask (never errors
-// or quality flags: GBKFIT keeps the pixels where a mask is not 0)
-export function siblings(arrays: Arrays, role: 'error' | 'mask'): ArrayInfo[] {
+// The other arrays of the file of the data, of their shape, in the order
+// of the file: those an error or a mask can be (nothing is read from
+// their names)
+export function siblings(arrays: Arrays): ArrayInfo[] {
   const data = arrays.found.data;
   if (data === undefined) return [];
-  const others = (arrays.inFile.data ?? []).filter((a) => a.index !== data.index && sameShape(a, data));
-  if (role === 'mask') return others.filter((a) => !looksLikeErrors(a) && !isFlags(a));
-  return [...others.filter(looksLikeErrors), ...others.filter((a) => !looksLikeErrors(a) && !isFlags(a))];
+  return (arrays.inFile.data ?? []).filter((a) => a.index !== data.index && sameShape(a, data));
 }
 
 // What the file of errors holds: as chosen, or else as its header states
@@ -483,14 +481,6 @@ export function hasEdits(edits: Edits, keys: string[]): boolean {
 // ---------------------------------------------------------------------------
 // What a draft needs
 
-// Where the user gives what is needed
-export type Place = 'name' | 'files' | 'spectral' | 'prepare';
-
-export interface Need {
-  place: Place;
-  text: string;
-}
-
 // A draft as the server describes its files: its kind, the draft, and
 // the arrays of each item (by key)
 export interface Resolved {
@@ -501,19 +491,28 @@ export interface Resolved {
   reading: Reading;
 }
 
-// What the draft still needs before it can be a dataset, the most basic
-// first (none: it can be one): what the user is to give of its files, then
-// the problems the library finds of them (see headerProblems: of an option
-// of the spectral axis of a cube, given there), then of the edits. The
-// name is the caller's.
-export function needsOf(resolved: Resolved): Need[] {
-  const needs = inputNeeds(resolved);
-  for (const problems of Object.values(headerProblems(resolved))) {
-    for (const problem of problems) needs.push({ place: resolved.kind === 'cube' && problem.path[0] === 'spectral' ? 'spectral' : 'files', text: problem.message });
+// The problems of a draft, at the paths of the fields that fix them (see
+// components/Problems): of an item, under its key ([key, 'data'], [key,
+// 'error'], [key, 'mask'], and the library's paths under [key], e.g.
+// [key, 'spectral', 'unit']); of the edits, ['prepare']; with no item,
+// ['files']. The library's keep its severity; what the user is still to
+// give is an error. The name is the caller's.
+export function problemsOf(resolved: Resolved): Problem[] {
+  const problems = inputProblems(resolved);
+  for (const [key, found] of Object.entries(headerProblems(resolved))) {
+    for (const problem of found) problems.push({ severity: problem.severity, path: [key, ...problem.path], message: problem.message });
   }
   const first = firstData(resolved);
-  if (first) needs.push(...editNeeds(resolved.kind, resolved.draft, resolved.arrays, first));
-  return needs;
+  if (first) problems.push(...editProblems(resolved.kind, resolved.draft, resolved.arrays, first));
+  return problems;
+}
+
+// Whether a draft waits for the header of a file it names
+export function isReading({ kind, draft, arrays }: Resolved): boolean {
+  return presentSlots(kind, draft).some((slot) => {
+    const of = arrays[slot.key] ?? NO_ARRAYS;
+    return draft.items[slot.key].files.data !== undefined && !of.errors.data && (of.found.data === undefined || !of.current);
+  });
 }
 
 // The problems the library finds of the data of each item (by its key),
@@ -533,51 +532,52 @@ function firstData({ kind, draft, arrays }: Resolved): ArrayInfo | undefined {
     .find((data) => data !== undefined && kept(data).length === KINDS[kind].ndim);
 }
 
-// What the user is to give before the draft can be a dataset
-function inputNeeds(resolved: Resolved): Need[] {
+const error = (path: Problem['path'], message: string): Problem => ({ severity: 'error', path, message });
+
+const shapeText = (array: ArrayInfo) => kept(array).join('×') || '1';
+
+// What the user is still to give of the files of a draft
+function inputProblems(resolved: Resolved): Problem[] {
   const { kind, draft, arrays } = resolved;
   const info = KINDS[kind];
   const slots = presentSlots(kind, draft);
-  const needs: Need[] = [];
-  if (slots.length === 0) needs.push({ place: 'files', text: 'Add a map' });
+  const problems: Problem[] = [];
+  if (slots.length === 0) problems.push(error(['files'], 'no map'));
   for (const slot of slots) {
     const of = arrays[slot.key] ?? NO_ARRAYS;
     const item = draft.items[slot.key];
-    const what = kind === 'moments' ? `the map of ${slot.title.toLowerCase()}` : info.what;
     const data = of.found.data;
     const file = item.files.data?.file.split('/').pop();
-    if (item.files.data === undefined) needs.push({ place: 'files', text: `Choose ${what}` });
-    else if (of.errors.data) needs.push({ place: 'files', text: `${file} cannot be read` });
-    else if (data === undefined) needs.push({ place: 'files', text: `Reading the header of ${file}…` });
-    else if (kept(data).length !== info.ndim) needs.push({ place: 'files', text: `${file} has ${axes(kept(data).length)}, not ${info.ndim}` });
-    else {
+    if (item.files.data === undefined) problems.push(error([slot.key, 'data'], 'data missing'));
+    else if (of.errors.data) problems.push(error([slot.key, 'data'], `'${file}' unreadable`));
+    else if (data !== undefined && kept(data).length !== info.ndim) problems.push(error([slot.key, 'data'], `'${file}' ${axes(kept(data).length)} · needs ${info.ndim}`));
+    else if (data !== undefined) {
       for (const role of ['error', 'mask'] as const) {
         const array = of.found[role];
-        const title = role === 'error' ? 'errors' : 'mask';
-        if (of.errors[role]) needs.push({ place: 'files', text: `The ${title} of ${what} cannot be read` });
-        else if (array !== undefined && !sameShape(array, data)) needs.push({ place: 'files', text: `The ${title} of ${what} are not of its shape` });
+        const name = role === 'error' ? 'errors' : 'mask';
+        if (of.errors[role]) problems.push(error([slot.key, role], `${name} unreadable`));
+        else if (array !== undefined && !sameShape(array, data)) problems.push(error([slot.key, role], `${name} ${shapeText(array)} · data ${shapeText(data)}`));
         else if (role === 'error' && array !== undefined && item.errorValue === null && errorKindOf(item, of) === null)
-          needs.push({ place: 'files', text: `Say what the errors of ${what} are (σ, σ² or 1/σ²): ${array.name || 'their header'} does not say` });
+          problems.push(error([slot.key, 'error'], 'error kind missing · σ, σ² or 1/σ²'));
       }
-      if (item.errorValue !== null && !(Number(item.errorValue) > 0)) needs.push({ place: 'files', text: 'Give the error a value above 0' });
+      if (item.errorValue !== null && !(Number(item.errorValue) > 0)) problems.push(error([slot.key, 'error'], `error '${item.errorValue}' not > 0`));
     }
   }
   const first = firstData(resolved);
   if (kind === 'moments' && first) {
-    const misfit = slots.find((slot) => {
+    for (const slot of slots) {
       const data = arrays[slot.key]?.found.data;
-      return data !== undefined && kept(data).length === 2 && !sameShape(data, first);
-    });
-    if (misfit) needs.push({ place: 'files', text: `The map of ${misfit.title.toLowerCase()} is not of the shape of the others` });
+      if (data !== undefined && kept(data).length === 2 && !sameShape(data, first)) problems.push(error([slot.key, 'data'], `map ${shapeText(data)} · others ${shapeText(first)}`));
+    }
   }
-  return needs;
+  return problems;
 }
 
 function axes(count: number): string {
   return `${count} ${count === 1 ? 'axis' : 'axes'}`;
 }
 
-function editNeeds(kind: Kind, draft: Draft, arrays: Record<string, Arrays>, data: ArrayInfo): Need[] {
+function editProblems(kind: Kind, draft: Draft, arrays: Record<string, Arrays>, data: ArrayInfo): Problem[] {
   const { edits } = draft;
   const keys = presentSlots(kind, draft).map((slot) => slot.key);
   const typed = [
@@ -592,7 +592,8 @@ function editNeeds(kind: Kind, draft: Draft, arrays: Record<string, Arrays>, dat
     edits.seed,
     ...keys.flatMap((key) => Object.values(edits.values[key] ?? NO_VALUE_EDITS)),
   ];
-  if (typed.some((text) => Number.isNaN(numberOf(text)))) return [{ place: 'prepare', text: 'An edit is not a number' }];
+  const wrong = typed.find((text) => Number.isNaN(numberOf(text)));
+  if (wrong !== undefined) return [error(['prepare'], `'${wrong}' not a number`)];
   const shape = kept(data);
   const ranges = [
     [edits.x, shape[0], 'x'],
@@ -601,12 +602,16 @@ function editNeeds(kind: Kind, draft: Draft, arrays: Record<string, Arrays>, dat
   ] as const;
   for (const [range, size, name] of ranges) {
     const crop = rangeOf(range, size);
-    if (crop && !(0 <= crop[0] && crop[0] <= crop[1] && crop[1] < size)) return [{ place: 'prepare', text: `The crop of ${name} is out of the data` }];
+    if (crop && !(0 <= crop[0] && crop[0] <= crop[1] && crop[1] < size)) return [error(['prepare'], `${name} ${crop[0]}–${crop[1]} outside 0–${size - 1}`)];
   }
   if (kind === 'moments' && hasEdits(edits, keys)) {
     const errors = keys.filter((key) => draft.items[key].files.error !== undefined && draft.items[key].errorValue === null);
     const kinds = new Set(errors.map((key) => errorKindOf(draft.items[key], arrays[key] ?? NO_ARRAYS)).filter((k) => k !== null));
-    if (kinds.size > 1) return [{ place: 'prepare', text: 'The errors of the maps are of different kinds (σ, σ², 1/σ²); prep needs one' }];
+    if (kinds.size > 1) return [error(['prepare'], 'error kinds differ · prep needs one')];
+  }
+  // (sigma clipping leaves out the line emission of a cube with the rest)
+  if (kind === 'cube' && keys.some((key) => (edits.values[key]?.sigma ?? '').trim() !== '')) {
+    return [{ severity: 'warning', path: ['prepare'], message: 'outliers σ on a cube · removes line emission' }];
   }
   return [];
 }
@@ -658,6 +663,8 @@ function itemOptions(item: Item, arrays: Arrays, project: string): Record<string
   }
   const errorKind = errorKindOf(item, arrays);
   if (item.errorValue === null && options.error !== undefined && errorKind !== null && errorKind !== 'sigma') options.error_kind = errorKind;
+  if (options.mask !== undefined && item.maskKind !== 'valid') options.mask_kind = item.maskKind;
+  if (item.unit.trim() !== '') options.unit = item.unit.trim();
   return options;
 }
 
@@ -694,7 +701,7 @@ export interface PrepRequest {
 }
 
 // The job of prep of a draft (its edits), writing into the folder data of
-// the project. The draft has no needs (see needsOf).
+// the project. The draft has no error (see problemsOf).
 export function prepRequest({ kind, draft, arrays }: Resolved, project: string): PrepRequest {
   const { edits } = draft;
   const slots = presentSlots(kind, draft);
@@ -716,7 +723,7 @@ export function prepRequest({ kind, draft, arrays }: Resolved, project: string):
   const files = (key: string) => {
     const item = draft.items[key];
     const of = arrays[key] ?? NO_ARRAYS;
-    return { file_d: prepFile(item, of, 'data'), file_e: prepFile(item, of, 'error'), file_m: prepFile(item, of, 'mask'), kind: errorKindOf(item, of) ?? undefined };
+    return { file_d: prepFile(item, of, 'data'), file_e: prepFile(item, of, 'error'), file_m: prepFile(item, of, 'mask'), kind: errorKindOf(item, of) ?? undefined, maskKind: item.maskKind, unit: item.unit.trim() || null };
   };
   const values = (key: string) => {
     const [below, above] = keptValues(edits, key);
@@ -736,6 +743,8 @@ export function prepRequest({ kind, draft, arrays }: Resolved, project: string):
         file_e: list((map) => map.file_e),
         file_m: list((map) => map.file_m),
         error_kind: maps.find((map) => map.file_e !== null)?.kind ?? 'sigma',
+        mask_kind: maps.find((map) => map.file_m !== null)?.maskKind ?? 'valid',
+        unit: list((map) => map.unit),
         clip_min: list((map) => map.clip_min),
         clip_max: list((map) => map.clip_max),
         sclip_sigma: list((map) => map.sclip_sigma),
@@ -744,7 +753,7 @@ export function prepRequest({ kind, draft, arrays }: Resolved, project: string):
   }
   const key = slots[0].key;
   const own = files(key);
-  const base = { ...common, ...values(key), file_d: own.file_d, file_m: own.file_m };
+  const base = { ...common, ...values(key), file_d: own.file_d, file_m: own.file_m, mask_kind: own.maskKind, unit: own.unit };
   // (noise added to data without errors, e.g. a simulation without noise)
   const added = own.file_e === null ? numberOf(edits.added) : null;
   const adding = added !== null ? { add_noise: added, seed: integerOf(edits.seed) } : {};
@@ -818,6 +827,10 @@ function errorKindOption(value: unknown): ErrorKind | null {
   return ERROR_KINDS.find(({ kind }) => kind === value)?.kind ?? null;
 }
 
+function maskKindOption(value: unknown): MaskKind {
+  return MASK_KINDS.find(({ kind }) => kind === value)?.kind ?? 'valid';
+}
+
 // The item of the options of an item of a dataset (paths relative to the
 // project)
 function itemOfOptions(options: Record<string, unknown>, project: string): Item {
@@ -831,6 +844,8 @@ function itemOfOptions(options: Record<string, unknown>, project: string): Item 
     files,
     errorValue: typeof options.error === 'number' ? String(options.error) : null,
     errorKind: errorKindOption(options.error_kind) ?? 'sigma',
+    maskKind: maskKindOption(options.mask_kind),
+    unit: typeof options.unit === 'string' ? options.unit : '',
   };
 }
 
@@ -882,7 +897,16 @@ export function draftOfPreparation(kind: Kind, dataset: Record<string, unknown>,
   for (const key of Object.keys(files)) {
     const i = index(key);
     if (i < 0) continue;
-    const item: Item = { files: {}, errorValue: null, errorKind: errorKindOption(options.error_kind) };
+    // (the unit of the values: as prep was given it, or else as the dataset
+    // states it)
+    const unit = at(options.unit, i);
+    const item: Item = {
+      files: {},
+      errorValue: null,
+      errorKind: errorKindOption(options.error_kind),
+      maskKind: maskKindOption(options.mask_kind),
+      unit: typeof unit === 'string' ? unit : (saved.items[key]?.unit ?? ''),
+    };
     for (const [role, option] of [['data', 'file_d'], ['error', 'file_e'], ['mask', 'file_m']] as const) {
       const file = fileArrayOf(at(options[option], i), base);
       if (file !== undefined) item.files[role] = file;
@@ -970,7 +994,7 @@ export function draftOfPrepared(kind: Kind, draft: Draft, prepared: Prepared): D
       if (file !== null) files[role] = { file, array: 0 };
     }
     const own = draft.items[slot.key];
-    items[slot.key] = { files, errorValue: files.error ? null : own.errorValue, errorKind: 'sigma' };
+    items[slot.key] = { files, errorValue: files.error ? null : own.errorValue, errorKind: 'sigma', maskKind: 'valid', unit: '' };
   });
   return { items, spectral: NO_SPECTRAL, edits: NO_EDITS };
 }

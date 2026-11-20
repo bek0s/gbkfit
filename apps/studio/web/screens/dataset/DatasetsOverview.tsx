@@ -1,20 +1,22 @@
 // The datasets of the project at a glance, the screen of the section
 // before any dataset is opened: one row each (a click opens it), with what
 // it is (its kind), its pixels and channels and their size, its beam, its
-// errors, the unit of its values, and the observations that see it (none:
-// nothing can use it yet). The dataset opened last is one click away, at
-// the top.
+// errors, the unit of its values, whether prep made its files, the count
+// of its problems (errors, warnings; see problemsOf), and the observations
+// that see it (none: nothing can use it yet). The dataset opened last is
+// one click away, at the top.
 import { useMemo } from 'react';
 import type { components } from '../../api/schema';
-import { usePiece, useProject } from '../../api/queries';
+import { usePiece, usePreparation, useProject } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
 import { significant } from '../../components/format';
+import { ProblemSign } from '../../components/Problems';
 import { Button } from '../../components/ui/basics';
 import { ScreenHead } from '../../shell/ScreenHead';
 import { sectionNamed } from '../../shell/sections';
 import { useStudio } from '../../studio';
 import { useResolved } from './hooks';
-import { draftOfDataset, KINDS, kindOfType, NO_EDITS, NO_SPECTRAL, type Draft } from './model';
+import { draftOfDataset, isReading, KINDS, kindOfType, NO_EDITS, NO_SPECTRAL, problemsOf, type Draft } from './model';
 
 type ArrayInfo = components['schemas']['ArrayInfo'];
 type Link = components['schemas']['PieceLink'];
@@ -56,6 +58,8 @@ export function DatasetsOverview() {
                 <th className="ov-num">Beam</th>
                 <th>Errors</th>
                 <th>Unit</th>
+                <th>Prepared</th>
+                <th>Problems</th>
                 <th>Seen by</th>
               </tr>
             </thead>
@@ -86,6 +90,11 @@ function DatasetRow({ project, name, links }: { project: string; name: string; l
   const maps = kind === 'moments' ? Object.keys(draft.items).length : null;
   const reading = options === undefined || (array === undefined && failed === undefined);
   const dash = <span className="ov-faint">{reading ? '…' : '—'}</span>;
+  const preparation = usePreparation(item?.files.data?.file ?? null);
+  const checked = kind !== undefined && !isReading(resolved);
+  const problems = checked ? problemsOf(resolved) : [];
+  const errors = problems.filter((problem) => problem.severity === 'error').length;
+  const warnings = problems.length - errors;
   return (
     <tr className="ov-row" onClick={() => go({ kind: 'block', folder: 'datasets', name })}>
       <td className="ov-name">{name}</td>
@@ -106,7 +115,30 @@ function DatasetRow({ project, name, links }: { project: string; name: string; l
         </>
       )}
       <td>{item ? item.files.error ? 'from a file' : item.errorValue !== null ? item.errorValue : <span className="ov-warn">none</span> : dash}</td>
-      <td className="ov-unit">{array?.unit ?? dash}</td>
+      <td className="ov-unit">{item?.unit || array?.unit || dash}</td>
+      <td>{preparation.isLoading ? dash : preparation.data ? 'yes' : 'no'}</td>
+      <td className="ov-problems" title={problems.map((problem) => problem.message).join('\n') || undefined}>
+        {!checked ? (
+          dash
+        ) : problems.length === 0 ? (
+          <span className="ov-faint">none</span>
+        ) : (
+          <>
+            {errors > 0 && (
+              <span data-severity="error">
+                <ProblemSign severity="error" />
+                {errors}
+              </span>
+            )}
+            {warnings > 0 && (
+              <span data-severity="warning">
+                <ProblemSign severity="warning" />
+                {warnings}
+              </span>
+            )}
+          </>
+        )}
+      </td>
       <td onClick={(event) => event.stopPropagation()}>
         {seenBy.length === 0 ? (
           <span className="ov-warn">no observation</span>

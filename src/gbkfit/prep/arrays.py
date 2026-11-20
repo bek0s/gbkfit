@@ -4,8 +4,9 @@ FitsArrays): in the orientation of the model, cropped, padded, masked
 and clipped.
 """
 
+import contextlib
 import dataclasses
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 
 import astropy.io.fits as fits
 import astropy.units
@@ -23,6 +24,34 @@ from .masks import bounding_box
 __all__ = [
     'FitsArrays'
 ]
+
+
+# The options of the prep tasks of the options of a dataset that fix the
+# errors of reading files (see gbkfit.io, e.g. ['spectral', 'rest']):
+# the others are named alike (e.g. unit)
+_TASK_OPTIONS = {
+    ('spectral', 'rest'): 'velocity_rest',
+    ('spectral', 'convention'): 'velocity',
+    ('spectral', 'type'): 'spectral_type',
+    ('spectral', 'unit'): 'spectral_unit'}
+
+
+@contextlib.contextmanager
+def _at_task_options() -> Iterator[None]:
+    """
+    Put the errors of reading files raised in the block (and those of a
+    group of them) at the options of the prep tasks that fix them (see
+    _TASK_OPTIONS) instead of those of a dataset.
+    """
+    try:
+        yield
+    except Exception as e:
+        for error in (
+                e.exceptions if isinstance(e, ExceptionGroup) else [e]):
+            path = tuple(getattr(error, 'config_path', ()))
+            if path in _TASK_OPTIONS:
+                error.config_path = [_TASK_OPTIONS[path]]
+        raise
 
 
 @dataclasses.dataclass(frozen=True)
@@ -51,7 +80,8 @@ class FitsArrays(Arrays):
             error_kind: ErrorKind = 'sigma',
             mask_kind: MaskKind = 'valid',
             spectral_type: str | None = None,
-            spectral_unit: str | None = None
+            spectral_unit: str | None = None,
+            unit: str | None = None
     ) -> 'FitsArrays':
         """
         Read the data, errors and mask from files in the orientation of
@@ -83,6 +113,9 @@ class FitsArrays(Arrays):
             The unit of a spectral axis whose header gives none or one that
             is not valid (see SpectralAxis, option unit); it is not used for
             others.
+        unit : str, optional
+            The unit of the data, which replaces that of their header
+            (BUNIT; see read_arrays).
 
         Returns
         -------
@@ -93,14 +126,16 @@ class FitsArrays(Arrays):
         ------
         ValueError
             If the files cannot be read as data, errors and mask (see
-            read_arrays), or the rest is given for data without
-            a spectral axis.
+            read_arrays; its errors at the options of the prep tasks, see
+            _TASK_OPTIONS), or the rest is given for data without a
+            spectral axis.
         """
-        arrays = read_arrays(
-            data, error, mask, error_kind=error_kind, mask_kind=mask_kind,
-            rest=rest,
-            velocity=velocity, spectral_type=spectral_type,
-            spectral_unit=spectral_unit)
+        with _at_task_options():
+            arrays = read_arrays(
+                data, error, mask, error_kind=error_kind,
+                mask_kind=mask_kind, unit=unit, rest=rest,
+                velocity=velocity, spectral_type=spectral_type,
+                spectral_unit=spectral_unit)
         header = arrays.header
         # (a header without world coordinates has no spectral axis)
         if rest is not None and astropy.wcs.WCS(header).wcs.spec < 0:

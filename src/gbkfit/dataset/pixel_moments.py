@@ -110,7 +110,8 @@ class DatasetPixelMoments(DatasetGrid):
         """
         check_options(DatasetPixelMoments.from_files, locals())
         items, coords = _detail.read_moments(
-            _detail.moment_options(locals()), rpix, rval)
+            _detail.moment_options(locals()), rpix, rval,
+            _grids.stated_options(step, rpix, rval))
         dataset = cls(
             *split_moments(items),
             **_grids.grid_coords(coords, step, rota))

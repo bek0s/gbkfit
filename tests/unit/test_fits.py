@@ -527,9 +527,10 @@ def test_invalid_rest(value):
 
 
 def test_nonlinear_velocity_axes_are_rejected():
-    # e.g. velocities derived from a linear frequency axis (F2W) are not
-    # linear in the pixels
-    header = _spectral_header('VOPT-F2W', RESTWAV=6.5628e-7)
+    # e.g. relativistic velocities of a linear frequency axis (F2V) are
+    # not linear in the pixels (optical ones, F2W, are read as radio
+    # velocities, see test_header_rests)
+    header = _spectral_header('VELO-F2V', RESTWAV=6.5628e-7)
     with pytest.raises(ValueError, match="not linear in velocity"):
         write(header, shape=(6, 20, 24))
 
@@ -739,15 +740,6 @@ def test_a_cunit_that_is_not_text_is_no_unit(tmp_path):
     with pytest.warns(astropy.wcs.FITSFixedWarning):
         coords = read_data(path)[1]
     assert coords.step == pytest.approx((10.0, 10.0))
-
-
-def test_the_header_of_a_frequency_axis_names_its_rest_if_not_given(
-        tmp_path):
-    path = write_map(tmp_path / 'cube.fits', SKY | dict(
-        CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.42e9, CDELT3=1e5, CRPIX3=1,
-        RESTFRQ=1420405752.0), (3, 20, 24))
-    with pytest.raises(ValueError, match="RESTFRQ 1420405752 Hz"):
-        read_data(path)
 
 
 def test_an_image_is_written_in_the_unit_given_whatever_its_header(

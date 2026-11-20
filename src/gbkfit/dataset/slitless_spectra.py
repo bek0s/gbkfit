@@ -124,7 +124,8 @@ class DatasetSlitlessSpectra(DatasetGrid):
         check_options(DatasetSlitlessSpectra.from_files, locals())
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam,
-            error_kind=error_kind, mask_kind=mask_kind, footprint=footprint)
+            error_kind=error_kind, mask_kind=mask_kind, footprint=footprint,
+            stated=_grids.stated_options(step, rpix, rval))
         dataset = cls(item, **_grids.grid_coords(coords, step, rota))
         return cleaned(dataset, outliers)
 

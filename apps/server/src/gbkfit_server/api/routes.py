@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal
 
 import numpy as np
 from fastapi import (
-    APIRouter, Body, Depends, Request, Response, WebSocket,
+    APIRouter, Body, Depends, Query, Request, Response, WebSocket,
     WebSocketException, status)
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
@@ -21,6 +21,7 @@ from starlette.requests import HTTPConnection
 
 import gbkfit
 import gbkfit.model
+import gbkfit.project
 from gbkfit.grid import SPECTRAL_TYPES, air_refractive_index
 
 from gbkfit_server.services import frames
@@ -37,7 +38,8 @@ from .models import (
     JobInfo, JobRequest, LensInfo, LensRequest, LensViewInfo,
     LensViewRequest, LSFRequest, LSFViewInfo, ObservedArrayInfo,
     ObservedInfo, ObservedRequest, PSFRequest, PSFViewInfo,
-    PieceReference, PieceRename, PieceRequest, PreferencesInfo,
+    PieceContent, PieceReference, PieceRename, PieceRequest,
+    PreferencesInfo,
     PreparationInfo,
     ProjectInfo, ProjectRename, ProjectRequest, RenderInfo, RunInfo,
     SessionInfo, SessionRequest, SetupInfo, SetupObservedRequest,
@@ -64,7 +66,8 @@ def _reading(
         rest: str | None = None,
         velocity: Literal['radio', 'optical'] | None = None,
         spectral_type: Literal[SPECTRAL_TYPES] | None = None,
-        spectral_unit: str | None = None
+        spectral_unit: str | None = None,
+        unit: str | None = None
 ) -> Reading:
     """
     Return how the spectral axis of a cube of a file is read, as a dataset
@@ -72,11 +75,13 @@ def _reading(
     (e.g. '6562.8 Angstrom'), which makes wavelengths or frequencies
     velocities; velocity, the convention of velocities that its header
     leaves ambiguous; spectral_type, what an axis whose header gives a
-    type FITS does not define, or none, is (e.g. 'AWAV'); and
-    spectral_unit, the unit of an axis whose header gives none, or one
-    that is not valid (e.g. 'km/s').
+    type FITS does not define, or none, is (e.g. 'AWAV'); spectral_unit,
+    the unit of an axis whose header gives none, or one that is not valid
+    (e.g. 'km/s'); and unit, the unit of the values, which replaces that
+    of the header (e.g. 'Jy/beam' for a BUNIT 'JY/BEAM', which is not a
+    unit).
     """
-    return Reading(rest, velocity, spectral_type, spectral_unit)
+    return Reading(rest, velocity, spectral_type, spectral_unit, unit)
 
 
 ReadingDep = Annotated[Reading, Depends(_reading)]
@@ -197,28 +202,43 @@ def folder(server: ServerDep, path: str) -> FolderInfo:
 
 @router.get('/describe/{path:path}')
 def describe(
-        server: ServerDep, path: str, reading: ReadingDep
+        server: ServerDep, path: str, reading: ReadingDep,
+        stated: Annotated[list[str] | None, Query()] = None
 ) -> list[ArrayInfo]:
     """
     Describe a file of data from its headers, without reading its data:
     each of its arrays (see ArrayInfo), and what a dataset of it refuses
-    or needs given, its spectral axis read so (see _reading).
+    or needs given, its spectral axis and its unit read so (see _reading);
+    stated, the options of the grid that the dataset states (e.g. 'step',
+    'rpix' or 'spectral.rval'), which its headers need not have.
     """
     return [
         ArrayInfo.model_validate(array)
         for array in server.workspace.describe(
             path, reading.velocity, reading.rest, reading.spectral_type,
-            reading.spectral_unit)]
+            reading.spectral_unit, reading.unit, stated or ())]
 
 
 @router.get('/header/{path:path}')
-def header(server: ServerDep, path: str, hdu: int = 0) -> HeaderInfo:
+def header(
+        server: ServerDep, path: str, hdu: int | str | None = None
+) -> HeaderInfo:
     """
-    Return the header of an array (an HDU) of a file of data, as it is in
-    the file (one header per HDU: the data and the errors of one file have
-    each their own).
+    Return the header of an HDU of a file of data, as it is in the file
+    (one header per HDU: the data and the errors of one file have each
+    their own): of the HDU given, its index or its name (EXTNAME), or by
+    default the first with data.
     """
     return HeaderInfo(cards=server.workspace.header(path, hdu))
+
+
+@router.post('/piece-text', response_class=PlainTextResponse)
+def piece_text(request: PieceContent) -> str:
+    """
+    Return the text of a piece of its options (e.g. of a dataset, to copy
+    it), as a project writes it: YAML in block style.
+    """
+    return gbkfit.project.piece_text(request.content)
 
 
 # (the responses of frames of arrays)

@@ -5,7 +5,8 @@ arrays as FITS files, with their headers (gbkfit writes FITS files only;
 see writing, for the headers of the world coordinates of the model).
 """
 
-from collections.abc import Mapping
+import contextlib
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 import astropy.io.fits
@@ -14,12 +15,37 @@ import astropy.units as u
 import numpy as np
 
 import gbkfit.units
+from gbkfit.config import InputError
 from ..headers import parse_wcs
 
 
 __all__ = [
+    'open_fits',
     'write_image'
 ]
+
+
+@contextlib.contextmanager
+def open_fits(filename: str) -> Iterator[astropy.io.fits.HDUList]:
+    """
+    Open a FITS file, as astropy does, but with the failures of astropy
+    to read it as OSErrors of short messages: a file that is not FITS, or
+    one empty or truncated (also as its data are read, in the block).
+    """
+    try:
+        with astropy.io.fits.open(filename) as hdus:
+            yield hdus
+    except OSError as e:
+        if 'No SIMPLE card found' in str(e):
+            raise OSError(f"{filename}: not FITS") from None
+        if 'Empty or corrupt FITS file' in str(e):
+            raise OSError(f"{filename}: empty or truncated") from None
+        raise
+    except TypeError as e:
+        # (of the data of a truncated file, as numpy reads them)
+        if 'buffer is too small' in str(e):
+            raise OSError(f"{filename}: truncated") from None
+        raise
 
 
 def read_image(
@@ -29,7 +55,7 @@ def read_image(
     Return the image of an HDU of a FITS file and its header (see
     _image_hdu).
     """
-    with astropy.io.fits.open(filename) as hdus:
+    with open_fits(filename) as hdus:
         found = _image_hdu(filename, hdus, key)
         return np.array(found.data), found.header.copy()
 
@@ -41,7 +67,7 @@ def read_header(
     Return the header of the HDU of an image of a FITS file (see
     _image_hdu), without its data.
     """
-    with astropy.io.fits.open(filename) as hdus:
+    with open_fits(filename) as hdus:
         return _image_hdu(filename, hdus, key).header.copy()
 
 
@@ -55,7 +81,7 @@ def read_channel_beams(
     """
     # (the file opened once: of a compressed file, each opening reads it
     # through to the table, at its end)
-    with astropy.io.fits.open(filename) as hdus:
+    with open_fits(filename) as hdus:
         if 'BEAMS' not in hdus:
             return None
         beams = astropy.table.Table.read(hdus['BEAMS'])
@@ -82,18 +108,18 @@ def _image_hdu(
             hdu for hdu in hdus
             if hdu.is_image and hdu.header.get('NAXIS', 0) > 0), None)
         if found is None:
-            raise ValueError(f"{filename}: no HDU has an image")
+            raise InputError(f"{filename}: no HDU has an image")
         return found
     try:
         found = hdus[key]
     except (IndexError, KeyError):
-        raise ValueError(f"{filename}: it has no HDU {key!r}") from None
+        raise InputError(f"{filename}: it has no HDU {key!r}") from None
     if not found.is_image:
-        raise ValueError(
+        raise InputError(
             f"{filename}: HDU {key!r} is not an image (e.g. a table); "
             f"choose the HDU of the image (e.g. hdu: SCI)")
     if found.header.get('NAXIS', 0) == 0:
-        raise ValueError(
+        raise InputError(
             f"{filename}: HDU {key!r} has no data; choose the HDU with the "
             f"data (e.g. hdu: SCI)")
     return found
@@ -113,7 +139,7 @@ def _channel_beams(
     beams.sort('CHAN')
     wcs = parse_wcs(filename, header)
     if wcs.wcs.spec < 0:
-        raise ValueError(f"{filename}: the cube has no spectral axis")
+        raise InputError(f"{filename}: the cube has no spectral axis")
     spectral = wcs.sub([wcs.wcs.spec + 1])
     unit = u.Unit(spectral.wcs.cunit[0])
     points = spectral.pixel_to_world_values(np.asarray(beams['CHAN']))

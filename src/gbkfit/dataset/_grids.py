@@ -40,6 +40,29 @@ def grid_coords(
         rota=coords.rota if rota is None else rota)
 
 
+def stated_options(
+        step: float | Sequence[float] | None,
+        rpix: float | Sequence[float] | None,
+        rval: float | Sequence[float] | None,
+        spectral: SpectralAxis | None = None
+) -> frozenset[str]:
+    """
+    Return the names of the options of the grid of a dataset that it
+    states, of the axes on the sky (step, rpix, rval) and of its spectral
+    axis ('spectral.step', 'spectral.rpix', 'spectral.rval'): the steps
+    and references that the headers of its files need not have (see
+    reference_errors).
+    """
+    spectral = spectral or SpectralAxis()
+    sky = dict(step=step, rpix=rpix, rval=rval)
+    of_spectral = dict(
+        step=spectral.step(), rpix=spectral.rpix(), rval=spectral.rval())
+    return frozenset(
+        [name for name, value in sky.items() if value is not None]
+        + [f'spectral.{name}' for name, value in of_spectral.items()
+           if value is not None])
+
+
 def file_references(
         nspatial: int,
         rpix: float | Sequence[float] | None,

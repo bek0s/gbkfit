@@ -1225,7 +1225,6 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-need::before { content: '!'; flex: none; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; background: var(--warn-fill); color: var(--on-warn); font: var(--text-caption); font-weight: 600; }
 .ds-need-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-need-more { flex: none; padding: 0 6px; border-radius: 999px; background: var(--panel2); color: var(--muted); font: var(--text-data-small); }
-.ds-dock-note { margin: 0; padding: 12px 14px 20px; color: var(--faint); font: var(--text-label); }
 
 /* (the files: an item a group, a row of each role) */
 .ds-files { display: grid; gap: 10px; }
@@ -1249,12 +1248,6 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-chevron:hover:not(:disabled) { color: var(--fg); }
 .ds-chevron[aria-expanded="true"] { transform: rotate(90deg); }
 .ds-header-of { margin: 2px 0 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel2); }
-.ds-full-header { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 2px 0; border: 0; background: none; color: var(--muted); font: var(--text-label); }
-.ds-full-header:hover { color: var(--fg); }
-.ds-chevron-sign { font-size: 10px; transition: transform .12s; }
-.ds-full-header[aria-expanded="true"] .ds-chevron-sign { transform: rotate(90deg); }
-.ds-header-count { color: var(--faint); }
-.ds-header-text { max-height: 280px; margin: 6px 0 0; padding: 8px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: var(--fg2); font: var(--text-data-small); white-space: pre; }
 .ds-add-file { justify-self: start; height: 26px; margin-top: 2px; padding: 0 9px; border: 1px dashed var(--line2); border-radius: 7px; background: none; color: var(--muted); font: var(--text-label); }
 .ds-add-file:hover, .ds-add-file[aria-expanded="true"] { border-color: var(--muted); color: var(--fg); }
 .ds-add { justify-self: start; padding: 6px 10px; border: 1px dashed var(--line2); border-radius: 8px; background: none; color: var(--muted); font: var(--text-label); }
@@ -1262,25 +1255,15 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-value { width: 110px; min-width: 0; padding: 2px 6px; border: 1px solid var(--line2); border-radius: 5px; background: var(--field); color: var(--fg); font: var(--text-data); text-align: right; }
 .ds-error-kind { display: flex; align-items: center; gap: 8px; padding-left: 2px; font: var(--text-label); color: var(--muted); }
 .ds-error-kind .ui-choice { flex: 1; }
-.ds-warn { margin: 0; padding: 6px 9px; border-left: 3px solid var(--warn-fill); border-radius: 4px; background: color-mix(in srgb, var(--warn-fill) 11%, transparent); font: var(--text-label); }
 
-/* (the spectral axis: a row for each of its options, a value or a field;
-   a problem of one shows in its field (as its placeholder) or beside it,
-   never under it: nothing moves as problems come and go) */
+/* (the spectral axis: a row for each of its options, a value or a field) */
 .sp-rows { display: grid; gap: 8px; }
 .sp-row { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; }
 .sp-label { display: flex; align-items: center; gap: 5px; min-height: 30px; font: var(--text-label); color: var(--muted); }
-.sp-row[data-attention] .sp-label { color: var(--fg); }
-.sp-row[data-attention] .sp-label::after { content: '!'; flex: none; width: 14px; height: 14px; display: grid; place-items: center; border-radius: 50%; background: var(--warn-fill); color: var(--on-warn); font: var(--text-caption); font-size: 10px; font-weight: 700; }
 .sp-value { min-width: 0; }
-.sp-row[data-attention] .ui-choice input { border-color: var(--warn-fill); }
-.sp-row[data-attention] .ui-choice input::placeholder { color: var(--warn); opacity: 1; font-family: var(--mono); }
-.sp-inline { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.sp-flag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--warn); font: var(--text-data-small); }
 .sp-fixed { display: flex; align-items: center; min-height: 30px; font: var(--text-data); color: var(--fg2); }
 .sp-pair { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
 .sp-result { color: var(--muted); font: var(--text-data-small); white-space: nowrap; }
-.sp-near { min-height: 1lh; margin: -4px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font: var(--text-caption); }
 
 /* (forms of the dock: a label and a field a row) */
 .ds-form { display: grid; gap: 10px; }
@@ -1317,7 +1300,6 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-facts dt { font: var(--text-label); color: var(--faint); }
 .ds-facts dd { margin: 0; min-width: 0; font: var(--text-data); overflow-wrap: anywhere; }
 .ds-fixed { margin: 10px 0 0; color: var(--ok); font: var(--text-label); }
-.ds-problems { margin: 10px 0 0; padding-left: 16px; color: var(--warn); font: var(--text-label); overflow-wrap: anywhere; }
 
 /* (how a dataset of the project was made) */
 .ds-made { display: grid; gap: 8px; }
@@ -1334,8 +1316,10 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-confirm p { margin: 0; font: var(--text-label); }
 .ds-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* (a narrower dock on narrow screens, on the side the user prefers) */
 @media (max-width: 1280px) {
-  .ds-body { grid-template-columns: minmax(0, 1fr) 340px; }
+  .ds-body[data-side="left"] { grid-template-columns: 340px minmax(0, 1fr); }
+  .ds-body[data-side="right"] { grid-template-columns: minmax(0, 1fr) 340px; }
 }
 
 /* the screen of an observation: its view (its stages, the sky, its
@@ -1675,3 +1659,38 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ov-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .ov-chip { padding: 1px 8px; border: 1px solid var(--line2); border-radius: 99px; background: none; color: var(--fg2); font: var(--text-data-small); cursor: pointer; }
 .ov-chip:hover { border-color: var(--accent); color: var(--accent-text); }
+
+/* the display of problems (see components/Problems.tsx): a rule at the
+   side of a field in the colour of its worst problem, its problems in a
+   tooltip, and the counter in the head of a screen, which lists them all;
+   nothing takes room under a field */
+.problem-field { position: relative; }
+.problem-field::before { content: ''; position: absolute; left: -8px; top: 3px; bottom: 3px; width: 2px; border-radius: 1px; background: transparent; }
+.problem-field[data-severity="error"]::before { background: var(--err); }
+.problem-field[data-severity="warning"]::before { background: var(--warn); }
+.problem-tip { font: var(--text-data-small); white-space: pre-line; }
+.problem-sign { width: 12px; height: 12px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.problem-counter { flex: none; width: 92px; height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 4px; background: none; font: var(--text-data); font-variant-numeric: tabular-nums; }
+.problem-counter span { display: inline-flex; align-items: center; gap: 4px; min-width: 30px; }
+.problem-counter span[data-severity="error"] { color: var(--err); }
+.problem-counter span[data-severity="warning"] { color: var(--warn); }
+.problem-counter span[data-none], .problem-counter span[data-none] .problem-sign { color: var(--faint); }
+.problem-counter:disabled { opacity: 1; cursor: default; }
+.problem-counter:not(:disabled):hover { border-color: var(--muted); }
+.problem-list { max-height: 60vh; overflow: auto; padding: 4px !important; }
+.problem-list-item { width: 100%; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 8px; border: 0; border-radius: 4px; background: none; text-align: left; }
+.problem-list-item:hover { background: var(--panel2); }
+.problem-list-item[data-severity="error"] .problem-sign { color: var(--err); }
+.problem-list-item[data-severity="warning"] .problem-sign { color: var(--warn); }
+.problem-list-text { font: var(--text-data-small); color: var(--fg); overflow-wrap: anywhere; }
+.problem-list-label { font: var(--text-caption); color: var(--faint); white-space: nowrap; }
+.ds-name-field { min-width: 0; }
+/* (the header of the data, in the room of the viewer) */
+.ds-header-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--text-data-small); color: var(--faint); }
+.ds-header-cards { flex: 1; min-height: 0; margin: 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: var(--fg2); font: var(--text-data-small); white-space: pre; }
+.ov-problems { white-space: nowrap; }
+.ov-problems span { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; font: var(--text-data-small); }
+.ov-problems span[data-severity="error"] { color: var(--err); }
+.ov-problems span[data-severity="warning"] { color: var(--warn); }
+.copy-config { min-width: 104px; }
+.ds-unit-input { width: 100%; height: 30px; padding: 0 9px; border-radius: 7px; text-align: left; }

@@ -390,7 +390,8 @@ def test_datasets_read_ambiguous_velocities_by_their_convention(tmp_path):
     # A cube of MIRIAD (e.g. of LVHIS): VELO-HEL without VELREF
     header = fits.Header(dict(
         CTYPE1='RA---SIN', CDELT1=-1 / 3600, CTYPE2='DEC--SIN',
-        CDELT2=1 / 3600, CTYPE3='VELO-HEL', CRVAL3=1e6, CDELT3=1e4,
+        CDELT2=1 / 3600, CRVAL1=150.0, CRPIX1=4.0, CRVAL2=2.0, CRPIX2=3.0,
+        CTYPE3='VELO-HEL', CRVAL3=1e6, CDELT3=1e4,
         CRPIX3=1, CUNIT3='m/s'))
     fits.writeto(
         tmp_path / 'cube.fits', np.ones((5, 6, 7), np.float32), header)
@@ -408,7 +409,8 @@ def test_a_convention_other_than_that_of_the_data_warns(tmp_path, caplog):
     # by mistake would put the lines 3.4% off at 5000 km/s)
     header = fits.Header(dict(
         CTYPE1='RA---SIN', CDELT1=-1 / 3600, CTYPE2='DEC--SIN',
-        CDELT2=1 / 3600, CTYPE3='VRAD', CRVAL3=5e6, CDELT3=1e4,
+        CDELT2=1 / 3600, CRVAL1=150.0, CRPIX1=4.0, CRVAL2=2.0, CRPIX2=3.0,
+        CTYPE3='VRAD', CRVAL3=5e6, CDELT3=1e4,
         CRPIX3=1, CUNIT3='m/s'))
     fits.writeto(
         tmp_path / 'cube.fits', np.ones((5, 6, 7), np.float32), header)
@@ -435,7 +437,8 @@ def test_relabelled_velocities_keep_the_line_of_their_rest(
     stated = 'radio' if 'RESTFRQ' in rest else 'optical'
     header = fits.Header(dict(
         CTYPE1='RA---SIN', CDELT1=-1 / 3600, CTYPE2='DEC--SIN',
-        CDELT2=1 / 3600, CTYPE3=dict(radio='VRAD', optical='VOPT')[stated],
+        CDELT2=1 / 3600, CRVAL1=150.0, CRPIX1=4.0, CRVAL2=2.0, CRPIX2=3.0,
+        CTYPE3=dict(radio='VRAD', optical='VOPT')[stated],
         CRVAL3=5e6, CDELT3=1e4, CRPIX3=1, CUNIT3='m/s') | rest)
     fits.writeto(
         tmp_path / 'cube.fits', np.ones((5, 6, 7), np.float32), header)
@@ -603,7 +606,7 @@ def test_data_have_the_unit_and_beam_of_their_header(tmp_path):
     assert given.unit() == u.K * u.km / u.s and given.beam().bmin == 8
     fits.writeto(tmp_path / 'odd.fits', np.ones((8, 20)),
                  fits.Header(dict(BUNIT='counts per banana')))
-    with pytest.raises(ValueError, match="'counts per banana' is not a"):
+    with pytest.raises(ValueError, match="'counts per banana' invalid"):
         Data.from_files(str(tmp_path / 'odd.fits'))
     assert Data.from_files(
         str(tmp_path / 'odd.fits'), unit='ct')[0].unit() == u.ct
@@ -621,7 +624,7 @@ def test_data_of_a_bunit_that_is_not_a_unit_need_a_unit(tmp_path):
     header = fits.Header(dict(BUNIT='counts per banana'))
     for name in ('moment0', 'moment1'):
         fits.writeto(tmp_path / f'{name}.fits', np.ones((8, 20)), header)
-        with pytest.raises(ValueError, match="'counts per banana' is not a"):
+        with pytest.raises(ValueError, match="'counts per banana' invalid"):
             dataset_parser.load(dict(
                 type='pixel_moments',
                 **{name: dict(data=str(tmp_path / f'{name}.fits'))}))

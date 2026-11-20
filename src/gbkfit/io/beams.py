@@ -16,7 +16,7 @@ import astropy.units
 import astropy.wcs
 import numpy as np
 
-from gbkfit.config import DataFile, split_data_file
+from gbkfit.config import DataFile, InputError, split_data_file
 from .formats import _read_channel_beams, read_header
 from .orientation import Orientation
 
@@ -112,7 +112,7 @@ def casa_beam_table(file: DataFile) -> astropy.table.QTable:
     filename = split_data_file(file)[0]
     table = _read_channel_beams(filename, read_header(file))
     if table is None:
-        raise ValueError(
+        raise InputError(
             f"{filename}: the file has no table of the beams of the "
             f"channels of its cube (BEAMS, of CASA)")
     return table
@@ -145,14 +145,14 @@ def _oriented_beam(
     if axis < 0:
         # (a spectral axis of one channel, left out: the beam of it)
         if len(beam.bmaj) != 1:
-            raise ValueError(
+            raise InputError(
                 f"{filename}: the cube has 1 channel, but its table BEAMS "
                 f"has beams for {len(beam.bmaj)}")
         return Beam(
             float(beam.bmaj[0]), float(beam.bmin[0]), float(beam.bpa[0]))
     nchannels = int(model[f'NAXIS{axis + 1}'])
     if len(beam.bmaj) != nchannels:
-        raise ValueError(
+        raise InputError(
             f"{filename}: the cube has {nchannels} channels, but its table "
             f"BEAMS has beams for {len(beam.bmaj)}")
     if axis not in orientation.flips:

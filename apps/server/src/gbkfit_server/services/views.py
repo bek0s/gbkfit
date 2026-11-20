@@ -76,12 +76,14 @@ class Reading:
     convention of velocities its header leaves ambiguous ('radio' or
     'optical'), as the type given of an axis whose type FITS does not
     define, or that has none, and in the unit given of an axis whose
-    header gives none or one that is not valid.
+    header gives none or one that is not valid; and the unit of its
+    values, which replaces that of its header (BUNIT).
     """
     rest: str | None = None
     velocity: str | None = None
     spectral_type: str | None = None
     spectral_unit: str | None = None
+    unit: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)

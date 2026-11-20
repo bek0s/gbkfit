@@ -20,22 +20,28 @@ import {
 } from './model';
 
 // A draft with the arrays of the files of its items, as the server
-// describes them, and how the spectral axis of their cube is read (by
-// those descriptions and by the views of the cube): of the convention of
-// velocities given, and of a cube, the type and the unit of its axis and
-// its rest (as it is typed: once it has stood a while, not at each key,
-// which would read the files again at each)
+// describes them, and how the data of its first item are read (by those
+// descriptions and by the views of its cube): the convention of
+// velocities given, of a cube the type and the unit of its axis and its
+// rest, and the unit of its values given (each as it is typed: once it has
+// stood a while, not at each key, which would read the files again at
+// each). The data of each item are described with the unit given of them.
 export function useResolved(kind: Kind, draft: Draft): Resolved {
   const items = Object.values(draft.items);
   const paths = items.flatMap((item) => Object.values(item.files).map((file) => file.file));
   const cube = kind === 'cube';
   const [rest] = useDebouncedValue(cube ? restOf(draft.spectral) : null, TYPED_MS);
+  const [units] = useDebouncedValue(JSON.stringify(items.map((item) => [item.files.data?.file ?? null, item.unit.trim() || null])), TYPED_MS);
   const { convention, type, axisUnit } = draft.spectral;
-  const reading = useMemo<Reading>(
-    () => ({ rest, velocity: convention, type: cube ? type : null, unit: cube ? axisUnit || null : null }),
+  const base = useMemo<Reading>(
+    () => ({ rest, velocity: convention, type: cube ? type : null, spectralUnit: cube ? axisUnit || null : null, dataUnit: null }),
     [rest, convention, cube, type, axisUnit],
   );
-  const describe = useDescriptions(paths, reading);
+  const unitOf = useMemo(() => new Map(JSON.parse(units) as [string | null, string | null][]), [units]);
+  const readingOf = (path: string): Reading => ({ ...base, dataUnit: unitOf.get(path) ?? null });
+  const first = items[0]?.files.data?.file;
+  const reading = useMemo<Reading>(() => ({ ...base, dataUnit: first ? (unitOf.get(first) ?? null) : null }), [base, first, unitOf]);
+  const describe = useDescriptions(paths, readingOf);
   const arrays = Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, KINDS[kind].ndim)]));
   return { kind, draft, arrays, reading };
 }

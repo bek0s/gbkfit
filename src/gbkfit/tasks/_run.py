@@ -11,8 +11,7 @@ import sys
 from collections.abc import Generator, Mapping
 from typing import Any
 
-from gbkfit.config import (
-    ConfigError, error_location, format_location, strict_mode)
+from gbkfit.config import format_location, strict_mode, user_problems
 
 
 __all__ = [
@@ -75,20 +74,25 @@ def run(task: str, options: Mapping[str, Any], lenient: bool = False) -> None:
 def exit_on_user_errors(verbose: bool) -> Generator[None]:
     """
     In the block, end the program (status 1) at an error that a user
-    fixes, logged without a traceback (with one if verbose): of a
-    configuration (ConfigError), or of files and folders (OSError, e.g.
-    one not found, or an output directory that exists), with the path in
-    the configuration that it happened in, if any (see config_path).
+    fixes, logged without a traceback (with one if verbose), one line per
+    problem with the path in the configuration of the option that fixes
+    it, if any: of a configuration (ConfigError), of what it is given
+    (InputError, e.g. a header of a file of data), of files and folders
+    (OSError, e.g. one not found, or an output directory that exists),
+    or several of them together (see user_problems).
     """
     try:
         yield
-    # Only these are certainly mistakes of the user; any other error (e.g.
-    # a ValueError of a constructor) may be a bug, so it keeps its
-    # traceback, which ends with its path in the configuration
-    except (ConfigError, OSError) as e:
-        if verbose:
+    # Only these are certainly mistakes of the user; any other error may
+    # be a bug, so it keeps its traceback, which ends with its path in the
+    # configuration
+    except Exception as e:
+        problems = user_problems(e)
+        if problems is None or verbose:
             raise
-        where = '' if isinstance(e, ConfigError) \
-            else format_location(*error_location(e))
-        _log.error(f"error: {where}: {e}" if where else f"error: {e}")
+        for problem in problems:
+            where = format_location(problem.path)
+            _log.error(
+                f"error: {where}: {problem.message}" if where
+                else f"error: {problem.message}")
         sys.exit(1)

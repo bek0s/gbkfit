@@ -40,7 +40,7 @@ export function PrepareForm({
   const slots = presentSlots(kind, draft);
   const ranges = useMapRanges(resolved);
   const first = slots.map((slot) => arrays[slot.key]?.found.data).find((data) => data !== undefined);
-  if (first === undefined) return <p className="note">The edits show once the data are read.</p>;
+  if (first === undefined) return <p className="note">—</p>;
   const [nx, ny, nz] = kept(first);
   const set = (changed: Partial<Edits>) => onEdits({ ...edits, ...changed });
   const setValues = (key: string, changed: Partial<ValueEdits>) =>
@@ -159,12 +159,6 @@ export function PrepareForm({
             </span>
             <NumberField value={own.sigma} placeholder="none" label={`Outliers of ${slot.title} beyond`} onChange={(sigma) => setValues(slot.key, { sigma })} />
             <span className="ds-unit">σ</span>
-            {kind === 'cube' && own.sigma.trim() !== '' && (
-              <p className="ds-warn ds-edit-wide">
-                Sigma clipping leaves out the values far from the mean of them all: in a cube of a line, its emission too. It is for images with bad
-                pixels.
-              </p>
-            )}
           </div>
         );
       })}

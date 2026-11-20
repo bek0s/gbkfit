@@ -4,18 +4,19 @@
 // prep makes (Prepare), what GBKFIT reads from its header, and, for one of
 // the project, how it was made.
 //
-// A new dataset (or one edited) is added once nothing it needs is
-// missing; the head says what is, and leads to it. Without edits, the
-// dataset reads its files as they are; with edits, of copies that prep
-// writes into the project (the originals stay). Prepare can preview the
-// copies first, to look at them beside the originals; adding keeps the
-// preview, if it is of the edits as they are.
+// A new dataset (or one edited) is added once it has no error; the
+// counter in the head counts the errors and warnings and leads to the
+// field of each (see components/Problems). Without edits, the dataset
+// reads its files as they are; with edits, of copies that prep writes into
+// the project (the originals stay). Prepare can preview the copies first;
+// adding keeps the preview, if it is of the edits as they are.
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCreateBlock, useDeleteData, useDescriptions, useKeepJob, usePiece, usePreparation, useProject, useUpdateBlock } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
 import { Button } from '../../components/ui/basics';
-import { Dock, DockSection, NeedsNote as DockNeeds } from '../../components/ui/dock';
+import { ProblemCounter, ProblemField, ProblemsProvider, type Problem } from '../../components/Problems';
+import { Dock, DockSection } from '../../components/ui/dock';
 import { Segments } from '../../components/ui/inputs';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
@@ -34,8 +35,8 @@ import {
   hasEdits,
   kept,
   KINDS,
+  isReading,
   kindOfType,
-  needsOf,
   needsPrep,
   newDraft,
   NO_EDITS,
@@ -43,28 +44,26 @@ import {
   presentSlots,
   preparedOptions,
   prepRequest,
+  problemsOf,
   suggestName,
   type Draft,
   type Kind,
-  type Need,
-  type Place,
   type Prepared,
   type Preparation,
   type PrepRequest,
   type Resolved,
 } from './model';
 import { PrepareForm } from './Prepare';
+import { CopyConfig } from './CopyConfig';
 import { hasSpectralChoices, SpectralFields } from './Spectral';
 import { DatasetViewer, type Selection } from './Viewer';
 import { SheetLayout } from '../../components/ui/sheet';
 
-// The element of the page where the user gives what a place needs
-const PLACES: Record<Place, string> = {
-  name: 'ds-name',
-  files: 'ds-files',
-  spectral: 'ds-spectral',
-  prepare: 'ds-prepare',
-};
+const hasErrors = (problems: readonly Problem[]) => problems.some((problem) => problem.severity === 'error');
+
+// A failure of the screen itself (e.g. writing the dataset), as a problem
+// of no field
+const failure = (message: string | null): Problem[] => (message ? [{ severity: 'error', path: [], message }] : []);
 
 const NO_SELECTION: Selection = { region: null, band: null };
 
@@ -95,39 +94,43 @@ export function NewDataset({ kind }: { kind: Kind }) {
     setUnsaved(false);
     go({ kind: 'block', folder: 'datasets', name: trimmed });
   });
-  const nameNeed: Need[] =
-    trimmed === '' ? [{ place: 'name', text: 'Name the dataset' }] : taken.includes(trimmed) ? [{ place: 'name', text: 'The project has a dataset of that name' }] : [];
-  const needs = [...editor.needs, ...nameNeed];
+  const nameProblems: Problem[] =
+    trimmed === '' ? [{ severity: 'error', path: ['name'], message: 'name missing' }] : taken.includes(trimmed) ? [{ severity: 'error', path: ['name'], message: `name '${trimmed}' taken` }] : [];
+  const problems = [...editor.problems, ...nameProblems, ...failure(commit.error)];
   useUnsaved(firstFile !== undefined || named);
   if (project === null) return null;
   return (
-    <section className="screen ds-screen">
-      <ScreenHead
-        up="data"
-        tags={[`New ${KINDS[kind].title.toLowerCase()}`]}
-        title={
-          <input
-            id={PLACES.name}
-            className="name-input"
-            value={name}
-            placeholder="Name of the dataset"
-            aria-label="Name of the dataset"
-            onChange={(event) => {
-              setName(event.target.value);
-              setNamed(true);
-            }}
-          />
-        }
-      >
-        {commit.phase ? <span className="note">{commit.phase}</span> : <NeedsNote needs={needs} />}
-        <Button onClick={() => go({ kind: 'home' })}>Cancel</Button>
-        <Button kind="primary" disabled={needs.length > 0 || commit.busy} title={needs.map((need) => need.text).join('\n') || undefined} onClick={commit.commit}>
-          Add to the project
-        </Button>
-      </ScreenHead>
-      {commit.error && <pre className="error screen-error">{commit.error}</pre>}
-      <EditorBody project={root} editor={editor} />
-    </section>
+    <ProblemsProvider problems={problems}>
+      <section className="screen ds-screen">
+        <ScreenHead
+          up="data"
+          tags={[`New ${KINDS[kind].title.toLowerCase()}`]}
+          title={
+            <ProblemField path={['name']} label="Name" className="ds-name-field">
+              <input
+                className="name-input"
+                value={name}
+                placeholder="Name of the dataset"
+                aria-label="Name of the dataset"
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setNamed(true);
+                }}
+              />
+            </ProblemField>
+          }
+        >
+          {commit.phase && <span className="note">{commit.phase}</span>}
+          <ProblemCounter />
+          <CopyConfig options={editor.options} />
+          <Button onClick={() => go({ kind: 'home' })}>Cancel</Button>
+          <Button kind="primary" disabled={hasErrors(problems) || editor.reading || commit.busy} onClick={commit.commit}>
+            Add to the project
+          </Button>
+        </ScreenHead>
+        <EditorBody project={root} editor={editor} />
+      </section>
+    </ProblemsProvider>
   );
 }
 
@@ -152,7 +155,7 @@ export function Dataset({ name }: { name: string }) {
   const [selection, setSelection] = useState(NO_SELECTION);
   if (project === null) return null;
   if (editing && kind && options) {
-    return <EditDataset name={name} kind={kind} dataset={options} record={record} initial={editing} onDone={() => setEditing(null)} />;
+    return <EditDataset name={name} kind={kind} record={record} initial={editing} onDone={() => setEditing(null)} />;
   }
   // (edited from the originals and the edits that made it, if its files
   // were prepared and the originals are there; or else from its files)
@@ -161,14 +164,20 @@ export function Dataset({ name }: { name: string }) {
     const canRedo = record !== null && originals.every((path) => !describeOriginals(path).error);
     setEditing(canRedo ? draftOfPreparation(kind, options, record, root) : draft);
   };
+  const problems = [
+    ...(kind && options ? problemsOf(resolved) : []),
+    ...failure(piece.error?.message ?? null),
+    ...failure(options && !kind ? `type '${String(options.type)}' has no screen` : null),
+  ];
   return (
+    <ProblemsProvider problems={problems}>
     <section className="screen ds-screen">
       <ScreenHead up="data" title={head.title} tags={kind ? [KINDS[kind].title] : []}>
+        <ProblemCounter />
+        {options && <CopyConfig options={options} />}
         {kind && <Button onClick={startEditing}>Edit</Button>}
         {head.menu}
       </ScreenHead>
-      {piece.error && <p className="error screen-error">{piece.error.message}</p>}
-      {options && !kind && <p className="note screen-error">Datasets of the type {String(options.type)} have no screen yet.</p>}
       {kind && options && (
         <SheetLayout
           className="ds-body"
@@ -183,11 +192,11 @@ export function Dataset({ name }: { name: string }) {
               <DockSection id="ds-made" title="Made from">
                 {preparation.isLoading ? <p className="note">…</p> : <MadeFrom project={root} kind={kind} dataset={options} record={record} />}
               </DockSection>
-              <DockSection id={PLACES.files} title="Files">
+              <DockSection id="ds-files" title="Files">
                 <Files project={root} resolved={resolved} />
               </DockSection>
               {hasSpectralChoices(resolved) && (
-                <DockSection id={PLACES.spectral} title="Spectral axis">
+                <DockSection id="ds-spectral" title="Spectral axis">
                   <SpectralFields resolved={resolved} />
                 </DockSection>
               )}
@@ -196,6 +205,7 @@ export function Dataset({ name }: { name: string }) {
         />
       )}
     </section>
+    </ProblemsProvider>
   );
 }
 
@@ -204,14 +214,12 @@ export function Dataset({ name }: { name: string }) {
 function EditDataset({
   name,
   kind,
-  dataset,
   record,
   initial,
   onDone,
 }: {
   name: string;
   kind: Kind;
-  dataset: Record<string, unknown>;
   record: Preparation | null;
   initial: Draft;
   onDone: () => void;
@@ -236,19 +244,22 @@ function EditDataset({
   });
   const dirty = JSON.stringify(editor.state.draft) !== JSON.stringify(initial);
   useUnsaved(dirty);
-  const needs = editor.needs;
+  const problems = [...editor.problems, ...failure(commit.error)];
   return (
-    <section className="screen ds-screen">
-      <ScreenHead up="data" title={name} tags={[KINDS[kind].title, 'Editing']}>
-        {commit.phase ? <span className="note">{commit.phase}</span> : <NeedsNote needs={needs} />}
-        <Button onClick={onDone}>Cancel</Button>
-        <Button kind="primary" disabled={needs.length > 0 || commit.busy || !dirty} title={needs.map((need) => need.text).join('\n') || undefined} onClick={commit.commit}>
-          Save
-        </Button>
-      </ScreenHead>
-      {commit.error && <pre className="error screen-error">{commit.error}</pre>}
-      <EditorBody project={root} editor={editor} dataset={dataset} />
-    </section>
+    <ProblemsProvider problems={problems}>
+      <section className="screen ds-screen">
+        <ScreenHead up="data" title={name} tags={[KINDS[kind].title, 'Editing']}>
+          {commit.phase && <span className="note">{commit.phase}</span>}
+          <ProblemCounter />
+          <CopyConfig options={editor.options} />
+          <Button onClick={onDone}>Cancel</Button>
+          <Button kind="primary" disabled={hasErrors(problems) || editor.reading || commit.busy || !dirty} onClick={commit.commit}>
+            Save
+          </Button>
+        </ScreenHead>
+        <EditorBody project={root} editor={editor} />
+      </section>
+    </ProblemsProvider>
   );
 }
 
@@ -261,7 +272,11 @@ interface Editor {
   kind: Kind;
   state: DraftState;
   resolved: Resolved;
-  needs: Need[];
+  // The problems of the draft (see problemsOf), those of its preview with
+  // them; whether it waits for a header; its options as a dataset
+  problems: Problem[];
+  reading: boolean;
+  options: Record<string, unknown>;
   // The job of prep of the draft (null: it needs none, or it needs
   // something first)
   request: PrepRequest | null;
@@ -274,8 +289,9 @@ interface Editor {
 function useEditor(project: string, kind: Kind, initial: Draft): Editor {
   const state = useDraftState(initial);
   const resolved = useResolved(kind, state.draft);
-  const needs = needsOf(resolved);
-  const request = needs.length === 0 && needsPrep(resolved) ? prepRequest(resolved, project) : null;
+  const own = problemsOf(resolved);
+  const reading = isReading(resolved);
+  const request = !hasErrors(own) && !reading && needsPrep(resolved) ? prepRequest(resolved, project) : null;
   const preview = usePrepJob(dataKey(state.draft.items));
   const files = preview.job?.state === 'complete' && preview.job.preview ? (preview.job.files as Prepared | null) : null;
   const prepared = useResolved(kind, files ? draftOfPrepared(kind, state.draft, files) : NOTHING);
@@ -290,7 +306,10 @@ function useEditor(project: string, kind: Kind, initial: Draft): Editor {
             ? 'ready'
             : 'stale'
           : 'none';
-  return { kind, state, resolved, needs, request, preview, previewStatus, prepared: files ? prepared : null };
+  const previewProblems: Problem[] =
+    previewStatus === 'failed' && preview.error ? preview.error.split('\n').filter((line) => line.trim()).map((message) => ({ severity: 'error', path: ['prepare'], message })) : [];
+  const options = datasetOptions(resolved, project);
+  return { kind, state, resolved, problems: [...own, ...previewProblems], reading, options, request, preview, previewStatus, prepared: files ? prepared : null };
 }
 
 // Adds (or saves) the dataset of an editor: of its files as they are, or
@@ -342,8 +361,8 @@ function useCommit(project: string, editor: Editor, write: (content: Record<stri
   };
 }
 
-function EditorBody({ project, editor, dataset }: { project: string; editor: Editor; dataset?: Record<string, unknown> }) {
-  const { kind, state, resolved, needs, prepared, previewStatus } = editor;
+function EditorBody({ project, editor }: { project: string; editor: Editor }) {
+  const { kind, state, resolved, prepared, previewStatus } = editor;
   const { draft } = state;
   const [showing, setShowing] = useState<'original' | 'prepared'>('original');
   // (a selection of each view, of the data it was made on: their pixels
@@ -358,7 +377,6 @@ function EditorBody({ project, editor, dataset }: { project: string; editor: Edi
   useEffect(() => {
     if (hasPreview) setShowing('prepared');
   }, [previewId, hasPreview]);
-  const places = new Set(needs.map((need) => need.place));
   const first = firstArray(resolved);
   const view = showing === 'prepared' && prepared ? 'prepared' : 'original';
   const shown = view === 'prepared' && prepared ? prepared : resolved;
@@ -404,7 +422,7 @@ function EditorBody({ project, editor, dataset }: { project: string; editor: Edi
       }
       sheet={
         <Dock label="The dataset">
-          <DockSection id={PLACES.files} title="Files" needed={places.has('files')}>
+          <DockSection id="ds-files" title="Files">
             <Files
               project={project}
               resolved={resolved}
@@ -414,16 +432,15 @@ function EditorBody({ project, editor, dataset }: { project: string; editor: Edi
             />
           </DockSection>
           {hasSpectralChoices(resolved) && (
-            <DockSection id={PLACES.spectral} title="Spectral axis" needed={places.has('spectral')}>
+            <DockSection id="ds-spectral" title="Spectral axis">
               <SpectralFields resolved={resolved} onChange={state.setSpectral} />
             </DockSection>
           )}
           {first && kept(first).length === KINDS[kind].ndim && (
             <DockSection
-              id={PLACES.prepare}
+              id="ds-prepare"
               title="Prepare"
-              note={hasEdits(draft.edits, keys) ? 'makes edited copies' : 'optional'}
-              needed={places.has('prepare')}
+              note={hasEdits(draft.edits, keys) ? 'edited copies' : 'optional'}
               actions={
                 hasEdits(draft.edits, keys) && (
                   <Button kind="small" onClick={() => state.setEdits(NO_EDITS)}>
@@ -432,11 +449,12 @@ function EditorBody({ project, editor, dataset }: { project: string; editor: Edi
                 )
               }
             >
-              <PrepareForm resolved={resolved} onEdits={state.setEdits} onCropToSelection={cropToSelection} />
-              <PreviewBar editor={editor} onShow={() => setShowing('prepared')} />
+              <ProblemField path={['prepare']} label="Prepare">
+                <PrepareForm resolved={resolved} onEdits={state.setEdits} onCropToSelection={cropToSelection} />
+                <PreviewBar editor={editor} onShow={() => setShowing('prepared')} />
+              </ProblemField>
             </DockSection>
           )}
-          {dataset && <p className="ds-dock-note">Saving prepares new copies from the originals; the copies of the last preparation that are no longer used go.</p>}
         </Dock>
       }
     />
@@ -447,21 +465,18 @@ function EditorBody({ project, editor, dataset }: { project: string; editor: Edi
 function PreviewBar({ editor, onShow }: { editor: Editor; onShow: () => void }) {
   const { request, previewStatus, preview } = editor;
   const keys = presentSlots(editor.kind, editor.state.draft).map((slot) => slot.key);
-  if (!hasEdits(editor.state.draft.edits, keys)) {
-    return <p className="ds-preview-note">Without edits, the dataset reads the files as they are.</p>;
-  }
+  if (!hasEdits(editor.state.draft.edits, keys)) return null;
   const status: Record<PreviewStatus, string> = {
-    none: 'Adding writes edited copies into the project; the originals stay.',
-    running: 'Preparing a preview…',
-    ready: 'The preview is of these edits: adding keeps it.',
-    stale: 'The edits changed since the preview.',
-    failed: 'The preview failed:',
-    gone: 'The preview was removed (newer ones were made).',
+    none: '',
+    running: 'Preparing…',
+    ready: 'Preview of these edits',
+    stale: 'Preview of earlier edits',
+    failed: 'Preview failed',
+    gone: 'Preview removed',
   };
   return (
     <div className="ds-preview">
-      <p className="ds-preview-note">{status[previewStatus]}</p>
-      {previewStatus === 'failed' && preview.error && <pre className="error">{preview.error}</pre>}
+      <span className="ds-preview-note">{status[previewStatus]}</span>
       <div className="ds-preview-actions">
         {previewStatus === 'ready' ? (
           <Button kind="small" onClick={onShow}>
@@ -471,7 +486,6 @@ function PreviewBar({ editor, onShow }: { editor: Editor; onShow: () => void }) 
           <Button
             kind="small"
             disabled={request === null || previewStatus === 'running'}
-            title={request === null ? 'The dataset needs something first (see the head of the screen)' : 'Prepare the copies, to look at them before adding'}
             onClick={() => request && preview.start(request, true)}
           >
             {previewStatus === 'stale' || previewStatus === 'gone' ? 'Preview again' : 'Preview'}
@@ -480,11 +494,6 @@ function PreviewBar({ editor, onShow }: { editor: Editor; onShow: () => void }) 
       </div>
     </div>
   );
-}
-
-// What the dataset needs, leading to where it is given
-function NeedsNote({ needs }: { needs: Need[] }) {
-  return <DockNeeds needs={needs.map((need) => ({ text: need.text, at: PLACES[need.place] }))} />;
 }
 
 // The data of the first item of a draft, once described

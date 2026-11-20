@@ -6,21 +6,24 @@ a dataset of it.
 """
 
 import dataclasses
+from collections.abc import Collection
 from typing import Any
 
 import astropy.io.fits
 import astropy.units
 
 import gbkfit.units
-from gbkfit.config import ConfigProblem
+from gbkfit.config import ConfigProblem, InputError
 from gbkfit.grid import Coords
 from .beams import Beam, header_beam
 from .coords import coords_from_header
+from .formats.fits import open_fits
 from .headers import (
-    header_shape, header_unit, ignoring_wcs_fixes, parse_wcs)
+    data_unit, header_shape, header_unit, ignoring_wcs_fixes, parse_wcs)
 from .orientation import model_axis_order, model_header
-from .spectral import (
-    _missing_unit, _statement_errors, velocity_is_ambiguous)
+from .references import _spectral_axis
+from .spectral import _missing_unit, velocity_is_ambiguous
+from .statements import blocks_reading, statement_errors
 
 
 __all__ = [
@@ -63,13 +66,15 @@ class HDUDescription:
         The unit of each axis as the header writes it (CUNIT, e.g. 'deg'
         or 'KMS', which is not one; '' if none), in the order of shape.
     unit : str or None
-        The unit of its values, as the header writes it (BUNIT).
+        The unit of its values: as given (see describe_fits), or else as
+        the header writes it (BUNIT).
     beam : Beam or None
         Its beam (see header_beam).
     coords : Coords or None
         The world coordinates of its data in the model (see
-        read_data); None if they cannot be read, or if its
-        velocities are ambiguous and their convention is not given.
+        read_data); None if they cannot be read, or not without what is
+        not stated (e.g. the convention of ambiguous velocities, or a
+        missing CRPIXn; see blocks_reading).
     rms : float or None
         The noise of its values that the header states (keyword RMS or
         NOISE, in the unit of the values; e.g. that of the cubes of
@@ -83,9 +88,10 @@ class HDUDescription:
         may not be meant (warnings: e.g. a spectral axis without a unit,
         read in SI units), each at the option of the dataset that fixes it
         (e.g. ['spectral', 'unit']; [] if none), with its message (without
-        the name of the file): one at a time of the spectral axis, the
-        first that reading it finds; described again with the option, the
-        next.
+        the name of the file): of every check that does not wait for
+        another together; of those that wait (e.g. the rest of an axis of
+        frequencies, for the convention of its velocities), when it is
+        stated.
     error_kind : str or None
         What its values are, as errors, if its header states it (HDUCLAS2
         = 'ERROR', and HDUCLAS3 'RMSE', 'MSE' or 'INVMSE'): 'sigma'
@@ -109,7 +115,9 @@ class HDUDescription:
 def describe_fits(
         filename: str, velocity: str | None = None, rest: Any = None,
         spectral_type: str | None = None,
-        spectral_unit: str | None = None
+        spectral_unit: str | None = None,
+        unit: str | None = None,
+        stated: Collection[str] = ()
 ) -> list[HDUDescription]:
     """
     Describe the HDUs of a FITS file that hold an array (e.g. data, their
@@ -134,6 +142,13 @@ def describe_fits(
         The unit of a spectral axis whose header gives none or one that
         is not valid (see SpectralAxis, option unit); it is not used for
         others.
+    unit : str, optional
+        The unit of the values, which replaces that of the headers
+        (BUNIT; see data_unit).
+    stated : Collection of str, optional
+        The options of the grid of a dataset that it states (e.g. 'step',
+        'rpix' or 'spectral.rval'): the steps and references that headers
+        need not have (see reference_errors).
 
     Returns
     -------
@@ -149,16 +164,17 @@ def describe_fits(
     # (the file is read once: its headers are described as they are read,
     # each of its HDUs then in memory; a compressed file is read from its
     # start each time it is opened)
-    with astropy.io.fits.open(filename) as hdus:
+    with open_fits(filename) as hdus:
         headers = [
             (index, hdu.name, hdu.header.copy())
             for index, hdu in enumerate(hdus)
             if hdu.is_image and hdu.header.get('NAXIS', 0) > 0]
         beams = 'BEAMS' in hdus
+    reading = dict(
+        rest=rest, velocity=velocity, spectral_type=spectral_type,
+        spectral_unit=spectral_unit)
     return [
-        _describe(
-            filename, *header, velocity, rest, spectral_type, spectral_unit,
-            beams)
+        _describe(filename, *header, reading, unit, stated, beams)
         for header in headers]
 
 
@@ -167,81 +183,90 @@ def _describe(
         index: int,
         name: str,
         header: astropy.io.fits.Header,
-        velocity: str | None,
-        rest: Any,
-        spectral_type: str | None,
-        spectral_unit: str | None,
+        reading: dict[str, Any],
+        unit: str | None,
+        stated: Collection[str],
         beams: bool
 ) -> HDUDescription:
     """
     Return the description of an HDU of a FITS file with an array, from
     its header (and the table of the beams of the file, if it has one:
-    beams): its world coordinates as read_data reads them, and its unit
-    and beam as header_unit and header_beam do.
+    beams): its world coordinates as read_data reads them, of what is
+    stated of its spectral axis (reading: the rest, velocity,
+    spectral_type and spectral_unit of model_header), and its unit and
+    beam as data_unit and header_beam do.
+
+    Its problems are those of every check that does not wait for another
+    (see statement_errors): each check waits only for what it needs. The
+    world coordinates wait for what they need stated (see
+    blocks_reading); those of the axes but the spectral one (e.g. of the
+    sky) are read without what it needs too (see _sky_errors).
     """
     problems: list[ConfigProblem] = []
 
-    def problem(error: ValueError) -> None:
-        # (at the option of the error, if any; of this file, unnamed)
-        message = str(error).removeprefix(f"{filename}: ")
-        path = list(getattr(error, 'config_path', []))
-        problems.append(ConfigProblem('error', path, message))
+    def problem(error: ValueError, severity: str = 'error') -> None:
+        # (at the option of the error, if any; of this file, unnamed; once)
+        found = ConfigProblem(
+            severity, list(getattr(error, 'config_path', [])),
+            str(error).removeprefix(f"{filename}: "))
+        if found not in problems:
+            problems.append(found)
 
     order = _model_order(filename, header)
+    file_shape = header_shape(header)
     # (world axes beyond those of the array are of length 1, see
     # model_header)
-    sizes = header_shape(header)[::-1]
+    sizes = file_shape[::-1]
     sizes += (1,) * (len(order) - len(sizes))
     shape = tuple(sizes[axis] for axis in order)
     axes = tuple(
         str(header.get(f'CTYPE{axis + 1}', '')).strip() for axis in order)
     axis_units = tuple(
         str(header.get(f'CUNIT{axis + 1}', '')).strip() for axis in order)
-    ambiguous = velocity_is_ambiguous(header)
-    coords = None
-    # (what the spectral axis needs stated, together; once it is, what
-    # reading it finds)
-    stated = _statement_errors(
-        filename, header, header_shape(header), spectral_type, velocity,
-        spectral_unit)
-    for error in stated:
+    errors = statement_errors(
+        filename, header, file_shape, **reading, unit=unit, stated=stated)
+    for error in errors:
         problem(error)
-    if not stated:
+    coords = None
+    if not any(map(blocks_reading, errors)):
         try:
             model, _ = model_header(
-                filename, header, header_shape(header), rest, velocity,
-                spectral_type, spectral_unit)
+                filename, header, file_shape, **reading)
             coords = coords_from_header(filename, model)
         except ValueError as e:
             problem(e)
-    if spectral_unit is None:
+    # (of coordinates unread, those of the axes but the spectral one)
+    if coords is None and not any(
+            blocks_reading(error, sky=True) for error in errors):
+        for error in _sky_errors(filename, header, file_shape):
+            problem(error)
+    if reading['spectral_unit'] is None:
         try:
             missing = _missing_unit(
-                filename, header, header_shape(header), spectral_type)
+                filename, header, file_shape, reading['spectral_type'])
         except ValueError:
             # (of a type not given: a problem of the coords)
             missing = None
         if missing is not None:
             problems.append(ConfigProblem(
                 'warning', ['spectral', 'unit'], f"CUNIT{missing[0]} missing"))
-    unit = header_unit(header)
     beam = None
     try:
         beam = header_beam(header, filename if beams else None)
     except ValueError as e:
         problems.append(ConfigProblem(
             'error', ['beam'], str(e).removeprefix(f"{filename}: ")))
-    if unit is not None:
-        try:
-            per_beam = gbkfit.units.spatial_unit(
-                gbkfit.units.parse_unit(unit)) == astropy.units.beam
-        except ValueError:
-            problems.append(ConfigProblem(
-                'error', ['unit'], f"BUNIT {unit!r} invalid"))
-        else:
-            if per_beam and beam is None:
-                problems.append(ConfigProblem(
-                    'error', ['beam'], f"BMAJ, BMIN missing (BUNIT {unit})"))
+    try:
+        values_unit = data_unit(filename, header, unit)
+    except InputError:
+        # (a problem of the statements)
+        values_unit = None
+    if values_unit is not None and beam is None and \
+            gbkfit.units.spatial_unit(values_unit) == astropy.units.beam:
+        said = f"unit {unit}" if unit is not None \
+            else f"BUNIT {header_unit(header)}"
+        problems.append(ConfigProblem(
+            'error', ['beam'], f"BMAJ, BMIN missing ({said})"))
     rms = next(
         (float(header[key]) for key in _RMS_KEYS
          if isinstance(header.get(key), (int, float))
@@ -252,10 +277,36 @@ def _describe(
             str(header.get('HDUCLAS3', '')).strip().upper())
     return HDUDescription(
         index=index, name=name, shape=shape, axes=axes,
-        axis_units=axis_units, unit=unit,
+        axis_units=axis_units,
+        unit=unit if unit is not None else header_unit(header),
         beam=beam, coords=coords, rms=rms,
-        ambiguous_velocity=ambiguous,
+        ambiguous_velocity=velocity_is_ambiguous(header),
         problems=tuple(problems), error_kind=error_kind)
+
+
+def _sky_errors(
+        filename: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...]
+) -> list[ValueError]:
+    """
+    Return the error of the world coordinates of a header (of an array of
+    the given shape, numpy order) but those of its spectral axis, if any:
+    read as a linear axis of no unit (LINEAR), which needs nothing stated,
+    so that what the spectral axis needs does not hide the problems of
+    the others (e.g. of the sky).
+    """
+    axis = _spectral_axis(header, shape)
+    if axis is not None:
+        header = header.copy()
+        header[f'CTYPE{axis + 1}'] = 'LINEAR'
+        header.remove(f'CUNIT{axis + 1}', ignore_missing=True)
+    try:
+        model, _ = model_header(filename, header, shape)
+        coords_from_header(filename, model)
+    except ValueError as e:
+        return [e]
+    return []
 
 
 def _model_order(

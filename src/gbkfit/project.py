@@ -32,6 +32,7 @@ the configurations in a project, and of its pieces, are relative to its
 folder.
 """
 
+import io
 import os
 from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
@@ -55,6 +56,7 @@ __all__ = [
     'open',
     'piece_folder',
     'piece_sections',
+    'piece_text',
     'resolve'
 ]
 
@@ -111,6 +113,18 @@ def _yaml_out() -> ruamel.yaml.YAML:
     yaml.default_flow_style = None
     yaml.sort_base_mapping_type_on_output = False
     return yaml
+
+
+def piece_text(content: Mapping[str, Any]) -> str:
+    """
+    Return the text of a piece (or a setup) of its content (its options),
+    as a project writes it (see create_piece): YAML in block style, with
+    lists and dictionaries of plain values on one line (e.g. data: {file:
+    data/cube.fits, hdu: SCI}).
+    """
+    stream = io.StringIO()
+    _yaml_out().dump(dict(content), stream)
+    return stream.getvalue()
 
 
 def _yaml_rt() -> ruamel.yaml.YAML:
@@ -409,10 +423,7 @@ class Project:
                 f: next(iter(self.names(f)), '') for f in _FOLDERS.values()})
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
         with Path(filename).open('x') as f:
-            if content is None:
-                f.write(text)
-            else:
-                _yaml_out().dump(dict(content), f)
+            f.write(text if content is None else piece_text(content))
         return filename
 
     def update_piece(
@@ -450,8 +461,7 @@ class Project:
                 and plain_values(old) != dict(content):
             old = _yaml_rt().load(text[len(header):])
         if not isinstance(old, Mapping):
-            with Path(filename).open('w') as f:
-                _yaml_out().dump(dict(content), f)
+            Path(filename).write_text(piece_text(content))
             return filename
         for key in [key for key in old if key not in content]:
             del old[key]

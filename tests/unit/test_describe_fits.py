@@ -11,6 +11,11 @@ from gbkfit.config import ConfigProblem
 from gbkfit.io import describe_fits, read_data, unstated_spectral_axis
 
 
+# The references of the axes on the sky (CRPIXn and CRVALn), which FITS
+# gives defaults (0), and GBKFIT never takes (see reference_errors)
+REFERENCES = dict(CRVAL1=150.0, CRPIX1=1.0, CRVAL2=2.0, CRPIX2=1.0)
+
+
 def test_fits_files_are_described_from_their_headers(tmp_path):
     # A cube of radio velocities per beam, with its beam; its velocity
     # field; a table (not described); and a cube of CASA whose header
@@ -77,7 +82,7 @@ def test_an_axis_of_a_type_fits_does_not_define_is_read_as_given(
         tmp_path):
     # (as CALIFA writes its cubes: CTYPE3 = 'WAVELENGTH', which says
     # nothing of air or vacuum, or of linear or logarithmic wavelengths)
-    header = fits.Header(dict(
+    header = fits.Header(REFERENCES | dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
         CDELT2=1 / 3600, CTYPE3='WAVELENGTH', CRVAL3=6500, CDELT3=2,
         CRPIX3=1, CUNIT3='Angstrom'))
@@ -115,7 +120,7 @@ def test_a_spectral_axis_of_no_type_is_read_as_given(tmp_path):
     # refused, as nothing says what its values are (not taken as
     # velocities in km/s); of the type given, in m/s (SI, as FITS reads
     # them without a unit), or in the unit given
-    header = fits.Header(dict(
+    header = fits.Header(REFERENCES | dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CUNIT1='deg',
         CTYPE2='DEC--TAN', CDELT2=1 / 3600, CUNIT2='deg',
         CRVAL3=200.0, CDELT3=4.0, CRPIX3=1))
@@ -169,7 +174,7 @@ def test_which_axis_does_not_say_what_it_is(cards, unstated):
 
 def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
         tmp_path):
-    header = fits.Header(dict(
+    header = fits.Header(REFERENCES | dict(
         CTYPE1='RA---TAN', CDELT1=-0.2 / 3600, CTYPE2='DEC--TAN',
         CDELT2=0.2 / 3600, CTYPE3='AWAV', CRVAL3=6600, CDELT3=1.25,
         CRPIX3=1, CUNIT3='Angstrom'))
@@ -252,8 +257,10 @@ def test_independent_problems_of_a_spectral_axis_are_found_together(
     # A unit that is not one, and velocities of no convention (as MIRIAD
     # writes them): both at once, each at its option
     fits.writeto(tmp_path / 'cube.fits', np.zeros((4, 3, 2)), fits.Header(
-        dict(CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
-             CDELT2=1 / 3600, CTYPE3='VELO-HEL', CDELT3=4.0, CUNIT3='KMS')))
+        REFERENCES | dict(
+            CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+            CDELT2=1 / 3600, CTYPE3='VELO-HEL', CDELT3=4.0, CRVAL3=0.0,
+            CRPIX3=1, CUNIT3='KMS')))
     (hdu,) = describe_fits(str(tmp_path / 'cube.fits'))
     assert [(p.path, p.message) for p in hdu.problems] == [
         (['spectral', 'unit'], "CUNIT3 'KMS' invalid"),

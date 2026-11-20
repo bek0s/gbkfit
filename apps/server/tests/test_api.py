@@ -15,6 +15,7 @@ import pytest
 from astropy.io import fits
 from fastapi.testclient import TestClient
 
+import gbkfit.project
 from gbkfit_server.api import create_app, openapi
 from gbkfit_server.services import frames
 from gbkfit_server.services.errors import Invalid
@@ -26,6 +27,10 @@ from gbkfit_server.services.workspace import Workspace
 TOKEN = 'secret'
 
 CONTRACT = pathlib.Path(__file__).parents[1] / 'openapi.json'
+
+# The references of the axes on the sky (CRPIXn and CRVALn) of headers,
+# which GBKFIT never takes from FITS defaults
+SKY_REFERENCES = dict(CRVAL1=10.0, CRPIX1=1.0, CRVAL2=-30.0, CRPIX2=1.0)
 
 
 @pytest.fixture
@@ -533,6 +538,7 @@ def test_folders_are_listed_and_files_of_data_described(client, root):
         CTYPE1='RA---TAN', CRVAL1=10, CDELT1=-1 / 3600, CUNIT1='deg',
         CTYPE2='DEC--TAN', CRVAL2=-30, CDELT2=1 / 3600, CUNIT2='deg',
         CTYPE3='VRAD', CRVAL3=0, CDELT3=10000, CUNIT3='m/s',
+        CRPIX1=1, CRPIX2=1, CRPIX3=1,
         BUNIT='Jy/beam', BMAJ=3 / 3600, BMIN=2 / 3600, BPA=30, RMS=0.002))
     fits.writeto(
         pathlib.Path(root, 'study/data/cube.fits'),
@@ -574,7 +580,8 @@ def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
     header = fits.Header(dict(
         CTYPE1='RA---TAN', CDELT1=-0.2 / 3600, CUNIT1='deg',
         CTYPE2='DEC--TAN', CDELT2=0.2 / 3600, CUNIT2='deg',
-        CTYPE3='AWAV', CRVAL3=6600, CDELT3=1.25, CUNIT3='Angstrom'))
+        CTYPE3='AWAV', CRVAL3=6600, CDELT3=1.25, CUNIT3='Angstrom',
+        CRPIX3=1) | SKY_REFERENCES)
     fits.writeto(
         pathlib.Path(root, 'study/data/ifu.fits'),
         np.zeros((4, 3, 2), np.float32), header)
@@ -617,13 +624,72 @@ def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
     radio = fits.Header(dict(
         CTYPE1='RA---SIN', CDELT1=-2 / 3600, CUNIT1='deg',
         CTYPE2='DEC--SIN', CDELT2=2 / 3600, CUNIT2='deg',
-        CTYPE3='VRAD', CRVAL3=1000, CDELT3=4000, CUNIT3='m/s',
-        RESTFRQ=1.420405752e9, SPECSYS='BARYCENT'))
+        CTYPE3='VRAD', CRVAL3=1000, CDELT3=4000, CUNIT3='m/s', CRPIX3=1,
+        RESTFRQ=1.420405752e9, SPECSYS='BARYCENT') | SKY_REFERENCES)
     fits.writeto(
         pathlib.Path(root, 'study/data/radio.fits'),
         np.zeros((4, 3, 2), np.float32), radio)
     (array,) = client.get('/api/v1/describe/study/data/radio.fits').json()
     assert array['rest'] == '1.420406 GHz'
+
+
+def test_the_header_of_an_hdu_by_its_index_or_name(client, root):
+    # (by default, the first with data: here the extension after an empty
+    # primary HDU)
+    fits.HDUList([
+        fits.PrimaryHDU(), fits.ImageHDU(
+            np.zeros((2, 2), np.float32), fits.Header(dict(BUNIT='K')),
+            name='SCI')]).writeto(pathlib.Path(root, 'study/data/ext.fits'))
+
+    def cards(**params):
+        return client.get(
+            '/api/v1/header/study/data/ext.fits', params=params)
+    assert "EXTNAME = 'SCI     '" in ' '.join(cards().json()['cards'])
+    assert cards(hdu='SCI').json() == cards().json() == cards(hdu=1).json()
+    assert cards(hdu=0).json()['cards'][0].startswith('SIMPLE')
+    assert cards(hdu='ERR').status_code == 404
+    assert client.get('/api/v1/header/../outside.fits').status_code in (
+        400, 404)
+    assert client.get(
+        '/api/v1/header/study/data/%2E%2E/%2E%2E/%2E%2E/x.fits'
+    ).status_code == 400
+
+
+def test_a_stated_unit_replaces_bunit_and_the_grid_its_references(
+        client, root):
+    # (a BUNIT that is not a unit, as LVHIS writes it, and no CRPIXn)
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CRVAL1=10, CDELT1=-1 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--TAN', CRVAL2=-30, CDELT2=1 / 3600, CUNIT2='deg',
+        BUNIT='JY/BEAM', BMAJ=3 / 3600, BMIN=2 / 3600, BPA=30))
+    fits.writeto(
+        pathlib.Path(root, 'study/data/map.fits'),
+        np.zeros((3, 2), np.float32), header)
+
+    def problems(**params):
+        (array,) = client.get(
+            '/api/v1/describe/study/data/map.fits', params=params).json()
+        return [(p['path'], p['message']) for p in array['problems']]
+    assert problems() == [
+        (['rpix'], 'CRPIX1 missing'), (['rpix'], 'CRPIX2 missing'),
+        (['unit'], "BUNIT 'JY/BEAM' invalid")]
+    assert problems(unit='Jy/beam', stated=['rpix', 'rval']) == []
+    assert problems(unit='Jy/bm', stated=['rpix', 'rval']) == [
+        (['unit'], "unit 'Jy/bm' invalid")]
+
+
+def test_the_text_of_a_piece_is_that_a_project_writes(client):
+    content = dict(
+        type='pixel_moments',
+        moment0=dict(data=dict(file='data/m0.fits', hdu='SCI'), unit='K'),
+        rpix=[10.5, 12.0])
+    response = client.post('/api/v1/piece-text', json=dict(content=content))
+    assert response.status_code == 200
+    assert response.text == gbkfit.project.piece_text(content)
+    assert response.text.splitlines() == [
+        'type: pixel_moments', 'moment0:',
+        '  data: {file: data/m0.fits, hdu: SCI}', '  unit: K',
+        'rpix: [10.5, 12.0]']
 
 
 def wait(client, job):
@@ -640,7 +706,7 @@ def test_a_preview_of_prep_is_kept_and_its_preparation_recorded(
         client, root):
     header = fits.Header(dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
-        CDELT2=1 / 3600))
+        CDELT2=1 / 3600) | SKY_REFERENCES)
     folder = pathlib.Path(root, 'study/data')
     fits.writeto(
         folder / 'image.fits',
@@ -686,7 +752,7 @@ def test_a_preview_of_prep_is_kept_and_its_preparation_recorded(
 def test_previews_not_kept_are_removed_as_newer_ones_end(client, root):
     header = fits.Header(dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
-        CDELT2=1 / 3600))
+        CDELT2=1 / 3600) | SKY_REFERENCES)
     fits.writeto(
         pathlib.Path(root, 'study/data/image.fits'),
         np.ones((3, 4), np.float32), header)
@@ -959,7 +1025,8 @@ def test_the_moments_of_a_cube_of_wavelengths_are_of_a_rest(
 def test_a_job_prepares_a_cube_into_the_project(client, root):
     header = fits.Header(dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
-        CDELT2=1 / 3600, CTYPE3='VRAD', CDELT3=10000, CUNIT3='m/s'))
+        CDELT2=1 / 3600, CTYPE3='VRAD', CDELT3=10000, CUNIT3='m/s',
+        CRVAL3=0, CRPIX3=1) | SKY_REFERENCES)
     values = np.full((5, 3, 4), -1, np.float32)
     values[2] = 1
     fits.HDUList([fits.PrimaryHDU(values, header), fits.ImageHDU(
@@ -1005,7 +1072,7 @@ def test_a_job_prepares_a_cube_into_the_project(client, root):
 def test_a_job_prepares_a_flux_map_into_the_project(client, root):
     header = fits.Header(dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
-        CDELT2=1 / 3600))
+        CDELT2=1 / 3600) | SKY_REFERENCES)
     values = np.arange(12, dtype=np.float32).reshape(3, 4)
     fits.PrimaryHDU(values, header).writeto(
         pathlib.Path(root, 'study/data/image.fits'))
@@ -1031,7 +1098,7 @@ def test_a_job_prepares_a_flux_map_into_the_project(client, root):
 def test_a_job_prepares_moment_maps_with_one_mask(client, root):
     header = fits.Header(dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
-        CDELT2=1 / 3600))
+        CDELT2=1 / 3600) | SKY_REFERENCES)
     flux = np.ones((4, 5), np.float32)
     velocity = np.full((4, 5), 100, np.float32)
     velocity[0, 0] = np.nan

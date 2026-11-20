@@ -655,6 +655,11 @@ class ImportRequest(BaseModel):
     path: str
 
 
+class PieceContent(BaseModel):
+    """The content of a piece (its options; e.g. those of a dataset)."""
+    content: dict[str, Any]
+
+
 class PieceRequest(BaseModel):
     """
     A piece (or a setup) to create: its project, its folder (e.g.

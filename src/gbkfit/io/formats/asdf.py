@@ -12,6 +12,7 @@ import gwcs
 import numpy as np
 
 import gbkfit.units
+from gbkfit.config import InputError
 from ._linear_wcs import linear_header
 
 
@@ -34,7 +35,7 @@ def read_image(
         the file has more than one WCS.
     """
     if path is None:
-        raise ValueError(
+        raise InputError(
             f"{filename}: give the path of the array in the tree of the "
             f"file (path, e.g. roman/data)")
     with asdf.open(filename) as file:
@@ -43,10 +44,10 @@ def read_image(
             try:
                 node = node[key]
             except (KeyError, IndexError, TypeError):
-                raise ValueError(
+                raise InputError(
                     f"{filename}: its tree has no {path!r}") from None
         if not hasattr(node, 'shape'):
-            raise ValueError(
+            raise InputError(
                 f"{filename}: {path!r} of its tree is not an array; give "
                 f"the path of one (e.g. roman/data)")
         unit = getattr(node, 'unit', None)
@@ -58,7 +59,7 @@ def read_image(
     if unit is not None:
         header['BUNIT'] = gbkfit.units.format_unit(unit)
     if len(wcss) > 1:
-        raise ValueError(
+        raise InputError(
             f"{filename}: its tree has {len(wcss)} WCSs; files of one are "
             f"read")
     if wcss:

@@ -634,5 +634,5 @@ def test_the_units_of_a_configuration_are_read_as_fits_reads_them(tmp_path):
         assert next(iter(dataset.values())).unit() == (
             u.erg / u.s / u.cm ** 2 / u.Angstrom)
     data['dataset']['unit'] = 'ERG/S'
-    with pytest.raises(ValueError, match="not a valid unit"):
+    with pytest.raises(ValueError, match="^unit 'ERG/S' invalid"):
         gbkfit.load(config)

@@ -13,9 +13,11 @@ import astropy.wcs
 import numpy as np
 
 import gbkfit.units
+from gbkfit.config import InputError
 
 
 __all__ = [
+    'data_unit',
     'has_wcs',
     'header_shape',
     'header_unit',
@@ -46,6 +48,12 @@ _AXIS_KEYWORDS = re.compile(
 # The keywords of the rest of the spectral axis, also in their old forms
 _REST_KEYWORDS = ('RESTWAV', 'RESTFRQ', 'RESTWAVE', 'RESTFREQ')
 
+# The types of spectral axes that wcslib reads only of a rest: FELO of
+# AIPS (optical velocities linear in frequency), and those of FITS whose
+# algorithm code is of another kind than their values (e.g. VOPT-F2W)
+_TYPES_OF_A_REST = re.compile(r'FELO.*|.{4}-[FWVA]2[FWVA]')
+
+
 # The keywords of the length of each axis
 _NAXIS_KEYWORDS = re.compile(r'NAXIS\d+')
 
@@ -53,7 +61,7 @@ _NAXIS_KEYWORDS = re.compile(r'NAXIS\d+')
 _CUNIT_KEYWORDS = re.compile(r'CUNIT\d+')
 
 
-def _option_error(message: str, *path: str) -> ValueError:
+def _option_error(message: str, *path: str) -> InputError:
     """
     Return an error of a header that an option of its data fixes, at its
     path in the options (e.g. 'spectral', 'unit'): where the data are read
@@ -61,10 +69,7 @@ def _option_error(message: str, *path: str) -> ValueError:
     which adds the path of the data before it), and where a header is
     described, the option of the problem (see describe_fits).
     """
-    error = ValueError(message)
-    error.config_path = list(path)
-    error.config_context = None
-    return error
+    return InputError(message, path)
 
 
 def has_wcs(header: astropy.io.fits.Header) -> bool:
@@ -107,6 +112,39 @@ def header_unit(header: astropy.io.fits.Header) -> str | None:
     # (a BUNIT without a value is None)
     unit = str(header.get('BUNIT') or '').strip()
     return unit or None
+
+
+def data_unit(
+        source: str,
+        header: astropy.io.fits.Header,
+        unit: str | None = None
+) -> gbkfit.units.AnyUnit | None:
+    """
+    Return the unit of the values of a header: that given (the option
+    unit of a dataset), which replaces that of the header, or else that of
+    the header (BUNIT), if any. Units are read as FITS writes them (see
+    gbkfit.units.parse_unit), never their legacy spellings (e.g.
+    'JY/BEAM').
+
+    Raises
+    ------
+    InputError
+        Of the option unit, if the unit given is not a unit, or, none
+        given, BUNIT is not.
+    """
+    if unit is not None:
+        try:
+            return gbkfit.units.parse_unit(unit)
+        except ValueError:
+            raise _option_error(f"unit {unit!r} invalid", 'unit') from None
+    text = header_unit(header)
+    if text is None:
+        return None
+    try:
+        return gbkfit.units.parse_unit(text)
+    except ValueError:
+        raise _option_error(
+            f"{source}: BUNIT {text!r} invalid", 'unit') from None
 
 
 def _centre_missing_crpix(
@@ -170,7 +208,8 @@ def _with_shape(
 
 def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
     """
-    Return the world coordinates of a header, or raise ValueError.
+    Return the world coordinates of a header, or raise InputError (of the
+    failures of wcslib, a short message, see _wcs_failure).
 
     The unit of each axis (CUNITn) must be valid (see
     gbkfit.units.parse_unit): astropy would correct some, e.g. 'HZ'
@@ -187,13 +226,94 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
         try:
             gbkfit.units.parse_unit(value.strip())
         except ValueError:
-            raise ValueError(
+            raise InputError(
                 f"{source}: {key} {value.strip()!r} invalid") from None
     try:
         return astropy.wcs.WCS(header)
     except ValueError as e:
-        raise ValueError(
-            f"{source}: invalid world coordinates: {e}") from None
+        message, path = _wcs_failure(header, str(e))
+        raise InputError(f"{source}: {message}", path) from None
+
+
+# The lines of wcslib that say where it failed (e.g. "ERROR 4 in
+# wcs_types() at line 3121 of file cextern/wcslib/C/wcs.c:"), and the
+# failures it says after them that have short messages (see _wcs_failure)
+_WCSLIB_WHERE = re.compile(r'ERROR \d+ in \w+\(\) at line \d+ of file .*')
+_WCSLIB_FAILURES = (
+    (re.compile(r'.*matrix is singular'), 'singular'),
+    (re.compile(r'Unrecognized projection code \((\S+) in (CTYPE\d+)\)'),
+     'projection'),
+    (re.compile(
+        r'Inconsistent projection types \(expected (\S+), got (\S+) in '
+        r'(CTYPE\d+)\)'), 'pair'),
+    (re.compile(r'Unmatched celestial axes'), 'unpaired'),
+    (re.compile(
+        r"In (CUNIT\d+) : Mismatched units type .*: have '(.*)', "
+        r"want '.*'"), 'unit'),
+    (re.compile(r'Missing required rest frequency or wavelength'), 'rest'),
+    (re.compile(r'Invalid projection: (.*)'), 'invalid'))
+
+# The prefixes of the types of celestial axes (CTYPE)
+_CELESTIAL_PREFIXES = (
+    'RA--', 'DEC-', 'GLON', 'GLAT', 'ELON', 'ELAT', 'SLON', 'SLAT', 'HPLN',
+    'HPLT')
+
+
+def _wcs_failure(
+        header: astropy.io.fits.Header, text: str
+) -> tuple[str, tuple[str, ...]]:
+    """
+    Return the short message of a failure of wcslib (astropy's error text)
+    to read the world coordinates of a header, in its keywords (e.g.
+    "CTYPE1 'RA---XXX' invalid"), and the path of the option that fixes
+    it, if any: of the failures it knows (see _WCSLIB_FAILURES); of
+    another, its first line that is not where wcslib failed.
+    """
+    lines = [
+        line.strip().rstrip('.') for line in text.splitlines()
+        if line.strip() and not _WCSLIB_WHERE.fullmatch(line.strip())]
+    for line in lines:
+        for pattern, kind in _WCSLIB_FAILURES:
+            if match := pattern.fullmatch(line):
+                return _wcs_failure_message(header, kind, match.groups())
+    return (lines[0] if lines else 'world coordinates invalid'), ()
+
+
+def _wcs_failure_message(
+        header: astropy.io.fits.Header, kind: str, groups: tuple[str, ...]
+) -> tuple[str, tuple[str, ...]]:
+    """
+    Return the short message of a known failure of wcslib (see
+    _wcs_failure) of its kind and the groups of its pattern.
+    """
+    def ctype(key: str) -> str:
+        return f"{key} {str(header.get(key, '')).strip()!r}"
+    ctypes = [
+        key for key in header
+        if re.fullmatch(r'CTYPE\d+', key)
+        and str(header[key]).strip().upper().startswith(_CELESTIAL_PREFIXES)]
+    if kind == 'singular':
+        return 'CDELT/PC/CD matrix singular', ()
+    if kind == 'projection':
+        return f"{ctype(groups[1])} invalid", ()
+    if kind == 'pair':
+        return f"{ctype(groups[2])} mismatched ({groups[0]} expected)", ()
+    if kind == 'unpaired':
+        return ', '.join(map(ctype, ctypes)) + ' unpaired', ()
+    if kind == 'unit':
+        number = groups[0].removeprefix('CUNIT')
+        return (
+            f"{groups[0]} {groups[1]!r} not of "
+            f"{str(header.get(f'CTYPE{number}', '')).strip()}"), ()
+    if kind == 'rest':
+        spectral = next((
+            str(header[key]).strip() for key in header
+            if re.fullmatch(r'CTYPE\d+', key)
+            and _TYPES_OF_A_REST.fullmatch(str(header[key]).strip())), None)
+        said = 'rest missing' if spectral is None \
+            else f"{spectral} axis: rest missing"
+        return said, ('spectral', 'rest')
+    return f"projection invalid: {groups[0]}", ()
 
 
 @contextlib.contextmanager

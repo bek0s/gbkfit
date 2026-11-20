@@ -3,7 +3,7 @@ Data items: measured values, with their mask and error.
 """
 
 import os.path
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any, NamedTuple
 
 import astropy.units
@@ -276,7 +276,8 @@ class Data:
             footprint: DataFile | None = None,
             spectral_type: str | None = None,
             spectral_unit: str | None = None,
-            mask_kind: MaskKind = 'valid'
+            mask_kind: MaskKind = 'valid',
+            stated: Collection[str] = ()
     ) -> tuple['Data', Coords]:
         """
         Read a data item from files, with the unit and the beam of the
@@ -340,6 +341,10 @@ class Data:
             read_arrays).
         footprint : str or tuple, optional
             The file of where the instrument looked (see Data).
+        stated : Collection of str, optional
+            The options of the grid of the dataset that it states (see
+            stated_options), which the header of the values need not have
+            (see read_arrays).
 
         Returns
         -------
@@ -375,7 +380,7 @@ class Data:
             rest=rest, velocity=velocity, footprint=footprint,
             spectral_type=spectral_type, spectral_unit=spectral_unit,
             medium=medium,
-            spectral_axis=spectral_axis)
+            spectral_axis=spectral_axis, stated=stated)
         coords = coords_from_header(
             split_data_file(data)[0], arrays.header, rpix=rpix, rval=rval,
             spectral_axis=spectral_axis, medium=medium, rest=rest)

@@ -1,6 +1,6 @@
 // The round trip that editing a dataset rests on: the options of prep of
 // a draft, recorded by the server, give back the draft (its files and its
-// edits); and what a draft needs of its spectral axis.
+// edits); and the problems of a draft.
 import { describe, expect, it } from 'vitest';
 import type { ArrayInfo } from '../../api/client';
 import {
@@ -10,11 +10,11 @@ import {
   draftOfPreparation,
   EMPTY_ITEM,
   headerProblems,
-  needsOf,
   NO_EDITS,
   NO_SPECTRAL,
   preparedOptions,
   prepRequest,
+  problemsOf,
   siblings,
   type Draft,
   type Kind,
@@ -29,7 +29,7 @@ function array(index: number, name: string, shape: number[], axes = ['RA---TAN',
 function resolve(kind: Kind, draft: Draft, files: Record<string, ArrayInfo[]>, stale: string[] = []): Resolved {
   const describe = (path: string) => ({ arrays: files[path], current: !stale.includes(path) });
   const ndim = kind === 'cube' ? 3 : 2;
-  const reading = { rest: null, velocity: null, type: null, unit: null };
+  const reading = { rest: null, velocity: null, type: null, spectralUnit: null, dataUnit: null };
   return { kind, draft, arrays: Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, ndim)])), reading };
 }
 
@@ -38,7 +38,7 @@ describe('a draft prepared and edited again', () => {
     // (of errors whose header says they are variances, as that of MUSE does)
     const files = { 'p/data/cube.fits': [array(0, 'PRIMARY', [40, 30, 20]), { ...array(1, 'STAT', [40, 30, 20]), holds: 'variance' as const }] };
     const draft: Draft = {
-      items: { cube: { files: { data: { file: 'p/data/cube.fits' }, error: { file: 'p/data/cube.fits', array: 'STAT' } }, errorValue: null, errorKind: null } },
+      items: { cube: { files: { data: { file: 'p/data/cube.fits' }, error: { file: 'p/data/cube.fits', array: 'STAT' } }, errorValue: null, errorKind: null, maskKind: 'valid', unit: '' } },
       spectral: { type: null, convention: 'radio', line: '', unit: '', redshift: '', axisUnit: '' },
       edits: { ...NO_EDITS, x: ['2', '30'], channels: ['5', '14'], values: { cube: { below: '0.001', above: '', sigma: '' } }, regions: '1', minify: true },
     };
@@ -86,28 +86,27 @@ describe('the spectral axis of a cube', () => {
   const other = { severity: 'error' as const, path: ['unit'], message: "BUNIT 'JY/BEAM' invalid" };
   const unit = { 'ifu.fits': [{ ...ifu['ifu.fits'][0], problems: [other] }] };
 
-  it('needs what the library finds of the files, where it is given', () => {
-    expect(needsOf(resolve('cube', draft(''), missing))).toEqual([{ place: 'spectral', text: 'AWAV axis: rest missing' }]);
-    expect(needsOf(resolve('cube', draft(''), unit))).toEqual([{ place: 'files', text: "BUNIT 'JY/BEAM' invalid" }]);
+  it('has the problems the library finds of the files, under their item', () => {
+    expect(problemsOf(resolve('cube', draft(''), missing))).toEqual([{ ...restMissing, path: ['cube', 'spectral', 'rest'] }]);
+    expect(problemsOf(resolve('cube', draft(''), unit))).toEqual([{ ...other, path: ['cube', 'unit'] }]);
     // (none found: nothing of its own)
-    expect(needsOf(resolve('cube', draft('6562.8'), ifu))).toEqual([]);
+    expect(problemsOf(resolve('cube', draft('6562.8'), ifu))).toEqual([]);
   });
 
   it('judges the problems of a header once it is of what is given', () => {
     // (the line typed, the header read again for it: not judged yet)
     expect(headerProblems(resolve('cube', draft('6562.8'), missing, ['ifu.fits']))).toEqual({});
-    expect(needsOf(resolve('cube', draft('6562.8'), missing, ['ifu.fits']))).toEqual([]);
+    expect(problemsOf(resolve('cube', draft('6562.8'), missing, ['ifu.fits']))).toEqual([]);
     // (read for it: its own)
     expect(headerProblems(resolve('cube', draft('6562.8'), unit))).toEqual({ cube: [other] });
   });
 });
 
-describe('the arrays offered for a mask', () => {
-  it('leave out errors and quality flags', () => {
-    const files = { 'muse.fits': [array(1, 'DATA', [8, 7, 6]), array(2, 'STAT', [8, 7, 6]), array(3, 'DQ', [8, 7, 6]), array(4, 'MASK', [8, 7, 6])] };
+describe('the arrays offered for errors and a mask', () => {
+  it('are the others of the shape of the data, in the order of the file', () => {
+    const files = { 'muse.fits': [array(1, 'DATA', [8, 7, 6]), array(2, 'STAT', [8, 7, 6]), array(3, 'DQ', [8, 7, 6]), array(4, 'SMALL', [8, 7])] };
     const resolved = resolve('cube', { items: { cube: { ...EMPTY_ITEM, files: { data: { file: 'muse.fits' } } } }, spectral: NO_SPECTRAL, edits: NO_EDITS }, files);
-    expect(siblings(resolved.arrays.cube, 'mask').map((a) => a.name)).toEqual(['MASK']);
-    expect(siblings(resolved.arrays.cube, 'error').map((a) => a.name)).toEqual(['STAT', 'MASK']);
+    expect(siblings(resolved.arrays.cube).map((a) => a.name)).toEqual(['STAT', 'DQ']);
   });
 });
 

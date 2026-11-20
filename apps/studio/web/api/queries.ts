@@ -75,16 +75,21 @@ export type SpectralTypeOption = NonNullable<NonNullable<operations['describe_ap
 // leaves ambiguous, and as velocities of a rest (of wavelengths or
 // frequencies); null: as its header says. Every view of a cube reads it
 // alike, so that their channels are the same (a rest may reverse them).
-export type Reading = { rest: string | null; velocity: Velocity | null; type: SpectralTypeOption | null; unit: string | null };
+// How a file of data is read (see the server's _reading): the rest and the
+// convention of velocities of its spectral axis, its type and unit where
+// its header does not say them, and the unit of its values (instead of
+// BUNIT)
+export type Reading = { rest: string | null; velocity: Velocity | null; type: SpectralTypeOption | null; spectralUnit: string | null; dataUnit: string | null };
 
 // The query of a reading (see the server's _reading), and its part of the
 // keys of the views
-function readingQuery(reading: Reading | null): { rest?: string; velocity?: Velocity; spectral_type?: SpectralTypeOption; spectral_unit?: string } {
+function readingQuery(reading: Reading | null): { rest?: string; velocity?: Velocity; spectral_type?: SpectralTypeOption; spectral_unit?: string; unit?: string } {
   return {
     ...(reading?.rest ? { rest: reading.rest } : {}),
     ...(reading?.velocity ? { velocity: reading.velocity } : {}),
     ...(reading?.type ? { spectral_type: reading.type } : {}),
-    ...(reading?.unit ? { spectral_unit: reading.unit } : {}),
+    ...(reading?.spectralUnit ? { spectral_unit: reading.spectralUnit } : {}),
+    ...(reading?.dataUnit ? { unit: reading.dataUnit } : {}),
   };
 }
 
@@ -121,12 +126,13 @@ export function useHeader(path: string | null, hdu: number) {
 // with another rest), its last description stays, not current: what shows
 // it stays, and nothing judges it (e.g. its problems are of the inputs it
 // was read with).
-export function useDescriptions(paths: string[], reading: Reading | null = null) {
+export function useDescriptions(paths: string[], reading: Reading | null | ((path: string) => Reading | null) = null) {
   const unique = [...new Set(paths)];
+  const readingOf = (path: string) => (typeof reading === 'function' ? reading(path) : reading);
   const results = useQueries({
     queries: unique.map((path) => ({
-      queryKey: keys.description(path, readingKey(reading)),
-      queryFn: () => describe(path, reading),
+      queryKey: keys.description(path, readingKey(readingOf(path))),
+      queryFn: () => describe(path, readingOf(path)),
     })),
   });
   const last = useRef(new Map<string, NonNullable<(typeof results)[number]['data']>>());
@@ -486,6 +492,18 @@ export function useSaveNotes(project: string) {
 }
 
 // Write the options of a block of a project (by its path)
+// The text of a piece of a project of a content, as the project writes it
+// (YAML, block style)
+export function usePieceText() {
+  return useMutation({
+    mutationFn: async (content: Record<string, unknown>) => {
+      const { data: text, error, response } = await api.POST('/api/v1/piece-text', { body: { content }, parseAs: 'text' });
+      if (!response.ok || text === undefined) throw new Error(errorMessage(error, response.status, response.statusText));
+      return text;
+    },
+  });
+}
+
 export function useUpdateBlock() {
   const client = useQueryClient();
   return useMutation({

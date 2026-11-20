@@ -191,7 +191,7 @@ export function CubeViewer({
   const spectralUnit = spectrum.data?.unit ?? '';
   const channelText = (c: number) => {
     const at = spectralOf(c);
-    return at === undefined ? `channel ${c}` : `${c} · ${significant(at, 4)} ${spectralUnit}`;
+    return at === undefined ? String(c) : `${c} · ${significant(at, 4)} ${spectralUnit}`;
   };
   const bandText = ([c0, c1]: [number, number]) => {
     const [a, b] = [spectralOf(c0), spectralOf(c1)];

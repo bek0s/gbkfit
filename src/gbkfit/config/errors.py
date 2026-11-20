@@ -15,6 +15,7 @@ from typing import Literal, NamedTuple
 __all__ = [
     'ConfigError',
     'ConfigProblem',
+    'InputError',
     'UnknownNamesError',
     'collect_problems',
     'config_path',
@@ -24,8 +25,10 @@ __all__ = [
     'format_location',
     'is_strict',
     'quoted_names',
+    'raise_all',
     'report_unknown',
     'strict_mode',
+    'user_problems',
     'warn'
 ]
 
@@ -80,6 +83,70 @@ class UnknownNamesError(ConfigError):
     An error of unknown names in a configuration: options, sections or
     parameters (see report_unknown).
     """
+
+
+class InputError(ValueError):
+    """
+    An error of what a user gives a valid configuration: a file of data
+    that cannot be read as it is (e.g. a header without the convention
+    of its velocities, or with a unit that is not one), or an option of
+    its reading that does not fit it. Like a ConfigError, its message is
+    all that a user needs to fix it, at the path of the option that
+    fixes it, if any (e.g. ['spectral', 'convention']; see config_path,
+    which adds the path of the part of the configuration it is read in).
+
+    Parameters
+    ----------
+    message : str
+        The description of the error.
+    path : Sequence of str or int, optional
+        The path of the option that fixes it, if any.
+    """
+
+    def __init__(self, message: str, path: Sequence[str | int] = ()):
+        super().__init__(message)
+        self.config_path = list(path)
+        self.config_context = None
+
+
+# The errors that a user fixes (see user_problems)
+_USER_ERRORS = (ConfigError, InputError, OSError)
+
+
+def raise_all(errors: Sequence[Exception], message: str) -> None:
+    """
+    Raise the errors, if any: the one alone, or several together, as an
+    ExceptionGroup with a message (e.g. the file of them), each with its
+    own path (see user_problems).
+    """
+    if len(errors) == 1:
+        raise errors[0]
+    if errors:
+        raise ExceptionGroup(message, list(errors))
+
+
+def user_problems(error: BaseException) -> list['ConfigProblem'] | None:
+    """
+    Return the problems of an error that a user fixes, each an error at
+    its path (see config_path) with its message alone: of the error, if it
+    is of a configuration (ConfigError), of what it is given (InputError)
+    or of files and folders (OSError); or of each of a group of them (see
+    raise_all), after the path of the group. None if it is another (e.g. a
+    bug, which keeps its traceback).
+    """
+    if isinstance(error, _USER_ERRORS):
+        return [_problem('error', error)]
+    if not isinstance(error, ExceptionGroup):
+        return None
+    path = error_location(error)[0]
+    problems = []
+    for inner in error.exceptions:
+        found = user_problems(inner)
+        if found is None:
+            return None
+        problems += [
+            problem._replace(path=path + problem.path) for problem in found]
+    return problems
 
 
 def format_location(
@@ -152,7 +219,8 @@ def error_message(error: BaseException) -> str:
     if isinstance(error, ConfigError):
         return str(error)
     where = format_location(*error_location(error))
-    message = f"{type(error).__name__}: {error}"
+    message = str(error) if isinstance(error, InputError) \
+        else f"{type(error).__name__}: {error}"
     return f"{where}: {message}" if where else message
 
 
@@ -406,10 +474,12 @@ def collect_problems() -> Generator[list[ConfigProblem]]:
     # Studio) shows every error at its path, not only ConfigErrors
     except Exception as e:
         _locate(e)
-        if not isinstance(e, ConfigError):
+        found = user_problems(e)
+        if found is None:
             _log.error(
                 "the configuration could not be loaded", exc_info=e)
-        problems.append(_problem('error', e))
+            found = [_problem('error', e)]
+        problems += found
     finally:
         _problems.reset(token)
 
@@ -417,9 +487,14 @@ def collect_problems() -> Generator[list[ConfigProblem]]:
 def _problem(
         severity: Literal['error', 'warning'], error: Exception
 ) -> ConfigProblem:
-    """Return the problem of an error (or of a warning)."""
+    """
+    Return the problem of an error (or of a warning): its message alone,
+    of an error that a user fixes (see user_problems), else after its
+    type (e.g. 'ValueError: ...').
+    """
     path, context = error_location(error)
     message = error.message if isinstance(error, ConfigError) \
+        else str(error) if isinstance(error, _USER_ERRORS) \
         else f"{type(error).__name__}: {error}"
     if context is not None:
         message = f"[{context}] {message}"

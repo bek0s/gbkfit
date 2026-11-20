@@ -14,6 +14,7 @@ import numpy as np
 from astropy.wcs.wcsapi import BaseHighLevelWCS, BaseLowLevelWCS
 
 import gbkfit.units
+from gbkfit.config import InputError
 from ..spectral import _SPECTRAL_UNITS
 
 
@@ -70,7 +71,7 @@ def linear_header(
     low = getattr(wcs, 'low_level_wcs', wcs)
     n = len(shape)
     if low.pixel_n_dim != n or low.world_n_dim != n:
-        raise ValueError(
+        raise InputError(
             f"{source}: the world coordinates have {low.pixel_n_dim} pixel "
             f"and {low.world_n_dim} world axes; the array has {n}")
     sizes = tuple(shape[::-1])
@@ -92,12 +93,12 @@ def linear_header(
         unit = u.Unit(low.world_axis_units[j])
         pixels = np.flatnonzero(correlation[j])
         if not any(unit.is_equivalent(x) for x in _SPECTRAL_UNITS):
-            raise ValueError(
+            raise InputError(
                 f"{source}: the world axis "
                 f"{low.world_axis_physical_types[j]!r} is neither celestial "
                 f"nor spectral")
         if len(pixels) != 1:
-            raise ValueError(
+            raise InputError(
                 f"{source}: the spectral axis varies along more than one "
                 f"pixel axis")
         k = int(pixels[0])
@@ -107,7 +108,7 @@ def linear_header(
     if sky:
         pixels = np.flatnonzero(correlation[sky].any(axis=0))
         if len(sky) != 2 or len(pixels) != 2:
-            raise ValueError(
+            raise InputError(
                 f"{source}: the celestial axes must be two, of two pixel "
                 f"axes")
         lon, lat = sorted(sky, key=lambda j: components[j][1])
@@ -157,7 +158,7 @@ def linear_header(
         world[axes[k]] * factors[k] for k in range(n)])
     pixels = np.array(pixels).reshape(points.shape)
     if not np.allclose(pixels, points, rtol=0, atol=_LINEAR_TOLERANCE):
-        raise ValueError(
+        raise InputError(
             f"{source}: the world coordinates are not those of a grid the "
             f"model represents (e.g. they have distortions, or a spectral "
             f"axis linear in none of wavelength, frequency, velocity or log "
@@ -221,7 +222,7 @@ def _linear_spectral_axis(
         lines.append((distance, kind, step, middle))
     distance, kind, step, middle = min(lines)
     if not distance <= _LINEAR_TOLERANCE:
-        raise ValueError(
+        raise InputError(
             f"{source}: the spectral axis is linear in none of "
             f"{', '.join(kind for kind, _ in kinds)}: resample the data "
             f"first")

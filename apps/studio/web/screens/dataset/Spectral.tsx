@@ -2,13 +2,14 @@
 // (its type, its unit, the convention of its velocities, and the line that
 // is 0 km/s, at the redshift of the galaxy). Each shows what the header
 // says, or a field, once the library finds a problem of that option (see
-// the server's ArrayProblem) or one is given: the field says the problem
-// until it is gone. No rule is the page's: the library describes the file
-// again with each option given, and says the next problem, if any.
+// the server's ArrayProblem) or one is given; a row with a problem is
+// marked, and says it on hover (see components/Problems). No rule is the
+// page's: the library describes the file again with each option given.
 import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 import type { ArrayProblem } from '../../api/client';
 import { useLines } from '../../api/queries';
+import { ProblemField } from '../../components/Problems';
 import { Choice, NumberField, Segments } from '../../components/ui/inputs';
 import { catalogueLineOf, catalogueRests, keptAxes, keptAxisUnits, LINE_UNITS, mediumOf, restOf, SPECTRAL_TYPES, spectrumOf, type Resolved, type Spectral, type SpectralType } from './model';
 
@@ -61,14 +62,14 @@ export function SpectralFields({ resolved, onChange }: { resolved: Resolved; onC
   const fixed = (text: string) => <span className="sp-fixed">{text || '—'}</span>;
   return (
     <div className="sp-rows">
-      <Row label="Type" problem={typeProblem}>
+      <Row label="Type" option="type">
         {!(typeProblem || spectral.type) ? (
           fixed(axis)
         ) : onChange ? (
           <Choice
             items={SPECTRAL_TYPES.map(({ type, text }) => ({ value: type, label: `${text} (${type})` }))}
             value={spectral.type ?? ''}
-            placeholder={typeProblem?.message ?? 'Choose'}
+            placeholder="Choose"
             label="The type of the spectral axis"
             onChange={(type) => onChange({ ...spectral, type: type as SpectralType })}
           />
@@ -76,14 +77,14 @@ export function SpectralFields({ resolved, onChange }: { resolved: Resolved; onC
           fixed(said ? `${said.text} (${said.type})` : '')
         )}
       </Row>
-      <Row label="Unit" problem={unitProblem}>
+      <Row label="Unit" option="unit">
         {!(unitProblem || spectral.axisUnit) ? (
           fixed(keptAxisUnits(data)[2] ?? '')
         ) : onChange ? (
           <Choice
             items={AXIS_UNITS}
             value={spectral.axisUnit}
-            placeholder={unitProblem?.message ?? 'Choose'}
+            placeholder="Choose"
             label="The unit of the spectral axis"
             onChange={(axisUnit) => onChange({ ...spectral, axisUnit })}
           />
@@ -92,26 +93,23 @@ export function SpectralFields({ resolved, onChange }: { resolved: Resolved; onC
         )}
       </Row>
       {(conventionProblem || spectral.convention !== null) && (
-        <Row label="Velocities" problem={conventionProblem}>
-          <div className="sp-inline">
-            <Segments
-              items={(['radio', 'optical'] as const).map((value) => ({ value, label: value === 'radio' ? 'Radio' : 'Optical', disabled: !onChange }))}
-              value={spectral.convention}
-              label="The convention of the velocities"
-              onChange={(convention) => onChange?.({ ...spectral, convention })}
-            />
-            {conventionProblem && <span className="sp-flag">{conventionProblem.message}</span>}
-          </div>
+        <Row label="Velocities" option="convention">
+          <Segments
+            items={(['radio', 'optical'] as const).map((value) => ({ value, label: value === 'radio' ? 'Radio' : 'Optical', disabled: !onChange }))}
+            value={spectral.convention}
+            label="The convention of the velocities"
+            onChange={(convention) => onChange?.({ ...spectral, convention })}
+          />
         </Row>
       )}
       {(restProblem || spectral.line.trim() !== '') && (
         <>
-          <Row label="Line" problem={restProblem}>
+          <Row label="Line" option="rest" note={others.length > 0 ? `Near: ${others.map(({ name, velocity }) => `${name} ${velocity > 0 ? '+' : '−'}${Math.round(Math.abs(velocity))} km/s`).join(', ')}` : undefined}>
             {onChange ? (
               <Choice
                 items={rests.map(({ name, rest }) => ({ value: name, label: name, description: `${rest} ${unit}` }))}
                 value={chosen ?? ''}
-                placeholder={restProblem?.message ?? (spectral.line.trim() ? 'Other' : 'Choose')}
+                placeholder={spectral.line.trim() ? 'Other' : 'Choose'}
                 label="The line"
                 onChange={(name) => onChange({ ...spectral, unit, line: rests.find((line) => line.name === name)?.rest ?? spectral.line })}
               />
@@ -136,23 +134,29 @@ export function SpectralFields({ resolved, onChange }: { resolved: Resolved; onC
               </div>
             </Row>
           )}
-          {/* (the lines of the catalogue near the one chosen: its line is
-              always there, so that choosing one moves nothing) */}
-          <p className="sp-near">{others.length > 0 && `Near: ${others.map(({ name, velocity }) => `${name} ${velocity > 0 ? '+' : '−'}${Math.round(Math.abs(velocity))} km/s`).join(', ')}`}</p>
         </>
       )}
     </div>
   );
 }
 
-// A row of the axis: its label, and its value or field; marked while the
-// library finds a problem of its option (which its field says)
-function Row({ label, problem = null, children }: { label: string; problem?: ArrayProblem | null; children: ReactNode }) {
-  return (
-    <div className="sp-row" data-attention={problem ? true : undefined}>
-      <span className="sp-label">{label}</span>
+// A row of the axis: its label, and its value or field; the field of the
+// problems of its option (none: a row of no option); a note (e.g. the
+// lines near the one chosen) on hover of its label
+function Row({ label, option, note, children }: { label: string; option?: string; note?: string; children: ReactNode }) {
+  const body = (
+    <>
+      <span className="sp-label" title={note}>
+        {label}
+      </span>
       <div className="sp-value">{children}</div>
-    </div>
+    </>
+  );
+  if (option === undefined) return <div className="sp-row">{body}</div>;
+  return (
+    <ProblemField path={['cube', 'spectral', option]} label={option === 'type' || option === 'unit' ? `Spectral ${label.toLowerCase()}` : label} className="sp-row">
+      {body}
+    </ProblemField>
   );
 }
 

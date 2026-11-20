@@ -258,22 +258,19 @@ def test_decreasing_velocity_is_reversed(header):
     assert coords.step[2] == pytest.approx(10)
 
 
-@pytest.mark.parametrize('roi_spat, offset', [
-    (None, (0, 0)), ([4, 20, 3, 17], (4, 3))])
-def test_missing_reference_pixel_stays_at_the_centre(roi_spat, offset):
-    # The model puts a missing CRPIX at the centre of the axis; the
-    # prepared file keeps that pixel at the same world coordinates
+def test_a_missing_reference_pixel_of_the_sky_is_refused():
+    # (FITS would take 0, GBKFIT none; prep has no option of it: the file
+    # is corrected)
     header = {
         k: v for k, v in HEADER.items()
         if k[-1] in '12' and not k.startswith('CRPIX')}
     fits.writeto('image.fits', np.ones((20, 24), np.float32),
                  fits.Header(header))
-    prep_pixel_brightness('image.fits', roi_spat=roi_spat)
-    _, coords_in = read_data('image.fits')
-    _, coords_out = read_data('prep_image.fits')
-    np.testing.assert_allclose(
-        coords_out.rpix, np.subtract(coords_in.rpix, offset))
-    np.testing.assert_allclose(coords_out.rval, coords_in.rval)
+    with pytest.raises(ExceptionGroup) as e:
+        prep_pixel_brightness('image.fits')
+    assert [(error.config_path, str(error)) for error in e.value.exceptions] \
+        == [(['rpix'], 'image.fits: CRPIX1 missing'),
+            (['rpix'], 'image.fits: CRPIX2 missing')]
 
 
 C = 299792.458
@@ -529,7 +526,7 @@ def test_an_axis_of_no_type_is_prepared_as_the_type_given():
 
 @pytest.mark.parametrize('header, message', [
     (dict(HEADER, CTYPE3='STOKES'), "no spectral axis"),
-    (dict(HEADER, CTYPE3='VOPT-F2W', RESTWAV=6.5628e-7), "not linear")])
+    (dict(HEADER, CTYPE3='VELO-F2V', RESTWAV=6.5628e-7), "not linear")])
 def test_spectral_axes_that_cannot_be_converted(header, message):
     write_cube('cube.fits', header)
     with pytest.raises(Exception, match=message):
@@ -617,7 +614,7 @@ def test_prep_refuses_data_of_a_bunit_that_is_not_a_unit():
     fits.writeto('bins.fits', np.zeros((2, 2), np.int32))
     fits.writeto('vel.fits', np.ones((2, 2)),
                  fits.Header(dict(BUNIT='METR/SEC')))
-    with pytest.raises(ValueError, match="BUNIT: 'METR/SEC' is not a"):
+    with pytest.raises(ValueError, match="BUNIT 'METR/SEC' invalid$"):
         prep.prep_region_moments(
             'bins.fits', ['vel.fits'], [None], None, 'float32')
 

@@ -476,7 +476,7 @@
     "/api/v1/describe/{path}": {
       "get": {
         "summary": "Describe",
-        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays (see ArrayInfo), and what a dataset of it refuses\nor needs given, its spectral axis read so (see _reading).",
+        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays (see ArrayInfo), and what a dataset of it refuses\nor needs given, its spectral axis and its unit read so (see _reading);\nstated, the options of the grid that the dataset states (e.g. 'step',\n'rpix' or 'spectral.rval'), which its headers need not have.",
         "operationId": "describe_api_v1_describe__path__get",
         "parameters": [
           {
@@ -486,6 +486,25 @@
             "schema": {
               "type": "string",
               "title": "Path"
+            }
+          },
+          {
+            "name": "stated",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stated"
             }
           },
           {
@@ -564,6 +583,22 @@
               ],
               "title": "Spectral Unit"
             }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Unit"
+            }
           }
         ],
         "responses": {
@@ -597,7 +632,7 @@
     "/api/v1/header/{path}": {
       "get": {
         "summary": "Header",
-        "description": "Return the header of an array (an HDU) of a file of data, as it is in\nthe file (one header per HDU: the data and the errors of one file have\neach their own).",
+        "description": "Return the header of an HDU of a file of data, as it is in the file\n(one header per HDU: the data and the errors of one file have each\ntheir own): of the HDU given, its index or its name (EXTNAME), or by\ndefault the first with data.",
         "operationId": "header_api_v1_header__path__get",
         "parameters": [
           {
@@ -614,8 +649,17 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer",
-              "default": 0,
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Hdu"
             }
           }
@@ -627,6 +671,45 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HeaderInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/piece-text": {
+      "post": {
+        "summary": "Piece Text",
+        "description": "Return the text of a piece of its options (e.g. of a dataset, to copy\nit), as a project writes it: YAML in block style.",
+        "operationId": "piece_text_api_v1_piece_text_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PieceContent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -752,6 +835,22 @@
                 }
               ],
               "title": "Spectral Unit"
+            }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Unit"
             }
           }
         ],
@@ -971,6 +1070,22 @@
               ],
               "title": "Spectral Unit"
             }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Unit"
+            }
           }
         ],
         "responses": {
@@ -1120,6 +1235,22 @@
                 }
               ],
               "title": "Spectral Unit"
+            }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Unit"
             }
           }
         ],
@@ -1293,6 +1424,22 @@
                 }
               ],
               "title": "Spectral Unit"
+            }
+          },
+          {
+            "name": "unit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Unit"
             }
           }
         ],
@@ -4157,6 +4304,21 @@
         ],
         "title": "PSFViewInfo",
         "description": "A PSF drawn on pixels (see Responses.psf): its values (rows of y,\nfrom the bottom; they sum to 1), the size of the pixels (x, y;\narcsec), the solid angle of its beam (arcsec^2) and the full width at\nhalf maximum of the circular Gaussian of that beam (arcsec; none for\na point), and its full widths at half maximum along its major and\nminor axes (arcsec) and the position angle of its major axis\n(degrees; none if round), as measured (none for a point)."
+      },
+      "PieceContent": {
+        "properties": {
+          "content": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "PieceContent",
+        "description": "The content of a piece (its options; e.g. those of a dataset)."
       },
       "PieceLink": {
         "properties": {

@@ -121,7 +121,8 @@ class DatasetPixelBrightness(DatasetGrid):
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam,
             spatial_correlation=spatial_correlation, error_kind=error_kind,
-            mask_kind=mask_kind, footprint=footprint)
+            mask_kind=mask_kind, footprint=footprint,
+            stated=_grids.stated_options(step, rpix, rval))
         dataset = cls(item, **_grids.grid_coords(coords, step, rota))
         return cleaned(dataset, outliers)
 

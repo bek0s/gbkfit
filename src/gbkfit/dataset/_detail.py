@@ -5,7 +5,7 @@ the reading of their files (their names and orders are those of
 gbkfit.moments).
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
 import astropy.units
@@ -114,11 +114,13 @@ def _dimensionless(data: Data, order: int) -> Data:
 def read_moments(
         files: Mapping[str, DataFiles],
         rpix: float | Sequence[float] | None = None,
-        rval: float | Sequence[float] | None = None
+        rval: float | Sequence[float] | None = None,
+        stated: Collection[str] = ()
 ) -> tuple[dict[str, Data], Coords]:
     """
     Read the moments of the given names from their files (see
-    MOMENT_ITEMS and Data.from_files), and return them with the world
+    MOMENT_ITEMS and Data.from_files; stated: the options of the grid
+    stated, see stated_options), and return them with the world
     coordinates of the file of the first. Maps of moments must be on the
     pixels of the first on the sky, to within _GRID_TOLERANCE (e.g. their
     headers may round the steps differently; what else their world
@@ -132,7 +134,7 @@ def read_moments(
             beam=item.beam, spatial_correlation=item.spatial_correlation,
             spectral_correlation=item.spectral_correlation,
             error_kind=item.error_kind, mask_kind=item.mask_kind,
-            footprint=item.footprint)
+            footprint=item.footprint, stated=stated)
     if not coords:
         raise ValueError("a dataset needs at least one moment")
     (first, first_coords), *others = coords.items()

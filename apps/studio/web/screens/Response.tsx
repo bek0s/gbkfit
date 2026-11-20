@@ -441,7 +441,7 @@ function useGridOf(project: string, family: Family, of: Of | null): Grid {
   const axis = objectAt(dataset ?? {}, 'spectral');
   const given = textAt(spectral, 'rest') ?? textAt(axis, 'rest');
   const velocity = axis.convention === 'radio' || axis.convention === 'optical' ? (axis.convention as Velocity) : null;
-  const reading = { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null, unit: textAt(axis, 'unit') };
+  const reading = { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null, spectralUnit: textAt(axis, 'unit'), dataUnit: null };
   const arrays = useDescription(file ? joinPath(project, file) : null, reading);
   const array = (arrays.data ?? []).find((a) => a.name === hdu || a.index === hdu) ?? arrays.data?.[0];
   const pending = observation.isLoading || datasetPiece.isLoading || arrays.isLoading;

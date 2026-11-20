@@ -165,7 +165,9 @@ export interface paths {
          * Describe
          * @description Describe a file of data from its headers, without reading its data:
          *     each of its arrays (see ArrayInfo), and what a dataset of it refuses
-         *     or needs given, its spectral axis read so (see _reading).
+         *     or needs given, its spectral axis and its unit read so (see _reading);
+         *     stated, the options of the grid that the dataset states (e.g. 'step',
+         *     'rpix' or 'spectral.rval'), which its headers need not have.
          */
         get: operations["describe_api_v1_describe__path__get"];
         put?: never;
@@ -185,13 +187,35 @@ export interface paths {
         };
         /**
          * Header
-         * @description Return the header of an array (an HDU) of a file of data, as it is in
-         *     the file (one header per HDU: the data and the errors of one file have
-         *     each their own).
+         * @description Return the header of an HDU of a file of data, as it is in the file
+         *     (one header per HDU: the data and the errors of one file have each
+         *     their own): of the HDU given, its index or its name (EXTNAME), or by
+         *     default the first with data.
          */
         get: operations["header_api_v1_header__path__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/piece-text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Piece Text
+         * @description Return the text of a piece of its options (e.g. of a dataset, to copy
+         *     it), as a project writes it: YAML in block style.
+         */
+        post: operations["piece_text_api_v1_piece_text_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1772,6 +1796,16 @@ export interface components {
             ] | null;
         };
         /**
+         * PieceContent
+         * @description The content of a piece (its options; e.g. those of a dataset).
+         */
+        PieceContent: {
+            /** Content */
+            content: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * PieceLink
          * @description A piece (or a setup) that names a piece (source), the piece it names
          *     (target), and whether that piece is missing (named, but not in the
@@ -2470,10 +2504,12 @@ export interface operations {
     describe_api_v1_describe__path__get: {
         parameters: {
             query?: {
+                stated?: string[] | null;
                 rest?: string | null;
                 velocity?: ("radio" | "optical") | null;
                 spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
                 spectral_unit?: string | null;
+                unit?: string | null;
             };
             header?: never;
             path: {
@@ -2506,7 +2542,7 @@ export interface operations {
     header_api_v1_header__path__get: {
         parameters: {
             query?: {
-                hdu?: number;
+                hdu?: number | string | null;
             };
             header?: never;
             path: {
@@ -2536,6 +2572,39 @@ export interface operations {
             };
         };
     };
+    piece_text_api_v1_piece_text_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PieceContent"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     view_channel_api_v1_views_channel__path__get: {
         parameters: {
             query: {
@@ -2545,6 +2614,7 @@ export interface operations {
                 velocity?: ("radio" | "optical") | null;
                 spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
                 spectral_unit?: string | null;
+                unit?: string | null;
             };
             header?: never;
             path: {
@@ -2588,6 +2658,7 @@ export interface operations {
                 velocity?: ("radio" | "optical") | null;
                 spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
                 spectral_unit?: string | null;
+                unit?: string | null;
             };
             header?: never;
             path: {
@@ -2627,6 +2698,7 @@ export interface operations {
                 velocity?: ("radio" | "optical") | null;
                 spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
                 spectral_unit?: string | null;
+                unit?: string | null;
             };
             header?: never;
             path: {
@@ -2668,6 +2740,7 @@ export interface operations {
                 velocity?: ("radio" | "optical") | null;
                 spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
                 spectral_unit?: string | null;
+                unit?: string | null;
             };
             header?: never;
             path: {
