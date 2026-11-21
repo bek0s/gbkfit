@@ -1896,8 +1896,9 @@ export interface components {
          *     (e.g. 'galaxies'), the paths of its runs, and its links: each piece or
          *     setup that names a piece, with the piece it names (see PieceLink).
          *     Also whether it has notes (its README.md), the type of each piece that
-         *     has one (its option 'type'), by folder and name, and the status of the
-         *     latest run of each setup that has run ('running', 'complete' or
+         *     has one (its option 'type'), by folder and name, when the file of each
+         *     piece last changed (ISO 8601, UTC), by folder and name, and the status
+         *     of the latest run of each setup that has run ('running', 'complete' or
          *     'failed'), by name.
          */
         ProjectInfo: {
@@ -1921,6 +1922,15 @@ export interface components {
              * @default {}
              */
             types: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            /**
+             * Modified
+             * @default {}
+             */
+            modified: {
                 [key: string]: {
                     [key: string]: string;
                 };

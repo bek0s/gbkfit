@@ -2,11 +2,15 @@
 // inspector of the galaxy screen), full height, with its own scroll, of
 // sections one under the other. A section has a head (its title, a short
 // note, and actions) whose title folds it, as the page remembers by its
-// id; a section that needs the user (e.g. a choice that stops an action)
-// is marked, and its head says so.
+// id; a section is a fold (see fold), which what it holds can open, and
+// its head, folded, is marked by the worst of the problems inside it (see
+// Problems). A section that needs the user (e.g. a choice that stops an
+// action) is marked, and its head says so.
 import { UnstyledButton } from '@mantine/core';
-import type { ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import { useRemembered } from '../../shell/remember';
+import { useSeverityWithin } from '../Problems';
+import { FoldScope } from './fold';
 
 export function Dock({ children, label }: { children: ReactNode; label: string }) {
   return (
@@ -37,10 +41,18 @@ export function DockSection({
   children: ReactNode;
 }) {
   const [folded, setFolded] = useRemembered(`dock:${id}`, startFolded);
+  const unfold = useCallback(() => setFolded(false), [setFolded]);
   // (a section that needs the user is never folded away)
   const open = !folded || needed === true;
+  const severity = useSeverityWithin(id);
   return (
-    <section id={id} className="dock-section" data-needed={needed || undefined} data-folded={!open || undefined}>
+    <section
+      id={id}
+      className="dock-section"
+      data-needed={needed || undefined}
+      data-folded={!open || undefined}
+      data-severity={(!open && severity) || undefined}
+    >
       <header className="dock-head">
         <UnstyledButton className="dock-title" aria-expanded={open} onClick={() => setFolded(open)}>
           <span className="ui-chevron" data-opened={open}>
@@ -52,7 +64,11 @@ export function DockSection({
         {note && <span className="dock-note">{note}</span>}
         {open && actions && <span className="dock-actions">{actions}</span>}
       </header>
-      {open && <div className="dock-body">{children}</div>}
+      <div className="dock-body" hidden={!open}>
+        <FoldScope id={id} open={unfold}>
+          {children}
+        </FoldScope>
+      </div>
     </section>
   );
 }

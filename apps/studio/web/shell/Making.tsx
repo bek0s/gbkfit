@@ -1,7 +1,8 @@
 // Making things and finding them, from anywhere: the New menu of the bar
 // (grouped like the rail), the dialog that names a new block (or the flow
 // of its own of a dataset; see SectionList's adders), and Go to (Ctrl+K),
-// which finds a section, a block of the project or an action by name.
+// which finds a section, a block of the project or an action by name: in
+// the section of the screen first, until that is let go.
 import { Fragment, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { useCreateBlock, useProject } from '../api/queries';
 import { Button, TextField } from '../components/ui/basics';
@@ -9,7 +10,7 @@ import { Dialog, DropMenu, type MenuEntry } from '../components/ui/overlays';
 import { useStudio } from '../studio';
 import { DataKindDialog } from './DataKindDialog';
 import { useOpenSection } from './Rail';
-import { kindOf, SECTIONS, type SectionKey } from './sections';
+import { kindOf, sectionNamed, sectionOf, SECTIONS, type Section, type SectionKey } from './sections';
 
 // How a new block of a folder is made: by its name, from the template of
 // its folder (see NamingDialog), or by a flow of its own
@@ -117,12 +118,17 @@ function inSentence(kind: string): string {
 
 interface Found {
   key: string;
-  // The group it is shown in (e.g. 'Galaxies'), and what it is
+  // The group it is shown in (e.g. 'Galaxies'; none: no heading), and
+  // what it is
   group: string;
   kind: string;
   title: string;
   note?: string;
+  // The folder of the blocks it is (or makes; none: of no section)
+  folder?: string;
   run: () => void;
+  // Whether Go to stays open as it runs (e.g. as it finds elsewhere)
+  stays?: boolean;
 }
 
 // The things Go to shows of a group (all, of what is typed), and of all
@@ -132,17 +138,34 @@ const SHOWN = 40;
 // Go to (Ctrl+K): the blocks of the project, the sections and the actions
 // whose names hold what is typed, under the title of their group; with
 // nothing typed, the blocks opened last first. Arrows choose, Enter goes.
+// It opens in the section of the screen (if it has blocks), as a chip
+// before what is typed: only its blocks and what makes them are found,
+// and the last line finds in all the project; the chip's ×, or Backspace
+// with nothing typed, lets the section go.
 export function GoTo() {
-  const { project, go, startAdding, visited } = useStudio();
+  const { project, go, startAdding, visited, screen } = useStudio();
   const openSection = useOpenSection();
   const info = useProject(project);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [chosen, setChosen] = useState(0);
+  const [scoped, setScoped] = useState(true);
+  const here = sectionNamed(sectionOf(screen));
+  const scope: Section | null = scoped && here.groups.length > 0 ? here : null;
+  const start = () => {
+    setScoped(true);
+    setChosen(0);
+    setOpen(true);
+  };
+  const widen = () => {
+    setScoped(false);
+    setChosen(0);
+  };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
+        setScoped(true);
         setOpen((was) => !was);
       }
     };
@@ -168,6 +191,7 @@ export function GoTo() {
             kind: group.kind,
             title: name,
             note: type ?? undefined,
+            folder: group.folder,
             run: () => go({ kind: 'block', folder: group.folder, name }),
           };
         }),
@@ -180,73 +204,96 @@ export function GoTo() {
         kind: 'New',
         title: `${kindOf(folder)}…`,
         note: `a new ${inSentence(kindOf(folder))}`,
+        folder,
         run: () => startAdding(folder),
       })),
     );
     return [...blocks, ...sections, ...actions];
   }, [info.data, go, openSection, startAdding]);
   const query = text.trim().toLowerCase();
-  const found = useMemo(() => {
-    if (query) return all.filter((item) => `${item.kind} ${item.title} ${item.note ?? ''}`.toLowerCase().includes(query)).slice(0, SHOWN);
+  // (what it finds in: the blocks of the section and what makes them, or
+  // all)
+  const searched = useMemo(() => {
+    const folders = scope?.groups.map((group) => group.folder);
+    return folders ? all.filter((item) => item.folder !== undefined && folders.includes(item.folder)) : all;
+  }, [all, scope]);
+  const matches = useMemo(() => {
+    if (query) return searched.filter((item) => `${item.kind} ${item.title} ${item.note ?? ''}`.toLowerCase().includes(query)).slice(0, SHOWN);
     // (nothing typed: the blocks opened last, then the first of each group)
     const recent = visited
-      .flatMap((seen) => (seen.kind === 'block' ? all.filter((item) => item.key === `${seen.folder}/${seen.name}`) : []))
+      .flatMap((seen) => (seen.kind === 'block' ? searched.filter((item) => item.key === `${seen.folder}/${seen.name}`) : []))
       .slice(0, PER_GROUP)
       .map((item) => ({ ...item, key: `recent/${item.key}`, group: 'Opened last', note: item.kind }));
     const counts: Record<string, number> = {};
-    const firsts = all.filter((item) => (counts[item.group] = (counts[item.group] ?? 0) + 1) <= PER_GROUP);
+    const firsts = searched.filter((item) => (counts[item.group] = (counts[item.group] ?? 0) + 1) <= PER_GROUP);
     return [...recent, ...firsts].slice(0, SHOWN);
-  }, [query, all, visited]);
+  }, [query, searched, visited]);
+  const found: Found[] =
+    scope && query ? [...matches, { key: 'widen', group: '', kind: '', title: 'Search the whole project', note: `for “${text.trim()}”`, run: widen, stays: true }] : matches;
   const input = useRef<HTMLInputElement>(null);
   if (project === null) return null;
   const run = (item: Found | undefined) => {
     if (!item) return;
-    setOpen(false);
-    setText('');
+    if (!item.stays) {
+      setOpen(false);
+      setText('');
+    }
     item.run();
   };
   return (
     <>
-      <button type="button" className="goto" title="Go to (Ctrl+K)" onClick={() => setOpen(true)}>
+      <button type="button" className="goto" title="Go to (Ctrl+K)" onClick={start}>
         Go to anything
         <kbd>Ctrl K</kbd>
       </button>
       {open && (
         <div className="goto-scrim" onMouseDown={() => setOpen(false)}>
           <div className="goto-box" role="dialog" aria-label="Go to" onMouseDown={(event) => event.stopPropagation()}>
-            <input
-              ref={input}
-              autoFocus
-              className="goto-input"
-              value={text}
-              placeholder="A galaxy, a dataset, a section, or New…"
-              aria-label="Go to"
-              onChange={(event) => {
-                setText(event.target.value);
-                setChosen(0);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') setOpen(false);
-                if (event.key === 'ArrowDown') setChosen(Math.min(chosen + 1, found.length - 1));
-                if (event.key === 'ArrowUp') setChosen(Math.max(chosen - 1, 0));
-                if (event.key === 'Enter') run(found[chosen]);
-              }}
-            />
+            <div className="goto-field">
+              {scope && (
+                <span className="goto-scope">
+                  {scope.title}
+                  {/* (the input keeps the focus) */}
+                  <button type="button" aria-label="Search the whole project" title="Search the whole project" onMouseDown={(event) => event.preventDefault()} onClick={widen}>
+                    ×
+                  </button>
+                </span>
+              )}
+              <input
+                ref={input}
+                autoFocus
+                className="goto-input"
+                value={text}
+                placeholder={scope ? `Find in ${scope.title.toLowerCase()}, or New…` : 'A galaxy, a dataset, a section, or New…'}
+                aria-label="Go to"
+                onChange={(event) => {
+                  setText(event.target.value);
+                  setChosen(0);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Backspace' && text === '' && scope) widen();
+                  if (event.key === 'Escape') setOpen(false);
+                  if (event.key === 'ArrowDown') setChosen(Math.min(chosen + 1, found.length - 1));
+                  if (event.key === 'ArrowUp') setChosen(Math.max(chosen - 1, 0));
+                  if (event.key === 'Enter') run(found[chosen]);
+                }}
+              />
+            </div>
             <div className="goto-list" role="listbox">
+              {matches.length === 0 && <p className="goto-none">{scope ? `Nothing in ${scope.title.toLowerCase()} by that name.` : 'Nothing by that name.'}</p>}
               {found.map((item, i) => (
                 <Fragment key={item.key}>
-                  {item.group !== found[i - 1]?.group && (
+                  {item.group && item.group !== found[i - 1]?.group && (
                     <div className="goto-group" role="presentation">
                       {item.group}
                     </div>
                   )}
-                  <button type="button" role="option" aria-selected={i === chosen} className="goto-item" onMouseEnter={() => setChosen(i)} onClick={() => run(item)}>
+                  <button type="button" role="option" aria-selected={i === chosen} className="goto-item" data-stays={item.stays || undefined} onMouseEnter={() => setChosen(i)} onClick={() => run(item)}>
                     <b>{item.title}</b>
                     {item.note && <span>{item.note}</span>}
                   </button>
                 </Fragment>
               ))}
-              {found.length === 0 && <p className="goto-none">Nothing by that name.</p>}
             </div>
           </div>
         </div>

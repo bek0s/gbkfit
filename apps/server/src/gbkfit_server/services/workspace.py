@@ -85,8 +85,9 @@ class ProjectInfo:
     {folder, name}, target: {folder, name}, missing}; see
     gbkfit.project.Project.links). Also: whether it has notes (its
     README.md), the type of each piece that has one (its option 'type'),
-    by folder and name, and the status of the latest run of each setup
-    that has run ('running', 'complete' or 'failed'), by name.
+    by folder and name, when the file of each piece last changed (ISO 8601,
+    UTC), by folder and name, and the status of the latest run of each
+    setup that has run ('running', 'complete' or 'failed'), by name.
     """
     path: str
     pieces: dict[str, list[str]]
@@ -94,6 +95,8 @@ class ProjectInfo:
     links: list[dict[str, Any]] = dataclasses.field(default_factory=list)
     notes: bool = False
     types: dict[str, dict[str, str]] = dataclasses.field(default_factory=dict)
+    modified: dict[str, dict[str, str]] = dataclasses.field(
+        default_factory=dict)
     latest: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
@@ -199,6 +202,7 @@ class Workspace:
             self.relative(path), pieces, runs, links,
             notes=Path(path, 'README.md').is_file(),
             types=_types(path, pieces),
+            modified=_modified(path, pieces),
             latest=_latest_runs(Path(path, 'runs'), manifests))
 
     def create_project(self, relative: str) -> ProjectInfo:
@@ -982,6 +986,22 @@ def _types(
                     and isinstance(kind := options.get('type'), str):
                 types.setdefault(folder, {})[name] = kind
     return types
+
+
+def _modified(
+        project: str, pieces: dict[str, list[str]]
+) -> dict[str, dict[str, str]]:
+    """
+    Return when the file of each piece of a project last changed (ISO
+    8601, UTC), by folder and name.
+    """
+    return {
+        folder: {
+            name: datetime.datetime.fromtimestamp(
+                Path(project, folder, f'{name}.yaml').stat().st_mtime,
+                datetime.UTC).isoformat()
+            for name in names}
+        for folder, names in pieces.items() if names}
 
 
 def _latest_runs(runs: Path, manifests: Sequence[Path]) -> dict[str, str]:

@@ -1,71 +1,97 @@
 // The datasets of the project at a glance, the screen of the section
-// before any dataset is opened: one row each (a click opens it), with what
-// it is (its kind), its pixels and channels and their size, its beam, its
-// errors, the unit of its values, whether prep made its files, the count
-// of its problems (errors, warnings; see problemsOf), and the observations
-// that see it (none: nothing can use it yet). The dataset opened last is
-// one click away, at the top.
-import { useMemo } from 'react';
+// before any dataset is opened: one row each (a click opens it; its menu,
+// at its end or of a right click, renames or deletes it), with what it is
+// (its kind), its pixels and channels and their size, its beam, the unit
+// of its values (of each map of moments, if theirs differ), whether prep
+// made its files, and when its file last changed; a sign before its name
+// says the worst of its problems (see problemsOf), all of them on hover;
+// a long name or unit is cut (all of it on hover). A click on the head of
+// a column sorts by it, as the page remembers: a pair of numbers (the
+// pixels, their size, the beam) by the area it spans.
+import { Tooltip } from '@mantine/core';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { components } from '../../api/schema';
 import { usePiece, usePreparation, useProject } from '../../api/queries';
-import { joinPath } from '../../components/FilePicker';
-import { significant } from '../../components/format';
+import { significant, when } from '../../components/format';
+import { MoreIcon } from '../../components/icons';
 import { ProblemSign } from '../../components/Problems';
-import { Button } from '../../components/ui/basics';
+import { DropMenu, PointMenu } from '../../components/ui/overlays';
+import { Cut, rowKeys, SortHead, sortedKeys, TableHeading, useRowFocus, type RowFocus, type Sort, type SortValue } from '../../components/ui/table';
+import { NameInput, useBlockActions } from '../../shell/BlockMenu';
+import { useRemembered } from '../../shell/remember';
 import { ScreenHead } from '../../shell/ScreenHead';
 import { sectionNamed } from '../../shell/sections';
 import { useStudio } from '../../studio';
 import { useResolved } from './hooks';
-import { draftOfDataset, isReading, KINDS, kindOfType, NO_EDITS, NO_SPECTRAL, problemsOf, type Draft } from './model';
+import { draftOfDataset, isReading, KINDS, kindOfType, NO_EDITS, NO_SPECTRAL, presentSlots, problemsOf, slotTitle, type Draft } from './model';
 
 type ArrayInfo = components['schemas']['ArrayInfo'];
-type Link = components['schemas']['PieceLink'];
 
 const NOTHING: Draft = { items: {}, spectral: NO_SPECTRAL, edits: NO_EDITS };
 
+// The columns, by the key of the value of a row that sorts by each, and
+// what that value is
+const COLUMNS = [
+  { key: 'name', title: 'Dataset', by: 'name' },
+  { key: 'kind', title: 'Kind', by: 'kind' },
+  { key: 'pixels', title: 'Pixels', by: 'the number of pixels', numeric: true },
+  { key: 'pixelSize', title: 'Pixel size', by: 'the area of a pixel', numeric: true },
+  { key: 'channels', title: 'Channels', by: 'the number of channels', numeric: true },
+  { key: 'beam', title: 'Beam', by: 'the area of the beam', numeric: true },
+  { key: 'unit', title: 'Unit', by: 'unit' },
+  { key: 'prepared', title: 'Prepared', by: 'whether prep made the files' },
+  { key: 'modified', title: 'Modified', by: 'when its file last changed', downFirst: true },
+] as const;
+
+// The longest name and unit shown whole (characters)
+const NAME_CAP = 28;
+const UNIT_CAP = 20;
+
+type RowValues = Record<(typeof COLUMNS)[number]['key'], SortValue>;
+
+const sameRow = (a: RowValues | undefined, b: RowValues) => a !== undefined && COLUMNS.every(({ key }) => a[key] === b[key]);
+
 export function DatasetsOverview() {
-  const { project, startAdding, visited, go } = useStudio();
+  const { project, startAdding } = useStudio();
   const info = useProject(project).data;
   const names = info?.pieces.datasets ?? [];
-  const last = visited.find((seen) => seen.kind === 'block' && seen.folder === 'datasets' && names.includes(seen.name));
+  const [sort, setSort] = useRemembered<Sort>('datasets:sort', { column: 'name', down: false });
+  // (the values of each row, as it reads them; null: a row gone)
+  const [values, setValues] = useState<Record<string, RowValues>>({});
+  const report = useCallback(
+    (name: string, row: RowValues | null) =>
+      setValues((all) => {
+        if (row !== null) return sameRow(all[name], row) ? all : { ...all, [name]: row };
+        const { [name]: _gone, ...others } = all;
+        return others;
+      }),
+    [],
+  );
+  const sorted = sortedKeys(names, values, sort);
+  const focusOf = useRowFocus(sorted);
   if (project === null) return null;
   return (
     <section className="screen ov-screen">
-      <ScreenHead title={sectionNamed('data').overview?.title ?? 'Datasets'} note={<span className="ov-count">{names.length === 1 ? '1 dataset' : `${names.length} datasets`}</span>}>
-        <Button kind="primary" onClick={() => startAdding('datasets')}>
-          + Add data
-        </Button>
-      </ScreenHead>
+      <ScreenHead title={sectionNamed('data').overview?.title ?? 'Datasets'} />
       <div className="ov-scroll">
-        {last?.kind === 'block' && (
-          <button className="ov-last" onClick={() => go(last)}>
-            <span>Opened last</span>
-            <b>{last.name}</b>
-            <span aria-hidden>→</span>
-          </button>
-        )}
+        <TableHeading title="Datasets" count={names.length} addLabel="Add a dataset" onAdd={() => startAdding('datasets')} />
         {names.length === 0 ? (
           <p className="ov-empty">The project has no data yet: a cube or maps from FITS files, prepared and kept beside their originals.</p>
         ) : (
           <table className="ov-table">
             <thead>
               <tr>
-                <th>Dataset</th>
-                <th>Kind</th>
-                <th className="ov-num">Pixels</th>
-                <th className="ov-num">Pixel size</th>
-                <th className="ov-num">Channels</th>
-                <th className="ov-num">Beam</th>
-                <th>Errors</th>
-                <th>Unit</th>
-                <th>Prepared</th>
-                <th>Problems</th>
-                <th>Seen by</th>
+                {COLUMNS.map(({ key, title, by, ...column }) => (
+                  <SortHead key={key} column={key} sort={sort} onSort={setSort} by={by} downFirst={'downFirst' in column} className={'numeric' in column ? 'ov-num' : undefined}>
+                    {title}
+                  </SortHead>
+                ))}
+                <th aria-label="Actions" />
               </tr>
             </thead>
             <tbody>
-              {names.map((name) => (
-                <DatasetRow key={name} project={project} name={name} links={info?.links ?? []} />
+              {sorted.map((name) => (
+                <DatasetRow key={name} project={project} name={name} modified={info?.modified.datasets?.[name] ?? null} focus={focusOf(name)} onValues={report} />
               ))}
             </tbody>
           </table>
@@ -75,9 +101,28 @@ export function DatasetsOverview() {
   );
 }
 
-function DatasetRow({ project, name, links }: { project: string; name: string; links: Link[] }) {
+function DatasetRow({
+  project,
+  name,
+  modified,
+  focus,
+  onValues,
+}: {
+  project: string;
+  name: string;
+  // When its file last changed (ISO 8601; null: not known)
+  modified: string | null;
+  // How the keyboard reaches it (see useRowFocus)
+  focus: RowFocus;
+  onValues: (name: string, row: RowValues | null) => void;
+}) {
   const { go } = useStudio();
-  const options = usePiece(joinPath(project, `datasets/${name}.yaml`)).data as Record<string, unknown> | undefined;
+  const actions = useBlockActions(project, 'datasets', name);
+  // (the menu of a right click, where it was in the box of the menu)
+  const [pointed, setPointed] = useState<[number, number] | null>(null);
+  const menuBox = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLTableRowElement>(null);
+  const options = usePiece(actions.path).data as Record<string, unknown> | undefined;
   const kind = kindOfType(options?.type);
   const draft = useMemo(() => (kind && options ? draftOfDataset(kind, options, project) : NOTHING), [kind, options, project]);
   const resolved = useResolved(kind ?? 'cube', draft);
@@ -86,81 +131,145 @@ function DatasetRow({ project, name, links }: { project: string; name: string; l
   const arrays = key === undefined ? undefined : resolved.arrays[key];
   const array = arrays?.found.data;
   const failed = arrays?.errors.data;
-  const seenBy = links.filter((link) => link.source.folder === 'observations' && link.target.folder === 'datasets' && link.target.name === name).map((link) => link.source.name);
   const maps = kind === 'moments' ? Object.keys(draft.items).length : null;
   const reading = options === undefined || (array === undefined && failed === undefined);
   const dash = <span className="ov-faint">{reading ? '…' : '—'}</span>;
   const preparation = usePreparation(item?.files.data?.file ?? null);
   const checked = kind !== undefined && !isReading(resolved);
   const problems = checked ? problemsOf(resolved) : [];
-  const errors = problems.filter((problem) => problem.severity === 'error').length;
-  const warnings = problems.length - errors;
+  const worst = problems.find((problem) => problem.severity === 'error')?.severity ?? problems[0]?.severity;
+  // (the unit of the values: of each map, as given or as its header says,
+  // where they differ)
+  const units = kind
+    ? presentSlots(kind, draft).flatMap((slot) => {
+        const unit = draft.items[slot.key].unit || resolved.arrays[slot.key]?.found.data?.unit;
+        return unit ? [{ map: slotTitle(slot, kind), unit }] : [];
+      })
+    : [];
+  const perMap = new Set(units.map(({ unit }) => unit)).size > 1;
+  // (what the row sorts by)
+  const kindTitle = kind ? KINDS[kind].title : options ? String(options.type ?? '') : null;
+  const unit = perMap ? 'per map' : (units[0]?.unit ?? null);
+  const [pixels, pixelSize, channelCount, beamSize] = array ? [array.shape[0] * array.shape[1], pixelSide(array), kind === 'cube' ? array.shape[2] : null, beamSide(array)] : [null, null, null, null];
+  const prepared = preparation.isLoading ? null : preparation.data ? 'yes' : 'no';
+  const time = modified === null ? null : Date.parse(modified);
+  const row = useMemo<RowValues>(
+    () => ({ name, kind: kindTitle, pixels, pixelSize, channels: channelCount, beam: beamSize, unit, prepared, modified: time }),
+    [name, kindTitle, pixels, pixelSize, channelCount, beamSize, unit, prepared, time],
+  );
+  // (before the row is drawn: it is in its place from the first)
+  useLayoutEffect(() => onValues(name, row), [name, row, onValues]);
+  useEffect(() => () => onValues(name, null), [name, onValues]);
+  const open = () => go({ kind: 'block', folder: 'datasets', name });
   return (
-    <tr className="ov-row" onClick={() => go({ kind: 'block', folder: 'datasets', name })}>
-      <td className="ov-name">{name}</td>
+    <tr
+      ref={rowRef}
+      className="ov-row"
+      data-renaming={actions.renaming || undefined}
+      onClick={actions.renaming ? undefined : open}
+      {...focus}
+      {...rowKeys(open)}
+      onContextMenu={(event) => {
+        const box = menuBox.current?.getBoundingClientRect();
+        const button = menuBox.current?.querySelector('.ov-more-button')?.getBoundingClientRect();
+        if (!box || !button) return;
+        event.preventDefault();
+        // (of the right button, where it was pressed; of the keyboard, e.g.
+        // the menu key, under the button of the menu)
+        setPointed(event.button === 2 ? [event.clientX - box.left, event.clientY - box.top] : [button.left - box.left, button.bottom - box.top]);
+      }}
+    >
+      <td className="ov-name">
+        <span className="ov-name-box">
+          <span className="ov-sign">
+            {worst && (
+              <Tooltip label={problems.map((problem) => problem.message).join('\n')} multiline maw={360} position="top-start" openDelay={120} classNames={{ tooltip: 'problem-tip' }}>
+                <span>
+                  <ProblemSign severity={worst} />
+                </span>
+              </Tooltip>
+            )}
+          </span>
+          <Cut max={NAME_CAP} title={name} className="ov-name-text" />
+          {actions.renaming && <NameInput project={project} folder="datasets" name={name} path={actions.path} onDone={() => actions.setRenaming(false)} />}
+        </span>
+      </td>
       <td>
-        {kind ? KINDS[kind].title : options ? String(options.type ?? '—') : dash}
+        {kindTitle ?? dash}
         {maps !== null && <span className="ov-faint"> · {maps}</span>}
       </td>
-      {failed !== undefined ? (
-        <td colSpan={4} className="ov-problem">
-          {failed}
-        </td>
-      ) : (
-        <>
-          <td className="ov-num">{array ? `${array.shape[0]} × ${array.shape[1]}` : dash}</td>
-          <td className="ov-num">{array?.step ? pixelSize(array.step) : dash}</td>
-          <td className="ov-num">{array ? (kind === 'cube' ? channels(array) : '—') : dash}</td>
-          <td className="ov-num">{array ? beam(array) : dash}</td>
-        </>
-      )}
-      <td>{item ? item.files.error ? 'from a file' : item.errorValue !== null ? item.errorValue : <span className="ov-warn">none</span> : dash}</td>
-      <td className="ov-unit">{item?.unit || array?.unit || dash}</td>
-      <td>{preparation.isLoading ? dash : preparation.data ? 'yes' : 'no'}</td>
-      <td className="ov-problems" title={problems.map((problem) => problem.message).join('\n') || undefined}>
-        {!checked ? (
-          dash
-        ) : problems.length === 0 ? (
-          <span className="ov-faint">none</span>
+      <td className="ov-num">{array ? `${array.shape[0]} × ${array.shape[1]}` : dash}</td>
+      <td className="ov-num">{array?.step ? pixelSizeText(array.step) : dash}</td>
+      <td className="ov-num">{array ? (kind === 'cube' ? channels(array) : '—') : dash}</td>
+      <td className="ov-num">{array ? beam(array) : dash}</td>
+      <td className="ov-unit">
+        {perMap ? (
+          <span title={units.map(({ map, unit }) => `${map}: ${unit}`).join('\n')}>per map</span>
+        ) : unit ? (
+          <Cut max={UNIT_CAP} title={unit} />
         ) : (
-          <>
-            {errors > 0 && (
-              <span data-severity="error">
-                <ProblemSign severity="error" />
-                {errors}
-              </span>
-            )}
-            {warnings > 0 && (
-              <span data-severity="warning">
-                <ProblemSign severity="warning" />
-                {warnings}
-              </span>
-            )}
-          </>
+          dash
         )}
       </td>
-      <td onClick={(event) => event.stopPropagation()}>
-        {seenBy.length === 0 ? (
-          <span className="ov-warn">no observation</span>
-        ) : (
-          <span className="ov-chips">
-            {seenBy.map((observation) => (
-              <button key={observation} className="ov-chip" title={`Open the observation ${observation}`} onClick={() => go({ kind: 'block', folder: 'observations', name: observation })}>
-                {observation}
+      <td>{prepared ?? dash}</td>
+      <td className="ov-time">{modified === null ? dash : when(modified)}</td>
+      {/* (what is done here is not a click on the row) */}
+      <td className="ov-more" onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.stopPropagation()}>
+        {/* (the box the menu of a right click is placed in: the cell is
+            not, so that the focus ring of the row is drawn over it) */}
+        <div ref={menuBox} className="ov-more-box">
+          <DropMenu
+            label={`The dataset ${name}`}
+            at="end"
+            returnFocus={false}
+            entries={actions.entries}
+            target={
+              // (not a stop of Tab: the menu key of the row opens it)
+            <button type="button" className="ov-more-button" tabIndex={-1} title="Rename or delete the dataset" aria-label={`The dataset ${name}`}>
+                <MoreIcon />
               </button>
-            ))}
-          </span>
-        )}
+            }
+          />
+          {pointed && (
+            <PointMenu
+              at={pointed}
+              entries={actions.entries}
+              label={`The dataset ${name}`}
+              onClose={() => {
+                setPointed(null);
+                // (the focus back to the row, as it was before the menu)
+                rowRef.current?.focus({ preventScroll: true });
+              }}
+            />
+          )}
+        </div>
+        {actions.dialog}
       </td>
     </tr>
   );
 }
 
+// The side of the square of the area of a pixel on the sky (arcsec; the
+// geometric mean of its sides), what the column of their size sorts by
+// (null: none known)
+function pixelSide(array: ArrayInfo): number | null {
+  const [x, y] = array.step ?? [];
+  return x === undefined || y === undefined ? null : Math.sqrt(Math.abs(x * y));
+}
+
+// The FWHM of the round beam of the area of the beam (arcsec; the
+// geometric mean of its axes), what the column of the beam sorts by
+// (null: none, or one per channel)
+function beamSide(array: ArrayInfo): number | null {
+  const { bmaj, bmin } = array.beam ?? {};
+  return typeof bmaj === 'number' && typeof bmin === 'number' ? Math.sqrt(bmaj * bmin) : null;
+}
+
 // The size of the pixels on the sky (arcsec): one number if they are
 // square
-function pixelSize(step: number[]): string {
+function pixelSizeText(step: number[]): string {
   const [x, y] = step.map((value) => significant(Math.abs(value), 3));
-  return x === y ? `${x}″` : `${x} × ${y}″`;
+  return x === y ? `${x}″` : `${x}″ × ${y}″`;
 }
 
 // The channels of a cube, and their width (km/s: the server reads the

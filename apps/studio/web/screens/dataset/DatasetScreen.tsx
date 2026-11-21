@@ -19,6 +19,7 @@ import { ProblemCounter, ProblemField, ProblemsProvider, type Problem } from '..
 import { Dock, DockSection } from '../../components/ui/dock';
 import { Segments } from '../../components/ui/inputs';
 import { useBlockHead } from '../../shell/BlockMenu';
+import { UsedBy } from '../../shell/UsedBy';
 import { useStudio } from '../../studio';
 import { ScreenHead } from '../../shell/ScreenHead';
 import { useUnsaved } from '../editing';
@@ -140,7 +141,8 @@ export function NewDataset({ kind }: { kind: Kind }) {
 export function Dataset({ name }: { name: string }) {
   const { project } = useStudio();
   const root = project ?? '.';
-  const piece = usePiece(project === null ? null : joinPath(root, `datasets/${name}.yaml`));
+  const path = joinPath(root, `datasets/${name}.yaml`);
+  const piece = usePiece(project === null ? null : path);
   const options = piece.data as Record<string, unknown> | undefined;
   const kind = kindOfType(options?.type);
   const head = useBlockHead(root, 'datasets', name);
@@ -161,7 +163,7 @@ export function Dataset({ name }: { name: string }) {
   // were prepared and the originals are there; or else from its files)
   const startEditing = () => {
     if (!kind || !options) return;
-    const canRedo = record !== null && originals.every((path) => !describeOriginals(path).error);
+    const canRedo = record !== null && originals.every((original) => !describeOriginals(original).error);
     setEditing(canRedo ? draftOfPreparation(kind, options, record, root) : draft);
   };
   const problems = [
@@ -200,6 +202,7 @@ export function Dataset({ name }: { name: string }) {
                   <SpectralFields resolved={resolved} />
                 </DockSection>
               )}
+              <UsedBy path={path} />
             </Dock>
           }
         />

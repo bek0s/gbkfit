@@ -90,8 +90,9 @@ class ProjectInfo(BaseModel):
     (e.g. 'galaxies'), the paths of its runs, and its links: each piece or
     setup that names a piece, with the piece it names (see PieceLink).
     Also whether it has notes (its README.md), the type of each piece that
-    has one (its option 'type'), by folder and name, and the status of the
-    latest run of each setup that has run ('running', 'complete' or
+    has one (its option 'type'), by folder and name, when the file of each
+    piece last changed (ISO 8601, UTC), by folder and name, and the status
+    of the latest run of each setup that has run ('running', 'complete' or
     'failed'), by name.
     """
     path: str
@@ -100,6 +101,7 @@ class ProjectInfo(BaseModel):
     links: list[PieceLink]
     notes: bool = False
     types: dict[str, dict[str, str]] = {}
+    modified: dict[str, dict[str, str]] = {}
     latest: dict[str, str] = {}
 
 

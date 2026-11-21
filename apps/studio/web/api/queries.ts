@@ -403,19 +403,45 @@ export function useReferences(path: string | null) {
   });
 }
 
-// Rename a block of a project (by its path), and the blocks that name it
-// with it; resolves to its new path
+// Rename a block of a project (by its path, its folder and its name), and
+// the blocks that name it with it; resolves to its new path
 export function useRenameBlock(project: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ path, name }: { path: string; name: string }) =>
-      data(api.PATCH('/api/v1/pieces/{path}', { params: { path: { path } }, body: { name } })),
-    onSuccess: () => {
+    mutationFn: ({ path, to }: { path: string; folder: string; from: string; to: string }) =>
+      data(api.PATCH('/api/v1/pieces/{path}', { params: { path: { path } }, body: { name: to } })),
+    onSuccess: (renamed, { path, folder, from, to }) => {
+      // (the block is known by its new name at once, as it was by its old,
+      // while the project is read again: what shows it neither shows its
+      // old name again nor reads it again)
+      const piece = client.getQueryData(keys.piece(path));
+      if (piece !== undefined) client.setQueryData(keys.piece(renamed), piece);
+      client.setQueryData<ProjectInfo>(keys.project(project), (info) => info && withRenamed(info, folder, from, to));
       client.invalidateQueries({ queryKey: keys.project(project) });
-      client.invalidateQueries({ queryKey: ['piece'] });
+      // (but its old path, which names nothing now)
+      client.invalidateQueries({ queryKey: ['piece'], predicate: (query) => query.queryKey[1] !== path });
       client.invalidateQueries({ queryKey: ['references'] });
     },
   });
+}
+
+type ProjectInfo = components['schemas']['ProjectInfo'];
+
+// A project as it is once a block of a folder of it is renamed, as far as
+// its lists say (its blocks, their types and times; the rest is as it is
+// read again)
+function withRenamed(info: ProjectInfo, folder: string, from: string, to: string): ProjectInfo {
+  // (what a list of the folder, by name, says of the block, by its new name)
+  const renamed = (byFolder: Record<string, Record<string, string>>) => {
+    const { [from]: value, ...others } = byFolder[folder] ?? {};
+    return value === undefined ? byFolder : { ...byFolder, [folder]: { ...others, [to]: value } };
+  };
+  return {
+    ...info,
+    pieces: { ...info.pieces, [folder]: (info.pieces[folder] ?? []).map((name) => (name === from ? to : name)) },
+    types: renamed(info.types),
+    modified: renamed(info.modified),
+  };
 }
 
 // Delete a block of a project (by its path)
@@ -511,7 +537,11 @@ export function useUpdateBlock() {
       const { error, response } = await api.PUT('/api/v1/pieces/{path}', { params: { path: { path } }, body: content });
       if (!response.ok) throw new Error(errorMessage(error, response.status, response.statusText));
     },
-    onSuccess: (_, { path }) => client.invalidateQueries({ queryKey: keys.piece(path) }),
+    onSuccess: (_, { path }) => {
+      client.invalidateQueries({ queryKey: keys.piece(path) });
+      // (its type and time, as its project says them)
+      client.invalidateQueries({ queryKey: ['project'] });
+    },
   });
 }
 

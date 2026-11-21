@@ -5,6 +5,7 @@
 // they can be deleted once the copies are right.
 import { useState } from 'react';
 import { useDeleteData, useDescriptions } from '../../api/queries';
+import { whenInFull } from '../../components/format';
 import { Button } from '../../components/ui/basics';
 import { draftOfPreparation, editsInWords, inProject, type Kind, type Preparation } from './model';
 
@@ -35,7 +36,7 @@ export function MadeFrom({
   };
   return (
     <div className="ds-made">
-      <p className="ds-text">Prepared {when(record.time)} from</p>
+      <p className="ds-text">Prepared {whenInFull(record.time)} from</p>
       <ul className="ds-originals">
         {originals.map((path) => (
           <li key={path} data-gone={describe(path).error ? true : undefined} title={path}>
@@ -92,7 +93,3 @@ export function preparedFilesOf(record: Preparation): string[] {
   return Object.values(record.files).flatMap((value) => (Array.isArray(value) ? value.filter((path): path is string => path !== null) : [value]));
 }
 
-function when(time: string): string {
-  const date = new Date(time);
-  return Number.isNaN(date.getTime()) ? time : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}

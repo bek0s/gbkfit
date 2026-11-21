@@ -6,6 +6,7 @@
 // runs, its log (followed while it runs), and its recipe as it ran.
 import { useMemo, useState } from 'react';
 import { useFileText, useJobs, useProject, useRun, useStopJob } from '../../api/queries';
+import { when } from '../../components/format';
 import { Button } from '../../components/ui/basics';
 import { Segments } from '../../components/ui/inputs';
 import { LiveView } from './Live';
@@ -161,13 +162,4 @@ export function RunPage({ project, entry, onStarts }: { project: string; entry: 
       </div>
     </>
   );
-}
-
-// (a time of the server, as people read it: today's by its time)
-export function when(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const today = new Date();
-  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return date.toDateString() === today.toDateString() ? `today ${time}` : `${date.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${time}`;
 }

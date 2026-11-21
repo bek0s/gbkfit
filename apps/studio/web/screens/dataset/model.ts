@@ -598,13 +598,13 @@ function inputProblems(resolved: Resolved): Problem[] {
     const data = of.found.data;
     const file = item.files.data?.file.split('/').pop();
     if (item.files.data === undefined) problems.push(error([slot.key, 'data'], 'data missing'));
-    else if (of.errors.data) problems.push(error([slot.key, 'data'], `'${file}' unreadable`));
+    else if (of.errors.data) problems.push(error([slot.key, 'data'], `'${file}' unreadable · ${of.errors.data}`));
     else if (data !== undefined && kept(data).length !== info.ndim) problems.push(error([slot.key, 'data'], `'${file}' ${axes(kept(data).length)} · needs ${info.ndim}`));
     else if (data !== undefined) {
       for (const role of ['error', 'mask'] as const) {
         const array = of.found[role];
         const name = role === 'error' ? 'errors' : 'mask';
-        if (of.errors[role]) problems.push(error([slot.key, role], `${name} unreadable`));
+        if (of.errors[role]) problems.push(error([slot.key, role], `${name} unreadable · ${of.errors[role]}`));
         else if (array !== undefined && !sameShape(array, data)) problems.push(error([slot.key, role], `${name} ${shapeText(array)} · data ${shapeText(data)}`));
         else if (role === 'error' && array !== undefined && item.errorValue === null && errorKindOf(item, of) === null)
           problems.push(error([slot.key, 'error'], 'error kind missing · σ, σ² or 1/σ²'));

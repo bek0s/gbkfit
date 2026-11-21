@@ -7,9 +7,14 @@
 // rule at its side in the colour of its worst problem, and says its
 // problems in a tooltip: fields keep their height, so nothing moves as
 // problems come and go. The counter in the head of the screen counts them
-// and lists them, each leading to its field.
+// and lists them, each leading to its field: the field is shown (the folds
+// around it opened, brought into view, marked, its tooltip open, focused)
+// until the next click or key. A fold (see ui/fold) can say the worst of
+// the problems inside it, e.g. on the head of a folded section.
 import { Popover, Tooltip } from '@mantine/core';
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
+import { isWithin, openFolds, useFold, type Fold } from './ui/fold';
 
 export type Severity = 'error' | 'warning';
 
@@ -23,12 +28,13 @@ type Path = Problem['path'];
 
 // A field that fixes problems: its path, its name in the list of the
 // counter, the prefix whose otherwise homeless problems it takes (if any),
-// and its element (to scroll to and focus)
+// its element (to bring into view) and the innermost fold around it
 interface Home {
   path: Path;
   label: string;
   catches?: Path;
   element: HTMLElement | null;
+  fold: Fold | null;
 }
 
 interface Registry {
@@ -37,6 +43,9 @@ interface Registry {
   homes: Map<Problem, string | null>;
   register: (key: string, home: Home) => () => void;
   lookup: (key: string) => Home | undefined;
+  // The home shown (its key; null: none), and how one is
+  shown: string | null;
+  show: (key: string) => void;
 }
 
 const Context = createContext<Registry | null>(null);
@@ -77,6 +86,29 @@ export function ProblemsProvider({ problems, children }: { problems: readonly Pr
     };
   }, []);
   const lookup = useCallback((key: string) => fields.current.get(key), []);
+  // (a home is shown at once, its folds opened and it marked, so that it
+  // can be brought into view and focused; until the next click or key)
+  const [shown, setShown] = useState<string | null>(null);
+  const show = useCallback((key: string) => {
+    const home = fields.current.get(key);
+    if (!home) return;
+    flushSync(() => {
+      openFolds(home.fold);
+      setShown(key);
+    });
+    home.element?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (home.element) firstControl(home.element)?.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (shown === null) return;
+    const hide = () => setShown(null);
+    document.addEventListener('pointerdown', hide, true);
+    document.addEventListener('keydown', hide, true);
+    return () => {
+      document.removeEventListener('pointerdown', hide, true);
+      document.removeEventListener('keydown', hide, true);
+    };
+  }, [shown]);
   const homes = useMemo(() => {
     const listed = [...fields.current.values()];
     return new Map(
@@ -86,7 +118,7 @@ export function ProblemsProvider({ problems, children }: { problems: readonly Pr
       }),
     );
   }, [problems, version]); // eslint-disable-line react-hooks/exhaustive-deps
-  const value = useMemo(() => ({ problems, homes, register, lookup }), [problems, homes, register, lookup]);
+  const value = useMemo(() => ({ problems, homes, register, lookup, shown, show }), [problems, homes, register, lookup, shown, show]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 
@@ -96,30 +128,52 @@ function useRegistry(): Registry {
   return registry;
 }
 
+// The first control of an element that can take the focus, if any
+function firstControl(element: HTMLElement): HTMLElement | null {
+  const controls = element.querySelectorAll<HTMLElement>('input:not([type="hidden"]), button, select, textarea, [tabindex]:not([tabindex="-1"])');
+  return [...controls].find((control) => !control.matches(':disabled')) ?? null;
+}
+
 // Registers a field as the home of the problems of its path (see homeOf);
 // gives the ref of its element, the worst severity of its problems (null:
-// none) and their messages
+// none), their messages, and whether it is shown (see ProblemCounter)
 export function useProblemHome(path: Path, label: string, catches?: Path) {
-  const { problems, homes, register } = useRegistry();
+  const { problems, homes, register, shown } = useRegistry();
+  const fold = useFold();
   const key = keyOf(path);
   const catchKey = catches && keyOf(catches);
   const [element, setElement] = useState<HTMLElement | null>(null);
   useLayoutEffect(
-    () => register(key, { path: JSON.parse(key) as Path, label, catches: catchKey ? (JSON.parse(catchKey) as Path) : undefined, element }),
-    [register, key, label, catchKey, element],
+    () => register(key, { path: JSON.parse(key) as Path, label, catches: catchKey ? (JSON.parse(catchKey) as Path) : undefined, element, fold }),
+    [register, key, label, catchKey, element, fold],
   );
   const own = bySeverity(problems.filter((problem) => homes.get(problem) === key));
-  return { ref: setElement, severity: own[0]?.severity ?? null, messages: own.map((problem) => problem.message) };
+  return { ref: setElement, severity: own[0]?.severity ?? null, messages: own.map((problem) => problem.message), shown: shown === key && own.length > 0 };
+}
+
+// The worst severity of the problems whose homes are in a fold (null:
+// none, or no problems around), e.g. for the head of a folded section
+export function useSeverityWithin(foldId: string): Severity | null {
+  const registry = useContext(Context);
+  if (registry === null) return null;
+  const { problems, homes, lookup } = registry;
+  const within = problems.filter((problem) => {
+    const key = homes.get(problem);
+    return key != null && isWithin(lookup(key)?.fold ?? null, foldId);
+  });
+  return bySeverity(within)[0]?.severity ?? null;
 }
 
 // A field (or a group of them) that fixes the problems of a path: marked
-// by a rule at its side while it has any, which it says on hover
+// by a rule at its side while it has any, which it says on hover, or
+// while it is shown
 export function ProblemField({ path, label, catches, className, children }: { path: Path; label: string; catches?: Path; className?: string; children: ReactNode }) {
   const home = useProblemHome(path, label, catches);
   return (
     <Tooltip
       label={home.messages.join('\n')}
       disabled={home.messages.length === 0}
+      opened={home.shown || undefined}
       multiline
       maw={360}
       position="top-start"
@@ -127,7 +181,7 @@ export function ProblemField({ path, label, catches, className, children }: { pa
       classNames={{ tooltip: 'problem-tip' }}
       events={{ hover: true, focus: true, touch: true }}
     >
-      <div ref={home.ref} className={['problem-field', className].filter(Boolean).join(' ')} data-severity={home.severity ?? undefined}>
+      <div ref={home.ref} className={['problem-field', className].filter(Boolean).join(' ')} data-severity={home.severity ?? undefined} data-shown={home.shown || undefined}>
         {children}
       </div>
     </Tooltip>
@@ -155,18 +209,14 @@ export function ProblemSign({ severity }: { severity: Severity }) {
 // The count of the errors and of the warnings, of a fixed width; a click
 // lists them all, each leading to its field
 export function ProblemCounter() {
-  const { problems, homes, lookup } = useRegistry();
+  const { problems, homes, lookup, show } = useRegistry();
   const [open, setOpen] = useState(false);
   const errors = problems.filter((problem) => problem.severity === 'error').length;
   const warnings = problems.length - errors;
-  const show = (problem: Problem) => {
+  const lead = (problem: Problem) => {
     setOpen(false);
     const key = homes.get(problem);
-    const element = key ? lookup(key)?.element : null;
-    if (!element) return;
-    element.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    const control = element.querySelector<HTMLElement>('input, button, [tabindex]');
-    (control ?? element).focus({ preventScroll: true });
+    if (key) show(key);
   };
   return (
     <Popover opened={open} onChange={setOpen} position="bottom-end" offset={6} shadow="md" width={420}>
@@ -192,7 +242,7 @@ export function ProblemCounter() {
         {bySeverity(problems).map((problem, i) => {
           const key = homes.get(problem);
           return (
-            <button key={i} type="button" className="problem-list-item" data-severity={problem.severity} onClick={() => show(problem)}>
+            <button key={i} type="button" className="problem-list-item" data-severity={problem.severity} onClick={() => lead(problem)}>
               <ProblemSign severity={problem.severity} />
               <span className="problem-list-text">{problem.message}</span>
               <span className="problem-list-label">{(key && lookup(key)?.label) ?? ''}</span>

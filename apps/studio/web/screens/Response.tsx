@@ -23,10 +23,10 @@ import { LinkIcon, UnlinkIcon } from '../components/icons';
 import { MapView } from '../components/MapView';
 import { SchemaForm, titleOf, unitKinds, type Defs, type Options } from '../components/SchemaForm';
 import { SpectrumPlot } from '../components/SpectrumPlot';
-import { NavItem } from '../components/ui/basics';
 import { Choice, NumberField, QuantityInput, Segments, splitQuantity } from '../components/ui/inputs';
 import { Dock, DockSection } from '../components/ui/dock';
 import { useBlockHead } from '../shell/BlockMenu';
+import { UsedBy } from '../shell/UsedBy';
 import { SaveControls, ScreenHead } from '../shell/ScreenHead';
 import { kindOf } from '../shell/sections';
 import { useStudio } from '../studio';
@@ -237,7 +237,7 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
               ) : (
                 schema.data && <LsfProperties project={project} path={path} options={shown} units={units} />
               )}
-              <NamedBy path={path} />
+              <UsedBy path={path} />
             </Dock>
           }
         />
@@ -517,29 +517,6 @@ function ownUnit(given: string[], kinds: Record<string, string[]>): string | nul
 
 function kept(array: { shape: number[] }): number[] {
   return array.shape.filter((n) => n > 1);
-}
-
-// The blocks that name it (e.g. observations, in their instruments)
-function NamedBy({ path }: { path: string }) {
-  const { go } = useStudio();
-  const references = useReferences(path).data ?? [];
-  return (
-    <DockSection id="named-by" title="Used by">
-      {references.length === 0 ? (
-        <p className="note">No observation uses it yet.</p>
-      ) : (
-        references.map((r) => (
-          <NavItem
-            key={`${r.folder}/${r.name}`}
-            mono
-            label={r.name}
-            right={<small>{kindOf(r.folder)}</small>}
-            onClick={() => r.folder !== 'setups' && go({ kind: 'block', folder: r.folder, name: r.name })}
-          />
-        ))
-      )}
-    </DockSection>
-  );
 }
 
 type Scale = 'linear' | 'log';

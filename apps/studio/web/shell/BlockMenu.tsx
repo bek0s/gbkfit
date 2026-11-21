@@ -1,22 +1,37 @@
-// The head of the screen of a block of the project: its name, which a
-// click renames in place (Enter keeps the name typed, as does a click
-// away; Escape lets it go; the blocks that name it follow), and its menu,
-// of an icon at the end of the actions of the screen: rename it (as a
-// click on its name does) or delete it (those that name it are shown
-// first, as they will name nothing).
+// What can be done to a block of the project, wherever it is shown (the
+// head of its screen, its row in a table): rename it in place (Enter
+// keeps the name typed, as does a click away; Escape lets it go; the
+// blocks that name it follow), or delete it (those that name it are shown
+// first, as they will name nothing). The head of the screen of a block
+// has its name, which a click renames, and its menu, of an icon at the
+// end of the actions of the screen.
+import { Tooltip } from '@mantine/core';
 import { useEffect, useRef, useState } from 'react';
 import { useDeleteBlock, useReferences, useRenameBlock } from '../api/queries';
 import { joinPath } from '../components/FilePicker';
 import { MoreIcon } from '../components/icons';
 import { Button } from '../components/ui/basics';
-import { Dialog, DropMenu } from '../components/ui/overlays';
+import { Dialog, DropMenu, type MenuEntry } from '../components/ui/overlays';
 import { useStudio } from '../studio';
 import { kindOf } from './sections';
 
-export function useBlockHead(project: string, folder: string, name: string) {
+// The actions on a block: the entries of its menu, whether it is being
+// renamed (its place then shows a NameInput, or the title of BlockTitle),
+// and the dialog that deletes it, while it is open
+export function useBlockActions(project: string, folder: string, name: string) {
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const path = joinPath(project, `${folder}/${name}.yaml`);
+  const entries: MenuEntry[] = [
+    { label: 'Rename', onClick: () => setRenaming(true) },
+    { label: 'Delete…', onClick: () => setDeleting(true) },
+  ];
+  const dialog = deleting ? <DeleteDialog project={project} folder={folder} name={name} path={path} onClose={() => setDeleting(false)} /> : null;
+  return { path, entries, renaming, setRenaming, dialog };
+}
+
+export function useBlockHead(project: string, folder: string, name: string) {
+  const { path, entries, renaming, setRenaming, dialog } = useBlockActions(project, folder, name);
   const what = kindOf(folder).toLowerCase();
   const title = <BlockTitle key={name} project={project} folder={folder} name={name} path={path} renaming={renaming} onRenaming={setRenaming} />;
   const menu = (
@@ -25,17 +40,14 @@ export function useBlockHead(project: string, folder: string, name: string) {
         label={`The ${what}`}
         at="end"
         returnFocus={false}
-        entries={[
-          { label: 'Rename', onClick: () => setRenaming(true) },
-          { label: 'Delete…', onClick: () => setDeleting(true) },
-        ]}
+        entries={entries}
         target={
           <Button title={`Rename or delete the ${what}`} aria-label={`The ${what}`} data-more>
             <MoreIcon />
           </Button>
         }
       />
-      {deleting && <DeleteDialog project={project} folder={folder} name={name} path={path} onClose={() => setDeleting(false)} />}
+      {dialog}
     </>
   );
   return { title, menu };
@@ -67,9 +79,45 @@ function BlockTitle({
   );
 }
 
+interface RenameProps {
+  project: string;
+  folder: string;
+  name: string;
+  // The path of its file in the workspace
+  path: string;
+  onDone: () => void;
+}
+
 // (the name as it is renamed: an input over the name typed, which sizes
 // its box as the name does, so that the box keeps its place and size)
-function TitleInput({ project, folder, name, path, onDone }: { project: string; folder: string; name: string; path: string; onDone: () => void }) {
+function TitleInput(props: RenameProps) {
+  const { typed, error, inputProps } = useRenaming(props);
+  return (
+    <h1 className="block-title" data-renaming>
+      <span className="block-title-box">
+        <span className="block-title-text">{typed || ' '}</span>
+        <input className="block-title-input" size={1} {...inputProps} />
+      </span>
+      {error && <span className="block-title-error error">{error}</span>}
+    </h1>
+  );
+}
+
+// The name of a block as it is renamed in a row of a table: over the
+// name, in its place (so that nothing moves), the error of the rename in a
+// tooltip
+export function NameInput(props: RenameProps) {
+  const { error, inputProps } = useRenaming(props);
+  return (
+    <Tooltip label={error} opened={error !== null} position="top-start" multiline maw={360} classNames={{ tooltip: 'problem-tip' }}>
+      <input className="name-input-row" data-error={error !== null || undefined} {...inputProps} />
+    </Tooltip>
+  );
+}
+
+// The state of a name being renamed: as typed, the error of the rename
+// (if any), and the props of its input
+function useRenaming({ project, folder, name, path, onDone }: RenameProps) {
   const { movedBlock } = useStudio();
   const rename = useRenameBlock(project);
   const [typed, setTyped] = useState(name);
@@ -92,7 +140,7 @@ function TitleInput({ project, folder, name, path, onDone }: { project: string; 
       return;
     }
     rename.mutate(
-      { path, name: next },
+      { path, folder, from: name, to: next },
       {
         onSuccess: () => {
           dropped.current = true;
@@ -102,33 +150,24 @@ function TitleInput({ project, folder, name, path, onDone }: { project: string; 
       },
     );
   };
-  return (
-    <h1 className="block-title" data-renaming>
-      <span className="block-title-box">
-        <span className="block-title-text">{typed || ' '}</span>
-        <input
-          ref={input}
-          className="block-title-input"
-          autoFocus
-          spellCheck={false}
-          aria-label={`Name of the ${what}`}
-          value={typed}
-          size={1}
-          onFocus={(event) => event.target.select()}
-          onChange={(event) => setTyped(event.target.value)}
-          onBlur={keep}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') keep();
-            if (event.key === 'Escape') {
-              dropped.current = true;
-              onDone();
-            }
-          }}
-        />
-      </span>
-      {rename.error && <span className="block-title-error error">{rename.error.message}</span>}
-    </h1>
-  );
+  const inputProps = {
+    ref: input,
+    autoFocus: true,
+    spellCheck: false,
+    'aria-label': `Name of the ${what}`,
+    value: typed,
+    onFocus: (event: React.FocusEvent<HTMLInputElement>) => event.target.select(),
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => setTyped(event.target.value),
+    onBlur: keep,
+    onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') keep();
+      if (event.key === 'Escape') {
+        dropped.current = true;
+        onDone();
+      }
+    },
+  };
+  return { typed, error: rename.error?.message ?? null, inputProps };
 }
 
 interface DialogProps {

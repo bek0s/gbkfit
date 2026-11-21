@@ -1,13 +1,15 @@
 // The state of the Studio that its parts share: the open project and the
-// recent ones, the screen on the stage, the blocks opened last, and the
-// folder where a new block is being made (see shell/Making). Leaving
-// a screen whose edits are not saved asks first, in a dialog.
+// recent ones, the screen on the stage, the blocks opened last, where each
+// section was left, and the folder where a new block is being made (see
+// shell/Making). Leaving a screen whose edits are not saved asks first, in
+// a dialog.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useProjects } from './api/queries';
 import { Button } from './components/ui/basics';
 import { Dialog } from './components/ui/overlays';
 import { address, parseAddress, sameScreen, type Screen } from './shell/navigation';
 import { latestFirst, useRemembered } from './shell/remember';
+import { sectionOf, type SectionKey } from './shell/sections';
 
 // The projects, and the blocks of each, remembered as recent
 const RECENT = 6;
@@ -21,6 +23,9 @@ export interface Studio {
   go: (screen: Screen) => void;
   // The blocks of the open project opened last, the latest first
   visited: Screen[];
+  // Where each section of the open project was left: its screen shown
+  // last (a block of it, or its overview), by section
+  places: Partial<Record<SectionKey, Screen>>;
   adding: string | null;
   startAdding: (folder: string | null) => void;
   // What the page remembers of a project or a block follows it as it is
@@ -45,6 +50,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [project, setProject] = useRemembered<string | null>('project', null);
   const [recent, setRecent] = useRemembered<string[]>('recent-projects', []);
   const [visited, setVisited] = useRemembered<Record<string, Screen[]>>('visited', {});
+  const [places, setPlaces] = useRemembered<Record<string, Partial<Record<SectionKey, Screen>>>>('places', {});
   const [screen, setScreen] = useState<Screen>(() => parseAddress(window.location.hash));
   const [adding, setAdding] = useState<string | null>(null);
 
@@ -107,13 +113,18 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   const go = useCallback((next: Screen) => show(next), [show]);
 
-  // (a block shown is a block visited, however it came: by a click, by
-  // the address, or back and forth in the history)
+  // (a block shown is a block visited, and a block or an overview shown is
+  // where its section is left, however it came: by a click, by the
+  // address, or back and forth in the history)
   useEffect(() => {
-    if (project !== null && screen.kind === 'block') {
+    if (project === null) return;
+    if (screen.kind === 'block') {
       setVisited((all) => ({ ...all, [project]: latestFirst(all[project] ?? [], screen, RECENT, sameScreen) }));
     }
-  }, [project, screen, setVisited]);
+    if (screen.kind === 'block' || screen.kind === 'section') {
+      setPlaces((all) => ({ ...all, [project]: { ...all[project], [sectionOf(screen)]: screen } }));
+    }
+  }, [project, screen, setVisited, setPlaces]);
 
   const openProject = useCallback(
     (path: string | null) =>
@@ -127,10 +138,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const movedProject = useCallback(
     (path: string, to: string | null) => {
       setRecent((paths) => (to === null ? paths.filter((p) => p !== path) : paths.map((p) => (p === path ? to : p))));
-      setVisited(({ [path]: moved, ...others }) => (to === null || moved === undefined ? others : { ...others, [to]: moved }));
+      const follow = <T,>({ [path]: moved, ...others }: Record<string, T>) => (to === null || moved === undefined ? others : { ...others, [to]: moved });
+      setVisited(follow);
+      setPlaces(follow);
       if (project === path) openProject(to);
     },
-    [project, openProject, setRecent, setVisited],
+    [project, openProject, setRecent, setVisited, setPlaces],
   );
 
   const movedBlock = useCallback(
@@ -142,6 +155,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         ...all,
         [project]: (all[project] ?? []).flatMap((other) => (was(other) ? (next ? [next] : []) : [other])),
       }));
+      // (a section left at the block: at it renamed, or at nothing)
+      setPlaces((all) => {
+        const key = sectionOf({ kind: 'block', folder, name });
+        const place = all[project]?.[key];
+        if (place === undefined || !was(place)) return all;
+        const { [key]: _gone, ...others } = all[project] ?? {};
+        return { ...all, [project]: next ? { ...others, [key]: next } : others };
+      });
       // (the screen of the block shows it as renamed, or the home)
       const shown: Screen | null = was(screen) ? (next ?? { kind: 'home' }) : null;
       if (shown !== null) {
@@ -149,7 +170,7 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         window.history.replaceState(null, '', address(shown));
       }
     },
-    [project, screen, setVisited],
+    [project, screen, setVisited, setPlaces],
   );
 
   const startAdding = useCallback((folder: string | null) => setAdding(folder), []);
@@ -162,13 +183,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       screen,
       go,
       visited: project === null ? [] : (visited[project] ?? []),
+      places: project === null ? {} : (places[project] ?? {}),
       adding,
       startAdding,
       movedProject,
       movedBlock,
       setUnsaved,
     }),
-    [project, openProject, recent, screen, go, visited, adding, startAdding, movedProject, movedBlock, setUnsaved],
+    [project, openProject, recent, screen, go, visited, places, adding, startAdding, movedProject, movedBlock, setUnsaved],
   );
   return (
     <StudioContext.Provider value={studio}>
