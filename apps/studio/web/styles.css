@@ -224,12 +224,8 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .why { display: inline-flex; align-items: center; gap: 7px; font: var(--text-body); color: var(--fg); }
 .why::before { content: '!'; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; background: var(--warn-fill); color: var(--on-warn); font: var(--text-caption); font-weight: 600; }
 .screen-error { padding: 8px 18px 0; }
-.form-file { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 4px; min-height: 30px; margin: 0 -6px; padding: 4px 6px; border-radius: 5px; }
-.form-file:hover { background: var(--panel2); }
-.form-file[data-open] { background: var(--sel); }
-.form-file-main { display: grid; align-items: start; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.form-file-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
-.form-file > .ui-close { margin: -3px -3px -3px 0; color: var(--faint); }
+.form-file { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 4px; padding: 4px 0; }
+.form-file > .ui-close { margin: 0 -3px 0 0; color: var(--faint); }
 .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; margin: 0; font: var(--text-body); }
 /* (fonts: words for people, e.g. labels, in sans; literal things, e.g.
    the keys of options, names of files and blocks, and data, e.g. values
@@ -1245,19 +1241,11 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-item-short { min-width: 22px; height: 20px; display: grid; place-items: center; padding: 0 5px; border-radius: 999px; background: var(--raise); color: var(--muted); font: var(--text-data-small); }
 .ds-item-title { flex: 1; font: var(--text-body); font-weight: 600; }
 .ds-rows { display: grid; gap: 4px; }
-/* (a row: its label and what it reads, a line that is, editing, a
-   button (it opens its popover), lit as it is pointed at or open, with
-   the way to remove what it reads; its rule of problems at the side of
-   the row, outside the light) */
-.ds-row-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 4px; margin: 0 -6px; padding: 4px 6px; border-radius: 5px; }
-.ds-row-main { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; column-gap: 8px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
-button.ds-row-main { cursor: pointer; }
-.ds-row-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
-.ds-row-line[data-editable]:hover { background: var(--panel2); }
-.ds-item[data-group] .ds-row-line[data-editable]:hover { background: var(--raise); }
-.ds-row-line[data-open], .ds-item[data-group] .ds-row-line[data-open] { background: var(--sel); }
-.ds-row-line > .ui-close { margin: -3px -3px -3px 0; color: var(--faint); }
-.ds-row-label { font: var(--text-label); color: var(--faint); white-space: nowrap; }
+/* (a row: its label, the lines of what it reads, the way to remove it;
+   its rule of problems at its side) */
+.ds-row-line { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: start; column-gap: 8px; padding: 3px 0; }
+.ds-row-line > .ui-close { margin: 0 -3px 0 0; color: var(--faint); }
+.ds-row-label { font: var(--text-label); line-height: 22px; color: var(--faint); white-space: nowrap; }
 /* (the way to add a map: text, lit as it is pointed at) */
 .ds-add { justify-self: start; margin-left: -6px; padding: 3px 6px; border: 0; border-radius: 4px; background: none; color: var(--muted); font: var(--text-label); cursor: pointer; }
 .ds-add:hover, .ds-add[aria-expanded="true"] { background: var(--panel2); color: var(--fg); }
@@ -1664,49 +1652,37 @@ button.ds-row-main { cursor: pointer; }
 .file-sum-sep { flex: none; padding: 0 .6ch; }
 .file-sum-fact { flex: 0 3 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .file-none { font: var(--text-data); color: var(--faint); }
-.file-add { justify-self: start; font: var(--text-label); color: var(--muted); }
-:hover > .file-add, [data-open] .file-add { color: var(--fg); }
 /* (the parts with problems, in the colour of the worst: the file or its
    array, how it is read, or what is asked in its place; the way to give
    what is missing) */
-.file-sum[data-name="error"] .file-sum-name, .file-sum[data-array="error"] .file-sum-array, .file-sum[data-fact="error"] .file-sum-fact, .file-add[data-severity="error"] { color: var(--err); }
-.file-sum[data-name="warning"] .file-sum-name, .file-sum[data-array="warning"] .file-sum-array, .file-sum[data-fact="warning"] .file-sum-fact, .file-add[data-severity="warning"] { color: var(--warn); }
-/* (the popover of a file read: beside its row, over the screen; its parts
-   each under a label: the file, its arrays (a list that scrolls), how it
-   is read) */
-.file-pop { display: grid; gap: 14px; padding: 12px 12px 14px; border: 1px solid var(--line2); border-radius: 6px; background: var(--raise); box-shadow: 0 10px 28px var(--shadow); color: var(--fg); }
-.file-pop-title { display: flex; align-items: baseline; gap: 8px; font: var(--text-heading); }
-.file-pop-title small { font: var(--text-caption); color: var(--faint); }
-.file-pop-part { display: grid; gap: 6px; min-width: 0; }
-/* (parts marked by the problems of the row, as it is: see ProblemPart) */
-.file-pop > .problem-field { display: grid; gap: 14px; min-width: 0; }
-.file-pop-label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.file-pop-label small { font: var(--text-data-small); color: var(--faint); }
-.file-pop-name { font: var(--text-data); overflow-wrap: anywhere; }
-.file-pop-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2px 8px; }
-.file-pop-path { min-width: 0; font: var(--text-data-small); color: var(--faint); overflow-wrap: anywhere; }
-.file-pop-another { display: flex; align-items: center; gap: 2px; margin-right: -6px; font: var(--text-caption); color: var(--faint); }
-.file-pop-link { height: 22px; padding: 0 6px; border: 0; border-radius: 4px; background: none; color: var(--muted); font: var(--text-label); cursor: pointer; }
-.file-pop-link:hover, .file-pop-link:focus-visible { background: var(--panel2); color: var(--fg); outline: none; }
-.file-pop-list { display: grid; margin: 0 -4px; }
-.file-pop-scroll { max-height: 232px; overflow-y: auto; overscroll-behavior: contain; }
-.file-pop-item { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 5px 8px; border: 0; border-radius: 4px; background: none; color: var(--fg); font: var(--text-body); text-align: left; cursor: pointer; }
-.file-pop-item[data-mono] { font: var(--text-data); }
-.file-pop-item > span { min-width: 0; overflow-wrap: anywhere; }
-.file-pop-item > small { flex: none; font: var(--text-caption); color: var(--faint); }
-.file-pop-item[data-mono] > small { font: var(--text-data-small); }
-.file-pop-item:hover, .file-pop-item:focus-visible { background: var(--panel2); outline: none; }
-.file-pop-item[data-current] { background: var(--sel); color: var(--accent-text); }
-.file-pop-item:disabled { color: var(--faint); cursor: default; }
-.file-pop-item:disabled:hover { background: none; }
-.file-pop-none { font: var(--text-data); color: var(--faint); }
-.file-pop-field { width: 100%; height: 30px; padding: 0 9px; border: 1px solid var(--line2); border-radius: 7px; background: var(--field); color: var(--fg); font: var(--text-data); }
-.file-pop-field:focus { outline: none; border-color: var(--accent); }
-.file-pop-value { display: flex; align-items: center; gap: 8px; }
-.file-pop-value .file-pop-field { width: 120px; text-align: right; }
-.file-pop-value span { font: var(--text-data-small); color: var(--faint); }
-.file-pop-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.file-pop-choice small { font: var(--text-caption); color: var(--faint); }
+.file-sum[data-name="error"] .file-sum-name, .file-sum[data-array="error"] .file-sum-array, .file-sum[data-fact="error"] .file-sum-fact { color: var(--err); }
+.file-sum[data-name="warning"] .file-sum-name, .file-sum[data-array="warning"] .file-sum-array, .file-sum[data-fact="warning"] .file-sum-fact { color: var(--warn); }
+/* (the lines of what a row reads, editing: a fact each, of quiet text and
+   ▾ that opens its menu, a line round it as it is pointed at, and small
+   controls, all of the height of a line and centred in it; a label and
+   its control never apart; parts with problems in their colour) */
+.file-lines { display: grid; gap: 2px; min-width: 0; }
+.file-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-width: 0; min-height: 22px; }
+.file-q { display: inline-flex; align-items: center; gap: 4px; max-width: calc(100% + 5px); min-width: 0; height: 22px; margin-left: -5px; padding: 0 5px; border: 0; border-radius: 4px; background: none; color: var(--fg); font: var(--text-data); cursor: pointer; }
+.file-q[data-small] { font: var(--text-data-small); color: var(--muted); }
+.file-q[data-words] { font: var(--text-label); color: var(--muted); }
+.file-q:hover, .file-q[aria-expanded="true"] { box-shadow: inset 0 0 0 1px var(--line2); color: var(--fg); }
+.file-q-text { min-width: 0; }
+.file-q-tri { flex: none; font-size: 9px; line-height: 1; color: var(--faint); }
+.file-q[data-severity="error"] { color: var(--err); }
+.file-q[data-severity="warning"] { color: var(--warn); }
+.file-pair { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.file-pair[data-wide] { flex: 1 1 auto; }
+.file-pair-label { font: var(--text-data-small); color: var(--faint); }
+.file-pair[data-severity="error"] .ui-segments { box-shadow: 0 0 0 1px var(--err); }
+.file-pair[data-severity="warning"] .ui-segments { box-shadow: 0 0 0 1px var(--warn); }
+.file-field { height: 22px; min-width: 0; padding: 0 7px; border: 1px solid var(--line2); border-radius: 5px; background: var(--field); color: var(--fg); font: var(--text-data-small); }
+.file-pair[data-wide] .file-field { flex: 1 1 auto; }
+.file-field:focus { outline: none; border-color: var(--accent); }
+.file-pair[data-severity="error"] .file-field { border-color: var(--err); }
+.file-pair[data-severity="warning"] .file-field { border-color: var(--warn); }
+.file-value { width: 110px; text-align: right; }
+.file-text { font: var(--text-data-small); color: var(--faint); }
 .ov-name-box { position: relative; display: flex; align-items: center; width: 100%; }
 .ov-row[data-renaming] .ov-name-text { visibility: hidden; }
 .ov-row[data-renaming] td { background: var(--sel); }

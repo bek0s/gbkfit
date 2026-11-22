@@ -166,8 +166,8 @@ export function useSeverityWithin(foldId: string): Severity | null {
 }
 
 // The problems of the field around (see ProblemField), for what it holds
-// to mark its parts (see useProblemsAt, ProblemPart): e.g. those of a row,
-// in what the row says and in the controls of its popover
+// to mark its parts (see useProblemsAt): e.g. those of a row, in the
+// lines of what it reads
 const FieldProblems = createContext<readonly Problem[]>([]);
 
 // The problems of the field around at a path, worst first: those of the
@@ -183,30 +183,6 @@ function useFieldProblemsAt(path: Path | null, exact: boolean): Problem[] {
 // field shows
 export function useProblemsAt(path: Path | null, exact = false): Severity | null {
   return useFieldProblemsAt(path, exact)[0]?.severity ?? null;
-}
-
-// A part of a field that fixes the problems of the field at a path (e.g.
-// a control in the popover of a row; none: it marks none): marked by a
-// rule at its side, which says them on hover, as the field is; the field
-// stays their home (the counter leads to it), so they show on both
-export function ProblemPart({ path, exact = false, children }: { path: Path | null; exact?: boolean; children: ReactNode }) {
-  const own = useFieldProblemsAt(path, exact);
-  return (
-    <Tooltip
-      label={own.map((problem) => problem.message).join('\n')}
-      disabled={own.length === 0}
-      multiline
-      maw={360}
-      position="top-start"
-      openDelay={120}
-      classNames={{ tooltip: 'problem-tip' }}
-      events={{ hover: true, focus: true, touch: true }}
-    >
-      <div className="problem-field" data-severity={own[0]?.severity}>
-        {children}
-      </div>
-    </Tooltip>
-  );
 }
 
 // A field (or a group of them) that fixes the problems of a path: marked

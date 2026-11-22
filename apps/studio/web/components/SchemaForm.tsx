@@ -10,8 +10,8 @@
 import { NumberInput, Slider } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useDescription } from '../api/queries';
-import { arrayLabel, arrayRef } from './arrays';
-import { ArraySection, FilePopover, FileSection, FileSummary } from './FileEditor';
+import { arrayRef } from './arrays';
+import { ArrayButton, FileLine, SourceButton, sourceEntries } from './FileEditor';
 import { useFileSource } from './FileSources';
 import { Button, Close, TextField } from './ui/basics';
 import { joinPath } from './FilePicker';
@@ -729,11 +729,11 @@ function ListField({ node, value, onChange }: { node: Schema; value: unknown; on
 }
 
 // A file of the project (relative to it): imported or uploaded, and its
-// array, if it has several (by name, or by index); a row of text (see
-// FileEditor), whose popover sets it
+// array, if it has several (by name, or by index); lines as the files of
+// a dataset have (see FileEditor): the file, whose menu gives another, and
+// its array, whose menu has all those of the file
 function FileField({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
   const { project } = useForm();
-  const [open, setOpen] = useState(false);
   const { file, hdu } = (typeof value === 'string' ? { file: value, hdu: undefined } : isObject(value) ? value : { file: undefined, hdu: undefined }) as {
     file?: unknown;
     hdu?: unknown;
@@ -744,43 +744,23 @@ function FileField({ value, onChange }: { value: unknown; onChange: (value: unkn
   const set = (nextFile: string | null, nextHdu: unknown) =>
     onChange(nextFile === null ? undefined : nextHdu === undefined ? nextFile : { file: nextFile, hdu: nextHdu });
   const source = useFileSource(project, (chosen) => set(chosen.startsWith(prefix) ? chosen.slice(prefix.length) : chosen, undefined));
-  // (a file is chosen with the popover closed: the dialog that picks it
-  // takes its place)
-  const sources = {
-    fromWorkspace: () => {
-      setOpen(false);
-      source.fromWorkspace();
-    },
-    fromComputer: () => {
-      setOpen(false);
-      source.fromComputer();
-    },
-  };
   const chosen = arrays.find((a) => a.name === hdu || a.index === hdu) ?? arrays[0];
   return (
-    <>
-      <FilePopover
-        opened={open}
-        onChange={setOpen}
-        target={
-          <div className="form-file" data-open={open || undefined}>
-            <button type="button" className="form-file-main" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
-              {path === null ? (
-                <span className="file-add">+ Add</span>
-              ) : (
-                <FileSummary path={path} array={arrays.length > 1 && chosen ? arrayLabel(chosen) : undefined} />
-              )}
-            </button>
-            {path !== null && <Close label="Remove the file" onClick={() => set(null, undefined)} />}
-          </div>
-        }
-      >
-        <FileSection path={path ?? undefined} source={sources} />
-        {path !== null && arrays.length > 0 && <ArraySection arrays={arrays} current={chosen} onChoose={(array) => set(path, arrayRef(arrays, array))} />}
-      </FilePopover>
+    <div className="form-file">
+      <span className="file-lines">
+        <FileLine>
+          <SourceButton file={path ?? undefined} text="+ Add" label="Where the file comes from" entries={sourceEntries(source)} />
+        </FileLine>
+        {path !== null && arrays.length > 1 && (
+          <FileLine>
+            <ArrayButton arrays={arrays} current={chosen} label="The array of the file" onChoose={(array) => set(path, arrayRef(arrays, array))} />
+          </FileLine>
+        )}
+      </span>
+      {path !== null && <Close label="Remove the file" onClick={() => set(null, undefined)} />}
       {source.status}
       {source.hidden}
-    </>
+    </div>
   );
 }
 
