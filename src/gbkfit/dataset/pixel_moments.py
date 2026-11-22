@@ -7,8 +7,10 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.config import DataFile, check_options
-from gbkfit.moments import moment_orders, split_moments
+from gbkfit.config import (
+    ConfigProblem, DataFile, check_options, config_path, split_data_file)
+from gbkfit.io import coords_from_header, header_shape
+from gbkfit.moments import MOMENT_ITEMS, moment_orders, split_moments
 from . import _detail, _grids
 from .base import DatasetGrid, NoiseCorrelation, cleaned
 from .data import Data, DataFiles
@@ -121,12 +123,48 @@ class DatasetPixelMoments(DatasetGrid):
         files = _detail.moment_options(locals())
         items, coords = _detail.read_moments(
             files, rpix, rval, _grids.stated_options(step, rpix, rval))
+        for name, item in items.items():
+            with config_path(name):
+                _grids.check_axes(item.shape(), cls.ndim)
         dataset = cls(
             *split_moments(items),
             **_grids.grid_coords(coords, step, rota),
             footprint=_grids.read_footprint(
                 footprint, next(iter(files.values())).data))
         return cleaned(dataset, outliers)
+
+    @classmethod
+    def file_problems(
+            cls, options: Mapping[str, Any]) -> list[ConfigProblem]:
+        # (of the files of each map, each on the pixels of the first map,
+        # and the footprint on them)
+        problems = []
+        first = None
+        for name in MOMENT_ITEMS:
+            if (files := options.get(name)) is None:
+                continue
+            found, model = _grids.item_file_problems(files, cls.ndim, {})
+            problems += [
+                problem._replace(path=[name, *problem.path])
+                for problem in found]
+            if model is None or len(header_shape(model)) != cls.ndim:
+                continue
+            try:
+                coords = coords_from_header(
+                    split_data_file(files.data)[0], model,
+                    rpix=options.get('rpix'), rval=options.get('rval'))
+            except ValueError:
+                continue
+            map_ = (name, header_shape(model), coords)
+            if first is None:
+                first, first_data = map_, files.data
+            else:
+                problems += _grids.problems_of(
+                    _detail.check_on_first, *map_, *first)
+        if first is not None:
+            problems += _grids.footprint_problems(
+                options.get('footprint'), first_data, {})
+        return problems
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

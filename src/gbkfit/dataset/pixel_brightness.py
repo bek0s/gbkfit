@@ -7,12 +7,12 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.config import DataFile, check_options
+from gbkfit.config import ConfigProblem, DataFile, check_options
 from gbkfit.instrument import PSF
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids
 from .base import DatasetGrid, NoiseCorrelation, cleaned
-from .data import Data
+from .data import Data, DataFiles
 
 
 __all__ = [
@@ -127,10 +127,21 @@ class DatasetPixelBrightness(DatasetGrid):
             spatial_correlation=spatial_correlation, error_kind=error_kind,
             mask_kind=mask_kind,
             stated=_grids.stated_options(step, rpix, rval))
+        _grids.check_axes(item.shape(), cls.ndim)
         dataset = cls(
             item, **_grids.grid_coords(coords, step, rota),
             footprint=_grids.read_footprint(footprint, data))
         return cleaned(dataset, outliers)
+
+    @classmethod
+    def file_problems(
+            cls, options: Mapping[str, Any]) -> list[ConfigProblem]:
+        # (of the files of its one item, and its footprint)
+        files = DataFiles(
+            options['data'], options.get('mask'), options.get('error'))
+        problems, _ = _grids.item_file_problems(files, cls.ndim, {})
+        return problems + _grids.footprint_problems(
+            options.get('footprint'), files.data, {})
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

@@ -27,6 +27,7 @@ __all__ = [
     'quoted_names',
     'raise_all',
     'report_unknown',
+    'shape_text',
     'strict_mode',
     'user_problems',
     'warn'
@@ -355,6 +356,23 @@ def quoted_names(names: Iterable) -> str:
         The names, each in quotes (e.g. "'a', 'b'").
     """
     return ', '.join(f"'{name}'" for name in sorted(names))
+
+
+def shape_text(shape: Sequence[int]) -> str:
+    """
+    Return the shape of an array (numpy order) as messages say it.
+
+    Parameters
+    ----------
+    shape : Sequence of int
+        The shape.
+
+    Returns
+    -------
+    str
+        Its sizes from the fastest axis (e.g. 'nx×ny×nz').
+    """
+    return '×'.join(str(size) for size in reversed(shape))
 
 
 def describe_unknown(unknown: Iterable, known: Iterable[str]) -> str:

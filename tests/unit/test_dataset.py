@@ -100,7 +100,7 @@ def test_dataset_items_must_have_the_same_world_coordinates(tmp_path):
     fits.writeto(tmp_path / 'moment0.fits', np.ones((8, 20)))
     fits.writeto(
         tmp_path / 'moment1.fits', np.ones((8, 20)), fits.Header(dict(CRPIX1=3)))
-    with pytest.raises(Exception, match="is not on the pixels of"):
+    with pytest.raises(Exception, match="map off the pixels of that of moment 0"):
         dataset_parser.load(dict(
             type='pixel_moments',
             moment0=dict(data=str(tmp_path / 'moment0.fits')),
@@ -131,7 +131,7 @@ def test_maps_of_moments_on_the_same_pixels_are_one_grid(
         moment0=dict(data=str(tmp_path / 'moment0.fits'), error=1.0),
         moment1=dict(data=str(tmp_path / 'moment1.fits'), error=1.0))
     if not same:
-        with pytest.raises(Exception, match="is not on the pixels of"):
+        with pytest.raises(Exception, match="map off the pixels of that of moment 0"):
             dataset_parser.load(info)
         return
     grid = dataset_parser.load(info).grid()
@@ -210,13 +210,20 @@ def test_dataset_round_trip_keeps_the_footprint(tmp_path):
 def test_a_footprint_is_of_the_items_or_of_the_sky_of_a_cube():
     with pytest.raises(ValueError, match="shape of the data items"):
         DatasetPixelBrightness(Data(np.zeros((8, 20))), footprint=np.ones(5))
-    with pytest.raises(ValueError, match="1 where the instrument looked"):
+    with pytest.raises(ValueError, match="footprint must be finite"):
         DatasetPixelBrightness(
-            Data(np.zeros((2, 2))), footprint=np.full((2, 2), 0.5))
+            Data(np.zeros((2, 2))), footprint=np.full((2, 2), np.nan))
     cube = DatasetPixelSpectra(
         Data(np.zeros((6, 8, 20))), spectral=SpectralAxis(step=10),
         footprint=np.ones((6, 8, 20)))
     assert cube.footprint_of('spectra').shape == (6, 8, 20)
+
+
+def test_a_footprint_is_inside_where_it_is_not_0():
+    # (e.g. the number of fibres on each pixel)
+    dataset = DatasetPixelBrightness(
+        Data(np.zeros((2, 2))), footprint=np.array([[0, 3], [0.5, 0]]))
+    np.testing.assert_array_equal(dataset.footprint(), [[0, 1], [1, 0]])
 
 
 def test_a_slit_is_oriented_by_its_position_angle(tmp_path):
@@ -317,7 +324,8 @@ def test_files_of_errors_and_masks_without_coordinates_follow_the_data(
     np.testing.assert_array_equal(data.mask()[:, 0, 0], [1, 1, 1, 0])
     # (they must be of the shape of the data, in the axes of its file)
     fits.writeto(tmp_path / 'bad.fits', np.ones((3, 3, 4)))
-    with pytest.raises(ValueError, match="of the shape of the data"):
+    with pytest.raises(
+            ValueError, match="errors 4×3×3 · must match the data, 3×3×4"):
         Data.from_files(
             str(tmp_path / 'data.fits'), error=str(tmp_path / 'bad.fits'))
 

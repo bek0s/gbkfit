@@ -15,8 +15,8 @@ once a file states what it says of its array as a FITS header.
 """
 
 import dataclasses
-from collections.abc import Collection, Sequence
-from typing import Annotated, Literal, TypeAlias
+from collections.abc import Collection, Mapping, Sequence
+from typing import Annotated, Any, Literal, TypeAlias
 
 import astropy.io.fits
 import astropy.wcs
@@ -24,7 +24,8 @@ import numpy as np
 
 import gbkfit.units
 from gbkfit.config import (
-    Choices, DataFile, InputError, raise_all, split_data_file)
+    Choices, DataFile, InputError, config_path, raise_all, shape_text,
+    split_data_file)
 from gbkfit.grid import Coords, Rest
 from .beams import Beam, _oriented_beam
 from .coords import coords_from_header
@@ -42,6 +43,8 @@ __all__ = [
     'Arrays',
     'ErrorKind',
     'MaskKind',
+    'check_companion',
+    'check_footprint',
     'read_arrays',
     'read_data',
     'read_footprint',
@@ -366,13 +369,14 @@ def read_arrays(
     if error is not None:
         error_name = split_data_file(error)[0]
         errors, error_header = _read_companion(
-            error, header, orientation, **read)
+            error, header, orientation, name='errors', path=['error'], **read)
         errors = _standard_deviations(
             error_name, errors, error_kind,
             _parsed_unit(error_name, error_header, given), unit)
     masks = None
     if mask is not None:
-        masks, _ = _read_companion(mask, header, orientation, **read)
+        masks, _ = _read_companion(
+            mask, header, orientation, name='mask', path=['mask'], **read)
     valid = np.isfinite(values)
     if errors is not None:
         valid &= np.isfinite(errors) & (errors > 0)
@@ -400,10 +404,12 @@ def read_footprint(
     """
     Read where the instrument looked (a footprint: 1 inside, 0 outside)
     on the pixels of data read from a file, in the orientation of the
-    model, as their errors and mask are read (see read_arrays): of the
-    shape of the data, or, of a cube (two axes on the sky and a spectral
-    axis), of its sky alone (an image of its sky, see read_sky_map), which
-    is then that of every channel.
+    model, as their errors and mask are read (see read_arrays): inside
+    where the file is finite and not 0 (e.g. the number of fibres on each
+    pixel, as CALIFA gives it), outside elsewhere; of the shape of the
+    data, or, of a cube (two axes on the sky and a spectral axis), of its
+    sky alone (an image of its sky, see read_sky_map), which is then that
+    of every channel.
 
     Parameters
     ----------
@@ -430,26 +436,173 @@ def read_footprint(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
         spectral_unit=spectral_unit, medium=medium,
         spectral_axis=spectral_axis)
-    data_header = read_header(data)
-    header, orientation = model_header(
-        split_data_file(data)[0], data_header, header_shape(data_header),
-        **read)
-    shape = _squeezed_shape(header_shape(read_header(file)))
-    data_shape = _squeezed_shape(header_shape(header))
+    header, orientation = _data_model(data, read)
+    with config_path('footprint'):
+        target, target_orientation, target_read = _footprint_target(
+            split_data_file(file)[0], header_shape(read_header(file)),
+            header, orientation, read)
+    values = _read_companion(
+        file, target, target_orientation, name='footprint',
+        path=['footprint'], **target_read)[0]
+    return (np.isfinite(values) & (values != 0)).astype(float)
+
+
+def check_companion(
+        file: DataFile,
+        data: DataFile,
+        *,
+        name: str,
+        path: Sequence[str | int] = (),
+        rest: Rest = None,
+        velocity: str | None = None,
+        spectral_type: str | None = None,
+        spectral_unit: str | None = None,
+        medium: str | None = None,
+        spectral_axis: int | None = None
+) -> None:
+    """
+    Check, from their headers alone, that the array of a file is on the
+    pixels of data read from a file, as their errors and mask are read
+    (see read_arrays).
+
+    Parameters
+    ----------
+    file : DataFile
+        The file of the array.
+    data : DataFile
+        The file of the data.
+    name : str
+        What the array is to the data (e.g. 'errors'), in the message of
+        an error.
+    path : Sequence of str or int, optional
+        The path of the option of its file, of the errors of it (see
+        config_path).
+    rest, velocity, spectral_type, spectral_unit, medium, spectral_axis :
+            optional
+        How the data are read (see read_arrays).
+
+    Raises
+    ------
+    OSError
+        If a file cannot be read.
+    ValueError
+        If the header of the data cannot be read in the orientation of the
+        model (see model_header), or the array is not on their pixels.
+    """
+    read = dict(
+        rest=rest, velocity=velocity, spectral_type=spectral_type,
+        spectral_unit=spectral_unit, medium=medium,
+        spectral_axis=spectral_axis)
+    header, orientation = _data_model(data, read)
+    with config_path(*path):
+        file_header = read_header(file)
+        _companion_orientation(
+            split_data_file(file)[0], file_header,
+            header_shape(file_header), header, orientation, name=name,
+            **read)
+
+
+def check_footprint(
+        file: DataFile,
+        data: DataFile,
+        *,
+        rest: Rest = None,
+        velocity: str | None = None,
+        spectral_type: str | None = None,
+        spectral_unit: str | None = None,
+        medium: str | None = None,
+        spectral_axis: int | None = None
+) -> None:
+    """
+    Check, from their headers alone, that a footprint is on the pixels of
+    data read from a file, or of their sky, as it is read (see
+    read_footprint).
+
+    Parameters
+    ----------
+    file : DataFile
+        The file of the footprint.
+    data : DataFile
+        The file of the data.
+    rest, velocity, spectral_type, spectral_unit, medium, spectral_axis :
+            optional
+        How the data are read (see read_arrays).
+
+    Raises
+    ------
+    OSError
+        If a file cannot be read.
+    ValueError
+        If the header of the data cannot be read in the orientation of the
+        model (see model_header), or the footprint is not on their pixels
+        or on those of their sky (an error of the option footprint, see
+        config_path).
+    """
+    read = dict(
+        rest=rest, velocity=velocity, spectral_type=spectral_type,
+        spectral_unit=spectral_unit, medium=medium,
+        spectral_axis=spectral_axis)
+    header, orientation = _data_model(data, read)
+    filename = split_data_file(file)[0]
+    with config_path('footprint'):
+        file_header = read_header(file)
+        target, target_orientation, target_read = _footprint_target(
+            filename, header_shape(file_header), header, orientation, read)
+        _companion_orientation(
+            filename, file_header, header_shape(file_header), target,
+            target_orientation, name='footprint', **target_read)
+
+
+def _data_model(
+        data: DataFile, read: Mapping[str, Any]
+) -> tuple[astropy.io.fits.Header, Orientation]:
+    """
+    Return the header of data read from a file in the orientation of the
+    model, and how they are put in it (see model_header), from their
+    header alone (read: how they are read, see read_arrays).
+    """
+    header = read_header(data)
+    return model_header(
+        split_data_file(data)[0], header, header_shape(header), **read)
+
+
+def _footprint_target(
+        filename: str,
+        shape: tuple[int, ...],
+        data_header: astropy.io.fits.Header,
+        data_orientation: Orientation,
+        read: Mapping[str, Any]
+) -> tuple[astropy.io.fits.Header, Orientation, Mapping[str, Any]]:
+    """
+    Return what a footprint of a shape (numpy order, of its file) is put
+    on, of data of a header and an orientation in the model (see
+    read_footprint): the pixels of the data, or, of a cube, those of its
+    sky (see DatasetGrid), as a header and an orientation, and how it is
+    read; or raise InputError if it is of neither.
+    """
+    shape = _squeezed_shape(shape)
+    data_shape = _squeezed_shape(header_shape(data_header))
     if len(shape) == len(data_shape):
-        return _read_companion(file, header, orientation, **read)[0]
-    # (of a cube, an image of its sky: see DatasetGrid)
+        return data_header, data_orientation, read
     if len(data_shape) == 3 and len(shape) == 2:
-        return _read_sky_image(file, header, orientation)[0]
+        return *_sky_target(filename, data_header, data_orientation), \
+            _NO_READING
     raise InputError(
-        f"footprint {_shape_text(shape)} · data {_shape_text(data_shape)}"
-        + (f" or {_shape_text(data_shape[1:])}"
-           if len(data_shape) == 3 else ""), ['footprint'])
+        _mismatch('footprint', shape, data_shape)
+        + (f" or {shape_text(data_shape[1:])}"
+           if len(data_shape) == 3 else ""))
 
 
-def _shape_text(shape: tuple[int, ...]) -> str:
-    """Return a shape (numpy order) as said to users: 'nx×ny×nz'."""
-    return '×'.join(str(size) for size in shape[::-1])
+def _mismatch(
+        name: str, shape: tuple[int, ...], data_shape: tuple[int, ...]
+) -> str:
+    """
+    Return the message of an array (e.g. 'errors') whose shape (numpy
+    order) is not that of the data.
+    """
+    return (
+        f"{name} {shape_text(shape)} · must match the data, "
+        f"{shape_text(data_shape)}")
 
 
 def read_sky_map(
@@ -505,20 +658,39 @@ def _read_sky_image(
     their sky, of their header and orientation in the model, and its
     header.
     """
+    header, orientation = _sky_target(
+        split_data_file(file)[0], data_header, data_orientation)
+    return _read_companion(
+        file, header, orientation, name='image', path=(), plane=plane,
+        **_NO_READING)
+
+
+def _sky_target(
+        filename: str,
+        data_header: astropy.io.fits.Header,
+        data_orientation: Orientation
+) -> tuple[astropy.io.fits.Header, Orientation]:
+    """
+    Return the header and the orientation in the model of the sky of data
+    of a header and an orientation in it, that an image of their sky (of a
+    file, see read_sky_map) is put on.
+    """
     orientation = data_orientation.sky()
     header = _with_shape(data_header, header_shape(data_header)[-2:])
     if has_wcs(data_header):
-        filename = split_data_file(file)[0]
         wcs = parse_wcs(filename, data_header)
         if wcs.wcs.spec in (0, 1):
             raise InputError(
                 f"{filename}: the data have no sky of two axes to put an "
                 f"image of the sky on")
         header = _with_wcs(header, wcs.sub(2))
-    return _read_companion(
-        file, header, orientation, rest=None, velocity=None,
-        spectral_type=None, spectral_unit=None, medium=None,
-        spectral_axis=None, plane=plane)
+    return header, orientation
+
+
+# How an image of the sky is read (see _sky_target): of no spectral axis
+_NO_READING = dict(
+    rest=None, velocity=None, spectral_type=None, spectral_unit=None,
+    medium=None, spectral_axis=None)
 
 
 def _read(
@@ -560,6 +732,9 @@ def _read_companion(
         file: DataFile,
         data_header: astropy.io.fits.Header,
         data_orientation: Orientation,
+        *,
+        name: str,
+        path: Sequence[str | int],
         rest: Rest,
         velocity: str | None,
         spectral_type: str | None,
@@ -573,28 +748,50 @@ def _read_companion(
     read_sky_map) on the pixels of data (their errors or mask, see
     read_arrays; their footprint, see read_footprint; or an image of their
     sky, see read_sky_map) in the orientation of the model, and its
-    header.
+    header (see _companion_orientation; name: what it is to the data, in
+    the message of an error; path: of the option of its file, of its
+    errors, see config_path).
     """
     filename = split_data_file(file)[0]
-    values, header = read_image(file)
-    if plane is not None:
-        values, header = _plane(filename, values, header, plane)
-    if has_wcs(header) and has_wcs(data_header):
-        header, orientation = model_header(
-            filename, header, values.shape, rest=rest, velocity=velocity,
+    with config_path(*path):
+        values, header = read_image(file)
+        if plane is not None:
+            values, header = _plane(filename, values, header, plane)
+        header, orientation = _companion_orientation(
+            filename, header, values.shape, data_header, data_orientation,
+            name=name, rest=rest, velocity=velocity,
             spectral_type=spectral_type, spectral_unit=spectral_unit,
-            medium=medium,
-            spectral_axis=spectral_axis)
-        values = orientation.apply(values)
-        _check_same_pixels(filename, header, values.shape, data_header)
-        return _floats(values), header
-    shape = data_orientation.file_shape
-    if values.shape != shape:
-        raise InputError(
-            f"{filename}: without world coordinates (or with data without "
-            f"them), its values must be of the shape of the data, {shape}, "
-            f"in the axes of their file; they are of {values.shape}")
-    return _floats(data_orientation.apply(values)), header
+            medium=medium, spectral_axis=spectral_axis)
+    return _floats(orientation.apply(values)), header
+
+
+def _companion_orientation(
+        filename: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...],
+        data_header: astropy.io.fits.Header,
+        data_orientation: Orientation,
+        *,
+        name: str,
+        **read: Any
+) -> tuple[astropy.io.fits.Header, Orientation]:
+    """
+    Return the header of an array of a file (of a shape, numpy order)
+    that is put on the pixels of data of a header and an orientation in
+    the model, and how it is put on them, from the headers alone: by its
+    own world coordinates, which must put its pixels on theirs, or, if it
+    or the data have none, in the axes of the file of the data, whose
+    shape it must have. Raise InputError if it is not on them (name: what
+    it is to the data, e.g. 'errors'; read: how it is read, see
+    read_arrays).
+    """
+    if has_wcs(header) and has_wcs(data_header):
+        model, orientation = model_header(filename, header, shape, **read)
+        _check_same_pixels(model, data_header, name=name)
+        return model, orientation
+    if shape != data_orientation.file_shape:
+        raise InputError(_mismatch(name, shape, data_orientation.file_shape))
+    return header, data_orientation
 
 
 def _plane(
@@ -618,36 +815,33 @@ def _plane(
 
 
 def _check_same_pixels(
-        source: str,
         header: astropy.io.fits.Header,
-        shape: tuple[int, ...],
-        data_header: astropy.io.fits.Header
+        data_header: astropy.io.fits.Header,
+        *,
+        name: str
 ) -> None:
     """
-    Raise ValueError unless the values of a header in the orientation of
-    the model (of the given shape) are on the pixels of the data of
-    another: of their shape, and their world coordinates at the corners.
+    Raise InputError unless an array of a header in the orientation of
+    the model is on the pixels of the data of another: of their shape,
+    and their world coordinates at the corners (name: what it is to the
+    data, e.g. 'errors').
     """
-    data_shape = header_shape(data_header)
+    shape, data_shape = header_shape(header), header_shape(data_header)
     if shape != data_shape:
-        raise InputError(
-            f"{source}: its values must be of the shape of the data, "
-            f"{data_shape} (in the orientation of the model); they are of "
-            f"{shape}")
+        raise InputError(_mismatch(name, shape, data_shape))
     wcs, data_wcs = astropy.wcs.WCS(header), astropy.wcs.WCS(data_header)
     if list(wcs.wcs.ctype) != list(data_wcs.wcs.ctype):
         raise InputError(
-            f"{source}: its world coordinates are of the axes "
-            f"{list(wcs.wcs.ctype)}, those of the data of "
-            f"{list(data_wcs.wcs.ctype)}")
+            f"{name} on the axes {', '.join(wcs.wcs.ctype)} · the data on "
+            f"{', '.join(data_wcs.wcs.ctype)}")
     corners = np.array(np.meshgrid(
         *[[0, size - 1] for size in shape[::-1]])).reshape(len(shape), -1)
     world = data_wcs.pixel_to_world_values(*corners)
     pixels = np.array(wcs.world_to_pixel_values(*world)).reshape(corners.shape)
     if not np.allclose(pixels, corners, rtol=0, atol=_GRID_TOLERANCE):
         raise InputError(
-            f"{source}: its world coordinates do not put its pixels on "
-            f"those of the data")
+            f"{name} off the pixels of the data (by their world "
+            f"coordinates)")
 
 
 def _standard_deviations(

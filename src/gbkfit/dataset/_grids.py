@@ -1,23 +1,29 @@
 """
 Helpers of the datasets on grids (see DatasetGrid): the world
 coordinates of their files and their grids (and of the spectral axis of
-the spectra of regions), their footprints, their dumps, the correlations
-of their noise, and their spectra masked whole.
+the spectra of regions), their footprints, the checks of their files
+from their headers, their dumps, the correlations of their noise, and
+their spectra masked whole.
 """
 
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+import astropy.io.fits
 import numpy as np
 
-from gbkfit.config import DataFile, warn
+from gbkfit.config import (
+    ConfigProblem, DataFile, InputError, error_location, split_data_file,
+    user_problems, warn)
 from gbkfit.grid import (
     Coords, Grid, SpectralAxis, grid_options, make_cube_grid, make_grid,
     per_axis, rest_of_convention)
 from gbkfit.instrument import LSF, Channel
-from gbkfit.io import read_footprint as read_footprint_file, write_data
-from .data import dump_data, item_filenames
+from gbkfit.io import (
+    check_companion, check_footprint, header_shape, model_header,
+    read_footprint as read_footprint_file, read_header, write_data)
+from .data import DataFiles, dump_data, item_filenames
 
 if TYPE_CHECKING:
     from .base import Dataset, DatasetGrid, NoiseCorrelation
@@ -132,6 +138,88 @@ def read_footprint(
         spectral_type=references.get('spectral_type'),
         spectral_unit=references.get('spectral_unit'),
         medium=references.get('medium'), spectral_axis=spectral_axis)
+
+
+def check_axes(shape: tuple[int, ...], ndim: int) -> None:
+    """
+    Raise InputError, at the option of the data, unless data of a shape
+    (in the orientation of the model) have the number of axes of the type
+    of their dataset.
+    """
+    if len(shape) != ndim:
+        raise InputError(
+            f"data of {len(shape)} {'axis' if len(shape) == 1 else 'axes'} "
+            f"· needs {ndim}", ['data'])
+
+
+def item_file_problems(
+        files: DataFiles,
+        ndim: int,
+        read: Mapping[str, Any]
+) -> tuple[list[ConfigProblem], astropy.io.fits.Header | None]:
+    """
+    Return the problems of the files of a data item, from their headers
+    alone (see Dataset.file_problems), at the paths of its options: that
+    its data have the axes of the type of its dataset (see check_axes),
+    and that its errors and mask are on their pixels (see
+    check_companion; read: how they are read, see read_arrays); and the
+    header of its data in the orientation of the model.
+
+    Data whose file or header cannot be read so have none, and no header,
+    and a file of errors or of a mask that cannot be read has none: those
+    are problems of the files themselves (see describe_fits).
+    """
+    data = files.data
+    try:
+        header = read_header(data)
+        model, _ = model_header(
+            split_data_file(data)[0], header, header_shape(header), **read)
+    except (OSError, ValueError):
+        return [], None
+    problems = problems_of(check_axes, header_shape(model), ndim)
+    for role, name in (('error', 'errors'), ('mask', 'mask')):
+        file = getattr(files, role)
+        # (one error for all the values has no file)
+        if file is not None and not isinstance(file, (int, float)):
+            problems += problems_of(
+                check_companion, file, data, name=name, path=[role],
+                **read)
+    return problems, model
+
+
+def footprint_problems(
+        footprint: DataFile | None,
+        data: DataFile,
+        read: Mapping[str, Any]
+) -> list[ConfigProblem]:
+    """
+    Return the problems of the footprint of a dataset on the data of a
+    file, from their headers alone (see check_footprint and
+    item_file_problems; read: how the data are read, see read_arrays).
+    """
+    if footprint is None:
+        return []
+    return problems_of(check_footprint, footprint, data, **read)
+
+
+def problems_of(
+        check: Callable[..., None], *args: Any, **kwargs: Any
+) -> list[ConfigProblem]:
+    """
+    Return the problems of a check of files (see item_file_problems): the
+    error it raises, at its path, unless a file cannot be read (of the file
+    itself); none if it passes.
+    """
+    try:
+        check(*args, **kwargs)
+    except OSError:
+        return []
+    except ValueError as e:
+        # (of a header that is not one of the data, e.g. of other world
+        # coordinates, as it is: see describe_fits)
+        return user_problems(e) or [
+            ConfigProblem('error', error_location(e)[0], str(e))]
+    return []
 
 
 def cube_coords(

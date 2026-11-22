@@ -312,7 +312,7 @@ def test_an_image_of_the_sky_is_read_on_the_pixels_of_the_data(
     np.testing.assert_array_equal(result, image)
     fits.writeto('off.fits', image, fits.Header(CELESTIAL | dict(
         CRPIX1=12.0, CDELT1=-1 / 3600, CDELT2=1 / 3600)))
-    with pytest.raises(ValueError, match="not put its pixels on"):
+    with pytest.raises(ValueError, match="image off the pixels of the data"):
         read_sky_map('off.fits', arrays)
 
 

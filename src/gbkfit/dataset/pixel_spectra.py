@@ -7,13 +7,13 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.config import DataFile, check_options
+from gbkfit.config import ConfigProblem, DataFile, check_options
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSF, PSF
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids
 from .base import DatasetGrid, NoiseCorrelation, cleaned
-from .data import Data
+from .data import Data, DataFiles
 
 
 __all__ = [
@@ -154,11 +154,31 @@ class DatasetPixelSpectra(DatasetGrid):
             spectral_type=references['spectral_type'],
             spectral_unit=references['spectral_unit'], mask_kind=mask_kind,
             stated=_grids.stated_options(step, rpix, rval, spectral))
+        _grids.check_axes(item.shape(), cls.ndim)
         dataset = cls(
             item, **_grids.cube_coords(coords, step, rota, spectral),
             footprint=_grids.read_footprint(
                 footprint, data, cls.spectral_axis, references))
         return cleaned(dataset, outliers, mask_whole_spectra)
+
+    @classmethod
+    def file_problems(
+            cls, options: Mapping[str, Any]) -> list[ConfigProblem]:
+        # (of the files of its one item, and its footprint, read as the
+        # spectral axis says)
+        references = _grids.file_references(
+            2, options.get('rpix'), options.get('rval'),
+            options.get('spectral'))
+        read = dict(
+            rest=references['rest'], velocity=references['velocity'],
+            spectral_type=references['spectral_type'],
+            spectral_unit=references['spectral_unit'],
+            medium=references['medium'], spectral_axis=cls.spectral_axis)
+        files = DataFiles(
+            options['data'], options.get('mask'), options.get('error'))
+        problems, _ = _grids.item_file_problems(files, cls.ndim, read)
+        return problems + _grids.footprint_problems(
+            options.get('footprint'), files.data, read)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

@@ -261,8 +261,7 @@ def _describe(
     except InputError:
         # (a problem of the statements)
         values_unit = None
-    if values_unit is not None and beam is None and \
-            gbkfit.units.spatial_unit(values_unit) == astropy.units.beam:
+    if values_unit is not None and beam is None and _per_beam(values_unit):
         said = f"unit {unit}" if unit is not None \
             else f"BUNIT {header_unit(header)}"
         problems.append(ConfigProblem(
@@ -282,6 +281,17 @@ def _describe(
         beam=beam, coords=coords, rms=rms,
         ambiguous_velocity=velocity_is_ambiguous(header),
         problems=tuple(problems), error_kind=error_kind)
+
+
+def _per_beam(unit: gbkfit.units.AnyUnit) -> bool:
+    """
+    Return whether a unit is of light per beam: not, if it is of no light
+    (e.g. arcsec, of an array of coordinates, as MaNGA has).
+    """
+    try:
+        return gbkfit.units.spatial_unit(unit) == astropy.units.beam
+    except ValueError:
+        return False
 
 
 def _sky_errors(

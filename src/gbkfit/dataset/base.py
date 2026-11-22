@@ -13,7 +13,8 @@ from typing import Any, NamedTuple, Self
 import numpy as np
 
 from gbkfit.config import (
-    TypedParser, TypedSerializable, config_path, parse_options)
+    ConfigProblem, TypedParser, TypedSerializable, collect_problems,
+    config_path, constructor_of, parse_options, parse_options_for_callable)
 from gbkfit.grid import Grid, SpectralAxis
 from gbkfit.utils import iterutils
 from . import _grids, _outliers, _resampling
@@ -24,6 +25,7 @@ __all__ = [
     'Dataset',
     'DatasetGrid',
     'NoiseCorrelation',
+    'check_files',
     'dataset_parser'
 ]
 
@@ -112,6 +114,29 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
                 f"the noise of the data items {correlated} has a spectral "
                 f"correlation, but {self.type()} data have no spectral axis")
         self._items = dict(items)
+
+    @classmethod
+    def file_problems(
+            cls, options: Mapping[str, Any]) -> list[ConfigProblem]:
+        """
+        Return the problems of how the files of a dataset of the type fit
+        together, from their headers alone, before their data are read
+        (see check_files), each at the path of its option: of the options
+        of its constructor of a configuration, as parsed (see
+        config_constructors). A type whose files are checked only as they
+        are read has none, as here.
+
+        Parameters
+        ----------
+        options : Mapping
+            The options.
+
+        Returns
+        -------
+        list of ConfigProblem
+            The problems.
+        """
+        return []
 
     @abc.abstractmethod
     def dump(
@@ -396,8 +421,10 @@ class DatasetGrid(Dataset):
     screen_outliers and resample_blocks).
 
     Its footprint says where the instrument looked (e.g. the field of an
-    IFU, whose corners are blank but were never observed): 1 inside, 0
-    outside, where the values of its items are masked too; of the shape of
+    IFU, whose corners are blank but were never observed): 0 outside,
+    where the values of its items are masked too, and any other value
+    inside (e.g. the number of fibres on each pixel, as CALIFA gives it),
+    kept as 1; of the shape of
     its items, or, of a cube (two axes on the sky and a spectral axis), of
     its sky alone, for every channel. Of the masked values, those inside
     are non-detections, which an upper limit of their likelihood takes
@@ -418,15 +445,15 @@ class DatasetGrid(Dataset):
         make_cube_grid): its world coordinates, the convention of its
         velocities, its rest and its medium; the data give its size.
     footprint : ndarray, optional
-        Where the instrument looked; by default, everywhere.
+        Where the instrument looked (0 outside); by default, everywhere.
 
     Raises
     ------
     ValueError
         If the items are not valid (see Dataset), the spectral axis has
         another number of channels, the grid is not valid, or the
-        footprint is not of the shape of the items or of their sky, or has
-        values other than 0 and 1.
+        footprint is not of the shape of the items or of their sky, or is
+        not finite.
     """
 
     config_titles = dict(
@@ -462,11 +489,11 @@ class DatasetGrid(Dataset):
 
     def _checked_footprint(self, footprint: np.ndarray) -> np.ndarray:
         """
-        Return a footprint as a copy of floats, or raise ValueError if it
-        is not of the shape of the items or of their sky (see DatasetGrid),
-        or has values other than 0 and 1.
+        Return a footprint as floats, 1 inside (where it is not 0) and 0
+        outside, or raise ValueError if it is not of the shape of the items
+        or of their sky (see DatasetGrid), or is not finite.
         """
-        footprint = np.array(footprint, dtype=self.dtype())
+        footprint = np.asarray(footprint)
         shape = self.shape()
         shapes = [shape]
         if self.spectral_axis is not None and len(shape) == 3:
@@ -477,11 +504,9 @@ class DatasetGrid(Dataset):
                 f"{' or of their sky' if len(shapes) > 1 else ''}, "
                 f"{' or '.join(map(str, shapes))}; it is of "
                 f"{footprint.shape}")
-        if not np.all(np.isin(footprint, (0, 1))):
-            raise ValueError(
-                "the footprint must be 1 where the instrument looked and 0 "
-                "elsewhere")
-        return footprint
+        if not np.all(np.isfinite(footprint)):
+            raise ValueError("the footprint must be finite")
+        return (footprint != 0).astype(self.dtype())
 
     def grid(self) -> Grid:
         """
@@ -575,3 +600,36 @@ class DatasetTypedParser(TypedParser):
 
 
 dataset_parser = DatasetTypedParser()
+
+
+def check_files(config: Mapping[str, Any]) -> tuple[ConfigProblem, ...]:
+    """
+    Return the problems of how the files of a dataset fit together, from
+    their headers alone, before their data are read (e.g. as it is edited;
+    see Dataset.file_problems): of a dataset on a grid of pixels, that the
+    data of its items have the axes of its type and are on one grid, and
+    that the errors, the mask and the footprint are on the pixels of the
+    data, as they are read. Its relative paths are of the directory of
+    the configuration (see paths_relative_to).
+
+    A file that cannot be read, or data whose header cannot be read in
+    the orientation of the model, are problems of the files themselves
+    (see describe_fits), not of these.
+
+    Parameters
+    ----------
+    config : Mapping
+        The configuration of the dataset (see dataset_parser).
+
+    Returns
+    -------
+    tuple of ConfigProblem
+        Its problems, each at its path in it (and an error of the
+        configuration itself, if it has one).
+    """
+    with collect_problems() as problems:
+        cls = dataset_parser.registered_class(config.get('type'))
+        info = {key: value for key, value in config.items() if key != 'type'}
+        func, _ = constructor_of(cls, info)
+        problems += cls.file_problems(parse_options_for_callable(info, func))
+    return tuple(problems)

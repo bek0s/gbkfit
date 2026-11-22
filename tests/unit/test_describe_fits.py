@@ -62,6 +62,20 @@ def test_fits_files_are_described_from_their_headers(tmp_path):
     assert third.problems == (beam,)
 
 
+def test_an_array_of_no_light_is_described(tmp_path):
+    # (e.g. the coordinates of each pixel, in arcsec, of the maps of
+    # MaNGA: an array of the file, not of light per beam)
+    fits.HDUList([
+        fits.PrimaryHDU(np.zeros((4, 5), np.float32),
+                        fits.Header(dict(BUNIT='Jy/beam'))),
+        fits.ImageHDU(np.zeros((4, 5), np.float32),
+                      fits.Header(dict(BUNIT='arcsec')), name='SKYCOO'),
+    ]).writeto(tmp_path / 'f.fits')
+    light, coordinates = describe_fits(str(tmp_path / 'f.fits'))
+    assert [p.path for p in light.problems] == [['beam']]
+    assert coordinates.unit == 'arcsec' and not coordinates.problems
+
+
 def test_what_errors_hold_is_described_as_their_header_states_it(
         tmp_path):
     # (as ESO's science data products state it: MUSE, MaNGA; a header

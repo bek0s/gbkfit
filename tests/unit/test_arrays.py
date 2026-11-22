@@ -124,6 +124,15 @@ def test_a_footprint_follows_the_data(tmp_path):
     np.testing.assert_array_equal(read, footprint[::-1])
 
 
+def test_a_footprint_is_inside_where_it_is_finite_and_not_0(tmp_path):
+    # (e.g. the number of fibres on each pixel; NaN where none)
+    write(tmp_path / 'data.fits', np.ones((3, 4)))
+    write(tmp_path / 'fibres.fits', [[0] * 4, [0.5, 1, 2, 9], [np.nan] * 4])
+    read = read_footprint(
+        str(tmp_path / 'fibres.fits'), str(tmp_path / 'data.fits'))
+    np.testing.assert_array_equal(read, [[0] * 4, [1] * 4, [0] * 4])
+
+
 def test_the_footprint_of_a_cube_can_be_of_its_sky(tmp_path):
     # (of every channel: as that of the cube of it in each, on the pixels
     # of the data)
@@ -143,7 +152,8 @@ def test_a_footprint_of_another_shape_is_an_error(tmp_path):
     write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
     write(tmp_path / 'footprint.fits', np.ones((2, 2, 2, 2)))
     with pytest.raises(
-            ValueError, match=r"footprint 2×2×2×2 · data 4×3×5 or 4×3"):
+            ValueError,
+            match=r"footprint 2×2×2×2 · must match the data, 4×3×5 or 4×3"):
         read_footprint(
             str(tmp_path / 'footprint.fits'), str(tmp_path / 'data.fits'))
 

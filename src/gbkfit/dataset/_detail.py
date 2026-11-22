@@ -12,6 +12,7 @@ import astropy.units
 import numpy as np
 
 import gbkfit.units
+from gbkfit.config import InputError, config_path, shape_text
 from gbkfit.grid import Coords, Grid, make_grid, pixels_on
 from gbkfit.moments import HERMITE_ORDERS, MOMENT_ITEMS, MOMENT_ORDERS
 from .data import Data, DataFiles
@@ -129,24 +130,47 @@ def read_moments(
     """
     items, coords = {}, {}
     for name, item in files.items():
-        items[name], coords[name] = Data.from_files(
-            item.data, item.mask, item.error, rpix, rval, unit=item.unit,
-            beam=item.beam, spatial_correlation=item.spatial_correlation,
-            spectral_correlation=item.spectral_correlation,
-            error_kind=item.error_kind, mask_kind=item.mask_kind,
-            stated=stated)
+        with config_path(name):
+            items[name], coords[name] = Data.from_files(
+                item.data, item.mask, item.error, rpix, rval,
+                unit=item.unit, beam=item.beam,
+                spatial_correlation=item.spatial_correlation,
+                spectral_correlation=item.spectral_correlation,
+                error_kind=item.error_kind, mask_kind=item.mask_kind,
+                stated=stated)
     if not coords:
         raise ValueError("a dataset needs at least one moment")
     (first, first_coords), *others = coords.items()
     for name, value in others:
-        if items[name].ndim() == 2 and not _on_the_same_pixels(
-                items[name].shape(), value,
-                items[first].shape(), first_coords):
-            raise ValueError(
-                f"the file of {name} is not on the pixels of that of "
-                f"{first}: their world coordinates are {value} and "
-                f"{first_coords}")
+        if items[name].ndim() == 2:
+            check_on_first(
+                name, items[name].shape(), value, first,
+                items[first].shape(), first_coords)
     return items, first_coords
+
+
+def check_on_first(
+        name: str,
+        shape: tuple[int, ...],
+        coords: Coords,
+        first: str,
+        first_shape: tuple[int, ...],
+        first_coords: Coords
+) -> None:
+    """
+    Raise InputError, at the option of its data, unless a map of a moment
+    of a shape (numpy order) and world coordinates is on the pixels of the
+    first map (see read_moments).
+    """
+    title = MOMENT_TITLES[first].lower()
+    if shape != first_shape:
+        raise InputError(
+            f"map {shape_text(shape)} · must match that of {title}, "
+            f"{shape_text(first_shape)}", [name, 'data'])
+    if not _on_the_same_pixels(shape, coords, first_shape, first_coords):
+        raise InputError(
+            f"map off the pixels of that of {title} (by their world "
+            f"coordinates)", [name, 'data'])
 
 
 def _on_the_same_pixels(
@@ -157,11 +181,9 @@ def _on_the_same_pixels(
 ) -> bool:
     """
     Return whether a map of a shape (numpy order) and world coordinates is
-    on the pixels of another on the sky (see _GRID_TOLERANCE).
+    on the pixels of another of its shape on the sky (see
+    _GRID_TOLERANCE).
     """
-    if shape != other_shape:
-        return False
-
     def sky_grid(c: Coords) -> Grid:
         return make_grid(shape[::-1], c.step, c.rpix, c.rval, c.rota)
     x, y = pixels_on(sky_grid(coords), sky_grid(other_coords))
