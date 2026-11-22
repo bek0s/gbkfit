@@ -22,7 +22,8 @@ from gbkfit.grid import (
 from gbkfit.instrument import LSF, Channel
 from gbkfit.io import (
     check_companion, check_footprint, header_shape, model_header,
-    read_footprint as read_footprint_file, read_header, write_data)
+    model_shape, read_footprint as read_footprint_file, read_header,
+    write_data)
 from .data import DataFiles, dump_data, item_filenames
 
 if TYPE_CHECKING:
@@ -165,18 +166,29 @@ def item_file_problems(
     check_companion; read: how they are read, see read_arrays); and the
     header of its data in the orientation of the model.
 
-    Data whose file or header cannot be read so have none, and no header,
-    and a file of errors or of a mask that cannot be read has none: those
-    are problems of the files themselves (see describe_fits).
+    Data whose file cannot be read, or whose world coordinates are
+    invalid, have none, and no header, and a file of errors or of a mask
+    that cannot be read has none: those are problems of the files
+    themselves (see describe_fits). So is a header of the data that does
+    not state what reading them in the orientation of the model needs
+    (e.g. the convention of their velocities): it has no header, but the
+    shapes, which do not depend on it, are checked.
     """
     data = files.data
+    filename = split_data_file(data)[0]
     try:
         header = read_header(data)
-        model, _ = model_header(
-            split_data_file(data)[0], header, header_shape(header), **read)
+        shape = model_shape(
+            filename, header, header_shape(header),
+            read.get('spectral_axis'))
     except (OSError, ValueError):
         return [], None
-    problems = problems_of(check_axes, header_shape(model), ndim)
+    try:
+        model, _ = model_header(
+            filename, header, header_shape(header), **read)
+    except ValueError:
+        model = None
+    problems = problems_of(check_axes, shape, ndim)
     for role, name in (('error', 'errors'), ('mask', 'mask')):
         file = getattr(files, role)
         # (one error for all the values has no file)

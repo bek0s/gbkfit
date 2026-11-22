@@ -121,3 +121,48 @@ def test_the_errors_of_reading_the_files_are_at_their_options(tmp_path):
     with pytest.raises(ValueError, match="mask 5×5 · must match") as error:
         dataset_parser.load(config)
     assert error.value.config_path == ['moment1', 'mask']
+
+
+def test_the_shapes_are_checked_before_the_velocities_are_stated(tmp_path):
+    # (they do not depend on how the velocities of the data are read: of
+    # a cube of MIRIAD without VELREF, the shapes of its errors and its
+    # footprint are checked, from the types of the axes; their world
+    # coordinates are once the convention of the data is stated; that it
+    # is not stated is a problem of the data, not of the check)
+    cube = SKY | dict(
+        CTYPE3='VELO-HEL', CRVAL3=1e6, CDELT3=1e4, CRPIX3=1, CUNIT3='m/s')
+    config = dict(
+        type='pixel_spectra', data=write(tmp_path, 'cube', (6, 4, 5), cube),
+        error=write(tmp_path, 'error', (6, 4, 4), cube),
+        footprint=write(tmp_path, 'sky', (3, 5), SKY))
+    assert check_files(config) == (
+        ConfigProblem(
+            'error', ['error'], 'errors 4×4×6 · must match the data, 5×4×6'),
+        ConfigProblem(
+            'error', ['footprint'], 'footprint 5×3 · must match the data, 5×4'))
+    shifted = cube | dict(CRVAL1=10.1)
+    fixed = config | dict(
+        error=write(tmp_path, 'shifted', (6, 4, 5), shifted),
+        footprint=write(tmp_path, 'sky-of-the-cube', (4, 5), SKY))
+    assert check_files(fixed) == ()
+    assert check_files(fixed | dict(spectral=dict(convention='radio'))) == (
+        ConfigProblem(
+            'error', ['error'],
+            'errors off the pixels of the data (by their world '
+            'coordinates)'),)
+
+
+def test_the_shape_of_an_array_in_the_model_needs_nothing_stated():
+    # (the axes of a cube of MIRIAD without VELREF, in the order of the
+    # model: the sky first, whatever the order of the file)
+    from gbkfit.io import model_shape
+    header = fits.Header(SKY | dict(
+        CTYPE3='VELO-HEL', CRVAL3=1e6, CDELT3=1e4, CRPIX3=1, CUNIT3='m/s'))
+    assert model_shape('cube', header, (6, 4, 5)) == (6, 4, 5)
+    swapped = fits.Header(dict(
+        CTYPE1='VELO-HEL', CRVAL1=1e6, CDELT1=1e4, CRPIX1=1, CUNIT1='m/s',
+        CTYPE2='RA---TAN', CUNIT2='deg', CDELT2=-1 / 3600, CRPIX2=3,
+        CRVAL2=10.0, CTYPE3='DEC--TAN', CUNIT3='deg', CDELT3=1 / 3600,
+        CRPIX3=2, CRVAL3=20.0))
+    assert model_shape('cube', swapped, (4, 5, 6)) == (6, 4, 5)
+    assert model_shape('map', fits.Header(), (1, 4, 5)) == (4, 5)

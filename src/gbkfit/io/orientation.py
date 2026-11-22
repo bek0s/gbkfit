@@ -15,7 +15,8 @@ import numpy as np
 from gbkfit.config import InputError, warn
 from gbkfit.grid import Rest
 from .headers import (
-    _centre_missing_crpix, _with_shape, _with_wcs, has_wcs, parse_wcs)
+    _centre_missing_crpix, _with_shape, _with_wcs, has_wcs,
+    ignoring_wcs_fixes, parse_wcs)
 from .spectral import (
     _axis_of_rest, _read_as_velocities, _stated_header, _with_stated_rest)
 
@@ -23,7 +24,8 @@ from .spectral import (
 __all__ = [
     'Orientation',
     'model_axis_order',
-    'model_header'
+    'model_header',
+    'model_shape'
 ]
 
 
@@ -202,6 +204,60 @@ def model_header(
     return _oriented_header(source, header, shape, rest, medium, ndim)
 
 
+def model_shape(
+        source: str,
+        header: astropy.io.fits.Header,
+        shape: Sequence[int],
+        spectral_axis: int | None = None
+) -> tuple[int, ...]:
+    """
+    Return the shape that an array of a header has in the orientation of
+    the model (see model_header), from the types of its axes alone: unlike
+    model_header, it needs nothing stated of a spectral axis (e.g. the
+    convention of its velocities), which changes neither its axes nor
+    their order. (How the axes are reversed may depend on it: see
+    _model_axis_flips.)
+
+    Parameters
+    ----------
+    source : str
+        Where the header is from (e.g. its file), in the message of an
+        error.
+    header : astropy.io.fits.Header
+        The header of the array.
+    shape : Sequence of int
+        The shape of the array in its file (numpy order).
+    spectral_axis : int, optional
+        The index of the spectral axis in the orientation of the model
+        (see model_header).
+
+    Returns
+    -------
+    tuple of int
+        The shape of the array in the orientation of the model (numpy
+        order).
+
+    Raises
+    ------
+    ValueError
+        If the world coordinates are invalid, or of fewer axes than the
+        array (e.g. a spectral axis left out of them, which model_header
+        needs stated).
+    """
+    shape = tuple(shape)
+    ndim = None if spectral_axis is None else spectral_axis + 1
+    if not has_wcs(header):
+        return tuple(shape[axis] for axis in _own_axes(shape, ndim))
+    # (the fixes astropy makes to a header that states nothing, e.g. of an
+    # axis of velocities of AIPS read as optical, change no type of axis:
+    # what they say is said as the header is read for its values)
+    with ignoring_wcs_fixes():
+        wcs, full = _file_wcs(source, header, shape)
+    wcs, kept = _own_wcs(wcs, full, ndim)
+    sizes = kept[::-1]
+    return tuple(sizes[axis] for axis in model_axis_order(wcs))[::-1]
+
+
 def _oriented_header(
         source: str,
         header: astropy.io.fits.Header,
@@ -230,12 +286,7 @@ def _oriented_header(
             f"{source}: its world coordinates have distortions (e.g. SIP), "
             f"which the model leaves out: it reads them as linear")
     wcs, cards = _axis_of_rest(source, header, wcs, full, rest, medium)
-    stokes = [
-        len(full) - 1 - axis for axis, ctype in enumerate(wcs.wcs.ctype)
-        if ctype.strip().upper() == 'STOKES']
-    own = _own_axes(full, ndim, stokes)
-    kept = tuple(full[axis] for axis in own)
-    wcs = _squeezed_wcs(wcs, [len(full) - 1 - axis for axis in own])
+    wcs, kept = _own_wcs(wcs, full, ndim)
     wcs, order, flips = _model_wcs(wcs, kept[::-1])
     sizes = [kept[len(kept) - 1 - axis] for axis in order]
     header = _with_shape(_with_wcs(header, wcs), tuple(sizes[::-1]))
@@ -389,6 +440,25 @@ def _own_axes(
         if axis not in own and axis not in others]
     missing = 0 if ndim is None else max(ndim - len(own), 0)
     return sorted(own + flat[:missing])
+
+
+def _own_wcs(
+        wcs: astropy.wcs.WCS,
+        full: tuple[int, ...],
+        ndim: int | None
+) -> tuple[astropy.wcs.WCS, tuple[int, ...]]:
+    """
+    Return the world coordinates of the axes of an array that are its own
+    (see _own_axes; one of Stokes parameters of length 1 is not), of a
+    shape with an axis for each world axis (numpy order, see _file_wcs),
+    and the sizes of those axes (numpy order).
+    """
+    stokes = [
+        len(full) - 1 - axis for axis, ctype in enumerate(wcs.wcs.ctype)
+        if ctype.strip().upper() == 'STOKES']
+    own = _own_axes(full, ndim, stokes)
+    kept = tuple(full[axis] for axis in own)
+    return _squeezed_wcs(wcs, [len(full) - 1 - axis for axis in own]), kept
 
 
 def _squeezed_wcs(

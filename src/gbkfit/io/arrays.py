@@ -16,7 +16,7 @@ once a file states what it says of its array as a FITS header.
 
 import dataclasses
 from collections.abc import Collection, Mapping, Sequence
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, NamedTuple, TypeAlias
 
 import astropy.io.fits
 import astropy.wcs
@@ -34,7 +34,8 @@ from .headers import (
     _with_shape, _with_wcs, data_unit, has_wcs, header_shape,
     ignoring_wcs_fixes, parse_wcs)
 from .orientation import (
-    Orientation, _oriented_header, _squeezed_shape, model_header)
+    Orientation, _oriented_header, _squeezed_shape, model_header,
+    model_shape)
 from .spectral import _stated_header, _warn_of_missing_unit
 from .statements import statement_errors
 
@@ -463,7 +464,10 @@ def check_companion(
     """
     Check, from their headers alone, that the array of a file is on the
     pixels of data read from a file, as their errors and mask are read
-    (see read_arrays).
+    (see read_arrays): of their shape, from the types of the axes alone,
+    and, once the header of the data can be read in the orientation of the
+    model (see model_header; e.g. it states the convention of its
+    velocities), of their world coordinates.
 
     Parameters
     ----------
@@ -486,20 +490,25 @@ def check_companion(
     OSError
         If a file cannot be read.
     ValueError
-        If the header of the data cannot be read in the orientation of the
-        model (see model_header), or the array is not on their pixels.
+        If the world coordinates of the data are invalid (see
+        model_shape), or the array is not on their pixels.
     """
     read = dict(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
         spectral_unit=spectral_unit, medium=medium,
         spectral_axis=spectral_axis)
-    header, orientation = _data_model(data, read)
+    model, target = _data_target(data, read)
+    filename = split_data_file(file)[0]
     with config_path(*path):
         file_header = read_header(file)
-        _companion_orientation(
-            split_data_file(file)[0], file_header,
-            header_shape(file_header), header, orientation, name=name,
-            **read)
+        shape = header_shape(file_header)
+        if model is None:
+            _check_shape(
+                filename, file_header, shape, target, name=name,
+                spectral_axis=spectral_axis)
+        else:
+            _companion_orientation(
+                filename, file_header, shape, *model, name=name, **read)
 
 
 def check_footprint(
@@ -516,7 +525,7 @@ def check_footprint(
     """
     Check, from their headers alone, that a footprint is on the pixels of
     data read from a file, or of their sky, as it is read (see
-    read_footprint).
+    read_footprint): as check_companion checks an array.
 
     Parameters
     ----------
@@ -533,24 +542,31 @@ def check_footprint(
     OSError
         If a file cannot be read.
     ValueError
-        If the header of the data cannot be read in the orientation of the
-        model (see model_header), or the footprint is not on their pixels
-        or on those of their sky (an error of the option footprint, see
-        config_path).
+        If the world coordinates of the data are invalid (see
+        model_shape), or the footprint is not on their pixels or on those
+        of their sky (an error of the option footprint, see config_path).
     """
     read = dict(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
         spectral_unit=spectral_unit, medium=medium,
         spectral_axis=spectral_axis)
-    header, orientation = _data_model(data, read)
+    model, target = _data_target(data, read)
     filename = split_data_file(file)[0]
     with config_path('footprint'):
         file_header = read_header(file)
-        target, target_orientation, target_read = _footprint_target(
-            filename, header_shape(file_header), header, orientation, read)
-        _companion_orientation(
-            filename, file_header, header_shape(file_header), target,
-            target_orientation, name='footprint', **target_read)
+        shape = header_shape(file_header)
+        if model is None:
+            sky = _footprint_on_sky(shape, target.shape)
+            _check_shape(
+                filename, file_header, shape,
+                target.sky() if sky else target, name='footprint',
+                spectral_axis=None if sky else spectral_axis)
+        else:
+            on, on_orientation, on_read = _footprint_target(
+                filename, shape, *model, read)
+            _companion_orientation(
+                filename, file_header, shape, on, on_orientation,
+                name='footprint', **on_read)
 
 
 def _data_model(
@@ -564,6 +580,81 @@ def _data_model(
     header = read_header(data)
     return model_header(
         split_data_file(data)[0], header, header_shape(header), **read)
+
+
+class _Target(NamedTuple):
+    """
+    What an array is put on, the pixels of data or of their sky, as its
+    shape is checked (see _check_shape): whether the data have world
+    coordinates, and the shape (numpy order) of the target in the axes of
+    the file of the data (of an array of no world coordinates, which is
+    put on them as it is) and in the orientation of the model.
+    """
+    wcs: bool
+    file_shape: tuple[int, ...]
+    shape: tuple[int, ...]
+
+    def sky(self) -> '_Target':
+        """
+        Return the sky of data of three axes: the first two of the model
+        (see Orientation.sky).
+        """
+        return _Target(self.wcs, self.shape[-2:], self.shape[-2:])
+
+
+def _data_target(
+        data: DataFile, read: Mapping[str, Any]
+) -> tuple[tuple[astropy.io.fits.Header, Orientation] | None, _Target]:
+    """
+    Return the header of data read from a file in the orientation of the
+    model and how they are put in it (see model_header), or none while
+    their header cannot be read so (e.g. it does not state the convention
+    of its velocities: a problem of the data themselves, see
+    describe_fits); and what an array put on their pixels is checked
+    against, from the types of their axes alone (see _check_shape; read:
+    how they are read, see read_arrays).
+
+    Raises
+    ------
+    ValueError
+        If the world coordinates of the data are invalid (see
+        model_shape).
+    """
+    filename = split_data_file(data)[0]
+    header = read_header(data)
+    shape = header_shape(header)
+    target = _Target(
+        has_wcs(header), shape,
+        model_shape(filename, header, shape, read['spectral_axis']))
+    try:
+        return model_header(filename, header, shape, **read), target
+    except ValueError:
+        return None, target
+
+
+def _check_shape(
+        filename: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...],
+        target: _Target,
+        *,
+        name: str,
+        spectral_axis: int | None
+) -> None:
+    """
+    Raise InputError unless an array of a header (of a shape, numpy order,
+    in its file) has the shape of what it is put on, from the types of
+    their axes alone: in the orientation of the model, of an array and
+    data of world coordinates (see model_shape), else in the axes of
+    their files (name: what it is to the data, e.g. 'errors').
+    """
+    if has_wcs(header) and target.wcs:
+        found = model_shape(filename, header, shape, spectral_axis)
+        wanted = target.shape
+    else:
+        found, wanted = tuple(shape), target.file_shape
+    if found != wanted:
+        raise InputError(_mismatch(name, found, wanted))
 
 
 def _footprint_target(
@@ -580,13 +671,26 @@ def _footprint_target(
     sky (see DatasetGrid), as a header and an orientation, and how it is
     read; or raise InputError if it is of neither.
     """
-    shape = _squeezed_shape(shape)
-    data_shape = _squeezed_shape(header_shape(data_header))
-    if len(shape) == len(data_shape):
-        return data_header, data_orientation, read
-    if len(data_shape) == 3 and len(shape) == 2:
+    if _footprint_on_sky(shape, header_shape(data_header)):
         return *_sky_target(filename, data_header, data_orientation), \
             _NO_READING
+    return data_header, data_orientation, read
+
+
+def _footprint_on_sky(
+        shape: tuple[int, ...], data_shape: tuple[int, ...]
+) -> bool:
+    """
+    Return whether a footprint of a shape (numpy order, of its file) is
+    put on the sky of data of a shape in the model (numpy order), not on
+    their pixels: of a cube, a footprint of two axes is; raise InputError
+    if it is of neither.
+    """
+    shape = _squeezed_shape(shape)
+    if len(shape) == len(data_shape):
+        return False
+    if len(data_shape) == 3 and len(shape) == 2:
+        return True
     raise InputError(
         _mismatch('footprint', shape, data_shape)
         + (f" or {shape_text(data_shape[1:])}"
@@ -780,17 +884,23 @@ def _companion_orientation(
     that is put on the pixels of data of a header and an orientation in
     the model, and how it is put on them, from the headers alone: by its
     own world coordinates, which must put its pixels on theirs, or, if it
-    or the data have none, in the axes of the file of the data, whose
-    shape it must have. Raise InputError if it is not on them (name: what
-    it is to the data, e.g. 'errors'; read: how it is read, see
-    read_arrays).
+    or the data have none, in the axes of the file of the data. Raise
+    InputError if it is not on them: first if it is not of their shape
+    (see _check_shape, as data whose header cannot yet be read in the
+    orientation of the model are checked), then if its world coordinates
+    are not on theirs (name: what it is to the data, e.g. 'errors'; read:
+    how it is read, see read_arrays).
     """
+    target = _Target(
+        has_wcs(data_header), data_orientation.file_shape,
+        header_shape(data_header))
+    _check_shape(
+        filename, header, shape, target, name=name,
+        spectral_axis=read.get('spectral_axis'))
     if has_wcs(header) and has_wcs(data_header):
         model, orientation = model_header(filename, header, shape, **read)
         _check_same_pixels(model, data_header, name=name)
         return model, orientation
-    if shape != data_orientation.file_shape:
-        raise InputError(_mismatch(name, shape, data_orientation.file_shape))
     return header, data_orientation
 
 
