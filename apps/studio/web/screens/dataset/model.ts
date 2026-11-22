@@ -501,8 +501,9 @@ export interface Resolved {
 
 // The problems of a draft, at the paths of the fields that fix them (see
 // components/Problems): of an item, under its key ([key, 'data'], [key,
-// 'error'], [key, 'mask'], and the library's paths under [key], e.g.
-// [key, 'spectral', 'unit']); of its footprint, ['footprint']; of the
+// 'error'], [key, 'error_kind'], [key, 'mask'], and the library's paths
+// under [key], e.g. [key, 'spectral', 'unit']); of its footprint,
+// ['footprint']; of the
 // edits, ['prepare']; with no item, ['files']. The library's keep its
 // severity; what the user is still to give is an error. How its files fit
 // together is the library's to say (see useDatasetProblems); the name is
@@ -580,7 +581,7 @@ function inputProblems(resolved: Resolved): Problem[] {
         const name = role === 'error' ? 'errors' : 'mask';
         if (of.errors[role]) problems.push(error([slot.key, role], `${name} unreadable · ${of.errors[role]}`));
         else if (role === 'error' && array !== undefined && item.errorValue === null && errorKindOf(item, of) === null)
-          problems.push(error([slot.key, 'error'], 'error kind missing · σ, σ² or 1/σ²'));
+          problems.push(error([slot.key, 'error_kind'], 'error kind missing · σ, σ² or 1/σ²'));
       }
       if (item.errorValue !== null && !(Number(item.errorValue) > 0)) problems.push(error([slot.key, 'error'], `error '${item.errorValue}' not > 0`));
     }

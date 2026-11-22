@@ -1666,6 +1666,11 @@ button.ds-row-main { cursor: pointer; }
 .file-none { font: var(--text-data); color: var(--faint); }
 .file-add { justify-self: start; font: var(--text-label); color: var(--muted); }
 :hover > .file-add, [data-open] .file-add { color: var(--fg); }
+/* (the parts with problems, in the colour of the worst: the file or its
+   array, how it is read, or what is asked in its place; the way to give
+   what is missing) */
+.file-sum[data-name="error"] .file-sum-name, .file-sum[data-array="error"] .file-sum-array, .file-sum[data-fact="error"] .file-sum-fact, .file-add[data-severity="error"] { color: var(--err); }
+.file-sum[data-name="warning"] .file-sum-name, .file-sum[data-array="warning"] .file-sum-array, .file-sum[data-fact="warning"] .file-sum-fact, .file-add[data-severity="warning"] { color: var(--warn); }
 /* (the popover of a file read: beside its row, over the screen; its parts
    each under a label: the file, its arrays (a list that scrolls), how it
    is read) */
@@ -1673,6 +1678,8 @@ button.ds-row-main { cursor: pointer; }
 .file-pop-title { display: flex; align-items: baseline; gap: 8px; font: var(--text-heading); }
 .file-pop-title small { font: var(--text-caption); color: var(--faint); }
 .file-pop-part { display: grid; gap: 6px; min-width: 0; }
+/* (parts marked by the problems of the row, as it is: see ProblemPart) */
+.file-pop > .problem-field { display: grid; gap: 14px; min-width: 0; }
 .file-pop-label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .file-pop-label small { font: var(--text-data-small); color: var(--faint); }
 .file-pop-name { font: var(--text-data); overflow-wrap: anywhere; }
@@ -1690,6 +1697,9 @@ button.ds-row-main { cursor: pointer; }
 .file-pop-item[data-mono] > small { font: var(--text-data-small); }
 .file-pop-item:hover, .file-pop-item:focus-visible { background: var(--panel2); outline: none; }
 .file-pop-item[data-current] { background: var(--sel); color: var(--accent-text); }
+.file-pop-item:disabled { color: var(--faint); cursor: default; }
+.file-pop-item:disabled:hover { background: none; }
+.file-pop-none { font: var(--text-data); color: var(--faint); }
 .file-pop-field { width: 100%; height: 30px; padding: 0 9px; border: 1px solid var(--line2); border-radius: 7px; background: var(--field); color: var(--fg); font: var(--text-data); }
 .file-pop-field:focus { outline: none; border-color: var(--accent); }
 .file-pop-value { display: flex; align-items: center; gap: 8px; }

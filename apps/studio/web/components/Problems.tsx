@@ -135,8 +135,9 @@ function firstControl(element: HTMLElement): HTMLElement | null {
 }
 
 // Registers a field as the home of the problems of its path (see homeOf);
-// gives the ref of its element, the worst severity of its problems (null:
-// none), their messages, and whether it is shown (see ProblemCounter)
+// gives the ref of its element, its problems, worst first, the worst
+// severity of them (null: none), their messages, and whether it is shown
+// (see ProblemCounter)
 export function useProblemHome(path: Path, label: string, catches?: Path) {
   const { problems, homes, register, shown } = useRegistry();
   const fold = useFold();
@@ -148,7 +149,7 @@ export function useProblemHome(path: Path, label: string, catches?: Path) {
     [register, key, label, catchKey, element, fold],
   );
   const own = bySeverity(problems.filter((problem) => homes.get(problem) === key));
-  return { ref: setElement, severity: own[0]?.severity ?? null, messages: own.map((problem) => problem.message), shown: shown === key && own.length > 0 };
+  return { ref: setElement, problems: own, severity: own[0]?.severity ?? null, messages: own.map((problem) => problem.message), shown: shown === key && own.length > 0 };
 }
 
 // The worst severity of the problems whose homes are in a fold (null:
@@ -164,9 +165,54 @@ export function useSeverityWithin(foldId: string): Severity | null {
   return bySeverity(within)[0]?.severity ?? null;
 }
 
+// The problems of the field around (see ProblemField), for what it holds
+// to mark its parts (see useProblemsAt, ProblemPart): e.g. those of a row,
+// in what the row says and in the controls of its popover
+const FieldProblems = createContext<readonly Problem[]>([]);
+
+// The problems of the field around at a path, worst first: those of the
+// path itself (exact), or of it and under it (none: no path)
+function useFieldProblemsAt(path: Path | null, exact: boolean): Problem[] {
+  const problems = useContext(FieldProblems);
+  if (path === null) return [];
+  return bySeverity(problems.filter((problem) => (exact ? keyOf(problem.path) === keyOf(path) : startsWith(problem.path, path))));
+}
+
+// The worst severity of the problems of the field around at a path (null:
+// none, or no path; see useFieldProblemsAt); e.g. of one part of what the
+// field shows
+export function useProblemsAt(path: Path | null, exact = false): Severity | null {
+  return useFieldProblemsAt(path, exact)[0]?.severity ?? null;
+}
+
+// A part of a field that fixes the problems of the field at a path (e.g.
+// a control in the popover of a row; none: it marks none): marked by a
+// rule at its side, which says them on hover, as the field is; the field
+// stays their home (the counter leads to it), so they show on both
+export function ProblemPart({ path, exact = false, children }: { path: Path | null; exact?: boolean; children: ReactNode }) {
+  const own = useFieldProblemsAt(path, exact);
+  return (
+    <Tooltip
+      label={own.map((problem) => problem.message).join('\n')}
+      disabled={own.length === 0}
+      multiline
+      maw={360}
+      position="top-start"
+      openDelay={120}
+      classNames={{ tooltip: 'problem-tip' }}
+      events={{ hover: true, focus: true, touch: true }}
+    >
+      <div className="problem-field" data-severity={own[0]?.severity}>
+        {children}
+      </div>
+    </Tooltip>
+  );
+}
+
 // A field (or a group of them) that fixes the problems of a path: marked
 // by a rule at its side while it has any, which it says on hover, or
-// while it is shown
+// while it is shown; what it holds can mark the parts they are of (see
+// useProblemsAt)
 export function ProblemField({ path, label, catches, className, children }: { path: Path; label: string; catches?: Path; className?: string; children: ReactNode }) {
   const home = useProblemHome(path, label, catches);
   return (
@@ -182,7 +228,7 @@ export function ProblemField({ path, label, catches, className, children }: { pa
       events={{ hover: true, focus: true, touch: true }}
     >
       <div ref={home.ref} className={['problem-field', className].filter(Boolean).join(' ')} data-severity={home.severity ?? undefined} data-shown={home.shown || undefined}>
-        {children}
+        <FieldProblems.Provider value={home.problems}>{children}</FieldProblems.Provider>
       </div>
     </Tooltip>
   );

@@ -11,7 +11,7 @@ import { NumberInput, Slider } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useDescription } from '../api/queries';
 import { arrayLabel, arrayRef } from './arrays';
-import { ArraySection, FilePopover, FileSection, FileSummary, SourceSection } from './FileEditor';
+import { ArraySection, FilePopover, FileSection, FileSummary } from './FileEditor';
 import { useFileSource } from './FileSources';
 import { Button, Close, TextField } from './ui/basics';
 import { joinPath } from './FilePicker';
@@ -775,14 +775,8 @@ function FileField({ value, onChange }: { value: unknown; onChange: (value: unkn
           </div>
         }
       >
-        {path === null ? (
-          <SourceSection source={sources} />
-        ) : (
-          <>
-            <FileSection path={path} source={sources} />
-            <ArraySection arrays={arrays} current={chosen} onChoose={(array) => set(path, arrayRef(arrays, array))} />
-          </>
-        )}
+        <FileSection path={path ?? undefined} source={sources} />
+        {path !== null && arrays.length > 0 && <ArraySection arrays={arrays} current={chosen} onChoose={(array) => set(path, arrayRef(arrays, array))} />}
       </FilePopover>
       {source.status}
       {source.hidden}
