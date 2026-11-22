@@ -3,6 +3,7 @@
 // chosen (by its title; one or several alike), its file and HDU beside it.
 import { useState, type ReactNode } from 'react';
 import { useHeader } from '../../api/queries';
+import { MiddleCut } from '../../components/ui/cut';
 import { Choice } from '../../components/ui/inputs';
 
 export interface HeaderSource {
@@ -26,9 +27,7 @@ export function HeaderView({ sources, actions }: { sources: HeaderSource[]; acti
           onChange={setChosen}
         />
         {source && (
-          <span className="ds-header-file" title={source.path}>
-            {source.path.split('/').pop()} · HDU {source.hdu}
-          </span>
+          <MiddleCut text={`${source.path.split('/').pop()} · HDU ${source.hdu}`} title={source.path} className="ds-header-file" />
         )}
         <span className="viewer-head-gap" />
         {actions}

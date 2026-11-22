@@ -227,7 +227,12 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .slot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; min-height: 32px; padding: 3px 6px 3px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel2); }
 .slot.empty { border-style: dashed; background: transparent; }
 .slot > .ui-close { margin-left: auto; }
-.slot-file { min-width: 0; font: var(--text-data); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot:not(.empty) { flex-wrap: nowrap; gap: 6px; }
+.slot-file { flex: 1 1 0; font: var(--text-data); }
+/* (the array of a file of several, read under its name: the name and the
+   way to remove it on the first line, the array on the second) */
+.slot[data-arrays] { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; }
+.slot-array { grid-column: 1 / -1; display: flex; min-width: 0; margin-bottom: 1px; }
 .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; margin: 0; font: var(--text-body); }
 /* (fonts: words for people, e.g. labels, in sans; literal things, e.g.
    the keys of options, names of files and blocks, and data, e.g. values
@@ -470,7 +475,9 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
    its top that finds them, over the list, which scrolls) */
 .ui-menu-scroll { max-height: min(420px, 70vh); overflow-y: auto; overscroll-behavior: contain; }
 .ui-search-menu { display: flex; flex-direction: column; padding: 4px; }
-.ui-search-menu .mantine-Combobox-search { flex: none; margin: 0 0 4px; }
+/* (Mantine draws the field as a strip from edge to edge of the menu: here
+   a field of its own, inside the menu, in line with the items) */
+.ui-search-menu .mantine-Combobox-search { width: 100%; margin: 0 0 4px; border-width: 1px; border-radius: var(--mantine-radius-default); }
 .ui-search-options { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .ui-search-menu .mantine-Combobox-option { padding: 6px 10px; border-radius: 4px; }
 .ui-search-menu .mantine-Combobox-option[data-combobox-selected], .ui-search-menu .mantine-Combobox-option:hover:not([data-combobox-disabled]) { background: var(--panel2); color: var(--fg); }
@@ -1246,16 +1253,14 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-row-body { display: grid; gap: 4px; min-width: 0; }
 .ds-slot { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 30px; padding: 2px 4px 2px 9px; border: 1px solid var(--line2); border-radius: 7px; background: var(--bg); }
 .ds-slot > .ui-close { margin-left: auto; flex: none; }
-.ds-slot .ui-choice { flex: 0 0 104px; }
-.ds-file { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--text-data); }
+.ds-file { flex: 1 1 0; font: var(--text-data); }
+/* (the array of a file of several, read under its name: the name and the
+   way to remove it on the first line, the array on the second) */
+.ds-slot[data-arrays] { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; }
+.ds-slot-array { grid-column: 1 / -1; display: flex; min-width: 0; margin-bottom: 2px; }
 .ds-array { flex: none; font: var(--text-data-small); color: var(--faint); }
 .ds-none { display: block; padding: 6px 0 0; font: var(--text-data); color: var(--faint); }
-/* (the chevron of a file, and what it opens: what GBKFIT reads from the
-   header of its array, and the header as it is, in a box that scrolls) */
-.ds-chevron { flex: none; width: 18px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; background: none; color: var(--faint); font: 10px/1 var(--sans); transition: transform .12s; }
-.ds-chevron:hover:not(:disabled) { color: var(--fg); }
-.ds-chevron[aria-expanded="true"] { transform: rotate(90deg); }
-.ds-header-of { margin: 2px 0 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel2); }
+/* (the ways to add a file, and a map: dashed, as places to fill) */
 .ds-add-file { justify-self: start; height: 26px; margin-top: 2px; padding: 0 9px; border: 1px dashed var(--line2); border-radius: 7px; background: none; color: var(--muted); font: var(--text-label); }
 .ds-add-file:hover, .ds-add-file[aria-expanded="true"] { border-color: var(--muted); color: var(--fg); }
 .ds-add { justify-self: start; padding: 6px 10px; border: 1px dashed var(--line2); border-radius: 8px; background: none; color: var(--muted); font: var(--text-label); }
@@ -1651,6 +1656,18 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ov-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ov-table .ov-name { color: var(--fg); font: var(--text-data); }
 .ui-cut { display: inline-block; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+/* (text cut in its middle: as wide as all of it at most, which a line of
+   no height holds, or as its place, e.g. a flex item that grows) */
+.ui-middle-cut { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+.ui-middle-cut > span { display: block; }
+.ui-middle-cut-all { height: 0; overflow: hidden; }
+/* (the array of a file, read beside its name: a small button of its name,
+   cut if long) */
+/* (its text in line with the text above it: its padding hangs out to the
+   left, seen as it is pointed at) */
+.ui-array-pick { flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: calc(100% + 6px); height: 22px; margin-left: -6px; padding: 0 6px; border: 0; border-radius: 4px; background: none; color: var(--muted); font: var(--text-data-small); white-space: nowrap; cursor: pointer; }
+.ui-array-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ui-array-pick:hover, .ui-array-pick[aria-expanded="true"] { box-shadow: inset 0 0 0 1px var(--line2); color: var(--fg); }
 .ov-name-box { position: relative; display: flex; align-items: center; width: 100%; }
 .ov-row[data-renaming] .ov-name-text { visibility: hidden; }
 .ov-row[data-renaming] td { background: var(--sel); }
@@ -1704,7 +1721,7 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .problem-list-label { font: var(--text-caption); color: var(--faint); white-space: nowrap; }
 .ds-name-field { min-width: 0; }
 /* (the header of the data, in the room of the viewer) */
-.ds-header-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--text-data-small); color: var(--faint); }
+.ds-header-file { font: var(--text-data-small); color: var(--faint); }
 .ds-header-cards { flex: 1; min-height: 0; margin: 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: var(--fg2); font: var(--text-data-small); white-space: pre; }
 .copy-config { min-width: 104px; }
 .ds-unit-input { width: 100%; height: 30px; padding: 0 9px; border-radius: 7px; text-align: left; }

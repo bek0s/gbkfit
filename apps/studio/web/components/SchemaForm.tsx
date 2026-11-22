@@ -10,8 +10,11 @@
 import { NumberInput, Slider } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useDescription } from '../api/queries';
+import { ArrayPick } from './ArrayPick';
+import { arrayRef } from './arrays';
 import { FileSources } from './FileSources';
 import { Button, Close, TextField } from './ui/basics';
+import { MiddleCut } from './ui/cut';
 import { joinPath } from './FilePicker';
 import { Choice, QuantityInput } from './ui/inputs';
 
@@ -748,22 +751,14 @@ function FileField({ value, onChange }: { value: unknown; onChange: (value: unkn
   }
   const chosen = arrays.find((a) => a.name === hdu || a.index === hdu) ?? arrays[0];
   return (
-    <div className="slot">
-      <span className="slot-file" title={path}>
-        {path.split('/').pop()}
-      </span>
-      {arrays.length > 1 && (
-        <Choice
-          items={arrays.map((a) => ({ value: String(a.index), label: `${a.name || `array ${a.index}`} · ${a.shape.filter((n) => n > 1).join(' × ')}` }))}
-          value={String(chosen?.index ?? '')}
-          label="The array of the file"
-          onChange={(index) => {
-            const array = arrays.find((a) => a.index === Number(index));
-            if (array) set(path, array.name && arrays.filter((a) => a.name === array.name).length === 1 ? array.name : array.index);
-          }}
-        />
-      )}
+    <div className="slot" data-arrays={arrays.length > 1 || undefined}>
+      <MiddleCut text={path.split('/').pop()!} title={path} className="slot-file" />
       <Close label="Remove the file" onClick={() => set(null, undefined)} />
+      {arrays.length > 1 && (
+        <div className="slot-array">
+          <ArrayPick arrays={arrays} chosen={chosen} label="The array of the file" onChoose={(array) => set(path, arrayRef(arrays, array))} />
+        </div>
+      )}
     </div>
   );
 }

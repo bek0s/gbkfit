@@ -10,6 +10,7 @@ import type { Layer } from './CubeViewer';
 import { MapPanel, robustRange } from './MapPanel';
 import type { Region } from './MapView';
 import type { SkyFrame } from './sky';
+import { MiddleCut } from './ui/cut';
 import { Choice, Segments } from './ui/inputs';
 
 // A map: its key, its title, how its colours run (sequential, diverging
@@ -88,8 +89,8 @@ export function MapsViewer({
             label={`The ${layer.title.toLowerCase()} of ${map.title}`}
             note={plane.error ? <p className="error">{plane.error.message}</p> : null}
             tags={
-              <span className="map-source" title={layer.path}>
-                {layer.path.split('/').pop()}
+              <span className="map-source">
+                <MiddleCut text={layer.path.split('/').pop()!} title={layer.path} />
               </span>
             }
           />

@@ -109,11 +109,12 @@ describe('the spectral axis of a cube', () => {
   });
 });
 
-describe('the arrays offered for errors and a mask', () => {
-  it('are the others of the shape of the data, in the order of the file', () => {
+describe('the arrays offered for errors, a mask and a footprint', () => {
+  // (of any shape: the library says if one cannot be read there)
+  it('are the others of the file of the data, in its order', () => {
     const files = { 'muse.fits': [array(1, 'DATA', [8, 7, 6]), array(2, 'STAT', [8, 7, 6]), array(3, 'DQ', [8, 7, 6]), array(4, 'SMALL', [8, 7])] };
     const resolved = resolve('cube', { items: { cube: { ...EMPTY_ITEM, files: { data: { file: 'muse.fits' } } } }, spectral: NO_SPECTRAL, edits: NO_EDITS }, files);
-    expect(siblings(resolved.arrays.cube).map((a) => a.name)).toEqual(['STAT', 'DQ']);
+    expect(siblings(resolved.arrays.cube).map((a) => a.name)).toEqual(['STAT', 'DQ', 'SMALL']);
   });
 });
 

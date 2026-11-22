@@ -6,6 +6,7 @@
 // left out blank.
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMaps } from '../../api/queries';
+import { kept } from '../../components/arrays';
 import { CubeViewer, type Layer } from '../../components/CubeViewer';
 import type { Region } from '../../components/MapView';
 import { MapsViewer, type MapItem } from '../../components/MapsViewer';
@@ -15,7 +16,6 @@ import { HeaderView, type HeaderSource } from './HeaderView';
 import {
   cropRegion,
   hasEdits,
-  kept,
   keptValues,
   KINDS,
   NO_ARRAYS,

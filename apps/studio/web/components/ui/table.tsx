@@ -1,9 +1,8 @@
 // The parts of a table of blocks (e.g. the datasets of a project): its
 // heading (what it lists, how many, and the way to add one: at its top,
-// however long it is), the heads of its columns, which sort it, and the
-// text of its cells cut to a width (its cells are never wrapped: a long
-// text is cut, a table too wide for its place scrolls), and its rows,
-// which the keyboard reaches.
+// however long it is), the heads of its columns, which sort it, and its
+// rows, which the keyboard reaches. Its cells are never wrapped: a long
+// text is cut (see Cut), a table too wide for its place scrolls.
 import { useState, type FocusEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 export function TableHeading({ title, count, onAdd, addLabel }: { title: string; count: number; onAdd?: () => void; addLabel: string }) {
@@ -74,23 +73,6 @@ export function sortedKeys(keys: readonly string[], values: Readonly<Record<stri
     const order = typeof x === 'number' && typeof y === 'number' ? x - y : byText(String(x), String(y));
     return (down ? -order : order) || byText(a, b);
   });
-}
-
-// Text of a cell cut to a width (characters of its font) with '…' if it
-// is longer; all of it (title) on hover once it is cut. What it shows is
-// its title, or else what it holds (e.g. parts of it in other colours).
-export function Cut({ max, title, className, children }: { max: number; title: string; className?: string; children?: ReactNode }) {
-  const [cut, setCut] = useState(false);
-  return (
-    <span
-      className={['ui-cut', className].filter(Boolean).join(' ')}
-      style={{ maxWidth: `${max}ch` }}
-      title={cut ? title : undefined}
-      onMouseEnter={(event) => setCut(event.currentTarget.scrollWidth > event.currentTarget.clientWidth)}
-    >
-      {children ?? title}
-    </span>
-  );
 }
 
 // The rows of a table as the keyboard reaches them: one stop of Tab, the

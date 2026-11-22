@@ -12,6 +12,7 @@ import { Combobox, Menu, UnstyledButton } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useDescription, useLsfView, usePiece, useProject, usePsfView, useReferences, useSchema, useUpdateBlock, type LsfAt, type SpectralTypeOption, type Velocity } from '../api/queries';
+import { kept } from '../components/arrays';
 import { ColourBar } from '../components/ColourBar';
 import { UNSTRETCHED, type Stretch } from '../components/colours';
 import { joinPath } from '../components/FilePicker';
@@ -513,10 +514,6 @@ function ownUnit(given: string[], kinds: Record<string, string[]>): string | nul
   if (axes.length > 1) return null;
   if (axes.length === 0) return given.length > 0 ? 'pix' : 'km/s';
   return axes[0] === VELOCITY ? 'km/s' : given.find((unit) => kindOf(unit) === axes[0]) ?? null;
-}
-
-function kept(array: { shape: number[] }): number[] {
-  return array.shape.filter((n) => n > 1);
 }
 
 type Scale = 'linear' | 'log';

@@ -571,6 +571,20 @@ export function useLensDescription(project: string, lens: Record<string, unknown
   });
 }
 
+// The problems of how the files of a dataset of options (its files
+// relative to the project) fit together, from their headers alone (e.g.
+// errors of another shape than their data), each at the path of its
+// option (see the server's check_dataset)
+export function useDatasetCheck(project: string, dataset: Record<string, unknown> | undefined) {
+  return useQuery({
+    queryKey: keys.view('dataset-check', project, JSON.stringify(dataset ?? null)),
+    enabled: dataset !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: ({ signal }) => data(api.POST('/api/v1/datasets/check', { signal, body: { project, dataset: dataset ?? {} } })),
+  });
+}
+
 // What a lens makes of a source behind it, at the properties of its
 // parameters: its deflection over a field, its critical curves and its
 // caustics (see the server's LensViewInfo)

@@ -16,14 +16,15 @@ import { significant, when } from '../../components/format';
 import { MoreIcon } from '../../components/icons';
 import { ProblemSign } from '../../components/Problems';
 import { DropMenu, PointMenu } from '../../components/ui/overlays';
-import { Cut, rowKeys, SortHead, sortedKeys, TableHeading, useRowFocus, type RowFocus, type Sort, type SortValue } from '../../components/ui/table';
+import { Cut } from '../../components/ui/cut';
+import { rowKeys, SortHead, sortedKeys, TableHeading, useRowFocus, type RowFocus, type Sort, type SortValue } from '../../components/ui/table';
 import { NameInput, useBlockActions } from '../../shell/BlockMenu';
 import { useRemembered } from '../../shell/remember';
 import { ScreenHead } from '../../shell/ScreenHead';
 import { sectionNamed } from '../../shell/sections';
 import { useStudio } from '../../studio';
-import { useResolved } from './hooks';
-import { draftOfDataset, isReading, KINDS, kindOfType, NO_EDITS, NO_SPECTRAL, presentSlots, problemsOf, slotTitle, type Draft } from './model';
+import { useDatasetProblems, useResolved } from './hooks';
+import { draftOfDataset, isReading, KINDS, kindOfType, NO_EDITS, NO_SPECTRAL, presentSlots, slotTitle, type Draft } from './model';
 
 type ArrayInfo = components['schemas']['ArrayInfo'];
 
@@ -135,8 +136,7 @@ function DatasetRow({
   const reading = options === undefined || (array === undefined && failed === undefined);
   const dash = <span className="ov-faint">{reading ? '…' : '—'}</span>;
   const preparation = usePreparation(item?.files.data?.file ?? null);
-  const checked = kind !== undefined && !isReading(resolved);
-  const problems = checked ? problemsOf(resolved) : [];
+  const problems = useDatasetProblems(project, resolved, kind !== undefined && !isReading(resolved));
   const worst = problems.find((problem) => problem.severity === 'error')?.severity ?? problems[0]?.severity;
   // (the unit of the values: of each map, as given or as its header says,
   // where they differ)

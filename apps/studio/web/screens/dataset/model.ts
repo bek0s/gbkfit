@@ -10,6 +10,7 @@
 // and its mask, each an array of a FITS file.
 import type { ArrayInfo, ArrayProblem, CatalogueLine } from '../../api/client';
 import type { Problem } from '../../components/Problems';
+import { arrayRef, kept, keptAxes, sameShape } from '../../components/arrays';
 import type { Reading, Velocity } from '../../api/queries';
 
 export type Kind = 'cube' | 'moments' | 'image';
@@ -318,23 +319,6 @@ export function fitsFootprint(array: ArrayInfo, data: ArrayInfo): boolean {
   return shape === kept(data).join() || (kept(data).length === 3 && shape === kept(data).slice(0, 2).join());
 }
 
-// The shape of an array without its axes of length 1, as GBKFIT reads it
-export function kept(array: ArrayInfo): number[] {
-  return array.shape.filter((size) => size > 1);
-}
-
-export function keptAxes(array: ArrayInfo): string[] {
-  return array.axes.filter((_, i) => array.shape[i] > 1);
-}
-
-export function keptAxisUnits(array: ArrayInfo): string[] {
-  return array.axis_units.filter((_, i) => array.shape[i] > 1);
-}
-
-export function sameShape(a: ArrayInfo, b: ArrayInfo): boolean {
-  return kept(a).join() === kept(b).join();
-}
-
 // The likeliest array of a file for a role: for the data, the first with
 // their number of axes; for their errors and mask, the first of their
 // shape
@@ -347,23 +331,14 @@ function findArray(arrays: ArrayInfo[], array: string | number): ArrayInfo | und
   return typeof array === 'number' ? arrays.find((a) => a.index === array) : arrays.find((a) => a.name === array);
 }
 
-// How a dataset names an array: by its name if no other array of its file
-// has it, or else by its index
-export function arrayRef(arrays: ArrayInfo[], array: ArrayInfo): string | number {
-  return array.name && arrays.filter((a) => a.name === array.name).length === 1 ? array.name : array.index;
-}
-
-export function arrayLabel(array: ArrayInfo): string {
-  return array.name || `array ${array.index}`;
-}
-
-// The other arrays of the file of the data, of their shape, in the order
-// of the file: those an error or a mask can be (nothing is read from
-// their names)
+// The other arrays of the file of the data, in the order of the file:
+// those its errors, its mask or the footprint can be (any of them: the
+// library says if one cannot be read there; nothing is read from their
+// names)
 export function siblings(arrays: Arrays): ArrayInfo[] {
   const data = arrays.found.data;
   if (data === undefined) return [];
-  return (arrays.inFile.data ?? []).filter((a) => a.index !== data.index && sameShape(a, data));
+  return (arrays.inFile.data ?? []).filter((a) => a.index !== data.index);
 }
 
 // What the file of errors holds: as chosen, or else as its header states
@@ -528,8 +503,9 @@ export interface Resolved {
 // 'error'], [key, 'mask'], and the library's paths under [key], e.g.
 // [key, 'spectral', 'unit']); of its footprint, ['footprint']; of the
 // edits, ['prepare']; with no item, ['files']. The library's keep its
-// severity; what the user is still to give is an error. The name is the
-// caller's.
+// severity; what the user is still to give is an error. How its files fit
+// together is the library's to say (see useDatasetProblems); the name is
+// the caller's.
 export function problemsOf(resolved: Resolved): Problem[] {
   const problems = [...inputProblems(resolved), ...footprintProblems(resolved)];
   for (const [key, found] of Object.entries(headerProblems(resolved))) {
@@ -538,6 +514,13 @@ export function problemsOf(resolved: Resolved): Problem[] {
   const first = firstData(resolved);
   if (first) problems.push(...editProblems(resolved.kind, resolved.draft, resolved.arrays, first));
   return problems;
+}
+
+// The path in the page of an option of a dataset (see datasetOptions):
+// of a cube or a flux map, under the key of its one item, but the
+// footprint, of the dataset
+export function pagePath(kind: Kind, path: Problem['path']): Problem['path'] {
+  return kind === 'moments' || path.length === 0 || path[0] === 'footprint' ? path : [KINDS[kind].first[0], ...path];
 }
 
 // Whether a draft waits for the header of a file it names
@@ -552,16 +535,10 @@ export function isReading({ kind, draft, arrays, footprint }: Resolved): boolean
   );
 }
 
-// The problems of the footprint of a draft: of its file, and of its shape
-// (that of the data, or of the sky of a cube)
-function footprintProblems(resolved: Resolved): Problem[] {
-  const { draft, footprint } = resolved;
-  const data = firstData(resolved);
-  if (draft.footprint === undefined) return [];
-  if (footprint.error) return [error(['footprint'], `'${draft.footprint.file.split('/').pop()}' unreadable`)];
-  if (footprint.found === undefined || data === undefined || fitsFootprint(footprint.found, data)) return [];
-  const sky = kept(data).length === 3 ? ` or ${kept(data).slice(0, 2).join('×')}` : '';
-  return [error(['footprint'], `footprint ${shapeText(footprint.found)} · data ${shapeText(data)}${sky}`)];
+// The problems of the footprint of a draft: of its file
+function footprintProblems({ draft, footprint }: Resolved): Problem[] {
+  if (draft.footprint === undefined || !footprint.error) return [];
+  return [error(['footprint'], `'${draft.footprint.file.split('/').pop()}' unreadable`)];
 }
 
 // The problems the library finds of the data of each item (by its key),
@@ -583,12 +560,9 @@ function firstData({ kind, draft, arrays }: Resolved): ArrayInfo | undefined {
 
 const error = (path: Problem['path'], message: string): Problem => ({ severity: 'error', path, message });
 
-const shapeText = (array: ArrayInfo) => kept(array).join('×') || '1';
-
 // What the user is still to give of the files of a draft
 function inputProblems(resolved: Resolved): Problem[] {
   const { kind, draft, arrays } = resolved;
-  const info = KINDS[kind];
   const slots = presentSlots(kind, draft);
   const problems: Problem[] = [];
   if (slots.length === 0) problems.push(error(['files'], 'no map'));
@@ -599,31 +573,18 @@ function inputProblems(resolved: Resolved): Problem[] {
     const file = item.files.data?.file.split('/').pop();
     if (item.files.data === undefined) problems.push(error([slot.key, 'data'], 'data missing'));
     else if (of.errors.data) problems.push(error([slot.key, 'data'], `'${file}' unreadable · ${of.errors.data}`));
-    else if (data !== undefined && kept(data).length !== info.ndim) problems.push(error([slot.key, 'data'], `'${file}' ${axes(kept(data).length)} · needs ${info.ndim}`));
     else if (data !== undefined) {
       for (const role of ['error', 'mask'] as const) {
         const array = of.found[role];
         const name = role === 'error' ? 'errors' : 'mask';
         if (of.errors[role]) problems.push(error([slot.key, role], `${name} unreadable · ${of.errors[role]}`));
-        else if (array !== undefined && !sameShape(array, data)) problems.push(error([slot.key, role], `${name} ${shapeText(array)} · data ${shapeText(data)}`));
         else if (role === 'error' && array !== undefined && item.errorValue === null && errorKindOf(item, of) === null)
           problems.push(error([slot.key, 'error'], 'error kind missing · σ, σ² or 1/σ²'));
       }
       if (item.errorValue !== null && !(Number(item.errorValue) > 0)) problems.push(error([slot.key, 'error'], `error '${item.errorValue}' not > 0`));
     }
   }
-  const first = firstData(resolved);
-  if (kind === 'moments' && first) {
-    for (const slot of slots) {
-      const data = arrays[slot.key]?.found.data;
-      if (data !== undefined && kept(data).length === 2 && !sameShape(data, first)) problems.push(error([slot.key, 'data'], `map ${shapeText(data)} · others ${shapeText(first)}`));
-    }
-  }
   return problems;
-}
-
-function axes(count: number): string {
-  return `${count} ${count === 1 ? 'axis' : 'axes'}`;
 }
 
 function editProblems(kind: Kind, draft: Draft, arrays: Record<string, Arrays>, data: ArrayInfo): Problem[] {

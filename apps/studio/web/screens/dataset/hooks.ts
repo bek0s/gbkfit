@@ -1,15 +1,21 @@
 // The hooks of the dataset screen: a draft resolved against the server's
-// descriptions of its files, the state of a draft as the user edits it,
-// and a job of prep that the screen follows.
+// descriptions of its files, its problems, the state of a draft as the
+// user edits it, and a job of prep that the screen follows.
 import { useDebouncedValue } from '@mantine/hooks';
 import { useMemo, useState } from 'react';
-import { useDescriptions, useJob, useSubmitJob, type Reading } from '../../api/queries';
+import { useDatasetCheck, useDescriptions, useJob, useSubmitJob, type Reading } from '../../api/queries';
+import type { Problem } from '../../components/Problems';
 import {
   arraysOf,
+  datasetOptions,
   footprintOf,
+  isReading,
   KINDS,
   NO_EDITS,
   NO_SPECTRAL,
+  pagePath,
+  presentSlots,
+  problemsOf,
   restOf,
   type Draft,
   type Edits,
@@ -51,6 +57,19 @@ export function useResolved(kind: Kind, draft: Draft): Resolved {
 
 // (how long a value typed stands before it is used, ms)
 const TYPED_MS = 600;
+
+// The problems of a draft resolved (of the project, its files relative to
+// it): those of what is given (see problemsOf), and those the library
+// finds of how its files fit together (see useDatasetCheck), once every
+// file is described and each item has its data (none if not checked)
+export function useDatasetProblems(project: string, resolved: Resolved, checked = true): Problem[] {
+  const { kind, draft } = resolved;
+  const ready = checked && !isReading(resolved) && presentSlots(kind, draft).every((slot) => draft.items[slot.key].files.data !== undefined);
+  const check = useDatasetCheck(project, ready ? datasetOptions(resolved, project) : undefined);
+  if (!checked) return [];
+  const found = ready ? (check.data ?? []) : [];
+  return [...problemsOf(resolved), ...found.map(({ severity, path, message }) => ({ severity, path: pagePath(kind, path), message }))];
+}
 
 export interface DraftState {
   draft: Draft;

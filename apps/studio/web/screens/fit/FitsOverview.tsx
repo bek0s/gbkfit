@@ -9,7 +9,8 @@ import { useFileText, usePiece, useProject, useRun, useStopJob, useSubmitJob } f
 import { joinPath } from '../../components/FilePicker';
 import { when } from '../../components/format';
 import { Button } from '../../components/ui/basics';
-import { Cut, rowKeys, TableHeading, useRowFocus, type RowFocus } from '../../components/ui/table';
+import { Cut } from '../../components/ui/cut';
+import { rowKeys, TableHeading, useRowFocus, type RowFocus } from '../../components/ui/table';
 import { ScreenHead } from '../../shell/ScreenHead';
 import { sectionNamed } from '../../shell/sections';
 import { useStudio } from '../../studio';

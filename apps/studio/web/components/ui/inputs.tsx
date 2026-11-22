@@ -4,7 +4,7 @@
 // choice of a few (segments) or of a list (a field whose list drops as the
 // menus do); and a check.
 import { Autocomplete, Checkbox, defaultOptionsFilter, NumberInput, SegmentedControl, Select, TextInput, type ComboboxItem, type ComboboxItemGroup, type OptionsFilter } from '@mantine/core';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 // The most choices of a list it shows without a search: a longer one is
 // searched, as it is typed into
@@ -13,7 +13,9 @@ const SEARCHED = 10;
 // One of a list of choices (some can be off, and each can say what it
 // is under its label, and be of a group, under its heading: consecutive
 // choices of one group are), as a field whose list drops as the menus do
-// (see overlays); searched, if long (see SEARCHED)
+// (see overlays); searched, if long (see SEARCHED). A click on the field
+// opens its list (and leaves it open as the field is searched, to place
+// the caret); one on its chevron opens or closes it.
 export function Choice({
   items,
   value,
@@ -43,8 +45,34 @@ export function Choice({
     else if (last && 'group' in last && last.group === group) last.items.push(item);
     else data.push({ group, items: [item] });
   }
+  const [opened, setOpened] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
+  // (whether it was open as its chevron was pressed: the press, out of
+  // the field, closes it, before the click)
+  const wasOpen = useRef(false);
   return (
     <Select
+      ref={field}
+      dropdownOpened={opened}
+      onDropdownOpen={() => setOpened(true)}
+      onDropdownClose={() => setOpened(false)}
+      rightSectionPointerEvents="all"
+      rightSectionProps={{
+        onMouseDown: (event) => {
+          event.preventDefault();
+          wasOpen.current = opened;
+        },
+        // (opened as a click on the field opens it, the one chosen marked;
+        // the field keeps the focus, or takes it, for the keys of the list)
+        onClick: () => {
+          if (disabled) return;
+          if (wasOpen.current) setOpened(false);
+          else {
+            field.current?.focus();
+            field.current?.click();
+          }
+        },
+      }}
       data={data}
       searchable={items.length > SEARCHED}
       // (as it is searched, its first match is marked, which Enter takes)

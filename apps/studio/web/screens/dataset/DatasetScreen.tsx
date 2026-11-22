@@ -13,6 +13,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCreateBlock, useDeleteData, useDescriptions, useKeepJob, usePiece, usePreparation, useProject, useUpdateBlock } from '../../api/queries';
+import { kept } from '../../components/arrays';
 import { joinPath } from '../../components/FilePicker';
 import { Button } from '../../components/ui/basics';
 import { ProblemCounter, ProblemField, ProblemsProvider, type Problem } from '../../components/Problems';
@@ -24,7 +25,8 @@ import { useStudio } from '../../studio';
 import { ScreenHead } from '../../shell/ScreenHead';
 import { useUnsaved } from '../editing';
 import { Files } from './Files';
-import { dataKey, requestKey, useDraftState, usePrepJob, useResolved, type DraftState } from './hooks';
+import { DataProperties } from './Properties';
+import { dataKey, requestKey, useDatasetProblems, useDraftState, usePrepJob, useResolved, type DraftState } from './hooks';
 import { MadeFrom, originalsOf, preparedFilesOf } from './MadeFrom';
 import {
   dataFiles,
@@ -34,7 +36,6 @@ import {
   draftOfPreparation,
   EMPTY_ITEM,
   hasEdits,
-  kept,
   KINDS,
   isReading,
   kindOfType,
@@ -45,7 +46,6 @@ import {
   presentSlots,
   preparedOptions,
   prepRequest,
-  problemsOf,
   suggestName,
   type Draft,
   type Kind,
@@ -148,6 +148,7 @@ export function Dataset({ name }: { name: string }) {
   const head = useBlockHead(root, 'datasets', name);
   const draft = useMemo(() => (kind && options ? draftOfDataset(kind, options, root) : NOTHING), [kind, options, root]);
   const resolved = useResolved(kind ?? 'cube', draft);
+  const datasetProblems = useDatasetProblems(root, resolved, Boolean(kind && options));
   const firstData = kind && options ? Object.values(dataFiles(kind, options, root))[0] : undefined;
   const preparation = usePreparation(firstData ?? null);
   const record = (preparation.data ?? null) as Preparation | null;
@@ -167,7 +168,7 @@ export function Dataset({ name }: { name: string }) {
     setEditing(canRedo ? draftOfPreparation(kind, options, record, root) : draft);
   };
   const problems = [
-    ...(kind && options ? problemsOf(resolved) : []),
+    ...datasetProblems,
     ...failure(piece.error?.message ?? null),
     ...failure(options && !kind ? `type '${String(options.type)}' has no screen` : null),
   ];
@@ -196,6 +197,9 @@ export function Dataset({ name }: { name: string }) {
               </DockSection>
               <DockSection id="ds-files" title="Files">
                 <Files project={root} resolved={resolved} />
+              </DockSection>
+              <DockSection id="ds-properties" title="Properties">
+                <DataProperties resolved={resolved} />
               </DockSection>
               {hasSpectralChoices(resolved) && (
                 <DockSection id="ds-spectral" title="Spectral axis">
@@ -292,7 +296,7 @@ interface Editor {
 function useEditor(project: string, kind: Kind, initial: Draft): Editor {
   const state = useDraftState(initial);
   const resolved = useResolved(kind, state.draft);
-  const own = problemsOf(resolved);
+  const own = useDatasetProblems(project, resolved);
   const reading = isReading(resolved);
   const request = !hasErrors(own) && !reading && needsPrep(resolved) ? prepRequest(resolved, project) : null;
   const preview = usePrepJob(dataKey(state.draft.items));
@@ -434,6 +438,9 @@ function EditorBody({ project, editor }: { project: string; editor: Editor }) {
               onRemove={kind === 'moments' ? state.removeItem : undefined}
               onFootprint={state.setFootprint}
             />
+          </DockSection>
+          <DockSection id="ds-properties" title="Properties">
+            <DataProperties resolved={resolved} />
           </DockSection>
           {hasSpectralChoices(resolved) && (
             <DockSection id="ds-spectral" title="Spectral axis">

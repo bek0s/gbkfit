@@ -9,9 +9,10 @@ import type { ReactNode } from 'react';
 import { useEffect } from 'react';
 import type { ArrayProblem } from '../../api/client';
 import { useLines } from '../../api/queries';
+import { keptAxes, keptAxisUnits } from '../../components/arrays';
 import { ProblemField } from '../../components/Problems';
 import { Choice, NumberField, Segments } from '../../components/ui/inputs';
-import { catalogueLineOf, catalogueRests, keptAxes, keptAxisUnits, LINE_UNITS, mediumOf, restOf, SPECTRAL_TYPES, spectrumOf, type Resolved, type Spectral, type SpectralType } from './model';
+import { catalogueLineOf, catalogueRests, LINE_UNITS, mediumOf, restOf, SPECTRAL_TYPES, spectrumOf, type Resolved, type Spectral, type SpectralType } from './model';
 
 // The problem of an array at an option (e.g. 'spectral.unit'), if any
 function problemAt(problems: ArrayProblem[], option: string): ArrayProblem | null {

@@ -6,13 +6,13 @@
 // The originals stay in the project; the dataset is of the prepared
 // copies. Of moment maps, a pixel left out of one map is left out of all.
 import { useMaps, useSpectrum, type Reading } from '../../api/queries';
+import { kept } from '../../components/arrays';
 import { significant } from '../../components/format';
 import { Button } from '../../components/ui/basics';
 import { Check, NumberField } from '../../components/ui/inputs';
 import { ValueRange } from '../../components/ui/sliders';
 import {
   clampRange,
-  kept,
   keptValues,
   NO_VALUE_EDITS,
   presentSlots,

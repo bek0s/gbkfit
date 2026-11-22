@@ -178,6 +178,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/datasets/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Dataset
+         * @description Check how the files of a dataset of the options of a piece of a
+         *     project fit together, from their headers alone, without reading their
+         *     data (e.g. errors of another shape than their data): its problems,
+         *     each at the path of its option (see gbkfit's check_files).
+         */
+        post: operations["check_dataset_api_v1_datasets_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/header/{path}": {
         parameters: {
             query?: never;
@@ -1280,6 +1303,19 @@ export interface components {
             shift: number;
         };
         /**
+         * DatasetRequest
+         * @description A dataset to check: the project of its piece, and its options (its
+         *     files relative to the project).
+         */
+        DatasetRequest: {
+            /** Project */
+            project: string;
+            /** Dataset */
+            dataset: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * Diagnostic
          * @description A problem of a text: its line (from 1), severity and message.
          */
@@ -1889,6 +1925,23 @@ export interface components {
             };
             /** Time */
             time: string;
+        };
+        /**
+         * Problem
+         * @description A problem of the options of a piece (see gbkfit's ConfigProblem): an
+         *     error or a warning, the path of the option that fixes it ([] if none)
+         *     and its message.
+         */
+        Problem: {
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "error" | "warning";
+            /** Path */
+            path: (string | number)[];
+            /** Message */
+            message: string;
         };
         /**
          * ProjectInfo
@@ -2536,6 +2589,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArrayInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_dataset_api_v1_datasets_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"][];
                 };
             };
             /** @description Validation Error */

@@ -8,13 +8,14 @@
 // its model is made. Its options are edited as a whole, and saved or
 // reverted (see editing).
 import { useDescriptions, useLsfView, usePiece, usePsfView, type Reading, type SpectralTypeOption } from '../../api/queries';
+import { kept } from '../../components/arrays';
 import { joinPath } from '../../components/FilePicker';
 import { membersOf, SchemaForm, titleOf, typeOf, type Options } from '../../components/SchemaForm';
 import { Dock, DockSection, NeedsNote } from '../../components/ui/dock';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
-import { arraysOf, draftOfDataset, EMPTY_ITEM, kept, KINDS, kindOfType } from '../dataset/model';
+import { arraysOf, draftOfDataset, EMPTY_ITEM, KINDS, kindOfType } from '../dataset/model';
 import { useEditedBlock } from '../editing';
 import { ACCURACY_KEYS, checksOf, datasetHasErrors, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, noiseText, objectAt, psfEllipse, skyKeys, textAt } from './model';
 import { AccuracyFields, DataFields, InstrumentFields, NoiseFields, OptionFields, RecordsFields, SeesFields } from './Sections';
