@@ -2,13 +2,12 @@
 // a file of the workspace of the server (import), or one of this computer
 // (upload). useFileSource gives the actions and what they show (the
 // progress, a failure, and the dialog that picks a file of the
-// workspace), for a caller that places them (e.g. in a menu);
-// FileSources is a pair of buttons.
+// workspace), for a caller that places them (e.g. in a popover, see
+// FileEditor).
 import { useRef, useState, type ReactNode } from 'react';
 import { upload } from '../api/client';
 import { useImportData } from '../api/queries';
 import { FilePicker } from './FilePicker';
-import { Button } from './ui/basics';
 
 export interface FileSource {
   fromWorkspace: () => void;
@@ -80,20 +79,4 @@ export function useFileSource(project: string, onFile: (path: string) => void): 
     status,
     hidden,
   };
-}
-
-export function FileSources({ project, onFile }: { project: string; onFile: (path: string) => void }) {
-  const source = useFileSource(project, onFile);
-  return (
-    <>
-      <Button kind="small" title="A file of the server's workspace; the project keeps a copy" onClick={source.fromWorkspace}>
-        Import
-      </Button>
-      <Button kind="small" title="A file of this computer; the project keeps a copy" onClick={source.fromComputer}>
-        Upload
-      </Button>
-      {source.status}
-      {source.hidden}
-    </>
-  );
 }

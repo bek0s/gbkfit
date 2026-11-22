@@ -224,15 +224,12 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .why { display: inline-flex; align-items: center; gap: 7px; font: var(--text-body); color: var(--fg); }
 .why::before { content: '!'; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; background: var(--warn-fill); color: var(--on-warn); font: var(--text-caption); font-weight: 600; }
 .screen-error { padding: 8px 18px 0; }
-.slot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; min-height: 32px; padding: 3px 6px 3px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel2); }
-.slot.empty { border-style: dashed; background: transparent; }
-.slot > .ui-close { margin-left: auto; }
-.slot:not(.empty) { flex-wrap: nowrap; gap: 6px; }
-.slot-file { flex: 1 1 0; font: var(--text-data); }
-/* (the array of a file of several, read under its name: the name and the
-   way to remove it on the first line, the array on the second) */
-.slot[data-arrays] { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; }
-.slot-array { grid-column: 1 / -1; display: flex; min-width: 0; margin-bottom: 1px; }
+.form-file { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 4px; min-height: 30px; margin: 0 -6px; padding: 4px 6px; border-radius: 5px; }
+.form-file:hover { background: var(--panel2); }
+.form-file[data-open] { background: var(--sel); }
+.form-file-main { display: grid; align-items: start; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.form-file-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.form-file > .ui-close { margin: -3px -3px -3px 0; color: var(--faint); }
 .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; margin: 0; font: var(--text-body); }
 /* (fonts: words for people, e.g. labels, in sans; literal things, e.g.
    the keys of options, names of files and blocks, and data, e.g. values
@@ -1248,26 +1245,22 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-item-short { min-width: 22px; height: 20px; display: grid; place-items: center; padding: 0 5px; border-radius: 999px; background: var(--raise); color: var(--muted); font: var(--text-data-small); }
 .ds-item-title { flex: 1; font: var(--text-body); font-weight: 600; }
 .ds-rows { display: grid; gap: 4px; }
-.ds-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; gap: 8px; }
-.ds-row-label { padding-top: 6px; font: var(--text-label); color: var(--faint); }
-.ds-row-body { display: grid; gap: 4px; min-width: 0; }
-.ds-slot { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 30px; padding: 2px 4px 2px 9px; border: 1px solid var(--line2); border-radius: 7px; background: var(--bg); }
-.ds-slot > .ui-close { margin-left: auto; flex: none; }
-.ds-file { flex: 1 1 0; font: var(--text-data); }
-/* (the array of a file of several, read under its name: the name and the
-   way to remove it on the first line, the array on the second) */
-.ds-slot[data-arrays] { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 6px; }
-.ds-slot-array { grid-column: 1 / -1; display: flex; min-width: 0; margin-bottom: 2px; }
-.ds-array { flex: none; font: var(--text-data-small); color: var(--faint); }
-.ds-none { display: block; padding: 6px 0 0; font: var(--text-data); color: var(--faint); }
-/* (the ways to add a file, and a map: dashed, as places to fill) */
-.ds-add-file { justify-self: start; height: 26px; margin-top: 2px; padding: 0 9px; border: 1px dashed var(--line2); border-radius: 7px; background: none; color: var(--muted); font: var(--text-label); }
-.ds-add-file:hover, .ds-add-file[aria-expanded="true"] { border-color: var(--muted); color: var(--fg); }
-.ds-add { justify-self: start; padding: 6px 10px; border: 1px dashed var(--line2); border-radius: 8px; background: none; color: var(--muted); font: var(--text-label); }
-.ds-add:hover, .ds-add[aria-expanded="true"] { border-color: var(--muted); color: var(--fg); }
-.ds-value { width: 110px; min-width: 0; padding: 2px 6px; border: 1px solid var(--line2); border-radius: 5px; background: var(--field); color: var(--fg); font: var(--text-data); text-align: right; }
-.ds-error-kind { display: flex; align-items: center; gap: 8px; padding-left: 2px; font: var(--text-label); color: var(--muted); }
-.ds-error-kind .ui-choice { flex: 1; }
+/* (a row: its label and what it reads, a line that is, editing, a
+   button (it opens its popover), lit as it is pointed at or open, with
+   the way to remove what it reads; its rule of problems at the side of
+   the row, outside the light) */
+.ds-row-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 4px; margin: 0 -6px; padding: 4px 6px; border-radius: 5px; }
+.ds-row-main { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: start; column-gap: 8px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button.ds-row-main { cursor: pointer; }
+.ds-row-main:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.ds-row-line[data-editable]:hover { background: var(--panel2); }
+.ds-item[data-group] .ds-row-line[data-editable]:hover { background: var(--raise); }
+.ds-row-line[data-open], .ds-item[data-group] .ds-row-line[data-open] { background: var(--sel); }
+.ds-row-line > .ui-close { margin: -3px -3px -3px 0; color: var(--faint); }
+.ds-row-label { font: var(--text-label); color: var(--faint); white-space: nowrap; }
+/* (the way to add a map: text, lit as it is pointed at) */
+.ds-add { justify-self: start; margin-left: -6px; padding: 3px 6px; border: 0; border-radius: 4px; background: none; color: var(--muted); font: var(--text-label); cursor: pointer; }
+.ds-add:hover, .ds-add[aria-expanded="true"] { background: var(--panel2); color: var(--fg); }
 
 /* (the spectral axis: a row for each of its options, a value or a field) */
 .sp-rows { display: grid; gap: 8px; }
@@ -1661,13 +1654,49 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ui-middle-cut { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
 .ui-middle-cut > span { display: block; }
 .ui-middle-cut-all { height: 0; overflow: hidden; }
-/* (the array of a file, read beside its name: a small button of its name,
-   cut if long) */
-/* (its text in line with the text above it: its padding hangs out to the
-   left, seen as it is pointed at) */
-.ui-array-pick { flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: calc(100% + 6px); height: 22px; margin-left: -6px; padding: 0 6px; border: 0; border-radius: 4px; background: none; color: var(--muted); font: var(--text-data-small); white-space: nowrap; cursor: pointer; }
-.ui-array-pick > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.ui-array-pick:hover, .ui-array-pick[aria-expanded="true"] { box-shadow: inset 0 0 0 1px var(--line2); color: var(--fg); }
+/* (a file read, as a row says it (see FileEditor): the name of the file,
+   and under it, smaller, its array and how it is read, each cut; nothing,
+   or the way to give one) */
+.file-sum { display: grid; min-width: 0; }
+.file-sum-name { font: var(--text-data); color: var(--fg); }
+.file-sum-more { display: flex; min-width: 0; font: var(--text-data-small); color: var(--faint); white-space: nowrap; }
+.file-sum-array { flex: 0 1 auto; }
+.file-sum-sep { flex: none; padding: 0 .6ch; }
+.file-sum-fact { flex: 0 3 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.file-none { font: var(--text-data); color: var(--faint); }
+.file-add { justify-self: start; font: var(--text-label); color: var(--muted); }
+:hover > .file-add, [data-open] .file-add { color: var(--fg); }
+/* (the popover of a file read: beside its row, over the screen; its parts
+   each under a label: the file, its arrays (a list that scrolls), how it
+   is read) */
+.file-pop { display: grid; gap: 14px; padding: 12px 12px 14px; border: 1px solid var(--line2); border-radius: 6px; background: var(--raise); box-shadow: 0 10px 28px var(--shadow); color: var(--fg); }
+.file-pop-title { display: flex; align-items: baseline; gap: 8px; font: var(--text-heading); }
+.file-pop-title small { font: var(--text-caption); color: var(--faint); }
+.file-pop-part { display: grid; gap: 6px; min-width: 0; }
+.file-pop-label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.file-pop-label small { font: var(--text-data-small); color: var(--faint); }
+.file-pop-name { font: var(--text-data); overflow-wrap: anywhere; }
+.file-pop-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 2px 8px; }
+.file-pop-path { min-width: 0; font: var(--text-data-small); color: var(--faint); overflow-wrap: anywhere; }
+.file-pop-another { display: flex; align-items: center; gap: 2px; margin-right: -6px; font: var(--text-caption); color: var(--faint); }
+.file-pop-link { height: 22px; padding: 0 6px; border: 0; border-radius: 4px; background: none; color: var(--muted); font: var(--text-label); cursor: pointer; }
+.file-pop-link:hover, .file-pop-link:focus-visible { background: var(--panel2); color: var(--fg); outline: none; }
+.file-pop-list { display: grid; margin: 0 -4px; }
+.file-pop-scroll { max-height: 232px; overflow-y: auto; overscroll-behavior: contain; }
+.file-pop-item { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 5px 8px; border: 0; border-radius: 4px; background: none; color: var(--fg); font: var(--text-body); text-align: left; cursor: pointer; }
+.file-pop-item[data-mono] { font: var(--text-data); }
+.file-pop-item > span { min-width: 0; overflow-wrap: anywhere; }
+.file-pop-item > small { flex: none; font: var(--text-caption); color: var(--faint); }
+.file-pop-item[data-mono] > small { font: var(--text-data-small); }
+.file-pop-item:hover, .file-pop-item:focus-visible { background: var(--panel2); outline: none; }
+.file-pop-item[data-current] { background: var(--sel); color: var(--accent-text); }
+.file-pop-field { width: 100%; height: 30px; padding: 0 9px; border: 1px solid var(--line2); border-radius: 7px; background: var(--field); color: var(--fg); font: var(--text-data); }
+.file-pop-field:focus { outline: none; border-color: var(--accent); }
+.file-pop-value { display: flex; align-items: center; gap: 8px; }
+.file-pop-value .file-pop-field { width: 120px; text-align: right; }
+.file-pop-value span { font: var(--text-data-small); color: var(--faint); }
+.file-pop-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.file-pop-choice small { font: var(--text-caption); color: var(--faint); }
 .ov-name-box { position: relative; display: flex; align-items: center; width: 100%; }
 .ov-row[data-renaming] .ov-name-text { visibility: hidden; }
 .ov-row[data-renaming] td { background: var(--sel); }
@@ -1724,4 +1753,3 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ds-header-file { font: var(--text-data-small); color: var(--faint); }
 .ds-header-cards { flex: 1; min-height: 0; margin: 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: var(--fg2); font: var(--text-data-small); white-space: pre; }
 .copy-config { min-width: 104px; }
-.ds-unit-input { width: 100%; height: 30px; padding: 0 9px; border-radius: 7px; text-align: left; }

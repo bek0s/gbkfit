@@ -31,10 +31,11 @@ export const ERROR_KINDS: { kind: ErrorKind; title: string; text: string }[] = [
   { kind: 'inverse_variance', title: '1/σ²', text: 'Inverse variances' },
 ];
 
-// What a mask marks where it is not 0 (see the library's mask_kind)
-export const MASK_KINDS: { kind: MaskKind; text: string }[] = [
-  { kind: 'valid', text: 'Valid pixels' },
-  { kind: 'invalid', text: 'Invalid pixels' },
+// What a mask marks where it is not 0 (see the library's mask_kind), and
+// how a row of the mask says it
+export const MASK_KINDS: { kind: MaskKind; text: string; fact: string }[] = [
+  { kind: 'valid', text: 'Valid pixels', fact: '≠ 0 valid' },
+  { kind: 'invalid', text: 'Invalid pixels', fact: '≠ 0 invalid' },
 ];
 
 // A place for an item in a dataset of a kind: its key in the options of

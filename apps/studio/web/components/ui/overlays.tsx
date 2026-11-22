@@ -9,10 +9,10 @@
 import { Combobox, Menu, Modal, useCombobox, type PopoverProps } from '@mantine/core';
 import { cloneElement, Fragment, useEffect, useState, type ReactElement, type ReactNode } from 'react';
 
-// The most a menu is tall (px), and the most items a menu has without a
-// field to find them
+// The most a menu is tall (px), and the most items a menu (or a list,
+// e.g. of a popover) has without a field to find them
 const MENU_MOST = 420;
-const SEARCHED = 10;
+export const SEARCHED = 10;
 
 // (the menu on the side of its button with the more room, as tall as that
 // room lets it be, less a margin; as wide as its items, one a line, but at

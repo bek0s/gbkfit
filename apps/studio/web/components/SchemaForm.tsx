@@ -10,11 +10,10 @@
 import { NumberInput, Slider } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useDescription } from '../api/queries';
-import { ArrayPick } from './ArrayPick';
-import { arrayRef } from './arrays';
-import { FileSources } from './FileSources';
+import { arrayLabel, arrayRef } from './arrays';
+import { ArraySection, FilePopover, FileSection, FileSummary, SourceSection } from './FileEditor';
+import { useFileSource } from './FileSources';
 import { Button, Close, TextField } from './ui/basics';
-import { MiddleCut } from './ui/cut';
 import { joinPath } from './FilePicker';
 import { Choice, QuantityInput } from './ui/inputs';
 
@@ -730,9 +729,11 @@ function ListField({ node, value, onChange }: { node: Schema; value: unknown; on
 }
 
 // A file of the project (relative to it): imported or uploaded, and its
-// array, if it has several (by name, or by index)
+// array, if it has several (by name, or by index); a row of text (see
+// FileEditor), whose popover sets it
 function FileField({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
   const { project } = useForm();
+  const [open, setOpen] = useState(false);
   const { file, hdu } = (typeof value === 'string' ? { file: value, hdu: undefined } : isObject(value) ? value : { file: undefined, hdu: undefined }) as {
     file?: unknown;
     hdu?: unknown;
@@ -742,24 +743,50 @@ function FileField({ value, onChange }: { value: unknown; onChange: (value: unkn
   const prefix = project === '.' ? '' : `${project}/`;
   const set = (nextFile: string | null, nextHdu: unknown) =>
     onChange(nextFile === null ? undefined : nextHdu === undefined ? nextFile : { file: nextFile, hdu: nextHdu });
-  if (path === null) {
-    return (
-      <div className="slot empty">
-        <FileSources project={project} onFile={(chosen) => set(chosen.startsWith(prefix) ? chosen.slice(prefix.length) : chosen, undefined)} />
-      </div>
-    );
-  }
+  const source = useFileSource(project, (chosen) => set(chosen.startsWith(prefix) ? chosen.slice(prefix.length) : chosen, undefined));
+  // (a file is chosen with the popover closed: the dialog that picks it
+  // takes its place)
+  const sources = {
+    fromWorkspace: () => {
+      setOpen(false);
+      source.fromWorkspace();
+    },
+    fromComputer: () => {
+      setOpen(false);
+      source.fromComputer();
+    },
+  };
   const chosen = arrays.find((a) => a.name === hdu || a.index === hdu) ?? arrays[0];
   return (
-    <div className="slot" data-arrays={arrays.length > 1 || undefined}>
-      <MiddleCut text={path.split('/').pop()!} title={path} className="slot-file" />
-      <Close label="Remove the file" onClick={() => set(null, undefined)} />
-      {arrays.length > 1 && (
-        <div className="slot-array">
-          <ArrayPick arrays={arrays} chosen={chosen} label="The array of the file" onChoose={(array) => set(path, arrayRef(arrays, array))} />
-        </div>
-      )}
-    </div>
+    <>
+      <FilePopover
+        opened={open}
+        onChange={setOpen}
+        target={
+          <div className="form-file" data-open={open || undefined}>
+            <button type="button" className="form-file-main" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+              {path === null ? (
+                <span className="file-add">+ Add</span>
+              ) : (
+                <FileSummary path={path} array={arrays.length > 1 && chosen ? arrayLabel(chosen) : undefined} />
+              )}
+            </button>
+            {path !== null && <Close label="Remove the file" onClick={() => set(null, undefined)} />}
+          </div>
+        }
+      >
+        {path === null ? (
+          <SourceSection source={sources} />
+        ) : (
+          <>
+            <FileSection path={path} source={sources} />
+            <ArraySection arrays={arrays} current={chosen} onChoose={(array) => set(path, arrayRef(arrays, array))} />
+          </>
+        )}
+      </FilePopover>
+      {source.status}
+      {source.hidden}
+    </>
   );
 }
 

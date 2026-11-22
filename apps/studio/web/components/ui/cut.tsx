@@ -29,7 +29,7 @@ export function MiddleCut({ text, title, className }: { text: string; title?: st
   const [shown, setShown] = useState(text);
   useLayoutEffect(() => {
     const element = ref.current!;
-    const fit = () => setShown(middleCut(text, element.clientWidth, getComputedStyle(element).font));
+    const fit = () => setShown(middleCut(text, contentWidth(element), getComputedStyle(element).font));
     fit();
     // (again once the fonts are in: those of the page may come after it)
     let live = true;
@@ -51,15 +51,27 @@ export function MiddleCut({ text, title, className }: { text: string; title?: st
   );
 }
 
+// The width of the content of an element (px), not rounded down, as
+// clientWidth is: a text as wide as its place is not cut (e.g. a part of
+// a line as wide as all of it)
+function contentWidth(element: HTMLElement): number {
+  const style = getComputedStyle(element);
+  const sides = ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'] as const;
+  return element.getBoundingClientRect().width - sides.reduce((sum, side) => sum + parseFloat(style[side]), 0);
+}
+
 // The most of a text, its start and its end with '…' between them, that
 // is at most a width (px) in a font (as CSS gives it)
 function middleCut(text: string, width: number, font: string): string {
-  if (widthOf(text, font) <= width) return text;
+  // (within half a pixel: the widths of the page and of the canvas differ
+  // by less)
+  const room = width + 0.5;
+  if (widthOf(text, font) <= room) return text;
   // (the most characters kept that fit; '…' alone, if none)
   let [fit, over] = [0, text.length];
   while (over - fit > 1) {
     const count = Math.floor((fit + over) / 2);
-    if (widthOf(keptOf(text, count), font) <= width) fit = count;
+    if (widthOf(keptOf(text, count), font) <= room) fit = count;
     else over = count;
   }
   return keptOf(text, fit);
