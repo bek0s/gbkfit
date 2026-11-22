@@ -8,17 +8,14 @@
 // a long name or unit is cut (all of it on hover). A click on the head of
 // a column sorts by it, as the page remembers: a pair of numbers (the
 // pixels, their size, the beam) by the area it spans.
-import { Tooltip } from '@mantine/core';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import type { components } from '../../api/schema';
 import { usePiece, usePreparation, useProject } from '../../api/queries';
 import { significant, when } from '../../components/format';
-import { MoreIcon } from '../../components/icons';
-import { ProblemSign } from '../../components/Problems';
-import { DropMenu, PointMenu } from '../../components/ui/overlays';
 import { Cut } from '../../components/ui/cut';
-import { rowKeys, SortHead, sortedKeys, TableHeading, useRowFocus, type RowFocus, type Sort, type SortValue } from '../../components/ui/table';
-import { NameInput, useBlockActions } from '../../shell/BlockMenu';
+import { sortedKeys, TableHeading, useRowFocus, type RowFocus, type Sort } from '../../components/ui/table';
+import { joinPath } from '../../components/FilePicker';
+import { BlockRow, ColumnHeads, useReportRow, useRowValues, type Column, type RowValues } from '../../shell/BlockTable';
 import { useRemembered } from '../../shell/remember';
 import { ScreenHead } from '../../shell/ScreenHead';
 import { sectionNamed } from '../../shell/sections';
@@ -32,7 +29,7 @@ const NOTHING: Draft = { items: {}, spectral: NO_SPECTRAL, edits: NO_EDITS };
 
 // The columns, by the key of the value of a row that sorts by each, and
 // what that value is
-const COLUMNS = [
+const COLUMNS: Column[] = [
   { key: 'name', title: 'Dataset', by: 'name' },
   { key: 'kind', title: 'Kind', by: 'kind' },
   { key: 'pixels', title: 'Pixels', by: 'the number of pixels', numeric: true },
@@ -42,32 +39,18 @@ const COLUMNS = [
   { key: 'unit', title: 'Unit', by: 'unit' },
   { key: 'prepared', title: 'Prepared', by: 'whether prep made the files' },
   { key: 'modified', title: 'Modified', by: 'when its file last changed', downFirst: true },
-] as const;
+];
 
-// The longest name and unit shown whole (characters)
-const NAME_CAP = 28;
+// The longest unit shown whole (characters)
 const UNIT_CAP = 20;
-
-type RowValues = Record<(typeof COLUMNS)[number]['key'], SortValue>;
-
-const sameRow = (a: RowValues | undefined, b: RowValues) => a !== undefined && COLUMNS.every(({ key }) => a[key] === b[key]);
 
 export function DatasetsOverview() {
   const { project, startAdding } = useStudio();
   const info = useProject(project).data;
   const names = info?.pieces.datasets ?? [];
   const [sort, setSort] = useRemembered<Sort>('datasets:sort', { column: 'name', down: false });
-  // (the values of each row, as it reads them; null: a row gone)
-  const [values, setValues] = useState<Record<string, RowValues>>({});
-  const report = useCallback(
-    (name: string, row: RowValues | null) =>
-      setValues((all) => {
-        if (row !== null) return sameRow(all[name], row) ? all : { ...all, [name]: row };
-        const { [name]: _gone, ...others } = all;
-        return others;
-      }),
-    [],
-  );
+  // (the values of each row, as it reads them)
+  const [values, report] = useRowValues();
   const sorted = sortedKeys(names, values, sort);
   const focusOf = useRowFocus(sorted);
   if (project === null) return null;
@@ -80,16 +63,7 @@ export function DatasetsOverview() {
           <p className="ov-empty">The project has no data yet: a cube or maps from FITS files, prepared and kept beside their originals.</p>
         ) : (
           <table className="ov-table">
-            <thead>
-              <tr>
-                {COLUMNS.map(({ key, title, by, ...column }) => (
-                  <SortHead key={key} column={key} sort={sort} onSort={setSort} by={by} downFirst={'downFirst' in column} className={'numeric' in column ? 'ov-num' : undefined}>
-                    {title}
-                  </SortHead>
-                ))}
-                <th aria-label="Actions" />
-              </tr>
-            </thead>
+            <ColumnHeads columns={COLUMNS} sort={sort} onSort={setSort} />
             <tbody>
               {sorted.map((name) => (
                 <DatasetRow key={name} project={project} name={name} modified={info?.modified.datasets?.[name] ?? null} focus={focusOf(name)} onValues={report} />
@@ -117,13 +91,7 @@ function DatasetRow({
   focus: RowFocus;
   onValues: (name: string, row: RowValues | null) => void;
 }) {
-  const { go } = useStudio();
-  const actions = useBlockActions(project, 'datasets', name);
-  // (the menu of a right click, where it was in the box of the menu)
-  const [pointed, setPointed] = useState<[number, number] | null>(null);
-  const menuBox = useRef<HTMLDivElement>(null);
-  const rowRef = useRef<HTMLTableRowElement>(null);
-  const options = usePiece(actions.path).data as Record<string, unknown> | undefined;
+  const options = usePiece(joinPath(project, `datasets/${name}.yaml`)).data as Record<string, unknown> | undefined;
   const kind = kindOfType(options?.type);
   const draft = useMemo(() => (kind && options ? draftOfDataset(kind, options, project) : NOTHING), [kind, options, project]);
   const resolved = useResolved(kind ?? 'cube', draft);
@@ -137,7 +105,6 @@ function DatasetRow({
   const dash = <span className="ov-faint">{reading ? '…' : '—'}</span>;
   const preparation = usePreparation(item?.files.data?.file ?? null);
   const problems = useDatasetProblems(project, resolved, kind !== undefined && !isReading(resolved));
-  const worst = problems.find((problem) => problem.severity === 'error')?.severity ?? problems[0]?.severity;
   // (the unit of the values: of each map, as given or as its header says,
   // where they differ)
   const units = kind
@@ -157,43 +124,9 @@ function DatasetRow({
     () => ({ name, kind: kindTitle, pixels, pixelSize, channels: channelCount, beam: beamSize, unit, prepared, modified: time }),
     [name, kindTitle, pixels, pixelSize, channelCount, beamSize, unit, prepared, time],
   );
-  // (before the row is drawn: it is in its place from the first)
-  useLayoutEffect(() => onValues(name, row), [name, row, onValues]);
-  useEffect(() => () => onValues(name, null), [name, onValues]);
-  const open = () => go({ kind: 'block', folder: 'datasets', name });
+  useReportRow(name, row, onValues);
   return (
-    <tr
-      ref={rowRef}
-      className="ov-row"
-      data-renaming={actions.renaming || undefined}
-      onClick={actions.renaming ? undefined : open}
-      {...focus}
-      {...rowKeys(open)}
-      onContextMenu={(event) => {
-        const box = menuBox.current?.getBoundingClientRect();
-        const button = menuBox.current?.querySelector('.ov-more-button')?.getBoundingClientRect();
-        if (!box || !button) return;
-        event.preventDefault();
-        // (of the right button, where it was pressed; of the keyboard, e.g.
-        // the menu key, under the button of the menu)
-        setPointed(event.button === 2 ? [event.clientX - box.left, event.clientY - box.top] : [button.left - box.left, button.bottom - box.top]);
-      }}
-    >
-      <td className="ov-name">
-        <span className="ov-name-box">
-          <span className="ov-sign">
-            {worst && (
-              <Tooltip label={problems.map((problem) => problem.message).join('\n')} multiline maw={360} position="top-start" openDelay={120} classNames={{ tooltip: 'problem-tip' }}>
-                <span>
-                  <ProblemSign severity={worst} />
-                </span>
-              </Tooltip>
-            )}
-          </span>
-          <Cut max={NAME_CAP} title={name} className="ov-name-text" />
-          {actions.renaming && <NameInput project={project} folder="datasets" name={name} path={actions.path} onDone={() => actions.setRenaming(false)} />}
-        </span>
-      </td>
+    <BlockRow project={project} folder="datasets" name={name} focus={focus} problems={problems}>
       <td>
         {kindTitle ?? dash}
         {maps !== null && <span className="ov-faint"> · {maps}</span>}
@@ -213,39 +146,7 @@ function DatasetRow({
       </td>
       <td>{prepared ?? dash}</td>
       <td className="ov-time">{modified === null ? dash : when(modified)}</td>
-      {/* (what is done here is not a click on the row) */}
-      <td className="ov-more" onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.stopPropagation()}>
-        {/* (the box the menu of a right click is placed in: the cell is
-            not, so that the focus ring of the row is drawn over it) */}
-        <div ref={menuBox} className="ov-more-box">
-          <DropMenu
-            label={`The dataset ${name}`}
-            at="end"
-            returnFocus={false}
-            entries={actions.entries}
-            target={
-              // (not a stop of Tab: the menu key of the row opens it)
-            <button type="button" className="ov-more-button" tabIndex={-1} title="Rename or delete the dataset" aria-label={`The dataset ${name}`}>
-                <MoreIcon />
-              </button>
-            }
-          />
-          {pointed && (
-            <PointMenu
-              at={pointed}
-              entries={actions.entries}
-              label={`The dataset ${name}`}
-              onClose={() => {
-                setPointed(null);
-                // (the focus back to the row, as it was before the menu)
-                rowRef.current?.focus({ preventScroll: true });
-              }}
-            />
-          )}
-        </div>
-        {actions.dialog}
-      </td>
-    </tr>
+    </BlockRow>
   );
 }
 

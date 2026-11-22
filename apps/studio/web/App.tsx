@@ -9,12 +9,14 @@ import { Button } from './components/ui/basics';
 import { Dataset, NewDataset } from './screens/dataset/DatasetScreen';
 import { DatasetsOverview } from './screens/dataset/DatasetsOverview';
 import { isKind } from './screens/dataset/model';
+import { GalaxiesOverview } from './screens/galaxy/GalaxiesOverview';
 import { GalaxyScreen } from './screens/galaxy/GalaxyScreen';
 import { Home } from './screens/Home';
 import { ObservationScreen } from './screens/observation/ObservationScreen';
 import { CompareScreen } from './screens/compare/CompareScreen';
 import { FitScreen } from './screens/fit/FitScreen';
 import { FitsOverview } from './screens/fit/FitsOverview';
+import { LensesOverview } from './screens/lens/LensesOverview';
 import { LensScreen } from './screens/lens/LensScreen';
 import { Pending } from './screens/Pending';
 import { ResponseScreen } from './screens/Response';
@@ -110,6 +112,8 @@ function ScreenView({ screen }: { screen: Screen }) {
     case 'section':
       if (screen.key === 'fit') return <FitsOverview />;
       if (screen.key === 'data') return <DatasetsOverview />;
+      if (screen.key === 'galaxies') return <GalaxiesOverview />;
+      if (screen.key === 'lenses') return <LensesOverview />;
       return <EmptySection section={screen.key} />;
     case 'block':
       if (screen.folder === 'datasets') return <Dataset key={address(screen)} name={screen.name} />;

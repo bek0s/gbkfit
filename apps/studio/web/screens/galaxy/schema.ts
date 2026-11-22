@@ -37,6 +37,11 @@ export function typesOf(defs: Defs | undefined, family: string, only?: string[] 
   return [...types.values()];
 }
 
+// The title of a type of a family and what it is
+export function titled(defs: Defs | undefined, family: string, type: string): { label: string; description?: string } {
+  return typesOf(defs, family).find((t) => t.value === type) ?? { label: type };
+}
+
 // The first sentence of a text (not cut at e.g. or i.e.)
 export function firstSentence(text: string): string {
   const ends = /\.(?=\s+[A-Z(]|\s*$)/g;

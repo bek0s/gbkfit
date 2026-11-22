@@ -100,6 +100,14 @@ export function lineName(line: unknown): string {
   return typeof line === 'string' ? line : String((line as Options | null)?.name ?? '?');
 }
 
+// An item of a part in a few words (e.g. the light of a component): its
+// type, and of an emission of lines, its lines; none if it has none
+export function itemText(value: unknown): string {
+  if (!isObject(value)) return 'none';
+  const lines = value.type === 'lines' ? lineList(value.lines).map(lineName) : [];
+  return [typeof value.type === 'string' ? value.type : 'on', ...lines].join(' ');
+}
+
 // The galaxy with the coefficients of the opacity of the lines of each
 // component (self-absorption) in step with its lines: of one unnamed line,
 // one set of traits; of named lines, the traits of each by its name (kept

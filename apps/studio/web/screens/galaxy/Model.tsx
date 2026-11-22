@@ -24,9 +24,9 @@ import { useRemembered } from '../../shell/remember';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { DirectionMark, RingMark } from './Marks';
 import { freeCount, NumberChip, NumberRows, paramText, type NumbersContext } from './Numbers';
-import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
+import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, itemText, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
 import { ownedBy, settingOf, type Param } from './params';
-import { memberOf, propertiesOf, restOf, retyped, startOf, typesOf, type TypeChoice } from './schema';
+import { memberOf, propertiesOf, restOf, retyped, startOf, titled, typesOf, type TypeChoice } from './schema';
 import { extentOf, familyOfOption, HEAD_OPTIONS, nameBase, optionTitle, partsOfType, referencesOf, settingsOfType, withReferencesRenamed, type ComponentTypes, type PartInfo } from './types';
 
 // A row open in the sheet: a component or a part of the mass
@@ -347,11 +347,6 @@ export function kpcPerArcsecOf(draft: GalaxyDraft): number | null {
   const setting = settingOf(draft.state?.properties ?? {}, param);
   const mpc = setting.kind === 'fixed' || setting.kind === 'free' ? setting.values[0] : undefined;
   return typeof mpc === 'number' && mpc > 0 ? (mpc * 1000 * Math.PI) / 648000 : null;
-}
-
-// The title of a type of a family and what it is
-function titled(defs: Defs | undefined, family: string, type: string): { label: string; description?: string } {
-  return typesOf(defs, family).find((t) => t.value === type) ?? { label: type };
 }
 
 // ---------------------------------------------------------------------
@@ -930,14 +925,6 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
 function optionText(component: Options, key: string): string {
   const value = component[key];
   return `${key} ${isObject(value) || Array.isArray(value) ? JSON.stringify(value) : String(value)}`;
-}
-
-// An item of a part in a few words (e.g. the light of a component): its
-// type, and of an emission of lines, its lines; none if it has none
-function itemText(value: unknown): string {
-  if (!isObject(value)) return 'none';
-  const lines = value.type === 'lines' ? lineList(value.lines).map(lineName) : [];
-  return [typeof value.type === 'string' ? value.type : 'on', ...lines].join(' ');
 }
 
 // The rings of a component (or its shells, or the nodes of the traits of

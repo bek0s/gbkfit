@@ -26,7 +26,7 @@ import { Views } from './Views';
 // The colours of the components, in turn (tokens): the first colour of a
 // theme is of the hue of its accent, which marks what is chosen, free or
 // to act on; it comes last, so that a component of that colour is rare
-const COLOURS = ['cat2', 'cat3', 'cat4', 'cat5', 'cat6', 'cat1'];
+export const COLOURS = ['cat2', 'cat3', 'cat4', 'cat5', 'cat6', 'cat1'];
 
 // The component a part of the mass follows, if any (e.g. of a traced disk;
 // of a disk of the mass, by its surface or its heights)
@@ -96,7 +96,7 @@ export function GalaxyScreen({ name }: { name: string }) {
     // (its renders are of it, in the Activity drawer)
     <RenderLabel.Provider value={name}>
     <section className="screen gx-screen">
-      <ScreenHead eyebrow="Galaxy" title={head.title}>
+      <ScreenHead up="galaxies" title={head.title}>
         <SaveControls saving={draft} />
         {head.menu}
       </ScreenHead>

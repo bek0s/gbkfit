@@ -50,10 +50,7 @@ export function LensScreen({ name }: { name: string }) {
   const pieces = asList(options?.pieces);
   return (
     <section className="screen ln-screen">
-      <ScreenHead
-        eyebrow={`Lens · ${pieces.length} ${pieces.length === 1 ? 'piece' : 'pieces'}`}
-        title={head.title}
-      >
+      <ScreenHead up="lenses" title={head.title}>
         <SaveControls saving={draft} />
         {head.menu}
       </ScreenHead>

@@ -1687,6 +1687,10 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ov-row[data-renaming] .ov-name-text { visibility: hidden; }
 .ov-row[data-renaming] td { background: var(--sel); }
 .ov-faint { color: var(--faint); }
+/* (the parts of a block, e.g. the components of a galaxy, each a dot of its colour and its kind) */
+.ov-parts { display: inline-flex; gap: 12px; }
+.ov-part { display: inline-flex; align-items: center; gap: 6px; }
+.ov-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
 .ov-sign { flex: none; display: inline-flex; width: 18px; }
 .ov-sign .problem-sign[data-severity="error"] { color: var(--err); }
 .ov-sign .problem-sign[data-severity="warning"] { color: var(--warn); }
