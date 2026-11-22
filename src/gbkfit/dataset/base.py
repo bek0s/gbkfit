@@ -7,7 +7,7 @@ correlation of their noise (see NoiseCorrelation).
 import abc
 import copy
 import logging
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any, NamedTuple, Self
 
 import numpy as np
@@ -18,6 +18,7 @@ from gbkfit.config import (
 from gbkfit.grid import Grid, SpectralAxis
 from gbkfit.utils import iterutils
 from . import _grids, _outliers, _resampling
+from .deferred import Deferred
 from .data import Data, DataFiles
 
 
@@ -225,6 +226,44 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         dataset._items = {
             key: item.with_data(data[key])
             for key, item in self._items.items()}
+        return dataset
+
+    def with_values(
+            self,
+            values: Callable[[str, Data], np.ndarray],
+            what: str | None = None
+    ) -> Self:
+        """
+        Return a copy with other values of its data items, each made of an
+        item with its values, its mask and errors kept (see
+        Data.with_data): at once if its values have been read, else as
+        they are first used (see Data.then). The values that each loses
+        are logged, if what it is is given (e.g. 'outliers masked').
+
+        Parameters
+        ----------
+        values : Callable
+            Makes the values of an item, as values(key, item).
+        what : str, optional
+            What the change is, in the log.
+
+        Returns
+        -------
+        Dataset
+            The copy.
+        """
+        def changed(key: str, item: Data) -> Data:
+            def change(read: Data) -> Data:
+                after = read.with_data(values(key, read))
+                if what is not None:
+                    lost = int(np.count_nonzero(read.mask())
+                               - np.count_nonzero(after.mask()))
+                    _log.info(f"{what} of {key}: {lost}")
+                return after
+            return item.then(change)
+        dataset = copy.copy(self)
+        dataset._items = {
+            key: changed(key, item) for key, item in self._items.items()}
         return dataset
 
     def screen_outliers(self, size: Sequence[float], nsigma: float) -> Self:
@@ -444,8 +483,10 @@ class DatasetGrid(Dataset):
         The spectral axis of the kinds of data with one (see
         make_cube_grid): its world coordinates, the convention of its
         velocities, its rest and its medium; the data give its size.
-    footprint : ndarray, optional
+    footprint : ndarray or Deferred, optional
         Where the instrument looked (0 outside); by default, everywhere.
+        One read when first used (e.g. of a file opened from its header)
+        masks the items as their values are read.
 
     Raises
     ------
@@ -472,7 +513,7 @@ class DatasetGrid(Dataset):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
             spectral: SpectralAxis | None = None,
-            footprint: np.ndarray | None = None
+            footprint: np.ndarray | Deferred | None = None
     ):
         super().__init__(items)
         self._footprint = None if footprint is None \
@@ -487,26 +528,28 @@ class DatasetGrid(Dataset):
             self._grid = _grids.cube_grid(
                 self, step, rpix, rval, rota, spectral)
 
-    def _checked_footprint(self, footprint: np.ndarray) -> np.ndarray:
+    def _checked_footprint(
+            self, footprint: np.ndarray | Deferred) -> Deferred:
         """
         Return a footprint as floats, 1 inside (where it is not 0) and 0
         outside, or raise ValueError if it is not of the shape of the items
-        or of their sky (see DatasetGrid), or is not finite.
+        or of their sky (see DatasetGrid), or is not finite (one read when
+        first used, as it is read).
         """
-        footprint = np.asarray(footprint)
         shape = self.shape()
         shapes = [shape]
         if self.spectral_axis is not None and len(shape) == 3:
             shapes.append(shape[1:])
-        if footprint.shape not in shapes:
+        given = np.shape(footprint) if not isinstance(footprint, Deferred) \
+            else footprint.shape
+        if given not in shapes:
             raise ValueError(
                 f"the footprint must be of the shape of the data items"
                 f"{' or of their sky' if len(shapes) > 1 else ''}, "
-                f"{' or '.join(map(str, shapes))}; it is of "
-                f"{footprint.shape}")
-        if not np.all(np.isfinite(footprint)):
-            raise ValueError("the footprint must be finite")
-        return (footprint != 0).astype(self.dtype())
+                f"{' or '.join(map(str, shapes))}; it is of {given}")
+        if isinstance(footprint, Deferred):
+            return Deferred(given, lambda: _inside(footprint.values()))
+        return Deferred.of(_inside(np.asarray(footprint)))
 
     def grid(self) -> Grid:
         """
@@ -523,14 +566,16 @@ class DatasetGrid(Dataset):
     def footprint(self) -> np.ndarray | None:
         """
         Return where the instrument looked (1 inside, 0 outside), if
-        given: of the shape of the items, or of their sky.
+        given: of the shape of the items, or of their sky, of their dtype.
         """
-        return self._footprint
+        if self._footprint is None:
+            return None
+        return self._footprint.values().astype(self.dtype())
 
     def footprint_of(self, key: str) -> np.ndarray | None:
         if self._footprint is None:
             return None
-        return np.broadcast_to(self._footprint, self[key].shape())
+        return np.broadcast_to(self.footprint(), self[key].shape())
 
     def screen_outliers(self, size: Sequence[float], nsigma: float) -> Self:
         """
@@ -551,32 +596,28 @@ def cleaned(
     Return a dataset with its outliers masked, if given the options size
     and nsigma (see Dataset.screen_outliers), and then every spectrum with
     a masked value masked whole, but for the channels masked in every
-    spectrum, if asked (see Dataset.mask_whole_spectra); and log how many
-    values each item loses to each.
+    spectrum, if asked (see Dataset.mask_whole_spectra); each logs how many
+    values each item loses, as its values are made (see with_values).
     """
     if outliers is not None:
         with config_path('outliers'):
             options = parse_options(
                 dict(outliers), required={'size', 'nsigma'})
-            dataset = _logged(
-                dataset,
-                dataset.screen_outliers(options['size'], options['nsigma']),
-                "outliers masked in the data")
+            dataset = dataset.screen_outliers(
+                options['size'], options['nsigma'])
     if mask_whole_spectra:
-        dataset = _logged(
-            dataset, dataset.mask_whole_spectra(),
-            "values masked with whole spectra")
+        dataset = dataset.mask_whole_spectra()
     return dataset
 
 
-def _logged(before: Dataset, after: Dataset, what: str) -> Dataset:
-    """Return a dataset after a change, and log how many values it masked."""
-    counts = {
-        key: int(np.count_nonzero(before[key].mask())
-                 - np.count_nonzero(after[key].mask()))
-        for key in before}
-    _log.info(f"{what}: {counts}")
-    return after
+def _inside(footprint: np.ndarray) -> np.ndarray:
+    """
+    Return a footprint as floats, 1 inside (where it is not 0) and 0
+    outside, or raise ValueError if it is not finite.
+    """
+    if not np.all(np.isfinite(footprint)):
+        raise ValueError("the footprint must be finite")
+    return (footprint != 0).astype(float)
 
 
 class DatasetTypedParser(TypedParser):

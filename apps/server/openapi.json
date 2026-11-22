@@ -1662,6 +1662,92 @@
         }
       }
     },
+    "/api/v1/observations/describe": {
+      "post": {
+        "summary": "Observation Problems",
+        "description": "Describe an observation of the options of a piece of a project, as\nthe library does from the headers of its data, without reading them:\nits problems, each at the path of its option (see gbkfit's\ndescribe_observation).",
+        "operationId": "observation_problems_api_v1_observations_describe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Problem"
+                  },
+                  "type": "array",
+                  "title": "Response Observation Problems Api V1 Observations Describe Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observations/parts/describe": {
+      "post": {
+        "summary": "Part Problems",
+        "description": "Describe a part that observations share (a PSF, an LSF or a noise) of\nthe options of a piece of a project: its problems, each at the path of\nits option.",
+        "operationId": "part_problems_api_v1_observations_parts_describe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Problem"
+                  },
+                  "type": "array",
+                  "title": "Response Part Problems Api V1 Observations Parts Describe Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/views/lens": {
       "post": {
         "summary": "View Lens",
@@ -4111,6 +4197,26 @@
         "title": "LensViewRequest",
         "description": "A lens to view (see Lenses.view): as LensRequest, with the properties\nof its parameters (by the names of the lens), the number of points\nacross the field, and its half-width (arcsec; by default, of its\nEinstein radii)."
       },
+      "ObservationRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "observation": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Observation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "observation"
+        ],
+        "title": "ObservationRequest",
+        "description": "An observation to describe: the project of its piece, and its options\n(the pieces it names, of the project; its files relative to it)."
+      },
       "ObservedArrayInfo": {
         "properties": {
           "kind": {
@@ -4367,6 +4473,36 @@
         ],
         "title": "PSFViewInfo",
         "description": "A PSF drawn on pixels (see Responses.psf): its values (rows of y,\nfrom the bottom; they sum to 1), the size of the pixels (x, y;\narcsec), the solid angle of its beam (arcsec^2) and the full width at\nhalf maximum of the circular Gaussian of that beam (arcsec; none for\na point), and its full widths at half maximum along its major and\nminor axes (arcsec) and the position angle of its major axis\n(degrees; none if round), as measured (none for a point)."
+      },
+      "PartRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "psf",
+              "lsf",
+              "noise"
+            ],
+            "title": "Family"
+          },
+          "part": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Part"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "family",
+          "part"
+        ],
+        "title": "PartRequest",
+        "description": "A part that observations share to describe: the project of its piece,\nits family (a PSF, an LSF or a noise) and its options (its files\nrelative to the project)."
       },
       "PieceContent": {
         "properties": {

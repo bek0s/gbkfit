@@ -22,8 +22,8 @@ from gbkfit.grid import (
 from gbkfit.instrument import LSF, Channel
 from gbkfit.io import (
     check_companion, check_footprint, header_shape, model_header,
-    model_shape, read_footprint as read_footprint_file, read_header,
-    write_data)
+    model_shape, open_footprint, read_header, write_data)
+from .deferred import Deferred
 from .data import DataFiles, dump_data, item_filenames
 
 if TYPE_CHECKING:
@@ -123,22 +123,24 @@ def read_footprint(
         data: DataFile,
         spectral_axis: int | None = None,
         references: Mapping[str, Any] | None = None
-) -> np.ndarray | None:
+) -> Deferred | None:
     """
-    Return the footprint of a dataset on a grid (see DatasetGrid), read
-    from its file on the pixels of the file of the data of its items, as
-    they are read (see read_footprint; references: the options of their
-    reading, see file_references), or None if it has no file.
+    Return the footprint of a dataset on a grid (see DatasetGrid) of its
+    file on the pixels of the file of the data of its items, as they are
+    read (see open_footprint; references: the options of their reading,
+    see file_references), opened from the headers and read when first
+    used; or None if it has no file.
     """
     if file is None:
         return None
     references = references or {}
-    return read_footprint_file(
+    opened = open_footprint(
         file, data, rest=references.get('rest'),
         velocity=references.get('velocity'),
         spectral_type=references.get('spectral_type'),
         spectral_unit=references.get('spectral_unit'),
         medium=references.get('medium'), spectral_axis=spectral_axis)
+    return Deferred(opened.shape(), opened.read)
 
 
 def check_axes(shape: tuple[int, ...], ndim: int) -> None:

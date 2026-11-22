@@ -193,7 +193,7 @@ class ObservationRegionMoments(ObservationRegions):
         self._flux_floor = flux_floor
         self._method = method
         grid = self._regions_grid(**options)
-        if self._regions.valid() is not None:
+        if self._regions.valid_channels() is not None:
             raise ValueError(
                 "the moments of regions are of whole spectra: their regions "
                 "take no valid pixels of each channel (those of the spectra "

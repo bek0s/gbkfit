@@ -4,9 +4,10 @@ measured (see UVCoverage); of files of their arrays, or of measurement
 sets (read by gbkfit.io.read_measurement_set).
 """
 
+import functools
 import numbers
 import os.path
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Annotated, Any, Literal
 
 import astropy.units
@@ -18,7 +19,7 @@ from annotated_types import Ge
 import gbkfit.units
 from gbkfit.config import FilePath, Serializable, Unit, check_options
 from gbkfit.grid import RestValue, make_rest
-from gbkfit.io import MSErrorSource, read_measurement_set
+from gbkfit.io import MSErrorSource, open_measurement_set
 from .base import Dataset
 from .data import Data
 
@@ -320,20 +321,31 @@ class DatasetVisibilities(Dataset):
             If an array is missing (see the class).
         """
         check_options(DatasetVisibilities.from_file, locals())
+        # (the arrays of the coverage now, the visibilities when first
+        # used: an npz file reads each array apart)
         with np.load(file) as arrays:
-            arrays = dict(arrays)
-        missing = {'data', 'error'} - set(arrays)
-        if missing:
-            raise ValueError(
-                f"the file of visibilities {file} has no arrays "
-                f"{sorted(missing)}")
-        data, error, mask = arrays['data'], arrays['error'], arrays.get('mask')
-        unit = str(arrays['unit']) if 'unit' in arrays else None
-        return cls(
-            Data(data.real, mask, error, unit),
-            Data(data.imag, arrays.get('mask_im', mask),
-                 arrays.get('error_im', error), unit),
-            UVCoverage.from_arrays(arrays))
+            names = set(arrays.files)
+            missing = {'data', 'error'} - names
+            if missing:
+                raise ValueError(
+                    f"the file of visibilities {file} has no arrays "
+                    f"{sorted(missing)}")
+            unit = str(arrays['unit']) if 'unit' in names else None
+            coverage = UVCoverage.from_arrays({
+                key: arrays[key] for key in UVCoverage._ARRAYS
+                if key in names})
+
+        def read() -> dict[str, tuple]:
+            with np.load(file) as arrays:
+                data, error = arrays['data'], arrays['error']
+                mask = arrays['mask'] if 'mask' in names else None
+                return dict(
+                    re=(data.real, mask, error),
+                    im=(data.imag,
+                        arrays['mask_im'] if 'mask_im' in names else mask,
+                        arrays['error_im'] if 'error_im' in names
+                        else error))
+        return cls(*_parts(read, coverage, unit), coverage)
 
     @classmethod
     def from_ms(
@@ -409,14 +421,20 @@ class DatasetVisibilities(Dataset):
         check_options(DatasetVisibilities.from_ms, locals())
         # TODO: TOPO frequencies, with the Doppler shift of the time of
         # each row (for now, regridded to LSRK by CASA mstransform)
-        read = read_measurement_set(
+        opened = open_measurement_set(
             ms, field, spw, column, rest, error, _FRAMES)
-        return cls(
-            Data(read.data.real, read.mask, read.error_re, 'Jy'),
-            Data(read.data.imag, read.mask, read.error_im, 'Jy'),
-            UVCoverage(
-                read.uvw, read.frequencies, read.phase_centre, read.frame,
-                read.rest))
+        coverage = UVCoverage(
+            opened.uvw, opened.frequencies, opened.phase_centre,
+            opened.frame, opened.rest)
+
+        def read() -> dict[str, tuple]:
+            visibilities = opened.read()
+            return dict(
+                re=(visibilities.data.real, visibilities.mask,
+                    visibilities.error_re),
+                im=(visibilities.data.imag, visibilities.mask,
+                    visibilities.error_im))
+        return cls(*_parts(read, coverage, 'Jy'), coverage)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -446,7 +464,7 @@ class DatasetVisibilities(Dataset):
     def __init__(self, re: Data, im: Data, coverage: UVCoverage):
         check_options(DatasetVisibilities.__init__, locals())
         super().__init__(dict(re=re, im=im))
-        if re.error() is None or im.error() is None:
+        if not (re.has_error() and im.has_error()):
             raise ValueError(
                 "visibilities need the errors of their parts (e.g. 1 / "
                 "sqrt(weight) of a measurement set)")
@@ -549,3 +567,38 @@ def _savez(
         raise FileExistsError(f"{filename} exists")
     with open(filename, 'wb') as file:
         np.savez(file, **arrays)
+
+
+class _Parts:
+    """
+    Reads the arrays of the two parts of visibilities once, for the data
+    items of both (see _parts): read() returns those of each, by part.
+    """
+
+    def __init__(self, read: Callable[[], dict[str, tuple]]):
+        self._read = read
+        self._parts: dict[str, tuple] | None = None
+
+    def part(self, name: str) -> tuple:
+        """Return the arrays of a part ('re' or 'im'), read now if not yet."""
+        if self._parts is None:
+            self._parts = self._read()
+        return self._parts[name]
+
+
+def _parts(
+        read: Callable[[], dict[str, tuple]],
+        coverage: UVCoverage,
+        unit: str | None
+) -> tuple[Data, Data]:
+    """
+    Return the data items of the real and imaginary parts of visibilities
+    of a coverage, in a unit, whose arrays read() returns, as they are
+    first used (see Data.deferred and _Parts).
+    """
+    parts = _Parts(read)
+    shape = (coverage.nchannels(), coverage.nrows())
+    return tuple(
+        Data.deferred(
+            functools.partial(parts.part, name), shape, True, unit)
+        for name in ('re', 'im'))

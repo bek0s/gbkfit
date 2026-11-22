@@ -20,6 +20,8 @@ from gbkfit.utils.numutils import MAD_TO_STD
 __all__ = [
     'MSErrorSource',
     'MSVisibilities',
+    'OpenedMeasurementSet',
+    'open_measurement_set',
     'read_measurement_set'
 ]
 
@@ -141,12 +143,97 @@ def read_measurement_set(
     ModuleNotFoundError
         If python-casacore is not installed.
     """
-    try:
-        from casacore import tables
-    except ModuleNotFoundError as e:
-        raise ModuleNotFoundError(
-            "reading measurement sets needs python-casacore: pip "
-            "install 'gbkfit[casacore]'") from e
+    return open_measurement_set(
+        ms, field, spw, column, rest, error, frames).read()
+
+
+@dataclasses.dataclass(frozen=True)
+class OpenedMeasurementSet:
+    """
+    A field of a measurement set in a spectral window, opened (see
+    open_measurement_set): where its visibilities are measured, read from
+    its subtables and the baselines of its rows, and how they are read
+    after (see read), without them.
+
+    Attributes
+    ----------
+    uvw, frequencies, phase_centre, frame, rest
+        As those of MSVisibilities.
+    """
+    uvw: np.ndarray
+    frequencies: np.ndarray
+    phase_centre: np.ndarray
+    frame: str
+    rest: str | astropy.units.Quantity
+    # (the set, the query of its rows, the column of the visibilities, the
+    # products of a row and the source of the errors)
+    ms: str = dataclasses.field(repr=False)
+    query: str = dataclasses.field(repr=False)
+    column: str = dataclasses.field(repr=False)
+    products: tuple[int, ...] = dataclasses.field(repr=False)
+    error: MSErrorSource = dataclasses.field(repr=False)
+
+    def read(self) -> MSVisibilities:
+        """
+        Read the visibilities (see read_measurement_set).
+
+        Raises
+        ------
+        ValueError
+            If the set no longer has the rows it was opened with.
+        """
+        tables = _casacore_tables()
+        with tables.table(self.ms, ack=False) as main:
+            rows = main.query(self.query)
+            if rows.nrows() != len(self.uvw):
+                raise ValueError(
+                    f"{self.ms}: the measurement set changed after it was "
+                    f"opened; load it again")
+            visibilities = rows.getcol(self.column)
+            flags = rows.getcol('FLAG') \
+                | rows.getcol('FLAG_ROW')[:, None, None]
+            weights = rows.getcol('WEIGHT_SPECTRUM') \
+                if 'WEIGHT_SPECTRUM' in rows.colnames() \
+                and rows.iscelldefined('WEIGHT_SPECTRUM', 0) \
+                else rows.getcol('WEIGHT')[:, None, :]
+            baselines = rows.getcol('ANTENNA1'), rows.getcol('ANTENNA2')
+            times = rows.getcol('TIME'), rows.getcol('INTERVAL')
+            rows.close()
+        stokes, sigma, mask = _ms_stokes_i(
+            visibilities, flags, weights, list(self.products))
+        sigma_re = sigma_im = sigma
+        if self.error == 'scatter':
+            sigma_re, sigma_im = _scatter_errors(
+                np.where(mask, stokes, np.nan), *baselines, *times)
+        # (read by row, as the set stores them; returned by channel, of
+        # shape (nchannels, nrows), as gbkfit holds visibilities)
+        return MSVisibilities(
+            stokes.T, mask.T, sigma_re.T, sigma_im.T, self.uvw,
+            self.frequencies, self.phase_centre, self.frame, self.rest)
+
+
+def open_measurement_set(
+        ms: str,
+        field: int | str | None = None,
+        spw: int = 0,
+        column: str = 'DATA',
+        rest: str | astropy.units.Quantity | None = None,
+        error: MSErrorSource = 'weights',
+        frames: Sequence[str] | None = None
+) -> OpenedMeasurementSet:
+    """
+    Open a field of a measurement set in a spectral window, as
+    read_measurement_set reads it (the same options): where its
+    visibilities are measured (its subtables and the baselines of its
+    rows), and every check of them, without reading the visibilities,
+    which are read after (see OpenedMeasurementSet.read).
+
+    Raises
+    ------
+    ValueError, ModuleNotFoundError
+        As read_measurement_set.
+    """
+    tables = _casacore_tables()
 
     # TODO: several fields or spectral windows at once (for now, one
     # read of each)
@@ -175,38 +262,34 @@ def read_measurement_set(
             .index(spw)
         polarization = descriptions.getcell('POLARIZATION_ID', description)
     with subtable('POLARIZATION') as polarizations:
-        products = list(polarizations.getcell('CORR_TYPE', polarization))
+        products = tuple(polarizations.getcell('CORR_TYPE', polarization))
+    _check_products(products)
     if rest is None:
         rest = _ms_rest(subtable, source)
+    query = (
+        f'FIELD_ID == {index} && DATA_DESC_ID == {description} '
+        f'&& ANTENNA1 != ANTENNA2')
     with tables.table(ms, ack=False) as main:
         if column not in main.colnames():
             raise ValueError(
                 f"the measurement set has no column {column}")
-        rows = main.query(
-            f'FIELD_ID == {index} && DATA_DESC_ID == {description} '
-            f'&& ANTENNA1 != ANTENNA2')
+        rows = main.query(query)
         uvw = -rows.getcol('UVW')
-        visibilities = rows.getcol(column)
-        flags = rows.getcol('FLAG') \
-            | rows.getcol('FLAG_ROW')[:, None, None]
-        weights = rows.getcol('WEIGHT_SPECTRUM') \
-            if 'WEIGHT_SPECTRUM' in rows.colnames() \
-            and rows.iscelldefined('WEIGHT_SPECTRUM', 0) \
-            else rows.getcol('WEIGHT')[:, None, :]
-        baselines = rows.getcol('ANTENNA1'), rows.getcol('ANTENNA2')
-        times = rows.getcol('TIME'), rows.getcol('INTERVAL')
         rows.close()
-    stokes, sigma, mask = _ms_stokes_i(
-        visibilities, flags, weights, products)
-    sigma_re = sigma_im = sigma
-    if error == 'scatter':
-        sigma_re, sigma_im = _scatter_errors(
-            np.where(mask, stokes, np.nan), *baselines, *times)
-    # (read by row, as the set stores them; returned by channel, of shape
-    # (nchannels, nrows), as gbkfit holds visibilities)
-    return MSVisibilities(
-        stokes.T, mask.T, sigma_re.T, sigma_im.T, uvw, frequencies,
-        phase_centre, frame, rest)
+    return OpenedMeasurementSet(
+        uvw, frequencies, phase_centre, frame, rest, ms, query, column,
+        products, error)
+
+
+def _casacore_tables() -> Any:
+    """Return the tables of python-casacore, or raise ModuleNotFoundError."""
+    try:
+        from casacore import tables
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(
+            "reading measurement sets needs python-casacore: pip "
+            "install 'gbkfit[casacore]'") from e
+    return tables
 
 
 def _ms_field(field: int | str | None, names: list[str]) -> int:
@@ -313,6 +396,24 @@ def _ms_stokes_i(
             stokes = (visibilities[..., a] + visibilities[..., b]) / 2
             error = np.sqrt(sigmas[..., a] ** 2 + sigmas[..., b] ** 2) / 2
             return stokes, error, ~(flags[..., a] | flags[..., b])
-    raise ValueError(
+    raise _products_error(products)
+
+
+def _check_products(products: Sequence[int]) -> None:
+    """
+    Raise ValueError unless the products of a row of a measurement set
+    (CASA codes) have Stokes I or a pair of parallel hands.
+    """
+    if _MS_STOKES_I not in products and not any(
+            a in products and b in products for a, b in _MS_PARALLEL_HANDS):
+        raise _products_error(products)
+
+
+def _products_error(products: Sequence[int]) -> ValueError:
+    """
+    Return the error of the products of a row of a measurement set (CASA
+    codes) that have neither Stokes I nor a pair of parallel hands.
+    """
+    return ValueError(
         f"the measurement set has neither Stokes I nor a pair of parallel "
-        f"hands; its products are {products} (CASA codes)")
+        f"hands; its products are {list(products)} (CASA codes)")

@@ -17,8 +17,8 @@ import numpy as np
 
 import gbkfit.units
 from gbkfit.config import (
-    Choices, check_name, config_path, load_option_and_update_info,
-    make_typed_desc)
+    Choices, InputError, check_name, config_path,
+    load_option_and_update_info, make_typed_desc)
 from gbkfit.dataset import Dataset, DatasetGrid, dataset_parser
 from gbkfit.driver import Driver
 from gbkfit.grid import (
@@ -934,11 +934,14 @@ class ObservationSky(Observation, abc.ABC):
 
     @classmethod
     def _check_dataset_class(cls, dataset: Dataset) -> None:
-        """Raise ValueError unless the dataset is of the dataset class."""
+        """
+        Raise InputError, at the option dataset, unless the dataset is of
+        the dataset class.
+        """
         if not isinstance(dataset, cls.dataset_class):
-            desc = make_typed_desc(cls, 'observation')
-            dataset_desc = make_typed_desc(dataset.__class__, 'dataset')
-            raise ValueError(f"{desc} cannot be compared with {dataset_desc}")
+            raise InputError(
+                f"data of {dataset.type_title().lower()} · needs "
+                f"{cls.dataset_class.type_title().lower()}", ['dataset'])
 
     def _check_dataset_coordinates(self, dataset: Dataset) -> None:
         """

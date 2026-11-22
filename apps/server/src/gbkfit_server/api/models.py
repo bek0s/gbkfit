@@ -194,6 +194,26 @@ class LensInfo(BaseModel):
     problems: list[dict[str, Any]]
 
 
+class ObservationRequest(BaseModel):
+    """
+    An observation to describe: the project of its piece, and its options
+    (the pieces it names, of the project; its files relative to it).
+    """
+    project: str
+    observation: dict[str, Any]
+
+
+class PartRequest(BaseModel):
+    """
+    A part that observations share to describe: the project of its piece,
+    its family (a PSF, an LSF or a noise) and its options (its files
+    relative to the project).
+    """
+    project: str
+    family: Literal['psf', 'lsf', 'noise']
+    part: dict[str, Any]
+
+
 class SetupRequest(BaseModel):
     """
     A setup to describe: its path (of a project, relative to the

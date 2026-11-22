@@ -13,6 +13,7 @@ from gbkfit.io import coords_from_header, header_shape
 from gbkfit.moments import MOMENT_ITEMS, moment_orders, split_moments
 from . import _detail, _grids
 from .base import DatasetGrid, NoiseCorrelation, cleaned
+from .deferred import Deferred
 from .data import Data, DataFiles
 
 
@@ -45,7 +46,7 @@ class DatasetPixelMoments(DatasetGrid):
         defaults are those of make_grid.
     rota : float, optional
         The rotation of the grid on the sky (see Coords).
-    footprint : ndarray, optional
+    footprint : ndarray or Deferred, optional
         Where the instrument looked, of shape (ny, nx) (see DatasetGrid).
     """
 
@@ -180,7 +181,7 @@ class DatasetPixelMoments(DatasetGrid):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            footprint: np.ndarray | None = None
+            footprint: np.ndarray | Deferred | None = None
     ):
         check_options(DatasetPixelMoments.__init__, locals())
         super().__init__(

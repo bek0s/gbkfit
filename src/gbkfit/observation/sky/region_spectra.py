@@ -152,10 +152,10 @@ class ObservationRegionSpectra(ObservationRegions):
             regions=regions, spectral=spectral, size=size, step=step,
             rpix=rpix, rval=rval, rota=rota))
         grid = self._regions_grid(**options)
-        valid = self._regions.valid()
-        if valid is not None and len(valid) != grid.spectral().size[0]:
+        channels = self._regions.valid_channels()
+        if channels is not None and channels != grid.spectral().size[0]:
             raise ValueError(
-                f"the valid pixels of the regions are of {len(valid)} "
+                f"the valid pixels of the regions are of {channels} "
                 f"channels; the spectral axis has "
                 f"{grid.spectral().size[0]}")
         super().__init__(

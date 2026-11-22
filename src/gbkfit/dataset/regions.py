@@ -15,7 +15,8 @@ import scipy.sparse
 from gbkfit.config import (
     DataFile, TypedParser, TypedSerializable, Unit, check_options)
 from gbkfit.grid import Grid, make_grid, sky_positions
-from gbkfit.io import read_data, write_data, write_image
+from gbkfit.io import open_data, read_data, write_data, write_image
+from .deferred import Deferred
 from .apertures import Aperture, aperture_parser
 
 
@@ -90,6 +91,13 @@ class Regions(TypedSerializable, abc.ABC):
         1 or 0, of shape (channels, ny, nx), e.g. of a spectrum of a bin
         that sums the valid pixels of each channel of a cube (see
         RegionsBins); None (here) if all do.
+        """
+        return None
+
+    def valid_channels(self) -> int | None:
+        """
+        Return the number of channels of its valid pixels (see valid),
+        without reading them; None (here) if all pixels are valid.
         """
         return None
 
@@ -179,7 +187,9 @@ class RegionsBins(Regions):
         # (read_data takes one value for both axes, or one for each)
         index, coords = read_data(file, rpix=rpix, rval=rval)
         if valid is not None:
-            valid, _ = read_data(valid)
+            # (read when first used: a cube)
+            opened, _ = open_data(valid)
+            valid = Deferred(opened.shape(), opened.read)
         return cls(
             index, coords.step if step is None else step, coords.rpix,
             coords.rval, coords.rota if rota is None else rota, valid)
@@ -204,7 +214,7 @@ class RegionsBins(Regions):
             # (an array without world coordinates, in the orientation of
             # the model: the bins give them)
             valid = f'{prefix}bins_valid.fits'
-            write_image(valid, self._valid, overwrite=overwrite)
+            write_image(valid, self.valid(), overwrite=overwrite)
             info['valid'] = valid if dump_path else os.path.basename(valid)
         return info
 
@@ -215,7 +225,7 @@ class RegionsBins(Regions):
             rpix: _PerAxis = None,
             rval: _PerAxis = None,
             rota: _Angle | None = None,
-            valid: npt.ArrayLike | None = None
+            valid: npt.ArrayLike | Deferred | None = None
     ):
         check_options(RegionsBins.__init__, locals())
         index = np.asarray(index)
@@ -238,13 +248,18 @@ class RegionsBins(Regions):
                 f"the bins are numbered from 0 to {nbins - 1}, but these "
                 f"have no pixels: {empty}")
         if valid is not None:
-            valid = np.asarray(valid)
-            if valid.ndim != 3 or valid.shape[1:] != index.shape:
+            shape = valid.shape if isinstance(valid, Deferred) \
+                else np.shape(valid)
+            if len(shape) != 3 or shape[1:] != index.shape:
                 raise ValueError(
                     f"the valid pixels of the bins must be a cube (channels, "
                     f"{index.shape[0]}, {index.shape[1]}), of the pixels of "
-                    f"the bins; they have the shape {valid.shape}")
-            valid = (np.nan_to_num(valid) != 0).astype(np.uint8)
+                    f"the bins; they have the shape {shape}")
+            given = valid if isinstance(valid, Deferred) \
+                else Deferred.of(np.asarray(valid))
+            valid = Deferred(
+                shape, lambda: (np.nan_to_num(given.values()) != 0).astype(
+                    np.uint8))
         self._index = index
         self._nbins = nbins
         self._valid = valid
@@ -252,17 +267,21 @@ class RegionsBins(Regions):
             index.shape[::-1], step, rpix, rval, rota)
 
     def __eq__(self, other: object) -> bool:
-        return (isinstance(other, RegionsBins)
-                and self._grid == other._grid
-                and np.array_equal(self._index, other._index)
-                and np.array_equal(self._valid, other._valid))
+        return other is self or (
+            isinstance(other, RegionsBins)
+            and self._grid == other._grid
+            and np.array_equal(self._index, other._index)
+            and np.array_equal(self.valid(), other.valid()))
 
     def index(self) -> np.ndarray:
         """Return the bin of each pixel (negative for none)."""
         return self._index
 
     def valid(self) -> np.ndarray | None:
-        return self._valid
+        return None if self._valid is None else self._valid.values()
+
+    def valid_channels(self) -> int | None:
+        return None if self._valid is None else self._valid.shape[0]
 
     def nregions(self) -> int:
         return self._nbins

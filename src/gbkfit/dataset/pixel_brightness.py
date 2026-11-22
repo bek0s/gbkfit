@@ -12,6 +12,7 @@ from gbkfit.instrument import PSF
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids
 from .base import DatasetGrid, NoiseCorrelation, cleaned
+from .deferred import Deferred
 from .data import Data, DataFiles
 
 
@@ -36,7 +37,7 @@ class DatasetPixelBrightness(DatasetGrid):
         defaults are those of make_grid.
     rota : float, optional
         The rotation of the grid on the sky (see Coords).
-    footprint : ndarray, optional
+    footprint : ndarray or Deferred, optional
         Where the instrument looked (see DatasetGrid).
     """
 
@@ -158,7 +159,7 @@ class DatasetPixelBrightness(DatasetGrid):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            footprint: np.ndarray | None = None
+            footprint: np.ndarray | Deferred | None = None
     ):
         check_options(DatasetPixelBrightness.__init__, locals())
         super().__init__(

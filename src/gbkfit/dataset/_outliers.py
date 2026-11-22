@@ -24,6 +24,11 @@ _MIN_NEIGHBOURS = 3
 # The most values of the windows of a grid copied at once
 _CHUNK = 2 ** 22
 
+# What the screening of outliers and the masking of whole spectra are, in
+# the log of the values they mask (see Dataset.with_values)
+OUTLIERS_MASKED = "outliers masked in the data"
+WHOLE_SPECTRA_MASKED = "values masked with whole spectra"
+
 
 def check_nsigma(nsigma: float) -> float:
     """Return nsigma; raise ValueError unless it is a positive number."""
@@ -199,7 +204,7 @@ def screen_grid(
     """
     window = window_size(size, axes)
     nsigma = check_nsigma(nsigma)
-    return dataset.with_data({
-        key: np.where(
-            grid_outliers(item.data(), window, nsigma), np.nan, item.data())
-        for key, item in dataset.items()})
+    return dataset.with_values(
+        lambda key, item: np.where(
+            grid_outliers(item.data(), window, nsigma), np.nan, item.data()),
+        OUTLIERS_MASKED)

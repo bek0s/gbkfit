@@ -15,6 +15,7 @@ import pytest
 from astropy.io import fits
 from fastapi.testclient import TestClient
 
+import gbkfit.io.formats.fits
 import gbkfit.project
 from gbkfit_server.api import create_app, openapi
 from gbkfit_server.services import frames
@@ -595,6 +596,51 @@ def test_the_files_of_a_dataset_are_checked_together(client, root):
     response = client.post(
         '/api/v1/datasets/check', json=dict(project='study', dataset=dataset))
     assert response.status_code == 400
+
+
+def test_an_observation_is_described_from_the_headers_of_its_data(
+        client, root, monkeypatch):
+    # (with the pieces it names, of the project: its problems at the paths
+    # of its own options; the values of its data are not read)
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--TAN', CDELT2=1 / 3600, CUNIT2='deg') | SKY_REFERENCES)
+    fits.writeto(
+        pathlib.Path(root, 'study/data/map.fits'),
+        np.ones((4, 5), np.float32), header)
+    pathlib.Path(root, 'study/datasets').mkdir(exist_ok=True)
+    pathlib.Path(root, 'study/datasets/map.yaml').write_text(
+        'type: pixel_brightness\ndata: data/map.fits\n')
+
+    def refused(filename, key):
+        raise AssertionError(f"the values of {filename} were read")
+    monkeypatch.setattr(gbkfit.io.formats.fits, 'read_image', refused)
+
+    def problems(observation):
+        return client.post('/api/v1/observations/describe', json=dict(
+            project='study', observation=observation)).json()
+    assert problems(dict(type='pixel_brightness', dataset='map')) == []
+    assert problems(dict(type='pixel_spectra', dataset='map')) == [dict(
+        severity='error', path=['dataset'],
+        message='data of pixel brightness (image) · needs pixel spectra '
+                '(cube)')]
+    assert problems(dict(
+        type='pixel_brightness', dataset='map',
+        instrument=dict(psf='nosuch'))) == [dict(
+            severity='error', path=['instrument', 'psf'],
+            message="the project has no piece 'nosuch' of psfs "
+                    "(psfs/nosuch.yaml)")]
+
+
+def test_a_part_of_observations_is_described(client):
+    def problems(family, part):
+        return client.post('/api/v1/observations/parts/describe', json=dict(
+            project='study', family=family, part=part)).json()
+    assert problems('psf', dict(type='gauss', sigma=1.5)) == []
+    assert problems('lsf', dict(type='gauss', sigma='15 km/s')) == []
+    assert problems('noise', dict(type='gauss', rms=0.01)) == []
+    [problem] = problems('psf', dict(type='gauss', sigma=-2))
+    assert problem['severity'] == 'error' and 'sigma' in problem['message']
 
 
 def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(

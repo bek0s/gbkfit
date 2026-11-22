@@ -13,6 +13,7 @@ from gbkfit.instrument import LSF
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids
 from .base import DatasetGrid, NoiseCorrelation, cleaned
+from .deferred import Deferred
 from .data import Data
 
 
@@ -54,7 +55,7 @@ class DatasetSlitSpectra(DatasetGrid):
         The spectral axis (see make_cube_grid): its world
         coordinates, the convention of its velocities, its rest and its
         medium; the data give its size.
-    footprint : ndarray, optional
+    footprint : ndarray or Deferred, optional
         Where the instrument looked (see DatasetGrid).
     """
 
@@ -199,7 +200,7 @@ class DatasetSlitSpectra(DatasetGrid):
             rval: float | Sequence[float] | None = None,
             slit_pa: float | None = None,
             spectral: SpectralAxis | None = None,
-            footprint: np.ndarray | None = None
+            footprint: np.ndarray | Deferred | None = None
     ):
         check_options(DatasetSlitSpectra.__init__, locals())
         super().__init__(

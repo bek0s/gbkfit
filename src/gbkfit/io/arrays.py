@@ -5,7 +5,10 @@ Arrays: reading them from files, in the orientation of the model.
 - Data with their errors and mask (see read_arrays): the one reader of
   the datasets (see dataset.Data.from_files) and of prep (see
   prep.FitsArrays); and images of the sky on the pixels of such data,
-  e.g. bins (see read_sky_map).
+  e.g. bins (see read_sky_map). Data are opened first, from the headers
+  of their files alone (see open_arrays: every check of what the headers
+  say), and read after, which a dataset defers until its values are
+  first used.
 - An array in the orientation of the model as far as its world
   coordinates allow, which need not be ones the model represents, to
   look at it (see read_oriented).
@@ -15,6 +18,7 @@ once a file states what it says of its array as a FITS header.
 """
 
 import dataclasses
+import os
 from collections.abc import Collection, Mapping, Sequence
 from typing import Annotated, Any, Literal, NamedTuple, TypeAlias
 
@@ -44,8 +48,14 @@ __all__ = [
     'Arrays',
     'ErrorKind',
     'MaskKind',
+    'OpenedArray',
+    'OpenedArrays',
+    'OpenedFootprint',
     'check_companion',
     'check_footprint',
+    'open_arrays',
+    'open_data',
+    'open_footprint',
     'read_arrays',
     'read_data',
     'read_footprint',
@@ -114,6 +124,163 @@ class Arrays:
     orientation: Orientation | None = None
 
 
+class _Stamp(NamedTuple):
+    """
+    A file as it was opened: its size and the time it last changed, which
+    its reading checks (see OpenedArray.read).
+    """
+    path: str
+    size: int
+    mtime: int
+
+    @classmethod
+    def of(cls, path: str) -> '_Stamp':
+        """Return the stamp of a file as it is now."""
+        status = os.stat(path)
+        return cls(path, status.st_size, status.st_mtime_ns)
+
+    def check(self) -> None:
+        """Raise InputError if the file changed since it was stamped."""
+        if _Stamp.of(self.path) != self:
+            raise InputError(
+                f"{self.path}: the file changed after it was opened; load "
+                f"it again")
+
+
+@dataclasses.dataclass(frozen=True)
+class OpenedArray:
+    """
+    The array of a file, opened from its header alone, as it is put in the
+    orientation of the model (see open_arrays), before it is read.
+
+    Attributes
+    ----------
+    file : DataFile
+        The file of the array.
+    header : astropy.io.fits.Header
+        Its header in the orientation of the model (of an array without
+        world coordinates put on the pixels of data, as it is in its file).
+    orientation : Orientation
+        How the array of the file is put in that orientation.
+    plane : int or None
+        The plane read of a file of images of the sky, if any (see
+        read_sky_map).
+    """
+    file: DataFile
+    header: astropy.io.fits.Header
+    orientation: Orientation
+    plane: int | None
+    stamp: _Stamp = dataclasses.field(repr=False)
+
+    def shape(self) -> tuple[int, ...]:
+        """Return the shape of the array as it is read (numpy order)."""
+        return header_shape(self.header)
+
+    def read(self, floats: bool = True) -> np.ndarray:
+        """
+        Read the array in the orientation of the model: as floats (which
+        can be NaN where invalid), or of the type of its file.
+
+        Raises
+        ------
+        ValueError
+            If the file changed since it was opened, or cannot be read.
+        """
+        self.stamp.check()
+        values, _ = read_image(self.file)
+        if self.plane is not None:
+            values = values[self.plane]
+        values = self.orientation.apply(values)
+        return _floats(values) if floats else values
+
+
+@dataclasses.dataclass(frozen=True)
+class OpenedFootprint(OpenedArray):
+    """
+    A footprint opened from the headers of its file and of its data (see
+    open_footprint), read as 1 inside (where finite and not 0) and 0
+    outside.
+    """
+
+    def read(self, floats: bool = True) -> np.ndarray:
+        values = super().read()
+        return (np.isfinite(values) & (values != 0)).astype(float)
+
+
+@dataclasses.dataclass(frozen=True)
+class OpenedArrays:
+    """
+    Data, and their errors and mask, opened from the headers of their files
+    alone (see open_arrays), before their values are read (see read).
+
+    Attributes
+    ----------
+    data : OpenedArray
+        The values.
+    error, mask : OpenedArray or None
+        The errors and the mask, if given.
+    unit : AnyUnit or None
+        The unit of the values, if known.
+    beam : Beam or None
+        The beam of the values, if they have one (see Arrays).
+    error_kind, mask_kind : str
+        What the errors are, and what the mask marks (see read_arrays).
+    """
+    data: OpenedArray
+    error: OpenedArray | None
+    mask: OpenedArray | None
+    unit: gbkfit.units.AnyUnit | None
+    beam: Beam | None
+    error_kind: ErrorKind
+    mask_kind: MaskKind
+    # (the factor of the errors to the unit of their kind of that of the
+    # values, see _error_scale)
+    error_scale: float = dataclasses.field(repr=False)
+
+    def header(self) -> astropy.io.fits.Header:
+        """
+        Return the header of the values, in the orientation of the model
+        (see model_header).
+        """
+        return self.data.header
+
+    def shape(self) -> tuple[int, ...]:
+        """Return the shape of the values as they are read (numpy order)."""
+        return self.data.shape()
+
+    def read(self) -> Arrays:
+        """
+        Read the values, their errors and mask (see read_arrays).
+
+        Raises
+        ------
+        ValueError
+            If a file changed since it was opened or cannot be read, or the
+            errors are negative.
+        """
+        values = self.data.read()
+        errors = None
+        if self.error is not None:
+            errors = self.error.read()
+            if self.error_scale != 1:
+                errors = errors * self.error_scale
+            errors = _standard_deviations(
+                split_data_file(self.error.file)[0], errors, self.error_kind)
+        masks = None if self.mask is None else self.mask.read()
+        valid = np.isfinite(values)
+        if errors is not None:
+            valid &= np.isfinite(errors) & (errors > 0)
+        if masks is not None:
+            marked = masks != 0
+            valid &= np.isfinite(masks) & (
+                marked if self.mask_kind == 'valid' else ~marked)
+        return Arrays(
+            np.where(valid, values, np.nan),
+            None if errors is None else np.where(valid, errors, np.nan),
+            valid.astype(float), self.data.header, self.unit, self.beam,
+            self.data.orientation)
+
+
 def read_data(
         file: DataFile,
         *,
@@ -178,19 +345,58 @@ def read_data(
         has invalid world coordinates or ones the model cannot represent
         (see model_header and coords_from_header).
     """
+    opened, coords = open_data(
+        file, rpix=rpix, rval=rval, rest=rest, velocity=velocity,
+        spectral_type=spectral_type, spectral_unit=spectral_unit,
+        medium=medium, spectral_axis=spectral_axis)
+    return opened.read(floats=False), coords
+
+
+def open_data(
+        file: DataFile,
+        *,
+        rpix: float | Sequence[float | None] | None = None,
+        rval: float | Sequence[float | None] | None = None,
+        rest: Rest = None,
+        velocity: str | None = None,
+        spectral_type: str | None = None,
+        spectral_unit: str | None = None,
+        medium: str | None = None,
+        spectral_axis: int | None = None
+) -> tuple[OpenedArray, Coords]:
+    """
+    Open the data of a file from its header alone, as read_data reads
+    them (the same options), with their world coordinates, to read them
+    after (see OpenedArray.read).
+
+    Returns
+    -------
+    OpenedArray
+        The data, opened.
+    Coords
+        Their world coordinates.
+
+    Raises
+    ------
+    ValueError
+        If the file has no such data, or their header has invalid world
+        coordinates or ones the model cannot represent (see read_data).
+    """
     filename = split_data_file(file)[0]
-    data, header = read_image(file)
+    stamp = _Stamp.of(filename)
+    header = read_header(file)
+    shape = header_shape(header)
     model, orientation = model_header(
-        filename, header, data.shape, rest=rest, velocity=velocity,
+        filename, header, shape, rest=rest, velocity=velocity,
         spectral_type=spectral_type, spectral_unit=spectral_unit,
         medium=medium,
         spectral_axis=spectral_axis)
     _warn_of_missing_unit(
-        filename, header, data.shape, spectral_type, spectral_unit)
+        filename, header, shape, spectral_type, spectral_unit)
     coords = coords_from_header(
         filename, model, rpix=rpix, rval=rval, spectral_axis=spectral_axis,
         medium=medium, rest=rest)
-    return orientation.apply(data), coords
+    return OpenedArray(file, model, orientation, None, stamp), coords
 
 
 def read_oriented(
@@ -350,6 +556,46 @@ def read_arrays(
         are raised together (see statement_errors; an ExceptionGroup of
         several).
     """
+    return open_arrays(
+        data, error, mask, error_kind=error_kind, mask_kind=mask_kind,
+        unit=unit, rest=rest, velocity=velocity, spectral_type=spectral_type,
+        spectral_unit=spectral_unit, medium=medium,
+        spectral_axis=spectral_axis, stated=stated).read()
+
+
+def open_arrays(
+        data: DataFile,
+        error: DataFile | None = None,
+        mask: DataFile | None = None,
+        *,
+        error_kind: ErrorKind = 'sigma',
+        mask_kind: MaskKind = 'valid',
+        unit: str | None = None,
+        rest: Rest = None,
+        velocity: str | None = None,
+        spectral_type: str | None = None,
+        spectral_unit: str | None = None,
+        medium: str | None = None,
+        spectral_axis: int | None = None,
+        stated: Collection[str] = ()
+) -> OpenedArrays:
+    """
+    Open data, and their errors and mask, from the headers of their files
+    alone, as read_arrays reads them (the same options): every check of
+    what the headers say is made here, and the values are read after (see
+    OpenedArrays.read), but for the checks of the values themselves (e.g.
+    errors that are negative).
+
+    Returns
+    -------
+    OpenedArrays
+        The arrays, opened.
+
+    Raises
+    ------
+    ValueError
+        As read_arrays, of what the headers say.
+    """
     if error_kind not in _ERROR_KINDS:
         raise InputError(
             f"the kind of the errors must be one of {list(_ERROR_KINDS)}; "
@@ -362,33 +608,25 @@ def read_arrays(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
         spectral_unit=spectral_unit,
         medium=medium, spectral_axis=spectral_axis)
-    values, header, orientation, beam = _read(
-        data, **read, unit=unit, stated=stated)
+    values, beam = _open(data, **read, unit=unit, stated=stated)
     given = unit is not None
-    unit = data_unit(split_data_file(data)[0], header, unit)
-    errors = None
+    unit = data_unit(split_data_file(data)[0], values.header, unit)
+    errors, scale = None, 1.0
     if error is not None:
+        errors = _open_companion(
+            error, values.header, values.orientation, name='errors',
+            path=['error'], **read)
         error_name = split_data_file(error)[0]
-        errors, error_header = _read_companion(
-            error, header, orientation, name='errors', path=['error'], **read)
-        errors = _standard_deviations(
-            error_name, errors, error_kind,
-            _parsed_unit(error_name, error_header, given), unit)
+        scale = _error_scale(
+            error_name, error_kind,
+            _parsed_unit(error_name, read_header(error), given), unit)
     masks = None
     if mask is not None:
-        masks, _ = _read_companion(
-            mask, header, orientation, name='mask', path=['mask'], **read)
-    valid = np.isfinite(values)
-    if errors is not None:
-        valid &= np.isfinite(errors) & (errors > 0)
-    if masks is not None:
-        marked = masks != 0
-        valid &= np.isfinite(masks) & (
-            marked if mask_kind == 'valid' else ~marked)
-    return Arrays(
-        np.where(valid, values, np.nan),
-        None if errors is None else np.where(valid, errors, np.nan),
-        valid.astype(float), header, unit, beam, orientation)
+        masks = _open_companion(
+            mask, values.header, values.orientation, name='mask',
+            path=['mask'], **read)
+    return OpenedArrays(
+        values, errors, masks, unit, beam, error_kind, mask_kind, scale)
 
 
 def read_footprint(
@@ -433,6 +671,34 @@ def read_footprint(
         If a file cannot be read, or the footprint is not on the pixels
         of the data or of their sky.
     """
+    return open_footprint(
+        file, data, rest=rest, velocity=velocity,
+        spectral_type=spectral_type, spectral_unit=spectral_unit,
+        medium=medium, spectral_axis=spectral_axis).read()
+
+
+def open_footprint(
+        file: DataFile,
+        data: DataFile,
+        *,
+        rest: Rest = None,
+        velocity: str | None = None,
+        spectral_type: str | None = None,
+        spectral_unit: str | None = None,
+        medium: str | None = None,
+        spectral_axis: int | None = None
+) -> OpenedFootprint:
+    """
+    Open a footprint from the headers of its file and of the file of its
+    data alone, as read_footprint reads it (the same options), to read it
+    after (see OpenedFootprint).
+
+    Raises
+    ------
+    ValueError
+        If a header cannot be read, or the footprint is not on the pixels
+        of the data or of their sky.
+    """
     read = dict(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
         spectral_unit=spectral_unit, medium=medium,
@@ -442,10 +708,9 @@ def read_footprint(
         target, target_orientation, target_read = _footprint_target(
             split_data_file(file)[0], header_shape(read_header(file)),
             header, orientation, read)
-    values = _read_companion(
+    return _open_companion(
         file, target, target_orientation, name='footprint',
-        path=['footprint'], **target_read)[0]
-    return (np.isfinite(values) & (values != 0)).astype(float)
+        path=['footprint'], opened=OpenedFootprint, **target_read)
 
 
 def check_companion(
@@ -797,7 +1062,7 @@ _NO_READING = dict(
     medium=None, spectral_axis=None)
 
 
-def _read(
+def _open(
         file: DataFile,
         rest: Rest,
         velocity: str | None,
@@ -807,28 +1072,29 @@ def _read(
         spectral_axis: int | None,
         unit: str | None,
         stated: Collection[str]
-) -> tuple[np.ndarray, astropy.io.fits.Header, Orientation, Beam | None]:
+) -> tuple[OpenedArray, Beam | None]:
     """
-    Return the values of a file in the orientation of the model, their
-    header in it, how they were put in it (see model_header), and their
-    beam (see _oriented_beam). The errors of what their header needs
-    stated, of the options given, are raised together, first (see
-    statement_errors).
+    Return the values of a file opened in the orientation of the model, of
+    its header alone (see model_header), and their beam (see
+    _oriented_beam). The errors of what their header needs stated, of the
+    options given, are raised together, first (see statement_errors).
     """
     filename = split_data_file(file)[0]
-    values, header = read_image(file)
+    stamp = _Stamp.of(filename)
+    header = read_header(file)
+    shape = header_shape(header)
     raise_all(statement_errors(
-        filename, header, values.shape, rest=rest, velocity=velocity,
+        filename, header, shape, rest=rest, velocity=velocity,
         spectral_type=spectral_type, spectral_unit=spectral_unit,
         unit=unit, stated=stated), filename)
     model, orientation = model_header(
-        filename, header, values.shape, rest=rest, velocity=velocity,
+        filename, header, shape, rest=rest, velocity=velocity,
         spectral_type=spectral_type, spectral_unit=spectral_unit,
         medium=medium,
         spectral_axis=spectral_axis)
     _warn_of_missing_unit(
-        filename, header, values.shape, spectral_type, spectral_unit)
-    return (_floats(orientation.apply(values)), model, orientation,
+        filename, header, shape, spectral_type, spectral_unit)
+    return (OpenedArray(file, model, orientation, None, stamp),
             _oriented_beam(filename, header, model, orientation))
 
 
@@ -849,24 +1115,54 @@ def _read_companion(
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
     Return the values of a file (of a plane of it, if given; see
-    read_sky_map) on the pixels of data (their errors or mask, see
+    read_sky_map) on the pixels of data in the orientation of the model,
+    and its header (see _open_companion).
+    """
+    opened = _open_companion(
+        file, data_header, data_orientation, name=name, path=path, rest=rest,
+        velocity=velocity, spectral_type=spectral_type,
+        spectral_unit=spectral_unit, medium=medium,
+        spectral_axis=spectral_axis, plane=plane)
+    return opened.read(), opened.header
+
+
+def _open_companion(
+        file: DataFile,
+        data_header: astropy.io.fits.Header,
+        data_orientation: Orientation,
+        *,
+        name: str,
+        path: Sequence[str | int],
+        rest: Rest,
+        velocity: str | None,
+        spectral_type: str | None,
+        spectral_unit: str | None,
+        medium: str | None,
+        spectral_axis: int | None,
+        plane: int | None = None,
+        opened: type[OpenedArray] = OpenedArray
+) -> OpenedArray:
+    """
+    Return the array of a file (of a plane of it, if given; see
+    read_sky_map) opened on the pixels of data (their errors or mask, see
     read_arrays; their footprint, see read_footprint; or an image of their
-    sky, see read_sky_map) in the orientation of the model, and its
-    header (see _companion_orientation; name: what it is to the data, in
-    the message of an error; path: of the option of its file, of its
-    errors, see config_path).
+    sky, see read_sky_map) in the orientation of the model, from the
+    headers alone (see _companion_orientation; name: what it is to the
+    data, in the message of an error; path: of the option of its file, of
+    its errors, see config_path; opened: what it is opened as).
     """
     filename = split_data_file(file)[0]
     with config_path(*path):
-        values, header = read_image(file)
+        stamp = _Stamp.of(filename)
+        header = read_header(file)
         if plane is not None:
-            values, header = _plane(filename, values, header, plane)
+            header = _plane(filename, header, plane)
         header, orientation = _companion_orientation(
-            filename, header, values.shape, data_header, data_orientation,
-            name=name, rest=rest, velocity=velocity,
+            filename, header, header_shape(header), data_header,
+            data_orientation, name=name, rest=rest, velocity=velocity,
             spectral_type=spectral_type, spectral_unit=spectral_unit,
             medium=medium, spectral_axis=spectral_axis)
-    return _floats(orientation.apply(values)), header
+    return opened(file, header, orientation, plane, stamp)
 
 
 def _companion_orientation(
@@ -905,23 +1201,22 @@ def _companion_orientation(
 
 
 def _plane(
-        source: str,
-        values: np.ndarray,
-        header: astropy.io.fits.Header,
-        plane: int
-) -> tuple[np.ndarray, astropy.io.fits.Header]:
+        source: str, header: astropy.io.fits.Header, plane: int
+) -> astropy.io.fits.Header:
     """
-    Return a plane of an array of three axes, along its last (FITS
-    order), and its header without that axis.
+    Return the header of a plane of an array of three axes of a header,
+    along its last (FITS order), without that axis; raise InputError if it
+    has no such plane.
     """
-    if values.ndim != 3 or not 0 <= plane < values.shape[0]:
+    shape = header_shape(header)
+    if len(shape) != 3 or not 0 <= plane < shape[0]:
         raise InputError(
             f"{source}: plane {plane} is not one of its array of shape "
-            f"{values.shape} (of planes along its first axis, numpy order)")
-    header = _with_shape(header, values.shape[1:])
+            f"{shape} (of planes along its first axis, numpy order)")
+    header = _with_shape(header, shape[1:])
     if has_wcs(header):
         header = _with_wcs(header, parse_wcs(source, header).sub(2))
-    return values[plane], header
+    return header
 
 
 def _check_same_pixels(
@@ -954,33 +1249,43 @@ def _check_same_pixels(
             f"coordinates)")
 
 
-def _standard_deviations(
+def _error_scale(
         source: str,
-        errors: np.ndarray,
         kind: str,
         unit: gbkfit.units.AnyUnit | None,
         data_unit: gbkfit.units.AnyUnit | None
-) -> np.ndarray:
+) -> float:
     """
-    Return errors of a kind (see read_arrays) as standard deviations in
-    the unit of the data; a unit of the errors that is not that of their
-    kind is an error, which names the kind it is of, if any.
+    Return the factor of errors of a kind (see read_arrays) in a unit to
+    the unit of their kind of that of the data (1 if either is not known);
+    a unit of the errors that is not that of their kind is an error, which
+    names the kind it is of, if any.
     """
+    if unit is None or data_unit is None:
+        return 1.0
     power = _ERROR_POWERS[kind]
-    if unit is not None and data_unit is not None:
-        expected = data_unit ** power
-        if not unit.is_equivalent(expected):
-            kinds = [
-                name for name, p in _ERROR_POWERS.items()
-                if unit.is_equivalent(data_unit ** p)]
-            hint = (
-                f"; it is that of {kinds[0]} (error_kind: {kinds[0]})"
-                if kinds else "")
-            raise InputError(
-                f"{source}: the unit of the errors "
-                f"({gbkfit.units.format_unit(unit)}) is not that of {kind} of "
-                f"the data ({gbkfit.units.format_unit(expected)}){hint}")
-        errors = errors * unit.to(expected)
+    expected = data_unit ** power
+    if not unit.is_equivalent(expected):
+        kinds = [
+            name for name, p in _ERROR_POWERS.items()
+            if unit.is_equivalent(data_unit ** p)]
+        hint = (
+            f"; it is that of {kinds[0]} (error_kind: {kinds[0]})"
+            if kinds else "")
+        raise InputError(
+            f"{source}: the unit of the errors "
+            f"({gbkfit.units.format_unit(unit)}) is not that of {kind} of "
+            f"the data ({gbkfit.units.format_unit(expected)}){hint}")
+    return float(unit.to(expected))
+
+
+def _standard_deviations(
+        source: str, errors: np.ndarray, kind: str) -> np.ndarray:
+    """
+    Return errors of a kind (see read_arrays), in the unit of their kind of
+    that of the data, as standard deviations; negative errors are an
+    error.
+    """
     with np.errstate(invalid='ignore'):
         negative = errors < 0
     if np.any(negative):

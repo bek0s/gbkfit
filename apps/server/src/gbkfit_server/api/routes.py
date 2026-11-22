@@ -37,8 +37,9 @@ from .models import (
     GalaxyInfo, GalaxyRenderRequest, GalaxyRequest, GalaxyVolumeRequest,
     HeaderInfo, ImportRequest,
     JobInfo, JobRequest, LensInfo, LensRequest, LensViewInfo,
-    LensViewRequest, LSFRequest, LSFViewInfo, ObservedArrayInfo,
-    ObservedInfo, ObservedRequest, PSFRequest, PSFViewInfo,
+    LensViewRequest, LSFRequest, LSFViewInfo, ObservationRequest,
+    ObservedArrayInfo, ObservedInfo, ObservedRequest, PartRequest,
+    PSFRequest, PSFViewInfo,
     PieceContent, PieceReference, PieceRename, PieceRequest,
     PreferencesInfo,
     PreparationInfo, Problem,
@@ -414,6 +415,34 @@ def lens_parameters(server: ServerDep, request: LensRequest) -> LensInfo:
     return LensInfo.model_validate(
         server.lenses.describe(request.project, request.lens),
         from_attributes=True)
+
+
+@router.post('/observations/describe')
+def observation_problems(
+        server: ServerDep, request: ObservationRequest) -> list[Problem]:
+    """
+    Describe an observation of the options of a piece of a project, as
+    the library does from the headers of its data, without reading them:
+    its problems, each at the path of its option (see gbkfit's
+    describe_observation).
+    """
+    return [
+        Problem.model_validate(problem)
+        for problem in server.observations.describe(
+            request.project, request.observation)]
+
+
+@router.post('/observations/parts/describe')
+def part_problems(server: ServerDep, request: PartRequest) -> list[Problem]:
+    """
+    Describe a part that observations share (a PSF, an LSF or a noise) of
+    the options of a piece of a project: its problems, each at the path of
+    its option.
+    """
+    return [
+        Problem.model_validate(problem)
+        for problem in server.observations.describe_part(
+            request.project, request.family, request.part)]
 
 
 @router.post('/views/lens')

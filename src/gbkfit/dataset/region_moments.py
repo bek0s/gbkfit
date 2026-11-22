@@ -222,8 +222,8 @@ class DatasetRegionMoments(Dataset):
             size, self._regions.nregions(), False)
         nsigma = _outliers.check_nsigma(nsigma)
         centres = self._regions.centres()
-        return self.with_data({
-            key: np.where(_outliers.region_outliers(
+        return self.with_values(
+            lambda key, item: np.where(_outliers.region_outliers(
                 item.data()[None], centres, nnearest, 1, nsigma)[0],
-                np.nan, item.data())
-            for key, item in self.items()})
+                np.nan, item.data()),
+            _outliers.OUTLIERS_MASKED)

@@ -15,12 +15,13 @@ area inside it (see Aperture and aperture_parser).
 """
 
 from . import (
-    apertures, base, data, pixel_brightness, pixel_moments,
+    apertures, base, data, deferred, pixel_brightness, pixel_moments,
     pixel_spectra, profile, region_moments, region_spectra, regions,
     slit_spectra, slitless_spectra, visibilities)
 from .apertures import *
 from .base import *
 from .data import *
+from .deferred import *
 from .pixel_brightness import *
 from .pixel_moments import *
 from .pixel_spectra import *
@@ -37,6 +38,7 @@ __all__ = []
 __all__ += apertures.__all__
 __all__ += base.__all__
 __all__ += data.__all__
+__all__ += deferred.__all__
 __all__ += pixel_brightness.__all__
 __all__ += pixel_moments.__all__
 __all__ += pixel_spectra.__all__

@@ -94,6 +94,8 @@ def test_the_data_of_an_observation_are_screened_as_they_are_read(
     with caplog.at_level(logging.INFO):
         observation = observation_parser.load(dict(
             type='pixel_brightness', dataset=data))
-    screened = observation.dataset()['brightness'].data()
+        # (screened as the values are first used)
+        assert "outliers masked" not in caplog.text
+        screened = observation.dataset()['brightness'].data()
     assert np.argwhere(np.isnan(screened)).tolist() == [[5, 7]]
-    assert "outliers masked in the data: {'brightness': 1}" in caplog.text
+    assert "outliers masked in the data of brightness: 1" in caplog.text

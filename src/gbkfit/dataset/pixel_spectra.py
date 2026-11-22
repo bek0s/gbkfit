@@ -11,8 +11,9 @@ from gbkfit.config import ConfigProblem, DataFile, check_options
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSF, PSF
 from gbkfit.io import ErrorKind, MaskKind
-from . import _grids
+from . import _grids, _outliers
 from .base import DatasetGrid, NoiseCorrelation, cleaned
+from .deferred import Deferred
 from .data import Data, DataFiles
 
 
@@ -41,7 +42,7 @@ class DatasetPixelSpectra(DatasetGrid):
         The spectral axis (see make_cube_grid): its world
         coordinates, the convention of its velocities, its rest and its
         medium; the data give its size.
-    footprint : ndarray, optional
+    footprint : ndarray or Deferred, optional
         Where the instrument looked, of the shape of the cube or of its
         sky (see DatasetGrid).
     """
@@ -196,7 +197,7 @@ class DatasetPixelSpectra(DatasetGrid):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
             spectral: SpectralAxis | None = None,
-            footprint: np.ndarray | None = None
+            footprint: np.ndarray | Deferred | None = None
     ):
         check_options(DatasetPixelSpectra.__init__, locals())
         super().__init__(
@@ -209,8 +210,9 @@ class DatasetPixelSpectra(DatasetGrid):
         where it masks any of its channels, but for the channels it masks
         in every spectrum (see Dataset.mask_whole_spectra).
         """
-        return self.with_data(dict(
-            spectra=_grids.whole_spectra(self['spectra'])))
+        return self.with_values(
+            lambda key, item: _grids.whole_spectra(item),
+            _outliers.WHOLE_SPECTRA_MASKED)
 
     def noise_correlation(self, key: str) -> NoiseCorrelation | None:
         """

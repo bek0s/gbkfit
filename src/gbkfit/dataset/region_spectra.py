@@ -217,8 +217,9 @@ class DatasetRegionSpectra(Dataset):
         where it masks any of its channels, but for the channels it masks
         in every region (see Dataset.mask_whole_spectra).
         """
-        return self.with_data(dict(
-            spectra=_grids.whole_spectra(self['spectra'])))
+        return self.with_values(
+            lambda key, item: _grids.whole_spectra(item),
+            _outliers.WHOLE_SPECTRA_MASKED)
 
     def noise_correlation(self, key: str) -> NoiseCorrelation | None:
         """
@@ -242,8 +243,11 @@ class DatasetRegionSpectra(Dataset):
         nnearest, window = _outliers.region_size(
             size, self._regions.nregions(), True)
         nsigma = _outliers.check_nsigma(nsigma)
-        spectra = self['spectra'].data()
-        return self.with_data(dict(spectra=np.where(
-            _outliers.region_outliers(
-                spectra, self._regions.centres(), nnearest, window, nsigma),
-            np.nan, spectra)))
+        regions = self._regions
+        return self.with_values(
+            lambda key, item: np.where(
+                _outliers.region_outliers(
+                    item.data(), regions.centres(), nnearest, window,
+                    nsigma),
+                np.nan, item.data()),
+            _outliers.OUTLIERS_MASKED)

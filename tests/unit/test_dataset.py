@@ -522,7 +522,7 @@ def test_other_data_of_an_observation_must_be_on_its_grid():
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
     with pytest.raises(ValueError, match="the data are on the grid"):
         ObservationPixelBrightness(size=(20, 8)).with_dataset(data)
-    with pytest.raises(ValueError, match="cannot be compared"):
+    with pytest.raises(ValueError, match="data of pixel moments"):
         ObservationPixelBrightness(size=(20, 8), dataset=moments)
     copy = ObservationPixelBrightness(size=(20, 8), rota=30).with_dataset(
         data)

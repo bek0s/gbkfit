@@ -41,9 +41,11 @@ __all__ = [
     'ConfigFile',
     'Description',
     'GalaxyDescription',
+    'ObservationDescription',
     'catalogue',
     'describe',
     'describe_galaxy',
+    'describe_observation',
     'load',
     'read_config',
     'schema',
@@ -444,6 +446,61 @@ def describe_galaxy(
             paths_relative_to(root or os.getcwd()):
         galaxy = gbkfit.model.galaxy_parser.load(dict(config))
     return GalaxyDescription(tuple(problems), galaxy)
+
+
+@dataclasses.dataclass(frozen=True)
+class ObservationDescription:
+    """
+    The configuration of an observation alone, described without devices
+    or galaxies (see describe_observation).
+
+    Attributes
+    ----------
+    problems : tuple of ConfigProblem
+        Its warnings and its unknown names, then its error, if any, each
+        with its path in the configuration of the observation.
+    observation : Observation or None
+        The observation, if it has no error.
+    """
+    problems: tuple[ConfigProblem, ...]
+    observation: 'gbkfit.observation.Observation | None'
+
+
+def describe_observation(
+        config: Mapping[str, Any], root: str | None = None
+) -> ObservationDescription:
+    """
+    Describe the configuration of an observation alone, without devices or
+    galaxies: load it, with its dataset, PSF, LSF and noise given in place,
+    with every rule of the observation and of its data checked (those of
+    what it sees of galaxies are of the setups that have them), and
+    collect its problems, past its unknown names (see collect_problems).
+
+    The data are opened from the headers of their files and small files
+    alone (see Data): their values are not read, but for the maps of the
+    velocities of moments whose spectral axis is not given, which it is
+    made of.
+
+    Parameters
+    ----------
+    config : Mapping
+        The configuration of the observation, of the current format (of a
+        project, see gbkfit.project.resolve: the pieces it names, in
+        place).
+    root : str, optional
+        The directory that its relative paths are relative to; the current
+        directory by default.
+
+    Returns
+    -------
+    ObservationDescription
+        The observation, if it could be loaded, and its problems.
+    """
+    observation = None
+    with strict_mode(False), collect_problems() as problems, \
+            paths_relative_to(root or os.getcwd()):
+        observation = gbkfit.observation.observation_parser.load(dict(config))
+    return ObservationDescription(tuple(problems), observation)
 
 
 def load(
