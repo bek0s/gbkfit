@@ -1691,6 +1691,15 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ov-parts { display: inline-flex; gap: 12px; }
 .ov-part { display: inline-flex; align-items: center; gap: 6px; }
 .ov-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+/* (a link in a row to a block it names: plain, e.g. a dataset; or, of a
+   part an observation shares, a chip after what the part is) */
+.ov-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px; cursor: pointer; }
+.ov-link:hover { text-decoration-color: currentColor; }
+.ov-given { display: inline-flex; align-items: center; gap: 8px; }
+.ov-shared { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px 0 4px; border: 0; border-radius: 4px; background: var(--sel); color: var(--accent-text); font: var(--text-data-small); cursor: pointer; }
+.ov-shared:hover { text-decoration: underline; text-underline-offset: 2px; }
+.ov-shared .icon { width: 12px; height: 12px; }
+.ov-shared[data-missing] { background: none; color: var(--faint); cursor: default; text-decoration: none; }
 .ov-sign { flex: none; display: inline-flex; width: 18px; }
 .ov-sign .problem-sign[data-severity="error"] { color: var(--err); }
 .ov-sign .problem-sign[data-severity="warning"] { color: var(--warn); }
@@ -1707,6 +1716,13 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ui-table-count { color: var(--faint); font: var(--text-data-small); }
 .ui-table-add { padding: 2px 6px; border: 0; border-radius: 4px; background: none; color: var(--accent-text); font: var(--text-label); cursor: pointer; }
 .ui-table-add:hover { background: var(--panel2); }
+/* (the tabs of a table of several kinds of blocks, in place of its title:
+   the same height, their text where a title starts) */
+.ui-table-tabs { display: flex; align-items: baseline; gap: 2px; margin: -2px 0 -2px -9px; }
+.ui-table-tabs button { display: inline-flex; align-items: baseline; gap: 8px; padding: 2px 9px; border: 0; border-radius: 5px; background: none; color: var(--muted); font: var(--text-heading); cursor: pointer; }
+.ui-table-tabs button:hover { background: var(--panel2); color: var(--fg); }
+.ui-table-tabs button[aria-selected="true"] { background: var(--sel); color: var(--accent-text); }
+.ui-table-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ui-sort { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: pointer; }
 .ui-sort:hover, .ui-sort[data-active] { color: var(--fg2); }
 .ui-sort-sign { width: 8px; font-size: 8px; }

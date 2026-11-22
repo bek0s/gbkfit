@@ -41,16 +41,30 @@ export function datasetHasErrors(dataset: Options | undefined): boolean {
   return Object.values(dataset).some((item) => isObject(item) && item.error != null);
 }
 
-// The noise of mock data of an observation in a few words (its options, of
-// the project or in place; undefined: not read yet)
+// The noise of mock data of an observation in a few words, with the name
+// of the noise of the project it is (its options, of the project or in
+// place; undefined: not read yet)
 export function noiseText(noise: unknown, options: Options | undefined, titleOf: (family: string, type: unknown) => string): string {
   if (noise == null) return 'None';
   if (!options) return typeof noise === 'string' ? noise : '…';
+  return `${typeof noise === 'string' ? `${noise}: ` : ''}${noiseOf(options, titleOf)}`;
+}
+
+// A noise of its options in a few words: its kind, its level and how it
+// is correlated (e.g. 'Gaussian 0.01 · as the PSF')
+export function noiseOf(options: Options, titleOf: (family: string, type: unknown) => string): string {
   const kind = titleOf('noise', options.type);
   const level = typeof options.rms === 'number' ? ` ${options.rms}` : options.error != null ? ' of an error map' : '';
   const spatial = options.spatial_correlation;
   const correlated = spatial === 'instrument' ? ' · as the PSF' : spatial != null ? ' · correlated on the sky' : '';
-  return `${typeof noise === 'string' ? `${noise}: ` : ''}${kind}${level}${correlated}`;
+  return `${kind}${level}${correlated}`;
+}
+
+// The two numbers of an option of a pair given as one or two (e.g. the
+// size of an observation: 64 or [64, 48]; 1 for one not given)
+export function pairOf(value: unknown): [number, number] {
+  const [a, b] = Array.isArray(value) ? value : [value, value];
+  return [Number(a) || 1, Number(b ?? a) || 1];
 }
 
 // The kinds of observations (and datasets) whose data have a spectral axis

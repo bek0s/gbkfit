@@ -21,11 +21,9 @@ import { ScreenHead } from '../../shell/ScreenHead';
 import { sectionNamed } from '../../shell/sections';
 import { useStudio } from '../../studio';
 import { useDatasetProblems, useResolved } from './hooks';
-import { draftOfDataset, isReading, KINDS, kindOfType, NO_EDITS, NO_SPECTRAL, presentSlots, slotTitle, type Draft } from './model';
+import { draftOfDataset, isReading, KINDS, kindOfType, NO_DRAFT, presentSlots, slotTitle } from './model';
 
 type ArrayInfo = components['schemas']['ArrayInfo'];
-
-const NOTHING: Draft = { items: {}, spectral: NO_SPECTRAL, edits: NO_EDITS };
 
 // The columns, by the key of the value of a row that sorts by each, and
 // what that value is
@@ -93,7 +91,7 @@ function DatasetRow({
 }) {
   const options = usePiece(joinPath(project, `datasets/${name}.yaml`)).data as Record<string, unknown> | undefined;
   const kind = kindOfType(options?.type);
-  const draft = useMemo(() => (kind && options ? draftOfDataset(kind, options, project) : NOTHING), [kind, options, project]);
+  const draft = useMemo(() => (kind && options ? draftOfDataset(kind, options, project) : NO_DRAFT), [kind, options, project]);
   const resolved = useResolved(kind ?? 'cube', draft);
   // (of a dataset of several maps, the first)
   const [key, item] = Object.entries(draft.items)[0] ?? [];

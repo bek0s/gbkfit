@@ -244,6 +244,9 @@ export interface Draft {
   footprint?: FileArray;
 }
 
+// The draft of no dataset (e.g. of one not read yet): no items
+export const NO_DRAFT: Draft = { items: {}, spectral: NO_SPECTRAL, edits: NO_EDITS };
+
 export function newDraft(kind: Kind): Draft {
   return { items: Object.fromEntries(KINDS[kind].first.map((key) => [key, EMPTY_ITEM])), spectral: NO_SPECTRAL, edits: NO_EDITS };
 }

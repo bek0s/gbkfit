@@ -41,6 +41,7 @@ export const SECTIONS: Section[] = [
       { folder: 'lsfs', title: 'LSFs', kind: 'LSF' },
       { folder: 'noise', title: 'Noise', kind: 'Noise model' },
     ],
+    overview: { title: 'Observations', listsAll: true },
   },
   { key: 'galaxies', title: 'Galaxies', tool: false, groups: [{ folder: 'galaxies', title: 'Galaxies', kind: 'Galaxy' }], overview: { title: 'Galaxies', listsAll: true } },
   { key: 'lenses', title: 'Lenses', tool: false, groups: [{ folder: 'lenses', title: 'Lenses', kind: 'Lens' }], overview: { title: 'Lenses', listsAll: true } },

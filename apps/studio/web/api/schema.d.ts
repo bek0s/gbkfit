@@ -435,6 +435,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/observations/describe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Observation Problems
+         * @description Describe an observation of the options of a piece of a project, as
+         *     the library does from the headers of its data, without reading them:
+         *     its problems, each at the path of its option (see gbkfit's
+         *     describe_observation).
+         */
+        post: operations["observation_problems_api_v1_observations_describe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/observations/parts/describe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Part Problems
+         * @description Describe a part that observations share (a PSF, an LSF or a noise) of
+         *     the options of a piece of a project: its problems, each at the path of
+         *     its option.
+         */
+        post: operations["part_problems_api_v1_observations_parts_describe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/views/lens": {
         parameters: {
             query?: never;
@@ -1716,6 +1761,19 @@ export interface components {
             half?: number | null;
         };
         /**
+         * ObservationRequest
+         * @description An observation to describe: the project of its piece, and its options
+         *     (the pieces it names, of the project; its files relative to it).
+         */
+        ObservationRequest: {
+            /** Project */
+            project: string;
+            /** Observation */
+            observation: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * ObservedArrayInfo
          * @description An array of a galaxy observed: its kind ('model', 'data' or 'error'),
          *     its item (e.g. 'spectra', 'brightness', 'moment1'), the path the views of
@@ -1830,6 +1888,25 @@ export interface components {
                 number,
                 number | null
             ] | null;
+        };
+        /**
+         * PartRequest
+         * @description A part that observations share to describe: the project of its piece,
+         *     its family (a PSF, an LSF or a noise) and its options (its files
+         *     relative to the project).
+         */
+        PartRequest: {
+            /** Project */
+            project: string;
+            /**
+             * Family
+             * @enum {string}
+             */
+            family: "psf" | "lsf" | "noise";
+            /** Part */
+            part: {
+                [key: string]: unknown;
+            };
         };
         /**
          * PieceContent
@@ -2985,6 +3062,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LensInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observation_problems_api_v1_observations_describe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObservationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    part_problems_api_v1_observations_parts_describe_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"][];
                 };
             };
             /** @description Validation Error */

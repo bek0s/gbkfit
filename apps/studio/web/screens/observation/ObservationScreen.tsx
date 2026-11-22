@@ -17,7 +17,7 @@ import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
 import { arraysOf, draftOfDataset, EMPTY_ITEM, KINDS, kindOfType } from '../dataset/model';
 import { useEditedBlock } from '../editing';
-import { ACCURACY_KEYS, checksOf, datasetHasErrors, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, noiseText, objectAt, psfEllipse, skyKeys, textAt } from './model';
+import { ACCURACY_KEYS, checksOf, datasetHasErrors, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, noiseText, objectAt, pairOf, psfEllipse, skyKeys, textAt } from './model';
 import { AccuracyFields, DataFields, InstrumentFields, NoiseFields, OptionFields, RecordsFields, SeesFields } from './Sections';
 import { Checks, NoisePatch, Resolution, Sky, Stages, type SkyData } from './View';
 import { SheetLayout } from '../../components/ui/sheet';
@@ -85,10 +85,7 @@ export function ObservationScreen({ name }: { name: string }) {
 
   return (
     <section className="screen ob-screen">
-      <ScreenHead
-        eyebrow={`Observation${options ? ` · ${title('observation', options.type)}` : ''}`}
-        title={head.title}
-      >
+      <ScreenHead up="observations" tags={options ? [title('observation', options.type)] : []} title={head.title}>
         <NeedsNote needs={needs.map((need) => ({ text: need.text, at: need.section }))} />
         <SaveControls saving={edited} />
         {head.menu}
@@ -163,11 +160,6 @@ export function ObservationScreen({ name }: { name: string }) {
       )}
     </section>
   );
-}
-
-function pairOf(value: unknown): [number, number] {
-  const [a, b] = Array.isArray(value) ? value : [value, value];
-  return [Number(a) || 1, Number(b ?? a) || 1];
 }
 
 function setCount(options: Options, keys: string[]): string | undefined {

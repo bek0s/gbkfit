@@ -19,6 +19,68 @@ export function TableHeading({ title, count, onAdd, addLabel }: { title: string;
   );
 }
 
+// A tab of a table of several kinds of blocks: its key, its title, how
+// many blocks it holds, and what it is on hover (none: its title says it)
+export interface TableTab<K extends string> {
+  key: K;
+  title: string;
+  count: number;
+  tip?: string;
+}
+
+// The heading of a table of several kinds of blocks, in place of its
+// title: a tab for each kind (the one shown, chosen; the arrows go from
+// tab to tab), and the button that adds a block of the kind shown
+export function TableTabs<K extends string>({
+  label,
+  tabs,
+  shown,
+  onShow,
+  onAdd,
+  addLabel,
+}: {
+  label: string;
+  tabs: readonly TableTab<K>[];
+  shown: K;
+  onShow: (key: K) => void;
+  onAdd?: () => void;
+  addLabel: string;
+}) {
+  const moveBy = (event: KeyboardEvent<HTMLButtonElement>, by: number) => {
+    const at = tabs.findIndex((tab) => tab.key === shown);
+    const next = (at + by + tabs.length) % tabs.length;
+    event.preventDefault();
+    onShow(tabs[next].key);
+    (event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus();
+  };
+  return (
+    <div className="ui-table-heading">
+      <div className="ui-table-tabs" role="tablist" aria-label={label}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={tab.key === shown}
+            tabIndex={tab.key === shown ? 0 : -1}
+            title={tab.tip}
+            onClick={() => onShow(tab.key)}
+            onKeyDown={(event) => (event.key === 'ArrowRight' ? moveBy(event, 1) : event.key === 'ArrowLeft' ? moveBy(event, -1) : undefined)}
+          >
+            {tab.title}
+            <span className="ui-table-count">{tab.count}</span>
+          </button>
+        ))}
+      </div>
+      {onAdd && (
+        <button type="button" className="ui-table-add" aria-label={addLabel} title={addLabel} onClick={onAdd}>
+          + Add
+        </button>
+      )}
+    </div>
+  );
+}
+
 // The order of a table: by the values of one column, up (smallest first)
 // or down
 export interface Sort {

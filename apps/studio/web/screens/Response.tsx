@@ -29,7 +29,6 @@ import { Dock, DockSection } from '../components/ui/dock';
 import { useBlockHead } from '../shell/BlockMenu';
 import { UsedBy } from '../shell/UsedBy';
 import { SaveControls, ScreenHead } from '../shell/ScreenHead';
-import { kindOf } from '../shell/sections';
 import { useStudio } from '../studio';
 import { useUnsaved } from './editing';
 import { objectAt, textAt } from './observation/model';
@@ -198,10 +197,7 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
   if (project === null || path === null) return null;
   return (
     <section className="screen response-screen">
-      <ScreenHead
-        eyebrow={`${kindOf(folder)}${options && typeof options.type === 'string' ? ` · ${titleOf(defs, family, options.type)}` : ''}`}
-        title={head.title}
-      >
+      <ScreenHead up="observations" tags={options && typeof options.type === 'string' ? [titleOf(defs, family, options.type)] : []} title={head.title}>
         <SaveControls saving={saving} />
         {head.menu}
       </ScreenHead>

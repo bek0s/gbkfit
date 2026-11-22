@@ -571,6 +571,33 @@ export function useLensDescription(project: string, lens: Record<string, unknown
   });
 }
 
+// The problems of an observation of options of a piece of a project, as
+// the library finds them from the headers of its data, without reading
+// them (see the server's /observations/describe); of the pieces it names
+// too (depends: what they are, read by the caller, which its key takes)
+export function useObservationProblems(project: string, observation: Record<string, unknown> | undefined, depends: unknown = null) {
+  return useQuery({
+    queryKey: keys.view('observation-describe', project, JSON.stringify(observation ?? null), JSON.stringify(depends)),
+    enabled: observation !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: ({ signal }) => data(api.POST('/api/v1/observations/describe', { signal, body: { project, observation: observation ?? {} } })),
+  });
+}
+
+// The problems of a part that observations share (a PSF, an LSF or a
+// noise) of options of a piece of a project (see the server's
+// /observations/parts/describe)
+export function usePartProblems(project: string, family: 'psf' | 'lsf' | 'noise', part: Record<string, unknown> | undefined) {
+  return useQuery({
+    queryKey: keys.view('part-describe', project, family, JSON.stringify(part ?? null)),
+    enabled: part !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: ({ signal }) => data(api.POST('/api/v1/observations/parts/describe', { signal, body: { project, family, part: part ?? {} } })),
+  });
+}
+
 // The problems of how the files of a dataset of options (its files
 // relative to the project) fit together, from their headers alone (e.g.
 // errors of another shape than their data), each at the path of its
