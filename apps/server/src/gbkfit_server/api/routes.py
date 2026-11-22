@@ -32,7 +32,8 @@ from gbkfit_server.services.units import rest_text
 from gbkfit_server.services.views import Cube, Reading
 from .models import (
     ArrayInfo, CatalogueLine, CheckRequest, CheckResult, ComponentPartInfo,
-    ComponentType, CubeRenderInfo, FolderInfo, GalaxyExtraRequest,
+    ComponentType, CubeRenderInfo, DatasetRequest, FolderInfo,
+    GalaxyExtraRequest,
     GalaxyInfo, GalaxyRenderRequest, GalaxyRequest, GalaxyVolumeRequest,
     HeaderInfo, ImportRequest,
     JobInfo, JobRequest, LensInfo, LensRequest, LensViewInfo,
@@ -40,7 +41,7 @@ from .models import (
     ObservedInfo, ObservedRequest, PSFRequest, PSFViewInfo,
     PieceContent, PieceReference, PieceRename, PieceRequest,
     PreferencesInfo,
-    PreparationInfo,
+    PreparationInfo, Problem,
     ProjectInfo, ProjectRename, ProjectRequest, RenderInfo, RunInfo,
     SessionInfo, SessionRequest, SetupInfo, SetupObservedRequest,
     SetupRequest, SpectrumView)
@@ -217,6 +218,20 @@ def describe(
         for array in server.workspace.describe(
             path, reading.velocity, reading.rest, reading.spectral_type,
             reading.spectral_unit, reading.unit, stated or ())]
+
+
+@router.post('/datasets/check')
+def check_dataset(server: ServerDep, request: DatasetRequest) -> list[Problem]:
+    """
+    Check how the files of a dataset of the options of a piece of a
+    project fit together, from their headers alone, without reading their
+    data (e.g. errors of another shape than their data): its problems,
+    each at the path of its option (see gbkfit's check_files).
+    """
+    return [
+        Problem.model_validate(problem)
+        for problem in server.workspace.check_dataset(
+            request.project, request.dataset)]
 
 
 @router.get('/header/{path:path}')

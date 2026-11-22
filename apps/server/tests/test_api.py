@@ -575,6 +575,28 @@ def test_folders_are_listed_and_files_of_data_described(client, root):
     assert [abs(step) for step in array['step']] == pytest.approx([1, 1, 10])
 
 
+def test_the_files_of_a_dataset_are_checked_together(client, root):
+    # (from their headers: errors of another shape than their data, at
+    # the option of their file; files relative to the project)
+    for name, shape in dict(data=(4, 5), error=(5, 6)).items():
+        fits.writeto(
+            pathlib.Path(root, f'study/data/{name}.fits'),
+            np.ones(shape, np.float32))
+    dataset = dict(
+        type='pixel_brightness', data='data/data.fits',
+        error='data/error.fits', error_kind='sigma')
+    response = client.post(
+        '/api/v1/datasets/check', json=dict(project='study', dataset=dataset))
+    assert response.json() == [dict(
+        severity='error', path=['error'],
+        message='errors 6×5 · must match the data, 5×4')]
+    # (none out of the workspace)
+    dataset['error'] = '../../outside.fits'
+    response = client.post(
+        '/api/v1/datasets/check', json=dict(project='study', dataset=dataset))
+    assert response.status_code == 400
+
+
 def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
         client, root):
     header = fits.Header(dict(

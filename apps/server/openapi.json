@@ -629,6 +629,49 @@
         }
       }
     },
+    "/api/v1/datasets/check": {
+      "post": {
+        "summary": "Check Dataset",
+        "description": "Check how the files of a dataset of the options of a piece of a\nproject fit together, from their headers alone, without reading their\ndata (e.g. errors of another shape than their data): its problems,\neach at the path of its option (see gbkfit's check_files).",
+        "operationId": "check_dataset_api_v1_datasets_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Problem"
+                  },
+                  "type": "array",
+                  "title": "Response Check Dataset Api V1 Datasets Check Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/header/{path}": {
       "get": {
         "summary": "Header",
@@ -3279,6 +3322,26 @@
         "title": "CubeRenderInfo",
         "description": "The cube of a galaxy rendered (see Renders.cube): the path the views\nof cubes take it at (its array 0; kept for a while, see Views.put), its\nshape in the order of the model (nx, ny, nchannels), the unit of the\ncoordinates of its channels (km/s), the size of its pixels (arcsec),\nand how the velocities of the galaxy land on its channels (see\nCubeAxis): the convention of their velocities ('optical', 'radio' or\n'relativistic') and the 1 + z of its lines (shift)."
       },
+      "DatasetRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "dataset": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Dataset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "dataset"
+        ],
+        "title": "DatasetRequest",
+        "description": "A dataset to check: the project of its piece, and its options (its\nfiles relative to the project)."
+      },
       "Diagnostic": {
         "properties": {
           "line": {
@@ -4480,6 +4543,44 @@
         ],
         "title": "PreparationInfo",
         "description": "How a file of data was prepared by a job of prep: the task, its\noptions (their files: a path, or {file, hdu}; of moment maps, lists),\nthe files it prepared (by the options of their files, as those of a\njob), with their paths relative to the workspace, and when (ISO 8601,\nUTC)."
+      },
+      "Problem": {
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity"
+          },
+          "path": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "severity",
+          "path",
+          "message"
+        ],
+        "title": "Problem",
+        "description": "A problem of the options of a piece (see gbkfit's ConfigProblem): an\nerror or a warning, the path of the option that fixes it ([] if none)\nand its message."
       },
       "ProjectInfo": {
         "properties": {

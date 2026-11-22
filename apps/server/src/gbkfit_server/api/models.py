@@ -457,7 +457,18 @@ class FolderInfo(BaseModel):
     files: list[FileEntry]
 
 
-class ArrayProblem(BaseModel):
+class Problem(BaseModel):
+    """
+    A problem of the options of a piece (see gbkfit's ConfigProblem): an
+    error or a warning, the path of the option that fixes it ([] if none)
+    and its message.
+    """
+    severity: Literal['error', 'warning']
+    path: list[str | int]
+    message: str
+
+
+class ArrayProblem(Problem):
     """
     A problem of an array of a file (see gbkfit's describe_fits): an error
     (a dataset of it refuses it) or a warning (it is read as FITS says,
@@ -465,9 +476,15 @@ class ArrayProblem(BaseModel):
     (e.g. ['spectral', 'unit']; [] if none) and its message (e.g. "CUNIT3
     'KMS' invalid").
     """
-    severity: Literal['error', 'warning']
-    path: list[str | int]
-    message: str
+
+
+class DatasetRequest(BaseModel):
+    """
+    A dataset to check: the project of its piece, and its options (its
+    files relative to the project).
+    """
+    project: str
+    dataset: dict[str, Any]
 
 
 class ArrayInfo(BaseModel):

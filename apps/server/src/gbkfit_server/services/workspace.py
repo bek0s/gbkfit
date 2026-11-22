@@ -14,7 +14,8 @@ import shutil
 import threading
 import uuid
 import warnings
-from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from collections.abc import (
+    AsyncIterator, Callable, Iterator, Mapping, Sequence)
 from pathlib import Path
 from typing import Any
 
@@ -25,9 +26,11 @@ import numpy as np
 import ruamel.yaml
 from astropy.io import fits
 
+import gbkfit.dataset
 import gbkfit.io
 import gbkfit.outputs
-from gbkfit.config import DataFile, with_files
+from gbkfit.config import (
+    DataFile, config_leaves, paths_relative_to, with_files)
 import gbkfit.project
 import gbkfit.units
 
@@ -560,6 +563,28 @@ class Workspace:
                  rest=None if hdu.coords is None or hdu.coords.rest is None
                  else rest_text(hdu.coords.rest))
             for hdu in hdus]
+
+    def check_dataset(
+            self, project: str, options: Mapping[str, Any]
+    ) -> list[dict[str, Any]]:
+        """
+        Check how the files of a dataset of the options of a piece of a
+        project (its files relative to the project) fit together, from
+        their headers alone (see gbkfit.dataset.check_files): its problems,
+        each at the path of its option.
+
+        Raises
+        ------
+        Invalid
+            If a file is out of the workspace.
+        """
+        folder = self.path(project)
+        for leaf in config_leaves(options, gbkfit.dataset.Dataset):
+            if leaf.kind == 'file':
+                self.path(os.path.join(project, leaf.value))
+        with paths_relative_to(folder):
+            problems = gbkfit.dataset.check_files(options)
+        return [problem._asdict() for problem in problems]
 
     def header(
             self, relative: str, hdu: int | str | None = None
