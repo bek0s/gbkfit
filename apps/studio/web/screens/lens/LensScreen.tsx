@@ -338,8 +338,14 @@ function PiecesBlock({
                 selected={name === ui.selected}
                 onFold={() => onUi((u) => ({ ...u, open: toggled(u.open ?? firstOpen(pieces), name) }))}
                 onSelect={() =>
-                  // (selected, and unfolded; or, if it was, selected no longer)
-                  onUi((u) => (u.selected === name ? { ...u, selected: null } : { ...u, selected: name, open: new Set([...(u.open ?? firstOpen(pieces)), name]) }))
+                  // (selected, and unfolded; or, if it was, folded and
+                  // selected no longer)
+                  onUi((u) => {
+                    const open = u.open ?? firstOpen(pieces);
+                    return u.selected === name
+                      ? { ...u, selected: null, open: new Set([...open].filter((n) => n !== name)) }
+                      : { ...u, selected: name, open: new Set([...open, name]) };
+                  })
                 }
                 onRename={(to) => rename(name, to)}
                 eye={

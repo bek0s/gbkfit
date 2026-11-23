@@ -94,7 +94,8 @@ export function Params({ draft, field, colours, types, defs }: ParamsProps) {
   }
   const groups = [...byKey.values()];
   const order = groups.flatMap((g) => g.params.map((p) => p.name));
-  const current = selected !== null && order.includes(selected) ? selected : (order[0] ?? null);
+  // (none at first, as every selection; the arrows then start at the top)
+  const current = selected !== null && order.includes(selected) ? selected : null;
 
   // (the row selected in sight)
   useEffect(() => {
@@ -130,7 +131,14 @@ export function Params({ draft, field, colours, types, defs }: ParamsProps) {
       if ((event.key === 'Enter' || event.key === 'Escape') && (event.target as HTMLElement).matches('.gp-list input.sh-num')) requestAnimationFrame(() => list.current?.focus());
       return;
     }
-    if (tie || current === null) return;
+    if (tie) return;
+    if (current === null) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSelected(order[0] ?? null);
+      }
+      return;
+    }
     const at = order.indexOf(current);
     const p = param(current);
     const setting = settings.get(current)!;

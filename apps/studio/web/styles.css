@@ -1327,8 +1327,8 @@ button.sh-num:hover, button.sh-num[aria-expanded="true"] { border-color: var(--m
 .sh-opens { cursor: pointer; }
 .sh-opens:hover, .sh-opens[data-open] { background: var(--panel2); }
 .sh-opens[data-open] { padding-bottom: 8px; }
-/* (the row the keys act on, in a list) */
-.sh-row[data-current] { box-shadow: inset 2px 0 0 var(--accent); }
+/* (the row the keys act on, in a list: selected, as every selection) */
+.sh-row[data-current] { background: var(--sel); }
 .sh-title { display: grid; min-width: 0; }
 .sh-title b { font: var(--text-label); font-weight: 400; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sh-title small { font: var(--text-data-small); font-size: 10px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

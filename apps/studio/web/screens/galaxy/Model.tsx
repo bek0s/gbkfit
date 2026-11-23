@@ -171,14 +171,19 @@ export function Model({ draft, project, galaxy, field, colours, massColours, ope
   }, [selected, onSelect]);
 
   // (a piece folded or unfolded by its chevron; selected by its line, and
-  // unfolded, or, if it was, selected no longer; kept where it is)
+  // unfolded, or, if it was, folded and selected no longer; kept where it
+  // is)
   const fold = (key: string, line: HTMLElement) => {
     keep(line);
     onOpen((o) => (o.includes(key) ? o.filter((k) => k !== key) : [...o, key]));
   };
   const select = (key: string, line: HTMLElement) => {
     keep(line);
-    if (selected === key) return onSelect(null);
+    if (selected === key) {
+      onSelect(null);
+      onOpen((o) => o.filter((k) => k !== key));
+      return;
+    }
     onSelect(key);
     onOpen((o) => (o.includes(key) ? o : [...o, key]));
   };
