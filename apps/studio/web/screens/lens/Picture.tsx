@@ -6,13 +6,13 @@
 // critical curves and the handles of the piece selected (dragged, they set
 // its parameters); and the source plane, with its caustics and the source,
 // which a drag moves (not saved). Each plane has a scale bar and the
-// compass of the sky (north up, east left; +x is west).
+// compass of the sky (north up, east left; +x is west). The field is that
+// of the view (see LensFrame), which its bar zooms by round steps or fits
+// to the lens again.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { components } from '../../api/schema';
+import type { LensFrame, LensView } from '../../api/queries';
 import type { Dots, Handles } from './LensScreen';
-import { fmt, Track } from './SliderRow';
-
-type LensView = components['schemas']['LensViewInfo'];
+import { fmt, snap, Track } from './SliderRow';
 
 // A round test source: its centre and its dispersion (arcsec)
 export interface Source {
@@ -32,13 +32,35 @@ const MODES: [Mode, string][] = [
 // The pixels across a picture
 const PIXELS = 300;
 
-// The largest test source (arcsec)
-const LARGEST_SOURCE = 0.4;
+// The largest test source, in half-widths of the field
+const LARGEST_SOURCE = 0.13;
+
+// The round fields (their width, arcsec, times a power of ten) a zoom
+// steps through: those the server fits the field to (see its lenses)
+const ROUND_FIELDS = [1, 1.5, 2, 3, 4, 6, 8];
+
+// The round field next to a field, wider or narrower
+export function zoomed(field: number, wider: boolean): number {
+  const power = 10 ** Math.floor(Math.log10(field));
+  const rounds = [power / 10, power, power * 10].flatMap((p) => ROUND_FIELDS.map((r) => Number((r * p).toPrecision(2))));
+  const near = field * 1e-9;
+  return wider ? rounds.find((r) => r > field + near)! : [...rounds].reverse().find((r) => r < field - near)!;
+}
+
+// A view of no lens (every piece hidden): the source as it is, over a
+// field (by default, 4 arcsec about the origin)
+export function bareView(frame: LensFrame | null): LensView {
+  const { half, centre } = frame ?? { half: 2, centre: [0, 0] as [number, number] };
+  return { half, centre, size: 2, alpha_x: [0, 0, 0, 0], alpha_y: [0, 0, 0, 0], critical: [], caustics: [], left_out: [] };
+}
 
 export function LensPicture({
   view,
+  bare,
   error,
   empty,
+  onZoom,
+  onFit,
   source,
   onSource,
   handles,
@@ -48,9 +70,15 @@ export function LensPicture({
   onHandle,
 }: {
   view: LensView | undefined;
+  // Whether every piece is hidden (the view is bare: see bareView)
+  bare: boolean;
   error: string | null;
   // Why there is nothing to draw, if so
   empty: string | null;
+  // What the zoom does (null: nothing, of no field yet) and what fits the
+  // field to the lens again
+  onZoom: ((wider: boolean) => void) | null;
+  onFit: () => void;
   source: Source;
   onSource: (source: Source) => void;
   handles: Handles;
@@ -72,58 +100,83 @@ export function LensPicture({
   if (empty) return <div className="ob-view"><p className="ob-empty">{empty}</p></div>;
   if (error) return <div className="ob-view"><p className="ob-empty">{error.replace(/^[A-Za-z]+Error: /, '')}</p></div>;
   if (!view) return <div className="ob-view"><div className="gx-map-wait" /></div>;
+  const largest = LARGEST_SOURCE * view.half;
   return (
     <div className="ob-view lp-view">
       <div className="lp-tools">
-        <span className="lp-seg" role="tablist" aria-label="What the image plane shows">
+        <span className="lp-grp" role="tablist" aria-label="What the image plane shows">
           {MODES.map(([key, title]) => (
             <button key={key} type="button" role="tab" aria-selected={mode === key} onClick={() => setMode(key)}>
               {title}
             </button>
           ))}
         </span>
-        <label className="lp-check">
-          <input type="checkbox" checked={curves} onChange={(event) => setCurves(event.target.checked)} />
-          curves
-        </label>
-        <label className="lp-check">
-          <input type="checkbox" checked={showHandles} onChange={(event) => setShowHandles(event.target.checked)} />
-          handles
-        </label>
-        <span className="lp-tools-end">field {fmt(2 * view.half)}″</span>
+        <span className="lp-grp">
+          <button type="button" aria-pressed={curves} title="The critical curves and the caustics" onClick={() => setCurves(!curves)}>
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path className="lp-ic-critical" d="M2 11c2-6 10-6 12 0" />
+              <path className="lp-ic-caustic" d="M5 13c1.5-2 4.5-2 6 0" />
+            </svg>
+            Curves
+          </button>
+          <button type="button" aria-pressed={showHandles} title="The handles of the selected piece" onClick={() => setShowHandles(!showHandles)}>
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="5.5" />
+              <circle className="lp-ic-fill" cx="8" cy="8" r="1.4" />
+              <circle className="lp-ic-fill" cx="13.5" cy="8" r="1.4" />
+            </svg>
+            Handles
+          </button>
+        </span>
+        <span className="lp-field">
+          Field
+          <span className="lp-grp">
+            <button type="button" className="lp-grp-icon" title="Zoom out" aria-label="Zoom out" disabled={!onZoom} onClick={() => onZoom?.(true)}>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8h8" /></svg>
+            </button>
+            <span className="lp-grp-val">{roundText(2 * view.half)}″</span>
+            <button type="button" className="lp-grp-icon" title="Zoom in" aria-label="Zoom in" disabled={!onZoom} onClick={() => onZoom?.(false)}>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8h8M8 4v8" /></svg>
+            </button>
+            <button type="button" className="lp-grp-icon" title="Fit the field to the lens" aria-label="Fit the field to the lens" onClick={onFit}>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" /></svg>
+            </button>
+          </span>
+        </span>
       </div>
       <div className="lp-planes">
         <figure className="lp-plane-box lp-image-box">
           <figcaption>
             Image plane
-            <span className="lp-key" data-off={!curves || undefined}><i className="lp-key-critical" /> critical curves</span>
+            {bare ? (
+              <span className="lp-key">Every piece hidden: the source as it is</span>
+            ) : (
+              <span className="lp-key" data-off={!curves || undefined}><i className="lp-key-critical" /> critical curves</span>
+            )}
           </figcaption>
           <ImagePlane view={view} source={source} mode={mode} curves={curves} handles={showHandles ? handles : null} dots={showHandles ? dots : []} onPick={onPick} onHandle={onHandle} />
         </figure>
         <figure className="lp-plane-box lp-source-box">
           <figcaption>
             Source plane
-            <span className="lp-key" data-off={!curves || undefined}><i className="lp-key-caustic" /> caustics</span>
+            <span className="lp-key" data-off={!curves || bare || undefined}><i className="lp-key-caustic" /> caustics</span>
           </figcaption>
           <SourcePlane view={view} source={source} curves={curves} onSource={onSource} />
-          <div className="lp-test">
-            <span>Test source</span>
-            <span className="lp-test-xy">
-              x {fmt(source.x)}″ · y {fmt(source.y)}″
-            </span>
-            <span>Size σ</span>
-            <span className="lp-test-size">
-              <Track at={source.size / LARGEST_SOURCE} onAt={(t) => onSource({ ...source, size: Math.max(0.02, t * LARGEST_SOURCE) })} />
-              <span>{fmt(source.size)}″</span>
-            </span>
-            <span />
-            <span className="lp-note">Drag it in its plane: only for the picture, not saved.</span>
+          <div className="lp-src">
+            <span>Test source σ</span>
+            <Track at={Math.min(1, source.size / largest)} onAt={(t) => onSource({ ...source, size: Math.max(largest / 50, snap(t * largest, [0, largest])) })} />
+            <span className="lp-src-v">{fmt(source.size)}″</span>
           </div>
         </figure>
       </div>
       {view.left_out.length > 0 && <p className="lp-note">Not drawn: {view.left_out.join(', ')} (the mass of a galaxy, which its setups lay out).</p>}
     </div>
   );
+}
+
+// A round length (e.g. of a field), as few digits as it has
+function roundText(length: number): string {
+  return String(Number(length.toPrecision(3)));
 }
 
 // The fields of the deflection on its grid, for the maps of the lens: its
@@ -181,13 +234,14 @@ function ImagePlane({
     if (!context) return;
     const n = view.size;
     const h = view.half;
+    const [cx, cy] = view.centre;
     const image = context.createImageData(PIXELS, PIXELS);
     for (let j = 0; j < PIXELS; j++) {
       for (let i = 0; i < PIXELS; i++) {
-        const x = -h + ((i + 0.5) / PIXELS) * 2 * h;
-        const y = h - ((j + 0.5) / PIXELS) * 2 * h;
-        const gx = ((x + h) / (2 * h)) * (n - 1);
-        const gy = ((y + h) / (2 * h)) * (n - 1);
+        const x = cx - h + ((i + 0.5) / PIXELS) * 2 * h;
+        const y = cy + h - ((j + 0.5) / PIXELS) * 2 * h;
+        const gx = ((x - cx + h) / (2 * h)) * (n - 1);
+        const gy = ((y - cy + h) / (2 * h)) * (n - 1);
         let rgb: [number, number, number];
         if (mode === 'images') {
           const ax = bilinear(view.alpha_x, n, gx, gy);
@@ -208,9 +262,10 @@ function ImagePlane({
     context.putImageData(image, 0, 0);
   }, [view, source, mode, fields]);
   const h = view.half;
+  const [cx, cy] = view.centre;
   const world = (event: React.PointerEvent<Element>, box: DOMRect): [number, number] => [
-    -h + ((event.clientX - box.left) / box.width) * 2 * h,
-    h - ((event.clientY - box.top) / box.height) * 2 * h,
+    cx - h + ((event.clientX - box.left) / box.width) * 2 * h,
+    cy + h - ((event.clientY - box.top) / box.height) * 2 * h,
   ];
   return (
     <div
@@ -219,9 +274,8 @@ function ImagePlane({
       onPointerLeave={() => setPointer(null)}
     >
       <canvas ref={canvas} width={PIXELS} height={PIXELS} aria-label="What the lens makes of the source" />
-      <svg className="lp-overlay" viewBox={`${-h} ${-h} ${2 * h} ${2 * h}`} preserveAspectRatio="none">
+      <svg className="lp-overlay" viewBox={`${cx - h} ${-cy - h} ${2 * h} ${2 * h}`} preserveAspectRatio="none">
         {curves && view.critical.map((line, k) => <polyline key={k} className="lp-critical" points={points(line)} />)}
-        <ScaleBar half={h} />
         {dots.map((dot) => (
           <circle key={dot.piece} className="lp-h-pick" cx={dot.x} cy={-dot.y} r={h * 0.018} style={{ fill: dot.colour }} onClick={() => onPick(dot.piece)}>
             <title>Select the piece</title>
@@ -229,6 +283,7 @@ function ImagePlane({
         ))}
         {handles && <HandleShapes handles={handles} half={h} onHandle={onHandle} world={world} />}
       </svg>
+      <ScaleBar half={h} />
       <Compass />
       {pointer && (
         <span className="lp-readout">
@@ -322,27 +377,30 @@ function HandleShapes({ handles, half, onHandle, world }: { handles: NonNullable
 function SourcePlane({ view, source, curves, onSource }: { view: LensView; source: Source; curves: boolean; onSource: (source: Source) => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const half = view.half / 2;
+  const [cx, cy] = view.centre;
   useEffect(() => {
     const context = canvas.current?.getContext('2d');
     if (!context) return;
     const image = context.createImageData(PIXELS, PIXELS);
     for (let j = 0; j < PIXELS; j++) {
       for (let i = 0; i < PIXELS; i++) {
-        const x = -half + ((i + 0.5) / PIXELS) * 2 * half;
-        const y = half - ((j + 0.5) / PIXELS) * 2 * half;
+        const x = cx - half + ((i + 0.5) / PIXELS) * 2 * half;
+        const y = cy + half - ((j + 0.5) / PIXELS) * 2 * half;
         const light = Math.exp(-((x - source.x) ** 2 + (y - source.y) ** 2) / (2 * source.size ** 2));
         image.data.set([255 * Math.min(1, light * 1.1), 200 * light, 90 * light, 255], (j * PIXELS + i) * 4);
       }
     }
     context.putImageData(image, 0, 0);
-  }, [source, half]);
+  }, [source, half, cx, cy]);
   const move = (event: React.PointerEvent<HTMLElement>) => {
     const box = event.currentTarget.getBoundingClientRect();
-    onSource({ ...source, x: Number((-half + ((event.clientX - box.left) / box.width) * 2 * half).toFixed(3)), y: Number((half - ((event.clientY - box.top) / box.height) * 2 * half).toFixed(3)) });
+    const span: [number, number] = [0, 2 * half];
+    onSource({ ...source, x: snap(cx - half + ((event.clientX - box.left) / box.width) * 2 * half, span), y: snap(cy + half - ((event.clientY - box.top) / box.height) * 2 * half, span) });
   };
   return (
     <div
       className="lp-plane lp-drag"
+      title="Drag to move the test source (only for the picture, not saved)"
       onPointerDown={(event) => {
         event.preventDefault();
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -351,27 +409,30 @@ function SourcePlane({ view, source, curves, onSource }: { view: LensView; sourc
       onPointerMove={(event) => event.buttons & 1 && move(event)}
     >
       <canvas ref={canvas} width={PIXELS} height={PIXELS} aria-label="The source" />
-      <svg className="lp-overlay" viewBox={`${-half} ${-half} ${2 * half} ${2 * half}`} preserveAspectRatio="none">
+      <svg className="lp-overlay" viewBox={`${cx - half} ${-cy - half} ${2 * half} ${2 * half}`} preserveAspectRatio="none">
         {curves && view.caustics.map((line, k) => <polyline key={k} className="lp-caustic" points={points(line)} />)}
-        <ScaleBar half={half} />
         <circle className="lp-h-knob" cx={source.x} cy={-source.y} r={half * 0.03} />
       </svg>
+      <ScaleBar half={half} />
       <Compass />
+      <span className="lp-readout lp-readout-corner">
+        x {fmt(source.x)}″ · y {fmt(source.y)}″
+      </span>
     </div>
   );
 }
 
-// A bar of 1 arcsec, in the lower left of a plane of a half-width
+// A bar of a round length (1, 2 or 5 times a power of ten, arcsec), at
+// most a fifth of a plane of a half-width, in its lower left (its label
+// of the same size in every plane)
 function ScaleBar({ half }: { half: number }) {
-  const x = -half * 0.9;
-  const y = half * 0.88;
+  const most = (2 * half) / 5;
+  const power = 10 ** Math.floor(Math.log10(most));
+  const length = [5, 2, 1].map((r) => r * power).find((r) => r <= most * (1 + 1e-9))!;
   return (
-    <g>
-      <line className="lp-scale" x1={x} y1={y} x2={x + 1} y2={y} />
-      <text className="lp-h-label" style={{ fontSize: half * 0.04, strokeWidth: half * 0.008 }} x={x} y={y - half * 0.04}>
-        1″
-      </text>
-    </g>
+    <span className="lp-scale" style={{ width: `${(length / (2 * half)) * 100}%` }}>
+      {roundText(length)}″
+    </span>
   );
 }
 

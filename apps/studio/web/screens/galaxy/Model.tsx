@@ -1828,7 +1828,7 @@ function MoreButton({ on, count = 0, onClick }: { on: boolean; count?: number; o
 }
 
 // A name, as typed: set as it is entered or left (Escape: as it was)
-function NameText({ value, onCommit, required, onCancel, autoFocus }: { value: string; onCommit: (name: string) => void; required: boolean; onCancel?: () => void; autoFocus?: boolean }) {
+export function NameText({ value, onCommit, required, onCancel, autoFocus }: { value: string; onCommit: (name: string) => void; required: boolean; onCancel?: () => void; autoFocus?: boolean }) {
   const [text, setText] = useState<string | null>(null);
   const commit = () => {
     const name = (text ?? value).trim();

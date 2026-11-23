@@ -4087,6 +4087,20 @@
             "type": "number",
             "title": "Half"
           },
+          "centre": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Centre"
+          },
           "size": {
             "type": "integer",
             "title": "Size"
@@ -4142,6 +4156,7 @@
         "type": "object",
         "required": [
           "half",
+          "centre",
           "size",
           "alpha_x",
           "alpha_y",
@@ -4150,7 +4165,7 @@
           "left_out"
         ],
         "title": "LensViewInfo",
-        "description": "What a lens makes of a source behind it (see Lenses.view and LensView):\nthe half-width of the field (arcsec), the points across it, the\ndeflection at each (arcsec, row-major, y up), the critical curves and\nthe caustics (lists of [x, y]), and the pieces left out of it."
+        "description": "What a lens makes of a source behind it (see Lenses.view and LensView):\nthe half-width and the centre of the field (arcsec), the points\nacross it, the deflection at each (arcsec, row-major, y up), the\ncritical curves and the caustics (lists of [x, y]), and the pieces left\nout of it."
       },
       "LensViewRequest": {
         "properties": {
@@ -4186,6 +4201,27 @@
               }
             ],
             "title": "Half"
+          },
+          "centre": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Centre"
           }
         },
         "type": "object",
@@ -4195,7 +4231,7 @@
           "properties"
         ],
         "title": "LensViewRequest",
-        "description": "A lens to view (see Lenses.view): as LensRequest, with the properties\nof its parameters (by the names of the lens), the number of points\nacross the field, and its half-width (arcsec; by default, of its\nEinstein radii)."
+        "description": "A lens to view (see Lenses.view): as LensRequest, with the properties\nof its parameters (by the names of the lens), the number of points\nacross the field, its half-width and its centre (x and y; arcsec; by\ndefault, fitted to the lens)."
       },
       "ObservationRequest": {
         "properties": {

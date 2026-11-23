@@ -612,18 +612,34 @@ export function useDatasetCheck(project: string, dataset: Record<string, unknown
   });
 }
 
+// The field of a view of a lens: its half-width and its centre (x, y;
+// arcsec)
+export type LensFrame = { half: number; centre: [number, number] };
+
 // What a lens makes of a source behind it, at the properties of its
-// parameters: its deflection over a field, its critical curves and its
-// caustics (see the server's LensViewInfo)
-export function useLensView(project: string, lens: Record<string, unknown> | undefined, properties: Record<string, unknown>, size = 96) {
+// parameters: its deflection over a field (null: one the server fits to
+// the lens), its critical curves and its caustics (see the server's
+// LensViewInfo)
+export function useLensView(project: string, lens: Record<string, unknown> | undefined, properties: Record<string, unknown>, frame: LensFrame | null, size = 96) {
+  const client = useQueryClient();
+  const key = (of: LensFrame | null) => keys.view('lens', project, JSON.stringify(lens ?? null), JSON.stringify(properties), size, JSON.stringify(of));
   return useQuery({
-    queryKey: keys.view('lens', project, JSON.stringify(lens ?? null), JSON.stringify(properties), size),
+    queryKey: key(frame),
     enabled: lens !== undefined,
     placeholderData: keepPreviousData,
     retry: false,
-    queryFn: ({ signal }) => data(api.POST('/api/v1/views/lens', { signal, body: { project, lens: lens ?? {}, properties, size } })),
+    queryFn: async ({ signal }) => {
+      const view = await data(api.POST('/api/v1/views/lens', { signal, body: { project, lens: lens ?? {}, properties, size, half: frame?.half ?? null, centre: frame?.centre ?? null } }));
+      // (a view of a field fitted to the lens is also the view of that
+      // field, which is asked for next)
+      if (frame === null) client.setQueryData(key({ half: view.half, centre: [view.centre[0], view.centre[1]] }), view);
+      return view;
+    },
   });
 }
+
+// A view of a lens (see useLensView)
+export type LensView = NonNullable<ReturnType<typeof useLensView>['data']>;
 
 // How an LSF is drawn (see the server's LSFRequest): on channels of a
 // width (null: of its own scale), of velocities (km/s) at the rest of a

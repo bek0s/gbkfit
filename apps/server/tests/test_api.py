@@ -1558,6 +1558,26 @@ def test_the_parameters_of_a_lens_are_described(client):
     assert 'source_redshift' in info['problems'][0]['message']
 
 
+def test_the_field_of_a_lens_is_fitted_to_it(client):
+    # (about the middle of the centres of its pieces, round; one of no
+    # Einstein radius, of 4 arcsec; a field given is kept)
+    def view(lens, properties, **field):
+        return client.post('/api/v1/views/lens', json=dict(
+            project='study', lens=lens, properties=properties, size=32,
+            **field)).json()
+    moved = view(LENS, LENS_PROPERTIES | dict(sie_xpos=3, sie_ypos=-1))
+    assert (moved['half'], moved['centre']) == (4, [3, -1])
+    wider = view(LENS, LENS_PROPERTIES | dict(sie_theta_e=5))
+    assert wider['half'] == 15
+    sheared = view(
+        LENS | dict(pieces=[dict(type='shear')]),
+        dict(shear_gamma=0.05, shear_posa=0))
+    assert (sheared['half'], sheared['centre']) == (2, [0, 0])
+    assert sheared['critical'] == []
+    given = view(LENS, LENS_PROPERTIES, half=1.5, centre=[0.5, 0])
+    assert (given['half'], given['centre']) == (1.5, [0.5, 0])
+
+
 def test_a_lens_is_drawn_for_one_source(client):
     # (that of the lens, each piece scaled to it from its own: an SIE
     # quoted for a farther source makes a smaller ring for the nearer
@@ -1580,11 +1600,12 @@ def test_a_lens_is_drawn_for_one_source(client):
 def test_a_lens_shows_its_critical_curves_and_caustics(client):
     # (of a singular isothermal sphere: the Einstein ring, of the Einstein
     # radius, whose caustic is a point at its centre; the field of the view
-    # of its Einstein radius)
+    # fitted to it: 2.5 Einstein radii, rounded up to 8 arcsec across)
     view = client.post('/api/v1/views/lens', json=dict(
         project='study', lens=LENS, properties=LENS_PROPERTIES,
         size=96)).json()
-    assert view['half'] == pytest.approx(2.5 * 1.2)
+    assert view['half'] == 4
+    assert view['centre'] == [0, 0]
     assert len(view['alpha_x']) == 96 * 96
     ring = max(view['critical'], key=len)
     radii = [math.hypot(x, y) for x, y in ring]

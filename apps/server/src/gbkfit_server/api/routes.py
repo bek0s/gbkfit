@@ -453,7 +453,7 @@ def view_lens(server: ServerDep, request: LensViewRequest) -> LensViewInfo:
     """
     view = server.lenses.view(
         request.project, request.lens, request.properties, request.size,
-        request.half)
+        request.half, request.centre)
     return LensViewInfo.model_validate(view, from_attributes=True)
 
 

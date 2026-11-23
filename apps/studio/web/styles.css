@@ -1409,8 +1409,10 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .ob-more-body { margin-top: 8px; }
 .ob-schema .schema-row, .ob-nested .schema-row, .ob-more .schema-row { grid-template-columns: 96px minmax(0, 1fr); }
 
+/* (a narrower sheet on narrow screens, on the side the user prefers) */
 @media (max-width: 1280px) {
-  .ob-body { grid-template-columns: minmax(0, 1fr) 360px; }
+  .ob-body[data-side="left"] { grid-template-columns: 360px minmax(0, 1fr); }
+  .ob-body[data-side="right"] { grid-template-columns: minmax(0, 1fr) 360px; }
   .ob-figures { grid-template-columns: minmax(0, 1fr); overflow: auto; }
 }
 .ob-names { width: 100%; height: 28px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 6px; background: var(--field); color: var(--fg); font: var(--text-data); outline: none; }
@@ -1447,7 +1449,10 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-count { font-weight: 400; color: var(--faint); }
 .lp-acts { margin-left: auto; display: flex; gap: 2px; }
 .lp-icon { width: 24px; height: 24px; display: inline-grid; place-items: center; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--muted); cursor: pointer; }
-.lp-icon:hover { background: var(--panel2); color: var(--fg); }
+/* (its hover a tint of the text, to show on any ground: the hover and the
+   selection of the line of a piece too; so while its menu is open) */
+.lp-icon:not(:disabled):hover, .lp-icon[aria-expanded="true"] { background: color-mix(in srgb, var(--fg) 13%, transparent); color: var(--fg); }
+.lp-icon:disabled { color: var(--faint); opacity: .4; cursor: default; }
 .lp-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .lp-add { color: var(--accent-text); }
 .lp-note { margin: 0; color: var(--muted); font: var(--text-caption); }
@@ -1470,7 +1475,7 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-piece + .lp-piece { border-top: 1px solid var(--line); }
 /* (the chevron, the dot and the buttons on the line of the name, whether
    the summary is under it or not: they stay put as it folds) */
-.lp-piece-head { display: grid; grid-template-columns: 12px 10px minmax(0, 1fr) auto auto auto; align-items: start; gap: 8px; margin: 2px 0; padding: 6px 2px; border-radius: 6px; cursor: pointer; outline: none; }
+.lp-piece-head { display: grid; grid-template-columns: 12px 10px minmax(0, 1fr) auto auto auto; align-items: start; gap: 8px; margin: 2px 0; padding: 6px 6px 6px 2px; border-radius: 6px; cursor: pointer; outline: none; }
 .lp-piece-head:hover { background: var(--panel2); }
 .lp-piece-head:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
 .lp-piece[data-selected] > .lp-piece-head { background: var(--sel); }
@@ -1482,15 +1487,14 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-piece-text { display: grid; gap: 2px; min-width: 0; }
 .lp-piece-name { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .lp-piece-name b { font: var(--text-body); font-weight: 600; color: var(--fg); }
-.lp-piece-name span { font: var(--text-label); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-piece-type { font: var(--text-label); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lp-sum { font: var(--text-data-small); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lp-sum em { font-style: normal; color: var(--accent-text); }
 .lp-badge { padding-top: 4px; font: var(--text-data-small); color: var(--faint); }
 .lp-piece-head .lp-icon { margin-top: -2px; }
-.lp-remove { opacity: 0; }
-.lp-piece-head:hover .lp-remove, .lp-remove:focus-visible { opacity: 1; }
+.lp-piece-name .gm-name { width: 140px; height: 22px; }
 .lp-piece-body { margin: 0 0 10px 6px; padding-left: 10px; border-left: 2px solid var(--piece); display: grid; gap: 2px; }
-.lp-row, .lp-option { display: grid; grid-template-columns: minmax(0, 1fr) 88px 14px 56px; align-items: center; column-gap: 8px; row-gap: 2px; padding: 6px 2px 6px 4px; border-radius: 6px; }
+.lp-row, .lp-option { display: grid; grid-template-columns: minmax(0, 1fr) 88px 14px 56px; align-items: center; column-gap: 8px; row-gap: 2px; padding: 6px 6px 6px 4px; border-radius: 6px; }
 .lp-row { cursor: pointer; }
 .lp-row:hover, .lp-row[data-open] { background: var(--panel2); }
 .lp-row[data-open] { padding-bottom: 8px; }
@@ -1514,13 +1518,28 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-slide[data-free] .lp-fill { background: var(--accent); }
 .lp-knob { position: absolute; top: 3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--fg); box-shadow: 0 0 0 3px var(--panel); }
 .lp-view { display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 0; overflow: hidden; }
-.lp-tools { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line); color: var(--muted); font: var(--text-label); }
-.lp-seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 6px; overflow: hidden; }
-.lp-seg button { padding: 4px 10px; border: 0; background: none; color: var(--muted); font: var(--text-label); cursor: pointer; }
-.lp-seg button[aria-selected="true"] { background: var(--sel); color: var(--accent-text); font-weight: 600; }
-.lp-check { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
-.lp-check input { accent-color: var(--accent-fill); margin: 0; }
-.lp-tools-end { margin-left: auto; font: var(--text-data-small); color: var(--faint); }
+/* (the bar of the picture: its controls in groups of one kind, buttons
+   side by side in a box; a toggle that is on is grey, so that only the
+   view chosen is in the accent) */
+.lp-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); color: var(--muted); font: var(--text-label); }
+.lp-grp { display: inline-flex; height: 28px; border: 1px solid var(--line2); border-radius: 6px; overflow: hidden; }
+.lp-grp > * { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; background: none; color: var(--muted); font: var(--text-label); white-space: nowrap; }
+.lp-grp > * + * { border-left: 1px solid var(--line); }
+.lp-grp > button { cursor: pointer; }
+.lp-grp > button:not([aria-selected="true"]):not(:disabled):hover { background: color-mix(in srgb, var(--fg) 5%, transparent); color: var(--fg); }
+.lp-grp > button:disabled { cursor: default; color: var(--faint); }
+.lp-grp > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lp-grp > [aria-selected="true"] { background: var(--sel); color: var(--accent-text); font-weight: 600; }
+.lp-grp > [aria-pressed="true"], .lp-grp > [aria-pressed="true"]:not(:disabled):hover { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
+.lp-grp > [aria-pressed="false"] { color: var(--faint); }
+.lp-grp > [aria-pressed="false"] svg { opacity: .45; }
+.lp-grp svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.lp-grp .lp-ic-critical { stroke: color-mix(in srgb, #7cc8ff 65%, var(--fg)); }
+.lp-grp .lp-ic-caustic { stroke: color-mix(in srgb, #ff8fc8 65%, var(--fg)); }
+.lp-grp .lp-ic-fill { fill: currentColor; stroke: none; }
+.lp-grp > .lp-grp-icon { width: 28px; padding: 0; justify-content: center; }
+.lp-grp > .lp-grp-val { min-width: 34px; padding: 0 6px; justify-content: center; font: var(--text-data); color: var(--fg); }
+.lp-field { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
 /* (the image plane, its caption with it, as large a square as fits the
    height of the place and its width beside the source plane, which is
    next to it) */
@@ -1532,15 +1551,17 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-key { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font: var(--text-caption); color: var(--muted); }
 .lp-key[data-off] { visibility: hidden; }
 .lp-key i { width: 14px; height: 2px; }
-.lp-key-critical { background: #7cc8ff; }
-.lp-key-caustic { background: #ff8fc8; }
+/* (the colours of the curves on the black of the planes, mixed with the
+   text off them, to show in either theme) */
+.lp-key-critical { background: color-mix(in srgb, #7cc8ff 65%, var(--fg)); }
+.lp-key-caustic { background: color-mix(in srgb, #ff8fc8 65%, var(--fg)); }
 .lp-plane { position: relative; width: 100%; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: #000; }
 .lp-plane canvas, .lp-overlay { position: absolute; inset: 0; width: 100%; height: 100%; }
 .lp-overlay { overflow: visible; }
 .lp-drag { cursor: crosshair; touch-action: none; }
 .lp-critical { fill: none; stroke: #7cc8ff; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
 .lp-caustic { fill: none; stroke: #ff8fc8; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
-.lp-scale { stroke: #e9eef3; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.lp-scale { position: absolute; left: 12px; bottom: 10px; padding-bottom: 3px; border-bottom: 2px solid #e9eef3; color: #e9eef3; font: var(--text-data-small); text-shadow: 0 0 3px #000; pointer-events: none; }
 .lp-h-line { fill: none; stroke: #e9eef3; stroke-width: 1.3; opacity: .85; vector-effect: non-scaling-stroke; }
 .lp-h-dash { stroke-dasharray: 4 3; }
 .lp-h-dot { fill: #e9eef3; }
@@ -1552,9 +1573,10 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-compass .lp-compass-tip { fill: #e9eef3; stroke: none; }
 .lp-compass text { font: 600 8px var(--mono); fill: #e9eef3; }
 .lp-readout { position: absolute; left: 8px; top: 8px; padding: 3px 6px; border-radius: 4px; background: rgba(0, 0, 0, .55); color: #cfd6de; font: var(--text-data-small); pointer-events: none; }
-.lp-test { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--muted); font: var(--text-label); }
-.lp-test-xy { font: var(--text-data-small); color: var(--fg2); }
-.lp-test-size { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; font: var(--text-data-small); color: var(--faint); }
+.lp-readout-corner { left: auto; top: auto; right: 8px; bottom: 8px; }
+.lp-src { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; color: var(--fg); font: var(--text-label); }
+.lp-src .lp-knob { box-shadow: 0 0 0 3px var(--bg); }
+.lp-src-v { font: var(--text-data-small); color: var(--fg2); }
 
 /* The compare screen: a grid of cells, a galaxy as an observation sees it
    each, under the heads of the columns and beside those of the rows */

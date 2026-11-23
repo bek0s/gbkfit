@@ -1714,13 +1714,19 @@ export interface components {
         /**
          * LensViewInfo
          * @description What a lens makes of a source behind it (see Lenses.view and LensView):
-         *     the half-width of the field (arcsec), the points across it, the
-         *     deflection at each (arcsec, row-major, y up), the critical curves and
-         *     the caustics (lists of [x, y]), and the pieces left out of it.
+         *     the half-width and the centre of the field (arcsec), the points
+         *     across it, the deflection at each (arcsec, row-major, y up), the
+         *     critical curves and the caustics (lists of [x, y]), and the pieces left
+         *     out of it.
          */
         LensViewInfo: {
             /** Half */
             half: number;
+            /** Centre */
+            centre: [
+                number,
+                number
+            ];
             /** Size */
             size: number;
             /** Alpha X */
@@ -1738,8 +1744,8 @@ export interface components {
          * LensViewRequest
          * @description A lens to view (see Lenses.view): as LensRequest, with the properties
          *     of its parameters (by the names of the lens), the number of points
-         *     across the field, and its half-width (arcsec; by default, of its
-         *     Einstein radii).
+         *     across the field, its half-width and its centre (x and y; arcsec; by
+         *     default, fitted to the lens).
          */
         LensViewRequest: {
             /** Project */
@@ -1759,6 +1765,11 @@ export interface components {
             size: number;
             /** Half */
             half?: number | null;
+            /** Centre */
+            centre?: [
+                number,
+                number
+            ] | null;
         };
         /**
          * ObservationRequest
