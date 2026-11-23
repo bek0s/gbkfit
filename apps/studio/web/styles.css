@@ -1464,9 +1464,10 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-path-source { fill: var(--accent-fill); }
 .lp-path-z { font: var(--text-data-small); fill: var(--fg); }
 .lp-path-label { font: var(--text-caption); fill: var(--muted); }
-.lp-z { display: flex; flex-wrap: wrap; gap: 8px 18px; }
-.lp-z-field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font: var(--text-label); white-space: nowrap; }
-.lp-z .lp-num { width: 72px; }
+/* (the redshifts of the lens: rows on the grid of the rows of the
+   parameters, their fields in the same column) */
+.lp-z { display: grid; }
+.lp-z-row .lp-scrub { justify-self: start; }
 .lp-num { width: 100%; height: 26px; padding: 0 7px; border: 1px solid var(--line2); border-radius: 5px; background: var(--field); color: var(--fg); font: var(--text-data); text-align: right; outline: none; }
 .lp-num:focus { border-color: var(--accent); }
 .lp-scrub { cursor: ew-resize; user-select: none; touch-action: none; }
@@ -1494,7 +1495,7 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-piece-head .lp-icon { margin-top: -2px; }
 .lp-piece-name .gm-name { width: 140px; height: 22px; }
 .lp-piece-body { margin: 0 0 10px 6px; padding-left: 10px; border-left: 2px solid var(--piece); display: grid; gap: 2px; }
-.lp-row, .lp-option { display: grid; grid-template-columns: minmax(0, 1fr) 88px 14px 56px; align-items: center; column-gap: 8px; row-gap: 2px; padding: 6px 6px 6px 4px; border-radius: 6px; }
+.lp-row, .lp-option, .lp-z-row { display: grid; grid-template-columns: minmax(0, 1fr) 88px 14px 56px; align-items: center; column-gap: 8px; row-gap: 2px; padding: 6px 6px 6px 4px; border-radius: 6px; }
 .lp-row { cursor: pointer; }
 .lp-row:hover, .lp-row[data-open] { background: var(--panel2); }
 .lp-row[data-open] { padding-bottom: 8px; }
@@ -1573,19 +1574,21 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-h-pick { stroke: #000; stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: pointer; }
 .lp-h-knob { fill: #e9eef3; stroke: #000; stroke-width: 1.5; vector-effect: non-scaling-stroke; cursor: grab; touch-action: none; }
 .lp-h-label { font-family: var(--mono); fill: #e9eef3; paint-order: stroke; stroke: #000; pointer-events: none; }
-.lp-compass { position: absolute; right: 10px; top: 10px; width: 34px; height: 34px; pointer-events: none; }
-.lp-compass path { stroke: #e9eef3; stroke-width: 1.4; fill: none; }
-.lp-compass .lp-compass-tip { fill: #e9eef3; stroke: none; }
-.lp-compass text { font: 600 8px var(--mono); fill: #e9eef3; }
+/* (as the scale bar: its colour, its line, its font, a shadow to read on
+   any light) */
+.lp-compass { position: absolute; right: 10px; top: 8px; width: 40px; height: 40px; overflow: visible; pointer-events: none; filter: drop-shadow(0 0 2px rgba(0, 0, 0, .9)); }
+.lp-compass path { stroke: #e9eef3; stroke-width: 2; stroke-linecap: round; fill: none; }
+.lp-compass text { font: var(--text-data-small); fill: #e9eef3; }
 .lp-readout { white-space: nowrap; position: absolute; left: 8px; top: 8px; padding: 3px 6px; border-radius: 4px; background: rgba(0, 0, 0, .55); color: #cfd6de; font: var(--text-data-small); pointer-events: none; }
 .lp-readout-corner { left: auto; top: auto; right: 8px; bottom: 8px; }
 .lp-src { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto; align-items: center; gap: 10px; color: var(--fg); font: var(--text-label); }
 .lp-src > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-src .lp-knob { box-shadow: 0 0 0 3px var(--bg); }
 .lp-src-v { font: var(--text-data-small); color: var(--fg2); }
-/* (a plane too small for its key, its readout and the name of its test
-   source, e.g. at a large zoom of the browser, shows them not) */
-@container (max-width: 150px) { .lp-key, .lp-readout, .lp-src-name { display: none; } }
+/* (a plane too small for its key, its readout, its compass and the name
+   of its test source, e.g. at a large zoom of the browser, shows them
+   not) */
+@container (max-width: 150px) { .lp-key, .lp-readout, .lp-src-name, .lp-compass { display: none; } }
 
 /* The compare screen: a grid of cells, a galaxy as an observation sees it
    each, under the heads of the columns and beside those of the rows */

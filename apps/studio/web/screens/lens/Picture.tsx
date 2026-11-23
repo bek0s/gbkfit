@@ -281,7 +281,7 @@ function ImagePlane({
         ))}
         {handles && <HandleShapes handles={handles} half={h} onHandle={onHandle} world={world} />}
       </svg>
-      <ScaleBar half={h} />
+      <ScaleBar length={barLength(view.half)} half={h} />
       <Compass />
       {pointer && (
         <span className="lp-readout">
@@ -412,7 +412,7 @@ function SourcePlane({ view, source, curves, onSource }: { view: LensView; sourc
         {curves && view.caustics.map((line, k) => <polyline key={k} className="lp-caustic" points={points(line)} />)}
         <circle className="lp-h-knob" cx={source.x} cy={-source.y} r={half * 0.03} />
       </svg>
-      <ScaleBar half={half} />
+      <ScaleBar length={barLength(view.half)} half={half} />
       <Compass />
       <span className="lp-readout lp-readout-corner">
         x {fmt(source.x)}″ · y {fmt(source.y)}″
@@ -421,13 +421,18 @@ function SourcePlane({ view, source, curves, onSource }: { view: LensView; sourc
   );
 }
 
-// A bar of a round length (1, 2 or 5 times a power of ten, arcsec), at
-// most a fifth of a plane of a half-width, in its lower left (its label
-// of the same size in every plane)
-function ScaleBar({ half }: { half: number }) {
+// The length of the scale bars (arcsec): a round one (1, 2 or 5 times a
+// power of ten) of at most a fifth of the image plane, of a half-width;
+// the same in the source plane, so that the planes compare
+function barLength(half: number): number {
   const most = (2 * half) / 5;
   const power = 10 ** Math.floor(Math.log10(most));
-  const length = [5, 2, 1].map((r) => r * power).find((r) => r <= most * (1 + 1e-9))!;
+  return [5, 2, 1].map((r) => r * power).find((r) => r <= most * (1 + 1e-9))!;
+}
+
+// A bar of a length, in the lower left of a plane of a half-width (its
+// label of the same size in every plane)
+function ScaleBar({ length, half }: { length: number; half: number }) {
   return (
     <span className="lp-scale" style={{ width: `${(length / (2 * half)) * 100}%` }}>
       {roundText(length)}″
@@ -435,14 +440,13 @@ function ScaleBar({ half }: { half: number }) {
   );
 }
 
-// North up, east left
+// North up, east left: two arms from a corner, as sky charts mark them
 function Compass() {
   return (
-    <svg className="lp-compass" viewBox="-17 -17 34 34" aria-label="North up, east left">
-      <path d="M0 9V-10M9 0H-10" />
-      <path className="lp-compass-tip" d="M0 -12l-2.5 4h5z" />
-      <text x={-3.2} y={-13}>N</text>
-      <text x={-17} y={3}>E</text>
+    <svg className="lp-compass" viewBox="0 0 40 40" aria-label="North up, east left">
+      <path d="M32 32V14M32 32H14" />
+      <text x={32} y={10} textAnchor="middle">N</text>
+      <text x={7} y={32} textAnchor="middle" dominantBaseline="central">E</text>
     </svg>
   );
 }

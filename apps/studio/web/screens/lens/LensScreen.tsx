@@ -203,16 +203,20 @@ function LensBlock({ draft, options, viewSource }: { draft: LensDraft; options: 
       <h3 className="lp-head">Lens</h3>
       <LightPath lens={z} source={zs ?? viewSource ?? undefined} />
       <div className="lp-z">
-        <span className="lp-z-field">
-          <span {...scrubZ}>Redshift</span>
+        <div className="lp-z-row">
+          <span className="lp-title">
+            <b {...scrubZ}>Lens redshift</b>
+          </span>
           <NumberInput value={z} label="The redshift of the lens" placeholder="needed" valid={positive} onChange={setZ} onClear={() => set('redshift', undefined)} />
-        </span>
-        <span className="lp-z-field">
-          <span {...scrubZs} title="The redshift of the source its quoted strengths (e.g. an Einstein radius) are those of, of the pieces without their own (drag sideways to change it)">
-            Source redshift
+        </div>
+        <div className="lp-z-row">
+          <span className="lp-title">
+            <b {...scrubZs} title="The redshift of the source its quoted strengths (e.g. an Einstein radius) are those of, of the pieces without their own (drag sideways to change it)">
+              Source redshift
+            </b>
           </span>
           <NumberInput value={zs} label="The source redshift of the lens" placeholder="none" valid={positive} onChange={setZs} onClear={() => set('source_redshift', undefined)} />
-        </span>
+        </div>
       </div>
     </section>
   );
