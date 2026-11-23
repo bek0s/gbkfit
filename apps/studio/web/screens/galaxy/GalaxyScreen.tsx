@@ -111,7 +111,7 @@ export function GalaxyScreen({ name }: { name: string }) {
       ) : (
         <SheetLayout
           className="gx-body"
-          width={480}
+          width={400}
           sheet={
             <section className="gm-sheet" aria-label="The galaxy">
               <div className="gm-tabs" role="tablist">

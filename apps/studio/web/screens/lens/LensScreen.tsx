@@ -147,7 +147,7 @@ export function LensScreen({ name }: { name: string }) {
       ) : (
         <SheetLayout
           className="ob-body"
-          width={404}
+          width={400}
           sheet={
             <aside className="lp-sheet" aria-label="The lens">
               <LensBlock draft={draft} options={options} viewSource={drawn?.source_redshift ?? null} />
