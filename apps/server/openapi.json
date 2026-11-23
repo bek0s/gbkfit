@@ -4101,6 +4101,17 @@
             "minItems": 2,
             "title": "Centre"
           },
+          "source_redshift": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Redshift"
+          },
           "size": {
             "type": "integer",
             "title": "Size"
@@ -4157,6 +4168,7 @@
         "required": [
           "half",
           "centre",
+          "source_redshift",
           "size",
           "alpha_x",
           "alpha_y",
@@ -4165,7 +4177,7 @@
           "left_out"
         ],
         "title": "LensViewInfo",
-        "description": "What a lens makes of a source behind it (see Lenses.view and LensView):\nthe half-width and the centre of the field (arcsec), the points\nacross it, the deflection at each (arcsec, row-major, y up), the\ncritical curves and the caustics (lists of [x, y]), and the pieces left\nout of it."
+        "description": "What a lens makes of a source behind it (see Lenses.view and LensView):\nthe half-width and the centre of the field (arcsec), the redshift of\nthe source it is of (None: at D_ls / D_s = 1), the points across it,\nthe deflection at each (arcsec, row-major, y up), the critical curves\nand the caustics (lists of [x, y]), and the pieces left out of it."
       },
       "LensViewRequest": {
         "properties": {

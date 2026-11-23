@@ -1554,7 +1554,7 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-plane-box figcaption { display: flex; align-items: center; gap: 10px; height: 20px; min-width: 0; font: var(--text-heading); color: var(--fg); white-space: nowrap; }
 .lp-key { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; font: var(--text-caption); color: var(--muted); }
 .lp-key[data-off] { visibility: hidden; }
-.lp-key[data-bad] { color: var(--warn); }
+.lp-key[data-bad] { color: var(--err); }
 .lp-key i { width: 14px; height: 2px; }
 /* (the colours of the curves on the black of the planes, mixed with the
    text off them, to show in either theme) */

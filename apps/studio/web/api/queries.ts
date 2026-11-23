@@ -561,13 +561,15 @@ export function usePsfView(project: string, options: Record<string, unknown>, st
 // A lens of the options of a piece, as the library describes it: its
 // parameters, by the names of the lens, and its problems (see the
 // server's LensInfo)
+// (with the options it describes, as the description of earlier options
+// stays while that of the next comes)
 export function useLensDescription(project: string, lens: Record<string, unknown> | undefined) {
   return useQuery({
     queryKey: keys.view('lens-describe', project, JSON.stringify(lens ?? null)),
     enabled: lens !== undefined,
     placeholderData: keepPreviousData,
     retry: false,
-    queryFn: ({ signal }) => data(api.POST('/api/v1/lenses/describe', { signal, body: { project, lens: lens ?? {} } })),
+    queryFn: async ({ signal }) => ({ ...(await data(api.POST('/api/v1/lenses/describe', { signal, body: { project, lens: lens ?? {} } }))), of: lens ?? {} }),
   });
 }
 

@@ -1714,10 +1714,10 @@ export interface components {
         /**
          * LensViewInfo
          * @description What a lens makes of a source behind it (see Lenses.view and LensView):
-         *     the half-width and the centre of the field (arcsec), the points
-         *     across it, the deflection at each (arcsec, row-major, y up), the
-         *     critical curves and the caustics (lists of [x, y]), and the pieces left
-         *     out of it.
+         *     the half-width and the centre of the field (arcsec), the redshift of
+         *     the source it is of (None: at D_ls / D_s = 1), the points across it,
+         *     the deflection at each (arcsec, row-major, y up), the critical curves
+         *     and the caustics (lists of [x, y]), and the pieces left out of it.
          */
         LensViewInfo: {
             /** Half */
@@ -1727,6 +1727,8 @@ export interface components {
                 number,
                 number
             ];
+            /** Source Redshift */
+            source_redshift: number | null;
             /** Size */
             size: number;
             /** Alpha X */

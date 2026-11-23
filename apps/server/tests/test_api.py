@@ -1548,9 +1548,9 @@ def test_the_parameters_of_a_lens_are_described(client):
     # piece; a lens with a problem has none)
     info = client.post('/api/v1/lenses/describe', json=dict(
         project='study', lens=LENS)).json()
-    owners = {p['name']: p['owner'] for p in info['parameters']}
-    assert owners['sie_theta_e'] == ['pieces', 0]
-    assert owners['shear_gamma'] == ['pieces', 1]
+    owners = {p['name']: (p['owner'], p['key']) for p in info['parameters']}
+    assert owners['sie_theta_e'] == (['pieces', 0], 'theta_e')
+    assert owners['shear_gamma'] == (['pieces', 1], 'gamma')
     assert info['problems'] == []
     info = client.post('/api/v1/lenses/describe', json=dict(
         project='study', lens=LENS | dict(source_redshift=None))).json()
@@ -1625,6 +1625,7 @@ def test_a_lens_shows_its_critical_curves_and_caustics(client):
         size=96)).json()
     assert view['half'] == 4
     assert view['centre'] == [0, 0]
+    assert view['source_redshift'] == 1.5
     assert len(view['alpha_x']) == 96 * 96
     ring = max(view['critical'], key=len)
     radii = [math.hypot(x, y) for x, y in ring]

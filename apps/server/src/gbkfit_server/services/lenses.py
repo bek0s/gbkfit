@@ -65,10 +65,12 @@ class LensView:
     deflection at each point of the plane (arcsec, row-major, y up), its
     critical curves and its caustics (lists of points), and the pieces left
     out (the masses of galaxies, which their setups lay out); the field is
-    of a half-width and about a centre (x and y, arcsec).
+    of a half-width and about a centre (x and y, arcsec); the redshift of
+    the source the view is of (None: at D_ls / D_s = 1).
     """
     half: float
     centre: tuple[float, float]
+    source_redshift: float | None
     size: int
     alpha_x: list[float]
     alpha_y: list[float]
@@ -98,11 +100,11 @@ class Lenses:
                 message=error_message(e))])
         owners = _owners(made)
         return LensDescription([
-            dict(name=name, title=desc.title(), desc=desc.desc(),
-                 size=desc.size(), default=desc.default(),
+            dict(name=name, key=owners[name][1], title=desc.title(),
+                 desc=desc.desc(), size=desc.size(), default=desc.default(),
                  unit=None if desc.unit() is None else str(desc.unit()),
                  range=str(desc.valid_range()), period=desc.period(),
-                 owner=['pieces', owners[name]])
+                 owner=['pieces', owners[name][0]])
             for name, desc in made.pdescs().items()], [])
 
     def view(
@@ -166,7 +168,11 @@ class Lenses:
         axis_x = np.linspace(centre[0] - half, centre[0] + half, size)
         axis_y = np.linspace(centre[1] - half, centre[1] + half, size)
         x, y = np.meshgrid(axis_x, axis_y)
-        ax, ay = deflection(x.ravel(), y.ravel())
+        try:
+            ax, ay = deflection(x.ravel(), y.ravel())
+        except ModelEvaluationError as e:
+            # (e.g. deflection maps that do not cover the field)
+            raise Invalid(error_message(e)) from None
         ax, ay = ax.reshape(x.shape), ay.reshape(x.shape)
         # (the critical curves: where the determinant of the Jacobian of
         # the lens mapping, beta = theta - alpha, is 0; the caustics, those
@@ -184,7 +190,7 @@ class Lenses:
             critical.append(_points(line[:, 0], line[:, 1]))
             caustics.append(_points(line[:, 0] - bx, line[:, 1] - by))
         return LensView(
-            float(half), (float(centre[0]), float(centre[1])), size,
+            float(half), (float(centre[0]), float(centre[1])), source, size,
             _rounded(ax), _rounded(ay), critical, caustics,
             [piece.name() for piece in shown
              if not isinstance(piece, Deflects)])
@@ -282,12 +288,16 @@ def _made(lens: Mapping[str, Any]) -> Lens:
     return Lens.load(dict(lens))
 
 
-def _owners(lens: Lens) -> dict[str, int]:
-    """Return the piece of each parameter of a lens (its index), by name."""
+def _owners(lens: Lens) -> dict[str, tuple[int, str]]:
+    """
+    Return the piece of each parameter of a lens (its index) and its name
+    in the piece (e.g. theta_e), by its name in the lens (e.g.
+    main_theta_e; see Lens.pdescs).
+    """
     owners = {}
     for i, piece in enumerate(lens.pieces()):
-        for name in piece.pdescs():
-            owners[f'{piece.name()}_{name}'] = i
+        for key in piece.pdescs():
+            owners[f'{piece.name()}_{key}'] = (i, key)
     return owners
 
 

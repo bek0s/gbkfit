@@ -2016,10 +2016,11 @@ function LinesLine({ emission, onChange }: { emission: Options; onChange: (emiss
   );
 }
 
-// A problem as people read it: without the name of the error of Python
-// (e.g. 'ValueError: ')
-function problemText(message: string): string {
-  return message.replace(/^[A-Za-z]+Error: /, '');
+// A problem as people read it: without the place the library prefixes
+// (e.g. '[pieces.0] ') nor the names of the errors of Python (e.g.
+// 'ValueError: ')
+export function problemText(message: string): string {
+  return message.replace(/^\[[^\]]*\] /, '').replace(/\b[A-Za-z]+Error: /g, '');
 }
 
 function omit(options: Options, key: string): Options {

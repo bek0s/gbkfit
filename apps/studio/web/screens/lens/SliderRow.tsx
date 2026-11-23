@@ -8,11 +8,14 @@
 // position angle) wraps. The name and the slider show once the row is
 // opened (a click on it; again, it closes), as the galaxy screen's rows.
 import { useEffect, useRef, useState } from 'react';
+import { unitText } from '../galaxy/ParamField';
 import { isObject } from './draft';
 
-// A parameter as the server describes it (see LensInfo)
+// A parameter as the server describes it (see LensInfo): its name in the
+// lens (e.g. main_theta_e) and in its piece (theta_e), and its piece
 export interface LensParam {
   name: string;
+  key: string;
   title?: string | null;
   unit: string | null;
   default: number | null;
@@ -25,12 +28,6 @@ export interface LensParam {
 // max}; see the params block)
 export type ParamValue = number | { value?: number; min?: number | null; max?: number | null } | undefined;
 
-const UNITS: Record<string, string> = { arcsec: '″', deg: '°' };
-
-export function unitText(unit: string | null): string {
-  return unit ? (UNITS[unit] ?? unit) : '';
-}
-
 // The number of a parameter's value (its default if none)
 export function numberOf(param: LensParam, value: ParamValue): number {
   const v = isObject(value) ? value.value : value;
@@ -38,14 +35,30 @@ export function numberOf(param: LensParam, value: ParamValue): number {
 }
 
 // The span of the slider of a parameter of no fit range (see the module):
-// field: the half-width of the picture (arcsec)
+// its period; its valid range, if bounded; of a position (arcsec, of no
+// bounds), what the picture shows (field: how far it reaches from the
+// origin), and its value; else about its value
 export function naturalSpan(param: LensParam, value: number, field: number): [number, number] {
   if (param.period) return [0, param.period];
   const [lo, hi] = parseRange(param.range);
   if (Number.isFinite(lo) && Number.isFinite(hi)) return [lo, hi];
-  if (param.unit === 'arcsec') return [Number.isFinite(lo) ? lo : -field, field];
+  if (param.unit === 'arcsec' && !Number.isFinite(lo) && !Number.isFinite(hi)) return [Math.min(-field, value), Math.max(field, value)];
   const reach = Math.max(4 * Math.abs(value), 0.1);
   return [Number.isFinite(lo) ? lo : value - reach, Number.isFinite(hi) ? hi : value + reach];
+}
+
+// Whether a value is one a parameter can take (in its valid range)
+export function isValid(param: LensParam, value: number): boolean {
+  const [lo, hi] = parseRange(param.range);
+  return Number.isFinite(value) && value >= lo && value <= hi;
+}
+
+// A value of a parameter as it is set, by its row or by a handle: wrapped
+// into its period, kept in its valid range
+export function settled(param: LensParam, value: number): number {
+  const wrapped = param.period ? ((value % param.period) + param.period) % param.period : value;
+  const [lo, hi] = parseRange(param.range);
+  return Math.min(Math.max(wrapped, lo), hi);
 }
 
 // The ends of a range as the server writes it (e.g. '[0, inf)')
@@ -98,11 +111,8 @@ export function SliderRow({
     if (open && own === null) setOwn(natural);
   }, [open, own, natural]);
   const span: [number, number] = free ? [value.min ?? natural[0], value.max ?? natural[1]] : (own ?? natural);
-  const short = param.name.slice(param.name.indexOf('_') + 1);
   const set = (v: number) => {
-    const wrapped = param.period ? ((v % param.period) + param.period) % param.period : v;
-    const [lo, hi] = parseRange(param.range);
-    const kept = Math.min(Math.max(wrapped, lo), hi);
+    const kept = settled(param, v);
     onChange(free ? { ...value, value: kept } : kept);
   };
   const setEnd = (end: 0 | 1, v: number | undefined) => {
@@ -123,10 +133,10 @@ export function SliderRow({
       }}
     >
       <div className="lp-title">
-        <b>{param.title ?? short}</b>
+        <b>{param.title ?? param.key}</b>
         {open && <small>{param.name}</small>}
       </div>
-      <NumberInput value={number} label={param.title ?? param.name} onChange={set} />
+      <NumberInput value={number} label={param.title ?? param.name} valid={(v) => isValid(param, v)} onChange={set} />
       <span className="lp-unit">{unitText(param.unit)}</span>
       <button type="button" className="lp-state" data-free={free || undefined} title={free ? 'Free in a fit: click to fix it' : 'Fixed: click to free it in a fit'} onClick={toggle}>
         {free ? 'free' : 'fixed'}
@@ -143,22 +153,25 @@ export function SliderRow({
 }
 
 // A number, typed: a click (or Tab) selects it, to type another over it;
-// one typed away is cleared, if it can be (see useScrub for the drag)
-export function NumberInput({ value, label, onChange, onClear, placeholder }: { value: number | undefined; label: string; onChange: (value: number) => void; onClear?: () => void; placeholder?: string }) {
+// set as it is typed once it is a valid one (not before: e.g. not 0 on
+// the way to 0.5), cleared once typed away, if it can be; shown as it is
+// (to 6 digits), not rounded as in a summary (see useScrub for the drag)
+export function NumberInput({ value, label, onChange, onClear, placeholder, valid = Number.isFinite }: { value: number | undefined; label: string; onChange: (value: number) => void; onClear?: () => void; placeholder?: string; valid?: (value: number) => boolean }) {
   const [typing, setTyping] = useState<string | null>(null);
   return (
     <input
       className="lp-num"
       aria-label={label}
       inputMode="decimal"
-      value={typing ?? (value === undefined ? '' : fmt(value))}
+      value={typing ?? (value === undefined ? '' : String(Number(value.toPrecision(6))))}
       placeholder={placeholder}
       onFocus={(event) => event.currentTarget.select()}
       onChange={(event) => {
         setTyping(event.target.value);
-        const parsed = Number(event.target.value);
-        if (event.target.value.trim() === '') onClear?.();
-        else if (Number.isFinite(parsed)) onChange(parsed);
+        const text = event.target.value.trim();
+        const parsed = Number(text);
+        if (text === '') onClear?.();
+        else if (valid(parsed)) onChange(parsed);
       }}
       onBlur={() => setTyping(null)}
       onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}

@@ -267,13 +267,14 @@ class LensViewRequest(BaseModel):
 class LensViewInfo(BaseModel):
     """
     What a lens makes of a source behind it (see Lenses.view and LensView):
-    the half-width and the centre of the field (arcsec), the points
-    across it, the deflection at each (arcsec, row-major, y up), the
-    critical curves and the caustics (lists of [x, y]), and the pieces left
-    out of it.
+    the half-width and the centre of the field (arcsec), the redshift of
+    the source it is of (None: at D_ls / D_s = 1), the points across it,
+    the deflection at each (arcsec, row-major, y up), the critical curves
+    and the caustics (lists of [x, y]), and the pieces left out of it.
     """
     half: float
     centre: tuple[float, float]
+    source_redshift: float | None
     size: int
     alpha_x: list[float]
     alpha_y: list[float]

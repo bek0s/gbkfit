@@ -55,7 +55,7 @@ export type PictureNote = { text: string; bad: boolean };
 // (by default, 4 arcsec about the origin)
 export function bareView(frame: LensFrame | null): LensView {
   const { half, centre } = frame ?? { half: 2, centre: [0, 0] as [number, number] };
-  return { half, centre, size: 2, alpha_x: [0, 0, 0, 0], alpha_y: [0, 0, 0, 0], critical: [], caustics: [], left_out: [] };
+  return { half, centre, source_redshift: null, size: 2, alpha_x: [0, 0, 0, 0], alpha_y: [0, 0, 0, 0], critical: [], caustics: [], left_out: [] };
 }
 
 export function LensPicture({
@@ -83,7 +83,7 @@ export function LensPicture({
   // The centres of the other pieces, and what a click on one does; what
   // Esc does (the piece no longer selected)
   dots: Dots;
-  onPick: (piece: number) => void;
+  onPick: (piece: string) => void;
   onClearPick: () => void;
   onHandle: (name: string, value: number) => void;
 }) {
@@ -96,7 +96,7 @@ export function LensPicture({
   const [curves, setCurves] = useState(true);
   const [showHandles, setShowHandles] = useState(true);
   // (nothing drawn yet: why, or a wait)
-  if (!view) return <div className="ob-view">{note ? <p className="ob-empty">{note.text}</p> : <div className="gx-map-wait" />}</div>;
+  if (!view) return <div className="ob-view lp-view">{note ? <p className="ob-empty">{note.text}</p> : <div className="gx-map-wait" />}</div>;
   const largest = LARGEST_SOURCE * view.half;
   return (
     <div className="ob-view lp-view">
@@ -168,7 +168,6 @@ export function LensPicture({
           </div>
         </figure>
       </div>
-      {view.left_out.length > 0 && <p className="lp-note">Not drawn: {view.left_out.join(', ')} (the mass of a galaxy, which its setups lay out).</p>}
     </div>
   );
 }
@@ -222,7 +221,7 @@ function ImagePlane({
   curves: boolean;
   handles: Handles;
   dots: Dots;
-  onPick: (piece: number) => void;
+  onPick: (piece: string) => void;
   onHandle: (name: string, value: number) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -294,7 +293,8 @@ function ImagePlane({
 }
 
 // The handles of a piece (see handlesOf): a drag of one sets the
-// parameters it shows
+// parameters it shows, to the values under the pointer (which the screen
+// settles and rounds as their rows do)
 function HandleShapes({ handles, half, onHandle, world }: { handles: NonNullable<Handles>; half: number; onHandle: (name: string, value: number) => void; world: (event: React.PointerEvent<Element>, box: DOMRect) => [number, number] }) {
   const { keys, values } = handles;
   const v = (key: keyof typeof keys, fallback = 0) => (keys[key] ? values[keys[key]!] : fallback);
@@ -329,7 +329,7 @@ function HandleShapes({ handles, half, onHandle, world }: { handles: NonNullable
         <circle className="lp-h-dot" cx={0} cy={0} r={r * 0.5} />
         <circle className="lp-h-knob" cx={length * ux} cy={-length * uy} r={r} {...drag((x, y) => {
           onHandle(keys.posa!, angle(x, y));
-          onHandle(keys.gamma!, Number(Math.min(0.5, Math.hypot(x, y) / (half * 8)).toFixed(4)));
+          onHandle(keys.gamma!, Math.hypot(x, y) / (half * 8));
         })} />
         <text className="lp-h-label" style={label} x={length * ux * 1.15} y={-length * uy * 1.15 - half * 0.05} textAnchor="middle">
           γ {fmt(v('gamma'))} · {fmt(posa)}°
@@ -350,13 +350,13 @@ function HandleShapes({ handles, half, onHandle, world }: { handles: NonNullable
           <ellipse className="lp-h-line lp-h-dash" cx={cx} cy={-cy} rx={a} ry={b} transform={`rotate(${-(90 + posa)} ${cx} ${-cy})`} />
           <line className="lp-h-line" x1={cx} y1={-cy} x2={cx + a * ux} y2={-(cy + a * uy)} />
           <circle className="lp-h-knob" cx={cx + a * ux} cy={-(cy + a * uy)} r={r} {...drag((x, y) => {
-            onHandle(keys.posa!, Number(angle(x - cx, y - cy).toFixed(2)));
-            if (keys.theta_e) onHandle(keys.theta_e, Number(Math.max(0.01, Math.hypot(x - cx, y - cy) * Math.sqrt(q)).toFixed(4)));
+            onHandle(keys.posa!, angle(x - cx, y - cy));
+            if (keys.theta_e) onHandle(keys.theta_e, Math.hypot(x - cx, y - cy) * Math.sqrt(q));
           })} />
           {keys.q && (
-            <circle className="lp-h-knob lp-h-small" cx={cx + b * uy} cy={-(cy - b * ux)} r={r * 0.8} {...drag((x, y) => {
+            <circle className="lp-h-knob" cx={cx + b * uy} cy={-(cy - b * ux)} r={r * 0.8} {...drag((x, y) => {
               const along = Math.abs((x - cx) * uy - (y - cy) * ux);
-              onHandle(keys.q!, Number(Math.min(1, Math.max(0.05, (along / size) ** 2)).toFixed(4)));
+              onHandle(keys.q!, (along / size) ** 2);
             })} />
           )}
           <text className="lp-h-label" style={label} x={cx + a * ux * 1.1} y={-(cy + a * uy * 1.1) - half * 0.05} textAnchor="middle">
@@ -366,8 +366,8 @@ function HandleShapes({ handles, half, onHandle, world }: { handles: NonNullable
         </>
       )}
       <circle className="lp-h-knob" cx={cx} cy={-cy} r={r} {...drag((x, y) => {
-        onHandle(keys.xpos!, Number(x.toFixed(3)));
-        onHandle(keys.ypos!, Number(y.toFixed(3)));
+        onHandle(keys.xpos!, x);
+        onHandle(keys.ypos!, y);
       })} />
     </g>
   );
