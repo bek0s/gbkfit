@@ -1,18 +1,18 @@
 // The screen of a lens of the project: a bending of the light of the
 // galaxies behind it, at a redshift, made of pieces (e.g. an SIE and a
-// shear, or the mass of a galaxy). Its sheet sets the lens (its redshift,
-// and that of the source its quoted strengths are of) and its pieces, a
-// box each with its parameters, whose values are those of the params block
-// of the same name (by the names of the lens: e.g. sie_theta_e), saved with
-// it. Its picture shows what it makes of a source behind it: the image
-// plane, with its critical curves and the images of a test source, and
-// the source plane, with its caustics and the source, which can be moved
-// (not saved).
-import { useMemo, useState } from 'react';
+// shear, or the mass of a galaxy). Its sheet shows the path of the light
+// (you, the lens, the source its quoted strengths are of) with both
+// redshifts, and its pieces, a line each that unfolds into its parameters
+// (slider rows, see SliderRow), whose values are those of the params block
+// of the same name (by the names of the lens: e.g. sie_theta_e), saved
+// with it, and its own source redshift, if it has one. A piece's eye hides
+// it in the picture only. Its picture shows what the lens makes of a
+// source behind it (see LensPicture), with handles of the piece selected.
+import { useDebouncedValue } from '@mantine/hooks';
+import { useMemo, useRef, useState } from 'react';
 import { useLensDescription, useLensView } from '../../api/queries';
-import { titleOf, type Options } from '../../components/SchemaForm';
-import { Dock, DockSection } from '../../components/ui/dock';
-import { NumberField } from '../../components/ui/inputs';
+import { membersOf, propertiesOf, titleOf, typeOf, type Defs, type Options } from '../../components/SchemaForm';
+import { NeedsNote } from '../../components/ui/dock';
 import { DropMenu } from '../../components/ui/overlays';
 import { SheetLayout } from '../../components/ui/sheet';
 import { useBlockHead } from '../../shell/BlockMenu';
@@ -20,16 +20,13 @@ import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
 import { typesOf } from '../galaxy/schema';
 import { isObject, useLensDraft, type LensDraft } from './draft';
+import { LightPath } from './LightPath';
 import { LensPicture, type Source } from './Picture';
+import { fmt, NumberInput, numberOf, SliderRow, unitText, useScrub, type LensParam, type ParamValue } from './SliderRow';
 
-// A parameter of the lens, as the server describes it (see LensInfo)
-interface LensParam {
-  name: string;
-  title?: string | null;
-  unit: string | null;
-  default: number | null;
-  owner: [string, number];
-}
+// The colours of the pieces, in order (those of the components of a
+// galaxy)
+export const PIECE_COLOURS = ['cat2', 'cat3', 'cat4', 'cat5', 'cat6', 'cat1'];
 
 export function LensScreen({ name }: { name: string }) {
   const { project } = useStudio();
@@ -39,18 +36,51 @@ export function LensScreen({ name }: { name: string }) {
   const options = draft.state?.options;
   const properties = useMemo(() => draft.state?.properties ?? {}, [draft.state]);
   const description = useLensDescription(root, options).data;
-  const params = (description?.parameters ?? []) as unknown as LensParam[];
-  const problems = (description?.problems ?? []) as { message: string }[];
-  // (the values that the picture takes: of the properties of the
-  // parameters, or their defaults)
-  const shown = useMemo(() => Object.fromEntries(params.flatMap((p) => (properties[p.name] !== undefined ? [[p.name, properties[p.name]]] : p.default !== null ? [[p.name, p.default]] : []))), [params, properties]);
-  const view = useLensView(root, problems.length === 0 && params.length > 0 ? options : undefined, shown);
-  const [source, setSource] = useState<Source>({ x: 0.1, y: 0.05, size: 0.1 });
-  if (project === null) return null;
+  const problems = (description?.problems ?? []) as { message: string; path?: (string | number)[] }[];
   const pieces = asList(options?.pieces);
+  // (its parameters as the library describes them; of a lens with a
+  // problem, which has none, those it had last, of the pieces it still
+  // has, so that its rows stay while it is mended)
+  const described = (description?.parameters ?? []) as unknown as LensParam[];
+  const last = useRef<LensParam[]>([]);
+  if (described.length > 0) last.current = described;
+  const params = described.length > 0 ? described : last.current.filter((p) => p.owner[1] < pieces.length);
+  // (the pieces unfolded, the one selected, whose handles the picture
+  // shows, and those hidden in the picture: none saved)
+  const [open, setOpen] = useState<Set<number>>(() => new Set([0]));
+  const [selected, setSelected] = useState<number | null>(null);
+  // (the parameter whose row shows its slider)
+  const [openRow, setOpenRow] = useState<string | null>(null);
+  const [hidden, setHidden] = useState<Set<number>>(() => new Set());
+  const [source, setSource] = useState<Source>({ x: 0.1, y: 0.05, size: 0.1 });
+  // (what the picture is of: the lens without its hidden pieces, at the
+  // values of the properties of its parameters, or their defaults; asked
+  // for once they stand a moment, not at each step of a drag)
+  const shown = useMemo(() => {
+    if (!options || problems.length > 0 || described.length === 0) return null;
+    const kept = pieces.map((_, i) => i).filter((i) => !hidden.has(i));
+    if (kept.length === 0) return null;
+    const values = Object.fromEntries(
+      params.filter((p) => !hidden.has(p.owner[1])).map((p) => [p.name, properties[p.name] !== undefined ? properties[p.name] : p.default]),
+    );
+    return { lens: { ...options, pieces: kept.map((i) => pieces[i]) }, values };
+  }, [options, problems.length, described.length, params, pieces, hidden, properties]);
+  const [settled] = useDebouncedValue(shown, 80);
+  const view = useLensView(root, settled?.lens, settled?.values ?? {});
+  if (project === null) return null;
+  const field = view.data?.half ?? 3;
+  const setProperty = (key: string, value: unknown) => draft.edit((s) => ({ ...s, properties: withKey(s.properties, key, value) }));
+  // (a value set by a handle: of a free parameter, its value in its range)
+  const setValue = (key: string, value: number) =>
+    draft.edit((s) => {
+      const current = s.properties[key];
+      return { ...s, properties: withKey(s.properties, key, isObject(current) ? { ...current, value } : value) };
+    });
+  const values = Object.fromEntries(params.map((p) => [p.name, numberOf(p, properties[p.name] as ParamValue)]));
   return (
     <section className="screen ln-screen">
       <ScreenHead up="lenses" title={head.title}>
+        <NeedsNote needs={problems.map((p) => ({ text: p.message.replace(/^\[[^\]]*\] /, '').replace(/^[A-Za-z]+Error: /, ''), at: 'ln-pieces' }))} />
         <SaveControls saving={draft} />
         {head.menu}
       </ScreenHead>
@@ -60,166 +90,349 @@ export function LensScreen({ name }: { name: string }) {
       ) : (
         <SheetLayout
           className="ob-body"
-          width={420}
+          width={404}
           sheet={
-            <Dock label="The lens">
-              <DockSection id="ln-lens" title="Lens">
-                <LensFields draft={draft} options={options} />
-              </DockSection>
-              <DockSection id="ln-pieces" title="Pieces" note={pieces.map((p) => String(p.name ?? p.type)).join(' · ')}>
-                <PiecesFields draft={draft} options={options} params={params} properties={properties} />
-                {problems.map((p, i) => (
-                  <p key={i} className="ln-problem">
-                    {p.message.replace(/^[A-Za-z]+Error: /, '')}
-                  </p>
-                ))}
-              </DockSection>
-              <DockSection id="ln-source" title="Try it" note="not saved">
-                <SourceFields source={source} onChange={setSource} />
-              </DockSection>
-            </Dock>
+            <aside className="lp-sheet" aria-label="The lens">
+              <LensBlock draft={draft} options={options} />
+              <PiecesBlock
+                draft={draft}
+                options={options}
+                pieces={pieces}
+                params={params}
+                properties={properties}
+                problems={problems}
+                field={field}
+                open={open}
+                selected={selected}
+                openRow={openRow}
+                onOpenRow={(name) => setOpenRow(openRow === name ? null : name)}
+                hidden={hidden}
+                onOpen={setOpen}
+                onSelect={setSelected}
+                onHide={setHidden}
+                onProperty={setProperty}
+              />
+            </aside>
           }
-          picture={<LensPicture view={view.data} error={view.error?.message ?? null} source={source} onSource={setSource} />}
+          picture={
+            <LensPicture
+              view={settled ? view.data : undefined}
+              error={view.error?.message ?? null}
+              empty={
+                pieces.length === 0
+                  ? 'Add a piece to see what the lens makes of a source.'
+                  : problems.length > 0
+                    ? 'The lens has a problem (see above): fix it to draw it.'
+                    : shown === null && params.length > 0
+                      ? 'Every piece is hidden.'
+                      : null
+              }
+              source={source}
+              onSource={setSource}
+              handles={selected === null ? null : handlesOf(pieces[selected], params.filter((p) => p.owner[1] === selected), values, hidden.has(selected))}
+              dots={centresOf(pieces, params, values, hidden, selected)}
+              onPick={(i) => {
+                setSelected(i);
+                setOpen(new Set([...open, i]));
+              }}
+              onClearPick={() => setSelected(null)}
+              onHandle={setValue}
+            />
+          }
         />
       )}
     </section>
   );
 }
 
-// The lens itself: its redshift, and that of the source its quoted
-// strengths are of (e.g. the Einstein radius of an SIE, as lens models
-// quote it)
-function LensFields({ draft, options }: { draft: LensDraft; options: Options }) {
+// The lens itself: the path of the light, and its redshift and that of the
+// source its quoted strengths are of (e.g. the Einstein radius of an SIE,
+// as lens models quote it), of the pieces without one of their own
+function LensBlock({ draft, options }: { draft: LensDraft; options: Options }) {
   const set = (key: string, value: number | undefined) => draft.edit((s) => ({ ...s, options: withKey(s.options, key, value) }));
+  const z = typeof options.redshift === 'number' ? options.redshift : undefined;
+  const zs = typeof options.source_redshift === 'number' ? options.source_redshift : undefined;
+  const setZ = (v: number) => set('redshift', Math.max(0.001, v));
+  const setZs = (v: number) => set('source_redshift', Math.max(0.001, v));
+  const scrubZ = useScrub(z, [0, 2], setZ);
+  const scrubZs = useScrub(zs, [0, 4], setZs);
   return (
-    <div className="ob-form">
-      <Row label="Redshift">
-        <Number value={options.redshift} placeholder="needed" label="The redshift of the lens" onChange={(v) => set('redshift', v)} />
-      </Row>
-      <Row label="Source redshift">
-        <Number value={options.source_redshift} placeholder="none" label="The redshift of the source of its quoted strengths" onChange={(v) => set('source_redshift', v)} />
-      </Row>
-      <p className="ob-text">Its quoted strengths (e.g. an Einstein radius) are those of a source at its source redshift; the light of galaxies at other redshifts is bent in proportion.</p>
-    </div>
+    <section className="lp-block">
+      <h3 className="lp-head">Lens</h3>
+      <LightPath lens={z} source={zs} />
+      <div className="lp-z">
+        <span className="lp-z-field">
+          <span {...scrubZ}>Redshift</span>
+          <NumberInput value={z} label="The redshift of the lens" placeholder="needed" onChange={setZ} onClear={() => set('redshift', undefined)} />
+        </span>
+        <span className="lp-z-field">
+          <span {...scrubZs} title="The redshift of the source its quoted strengths (e.g. an Einstein radius) are those of, of the pieces without their own (drag sideways to change it)">
+            Source redshift
+          </span>
+          <NumberInput value={zs} label="The source redshift of the lens" placeholder="none" onChange={setZs} onClear={() => set('source_redshift', undefined)} />
+        </span>
+      </div>
+    </section>
   );
 }
 
-// Its pieces, a box each: its name and type, and its parameters, whose
-// values are the properties of the params block of the lens (a number, or
-// free in a range); what adds a piece of a type
-function PiecesFields({ draft, options, params, properties }: { draft: LensDraft; options: Options; params: LensParam[]; properties: Options }) {
+// Its pieces: a line each, which a click selects (its handles in the
+// picture) and unfolds (folds, if selected and open); unfolded, its
+// parameters and its own source redshift; what adds a piece of a type,
+// and unfolds or folds them all
+function PiecesBlock({
+  draft,
+  options,
+  pieces,
+  params,
+  properties,
+  problems,
+  field,
+  open,
+  selected,
+  openRow,
+  onOpenRow,
+  hidden,
+  onOpen,
+  onSelect,
+  onHide,
+  onProperty,
+}: {
+  draft: LensDraft;
+  options: Options;
+  pieces: Options[];
+  params: LensParam[];
+  properties: Options;
+  problems: { path?: (string | number)[] }[];
+  field: number;
+  open: Set<number>;
+  selected: number | null;
+  openRow: string | null;
+  onOpenRow: (name: string) => void;
+  hidden: Set<number>;
+  onOpen: (open: Set<number>) => void;
+  onSelect: (i: number | null) => void;
+  onHide: (hidden: Set<number>) => void;
+  onProperty: (key: string, value: unknown) => void;
+}) {
   const defs = draft.defs;
-  const pieces = asList(options.pieces);
   const types = typesOf(defs, 'lens_piece');
   const setPieces = (next: Options[]) => draft.edit((s) => ({ ...s, options: { ...s.options, pieces: next } }));
-  const setProperty = (key: string, value: unknown) => draft.edit((s) => ({ ...s, properties: withKey(s.properties, key, value) }));
   const add = (type: string) => {
     const names = pieces.map((p) => String(p.name ?? p.type));
     let base = type;
     for (let i = 2; names.includes(base); i++) base = `${type}${i}`;
     setPieces([...pieces, base === type ? { type } : { type, name: base }]);
+    onOpen(new Set([...open, pieces.length]));
+    onSelect(pieces.length);
   };
+  const remove = (i: number) => {
+    setPieces(pieces.filter((_, j) => j !== i));
+    const shift = (set: Set<number>) => new Set([...set].filter((j) => j !== i).map((j) => (j > i ? j - 1 : j)));
+    onOpen(shift(open));
+    onHide(shift(hidden));
+    if (selected === i) onSelect(null);
+    else if (selected !== null && selected > i) onSelect(selected - 1);
+  };
+  const toggle = (set: Set<number>, i: number) => {
+    const next = new Set(set);
+    if (next.has(i)) next.delete(i);
+    else next.add(i);
+    return next;
+  };
+  const lensSource = typeof options.source_redshift === 'number' ? options.source_redshift : null;
   return (
-    <div className="ln-pieces">
-      {pieces.map((piece, i) => (
-        <div key={i} className="ln-piece">
-          <div className="ln-piece-head">
-            <b>{String(piece.name ?? piece.type)}</b>
-            <span>{titleOf(defs, 'lens_piece', String(piece.type))}</span>
-            <button className="ln-x" aria-label="Remove the piece" title="Remove the piece" onClick={() => setPieces(pieces.filter((_, j) => j !== i))}>
-              ×
-            </button>
-          </div>
-          {params
-            .filter((p) => p.owner[1] === i)
-            .map((p) => (
-              <ParamLine key={p.name} param={p} value={properties[p.name]} onChange={(value) => setProperty(p.name, value)} />
-            ))}
-          {piece.type === 'mass' && <p className="ob-text">The mass of the galaxy {String(piece.galaxy ?? '?')}: its parameters are those of the galaxy, which its setups lay out.</p>}
-        </div>
-      ))}
-      <DropMenu
-        label="Add a piece"
-        width={300}
-        entries={types.map((t) => ({ label: t.label, description: t.description, onClick: () => add(t.value) }))}
-        target={<button className="gm-add">+ Add a piece</button>}
-      />
-    </div>
+    <section className="lp-block" id="ln-pieces">
+      <h3 className="lp-head">
+        Pieces <span className="lp-count">{pieces.length}</span>
+        <span className="lp-acts">
+          <button type="button" className="lp-icon" title="Unfold every piece" aria-label="Unfold every piece" onClick={() => onOpen(new Set(pieces.map((_, i) => i)))}>
+            <svg viewBox="0 0 16 16"><path d="M4 6l4-4 4 4M4 10l4 4 4-4" /></svg>
+          </button>
+          <button type="button" className="lp-icon" title="Fold every piece" aria-label="Fold every piece" onClick={() => onOpen(new Set())}>
+            <svg viewBox="0 0 16 16"><path d="M4 2l4 4 4-4M4 14l4-4 4 4" /></svg>
+          </button>
+          <DropMenu
+            label="Add a piece"
+            width={300}
+            at="end"
+            entries={types.map((t) => ({ label: t.label, description: t.description, onClick: () => add(t.value) }))}
+            target={
+              <button type="button" className="lp-icon lp-add" title="Add a piece" aria-label="Add a piece">
+                <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" /></svg>
+              </button>
+            }
+          />
+        </span>
+      </h3>
+      {pieces.length === 0 && <p className="lp-note">No piece yet: + adds an SIE, a power law, an NFW halo, a shear, a sheet, deflection maps or the mass of a galaxy.</p>}
+      <div className="lp-pieces">
+        {pieces.map((piece, i) => {
+          const own = params.filter((p) => p.owner[1] === i);
+          const isOpen = open.has(i);
+          const colour = `var(--${PIECE_COLOURS[i % PIECE_COLOURS.length]})`;
+          const bad = problems.some((p) => p.path?.[0] === 'pieces' && p.path[1] === i);
+          const zs = typeof piece.source_redshift === 'number' ? piece.source_redshift : null;
+          return (
+            <div key={i} className="lp-piece" data-open={isOpen || undefined} data-selected={i === selected || undefined} data-hidden={hidden.has(i) || undefined} data-bad={bad || undefined} style={{ ['--piece' as string]: colour }}>
+              <div
+                className="lp-piece-head"
+                role="button"
+                tabIndex={0}
+                aria-expanded={isOpen}
+                onClick={() => {
+                  // (unfolded, it is selected; folded, it is no longer)
+                  onOpen(toggle(open, i));
+                  if (isOpen) {
+                    if (selected === i) onSelect(null);
+                  } else onSelect(i);
+                }}
+                onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.click()}
+              >
+                <svg className="lp-chev" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M6 4l4 4-4 4" />
+                </svg>
+                <span className="lp-dot" />
+                <span className="lp-piece-text">
+                  <span className="lp-piece-name">
+                    <b>{String(piece.name ?? piece.type)}</b>
+                    <span>{titleOf(defs, 'lens_piece', String(piece.type))}</span>
+                  </span>
+                  {!isOpen && <span className="lp-sum">{piece.type === 'mass' ? `the mass of ${String(piece.galaxy ?? '?')}` : summary(own, properties)}</span>}
+                </span>
+                {zs !== null && <span className="lp-badge">z_s {zs}</span>}
+                <button
+                  type="button"
+                  className="lp-icon"
+                  title={hidden.has(i) ? 'Show it in the picture' : 'Hide it in the picture (not saved)'}
+                  aria-label={hidden.has(i) ? 'Show the piece in the picture' : 'Hide the piece in the picture'}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onHide(toggle(hidden, i));
+                  }}
+                >
+                  {hidden.has(i) ? (
+                    <svg viewBox="0 0 16 16"><path d="M2 2l12 12" /><path d="M6.2 4c.6-.3 1.2-.5 1.8-.5 4 0 6.5 4.5 6.5 4.5s-.7 1.3-2 2.5M4 5.6C2.4 6.8 1.5 8 1.5 8s2.5 4.5 6.5 4.5c.9 0 1.8-.2 2.6-.6" /></svg>
+                  ) : (
+                    <svg viewBox="0 0 16 16"><path d="M1.5 8s2.5-4.5 6.5-4.5 6.5 4.5 6.5 4.5-2.5 4.5-6.5 4.5S1.5 8 1.5 8z" /><circle cx="8" cy="8" r="1.8" /></svg>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="lp-icon lp-remove"
+                  title="Remove the piece"
+                  aria-label="Remove the piece"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    remove(i);
+                  }}
+                >
+                  <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+                </button>
+              </div>
+              {isOpen && (
+                <div className="lp-piece-body">
+                  {piece.type === 'mass' && <p className="lp-note">The mass of the galaxy {String(piece.galaxy ?? '?')}: its parameters are the galaxy's, which its setups lay out. Not drawn here.</p>}
+                  {own.map((p) => (
+                    <SliderRow key={p.name} param={p} value={properties[p.name] as ParamValue} field={field} open={openRow === p.name} onOpen={() => onOpenRow(p.name)} onChange={(value) => onProperty(p.name, value)} />
+                  ))}
+                  {canBeQuoted(defs, String(piece.type)) && (
+                    <SourceOption
+                      own={zs}
+                      lens={lensSource}
+                      onChange={(v) => setPieces(pieces.map((p, j) => (j === i ? withKey(p, 'source_redshift', v) : p)))}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
-// A parameter of a piece: its short name and title, and its value (a
-// number), or free (its value and its range, a fit frees it within)
-function ParamLine({ param, value, onChange }: { param: LensParam; value: unknown; onChange: (value: unknown) => void }) {
-  const free = isObject(value);
-  const number = free ? value.value : value;
-  const unit = param.unit === 'arcsec' ? '″' : param.unit === 'deg' ? '°' : (param.unit ?? '');
-  const short = param.name.slice(param.name.indexOf('_') + 1);
-  const setValue = (v: number | undefined) => onChange(free ? { ...value, value: v } : v);
+// The source redshift of a piece: its own, or that of the lens (shown
+// faint, until one is set); undefined: the lens's again
+function SourceOption({ own, lens, onChange }: { own: number | null; lens: number | null; onChange: (value: number | undefined) => void }) {
+  const set = (v: number) => onChange(Math.max(0.001, v));
   return (
-    <div className="ln-param">
-      <code className="gm-pn">{short}</code>
-      <span className="gm-pt">{param.title ?? short}</span>
-      <Number value={number} placeholder={param.default === null ? 'needed' : String(param.default)} label={param.title ?? param.name} onChange={setValue} />
-      <span className="ob-unit">{unit}</span>
-      <button className="ln-free" aria-pressed={free} title={free ? 'Free in a fit: click to fix it' : 'Fixed: click to free it in a fit'} onClick={() => onChange(free ? value.value : { value: typeof number === 'number' ? number : (param.default ?? 0), min: null, max: null })}>
-        {free ? 'free' : 'fixed'}
-      </button>
-      {free && (
-        <span className="ln-range">
-          <Number value={value.min} placeholder="min" label="Its least value" onChange={(v) => onChange({ ...value, min: v })} />
-          <span>to</span>
-          <Number value={value.max} placeholder="max" label="Its greatest value" onChange={(v) => onChange({ ...value, max: v })} />
-        </span>
+    <div className="lp-option">
+      <div className="lp-title">
+        <b>Source redshift</b>
+        <small>{own === null ? 'of the lens' : 'its own'}</small>
+      </div>
+      <NumberInput
+        value={own ?? undefined}
+        label="The redshift of the source its strength is quoted for (by default, that of the lens)"
+        placeholder={lens === null ? 'needed' : String(lens)}
+        onChange={set}
+        onClear={() => onChange(undefined)}
+      />
+      <span />
+      {own !== null ? (
+        <button type="button" className="lp-icon" title="Use the lens's" aria-label="Use the source redshift of the lens" onClick={() => onChange(undefined)}>
+          <svg viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.5-3.5" /><path d="M3 2.5V5h2.5" /></svg>
+        </button>
+      ) : (
+        <span />
       )}
     </div>
   );
 }
 
-// The test source: its place behind the lens and its size (arcsec)
-function SourceFields({ source, onChange }: { source: Source; onChange: (source: Source) => void }) {
-  return (
-    <div className="ob-form">
-      <Row label="Source at x">
-        <Number value={source.x} placeholder="0" label="The x of the source" onChange={(x) => onChange({ ...source, x: x ?? 0 })} />
-      </Row>
-      <Row label="Source at y">
-        <Number value={source.y} placeholder="0" label="The y of the source" onChange={(y) => onChange({ ...source, y: y ?? 0 })} />
-      </Row>
-      <Row label="Source size">
-        <Number value={source.size} placeholder="0.1" label="The size of the source (its sigma)" onChange={(size) => onChange({ ...source, size: size && size > 0 ? size : 0.1 })} />
-      </Row>
-      <p className="ob-text">A round source, only for the picture: drag it in the source plane too.</p>
-    </div>
-  );
+// The values of a piece in a few words, the free ones first and marked
+function summary(params: LensParam[], properties: Options) {
+  const free = (p: LensParam) => isObject(properties[p.name]);
+  const sorted = [...params.filter(free), ...params.filter((p) => !free(p))];
+  return sorted.map((p, k) => {
+    const short = p.name.slice(p.name.indexOf('_') + 1);
+    const text = `${short} ${fmt(numberOf(p, properties[p.name] as ParamValue))}${unitText(p.unit)}`;
+    return (
+      <span key={p.name}>
+        {k > 0 && ' · '}
+        {free(p) ? <em>{text}</em> : text}
+      </span>
+    );
+  });
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="ob-row">
-      <span className="ob-label">{label}</span>
-      <div className="ob-field">{children}</div>
-    </div>
-  );
+// The handles of a piece in the picture (none if hidden): of a shape (its
+// centre, and of an Einstein radius, its ellipse with its position angle
+// and axis ratio) or of a shear (its strength and angle), by the names of
+// its parameters
+function handlesOf(piece: Options | undefined, params: LensParam[], values: Record<string, number>, hidden: boolean) {
+  if (!piece || hidden) return null;
+  const named = (short: string) => params.find((p) => p.name.slice(p.name.indexOf('_') + 1) === short)?.name;
+  const keys = { xpos: named('xpos'), ypos: named('ypos'), posa: named('posa'), q: named('q'), theta_e: named('theta_e'), gamma: named('gamma') };
+  if (keys.gamma && keys.posa) return { kind: 'shear' as const, keys, values };
+  if (keys.xpos && keys.ypos) return { kind: 'shape' as const, keys, values };
+  return null;
 }
 
-// A number, as typed: taken once it reads as one (blank: none)
-function Number({ value, placeholder, label, onChange }: { value: unknown; placeholder: string; label: string; onChange: (value: number | undefined) => void }) {
-  const [typing, setTyping] = useState<string | null>(null);
-  return (
-    <span className="ob-number" onBlur={() => setTyping(null)}>
-      <NumberField
-        value={typing ?? (typeof value === 'number' ? String(value) : '')}
-        placeholder={placeholder}
-        label={label}
-        onChange={(text) => {
-          setTyping(text);
-          const parsed = text.trim() === '' ? undefined : globalThis.Number(text);
-          if (parsed === undefined || globalThis.Number.isFinite(parsed)) onChange(parsed);
-        }}
-      />
-    </span>
-  );
+export type Handles = ReturnType<typeof handlesOf>;
+
+// The centres of the pieces not selected nor hidden that have one, a dot
+// each in the picture (a click selects its piece)
+function centresOf(pieces: Options[], params: LensParam[], values: Record<string, number>, hidden: Set<number>, selected: number | null) {
+  return pieces.flatMap((_, i) => {
+    if (i === selected || hidden.has(i)) return [];
+    const own = params.filter((p) => p.owner[1] === i);
+    const x = own.find((p) => p.name.endsWith('_xpos'))?.name;
+    const y = own.find((p) => p.name.endsWith('_ypos'))?.name;
+    return x && y ? [{ piece: i, x: values[x], y: values[y], colour: `var(--${PIECE_COLOURS[i % PIECE_COLOURS.length]})` }] : [];
+  });
+}
+
+export type Dots = ReturnType<typeof centresOf>;
+
+// Whether a piece of a type can be quoted for a source: whether it has
+// the option source_redshift (see the schema)
+function canBeQuoted(defs: Defs | undefined, type: string): boolean {
+  if (!defs) return false;
+  const member = membersOf(defs.lens_piece ?? {}, defs).find((m) => typeOf(m) === type);
+  return member !== undefined && 'source_redshift' in propertiesOf(member);
 }
 
 function asList(value: unknown): Options[] {
