@@ -10,6 +10,7 @@
 // (e.g. its components' names, the place of a trait in its list, the
 // number of rings), so that its properties are kept in step with them as
 // they change (see transition).
+import { rangeOf } from '../../components/values';
 import { getAt, isObject, startsWith, type Options, type Path } from './options';
 
 export interface Param {
@@ -94,15 +95,16 @@ export function elementValues(values: number[], size: number): number[] {
 
 // The property of a parameter with its values (one for all: a number;
 // else one each), its other properties kept; of a free one, its range
-// grown to hold them (a value is never refused for it)
-export function withValues(property: unknown, param: Param, values: number[]): unknown {
+// grown to hold them (a value is never refused for it), unless it is kept
+// (e.g. as a value is typed, through others on its way)
+export function withValues(property: unknown, param: Param, values: number[], grow = true): unknown {
   const one = values.every((v) => v === values[0]);
   const scalar = param.size === 1 || one;
   if (isObject(property)) {
     const { value: _, '*value': __, ...rest } = property;
     const [low, high] = [Math.min(...values), Math.max(...values)];
-    if (typeof rest.min === 'number' && low < rest.min) rest.min = low;
-    if (typeof rest.max === 'number' && high > rest.max) rest.max = high;
+    if (grow && typeof rest.min === 'number' && low < rest.min) rest.min = low;
+    if (grow && typeof rest.max === 'number' && high > rest.max) rest.max = high;
     return scalar ? { ...rest, value: values[0] } : { ...rest, '*value': values };
   }
   if (Array.isArray(property) && property.every(isObject)) {
@@ -132,12 +134,7 @@ export function withRange(property: unknown, min: number, max: number): unknown 
 
 // The valid range of a parameter, of its text (e.g. '[0, 90]', '(0, inf)')
 export function validRange(param: Param): [number, number] {
-  const match = /^[[(]\s*([^,]+),\s*([^\])]+)[\])]$/.exec(param.range);
-  const read = (text: string | undefined, infinite: number) => {
-    const value = Number(text?.trim().replace(/^(-?)inf$/, '$1Infinity'));
-    return Number.isFinite(value) ? value : infinite;
-  };
-  return [read(match?.[1], -Infinity), read(match?.[2], Infinity)];
+  return rangeOf(param.range);
 }
 
 // The reach of the slider of a parameter: its valid range where it has
@@ -167,11 +164,12 @@ export function sliderReach(param: Param, field: number): { min: number; max: nu
   return { min, max, step };
 }
 
-// A default range of a parameter freed for a fit, about its value: its
-// slider's reach
-export function freeRange(param: Param, field: number): [number, number] {
+// The natural span of a parameter, of its values: its slider's reach,
+// grown to hold them; the span of its slider of no fit range, and the fit
+// range it is freed with
+export function naturalSpan(param: Param, values: number[], field: number): [number, number] {
   const { min, max } = sliderReach(param, field);
-  return [min, max];
+  return [Math.min(min, ...values), Math.max(max, ...values)];
 }
 
 // --- Names -------------------------------------------------------------

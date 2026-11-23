@@ -14,19 +14,22 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLensDescription, useLensView, type LensFrame } from '../../api/queries';
 import { membersOf, propertiesOf, titleOf, typeOf, type Defs, type Options } from '../../components/SchemaForm';
+import { fmt } from '../../components/format';
 import { NeedsNote } from '../../components/ui/dock';
-import { DropMenu } from '../../components/ui/overlays';
+import { AddMenu, FoldAll, PieceHead } from '../../components/ui/pieces';
+import { NumberInput, Row, useScrub } from '../../components/ui/rows';
 import { SheetLayout } from '../../components/ui/sheet';
+import { settled, snap } from '../../components/values';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
-import { NameText, problemText } from '../galaxy/Model';
+import { problemText } from '../galaxy/Model';
 import { unitText } from '../galaxy/ParamField';
 import { typesOf } from '../galaxy/schema';
 import { isObject, useLensDraft, type LensDraft } from './draft';
 import { LightPath } from './LightPath';
 import { bareView, LensPicture, zoomed, type PictureNote, type Source } from './Picture';
-import { fmt, naturalSpan, NumberInput, numberOf, settled, SliderRow, snap, useScrub, type LensParam, type ParamValue } from './SliderRow';
+import { naturalSpan, numberOf, SliderRow, type LensParam, type ParamValue } from './SliderRow';
 
 // The colours of the pieces, in order (those of the components of a
 // galaxy)
@@ -124,7 +127,7 @@ export function LensScreen({ name }: { name: string }) {
   const setValue = (key: string, value: number) => {
     const param = params.find((p) => p.name === key);
     if (!param) return;
-    const v = snap(settled(param, value), naturalSpan(param, value, field));
+    const v = snap(settled(value, param), naturalSpan(param, value, field));
     draft.edit((s) => {
       const now = s.properties[key];
       return { ...s, properties: withKey(s.properties, key, isObject(now) ? { ...now, value: v } : v) };
@@ -199,24 +202,20 @@ function LensBlock({ draft, options, viewSource }: { draft: LensDraft; options: 
   const scrubZ = useScrub(z, [0, 2], setZ);
   const scrubZs = useScrub(zs, [0, 4], setZs);
   return (
-    <section className="lp-block" id="ln-lens">
-      <h3 className="lp-head">Lens</h3>
+    <section className="sh-block" id="ln-lens">
+      <h3 className="sh-head">Lens</h3>
       <LightPath lens={z} source={zs ?? viewSource ?? undefined} />
-      <div className="lp-z">
-        <div className="lp-z-row">
-          <span className="lp-title">
-            <b {...scrubZ}>Lens redshift</b>
-          </span>
-          <NumberInput value={z} label="The redshift of the lens" placeholder="needed" valid={positive} onChange={setZ} onClear={() => set('redshift', undefined)} />
-        </div>
-        <div className="lp-z-row">
-          <span className="lp-title">
-            <b {...scrubZs} title="The redshift of the source its quoted strengths (e.g. an Einstein radius) are those of, of the pieces without their own (drag sideways to change it)">
-              Source redshift
-            </b>
-          </span>
-          <NumberInput value={zs} label="The source redshift of the lens" placeholder="none" valid={positive} onChange={setZs} onClear={() => set('source_redshift', undefined)} />
-        </div>
+      <div className="sh-rows">
+        <Row
+          title="Lens redshift"
+          titleProps={scrubZ}
+          box={<NumberInput value={z} label="The redshift of the lens" placeholder="needed" valid={positive} onChange={setZ} onClear={() => set('redshift', undefined)} />}
+        />
+        <Row
+          title="Source redshift"
+          titleProps={{ ...scrubZs, title: 'The redshift of the source its quoted strengths (e.g. an Einstein radius) are those of, of the pieces without their own (drag sideways to change it)' }}
+          box={<NumberInput value={zs} label="The source redshift of the lens" placeholder="none" valid={positive} onChange={setZs} onClear={() => set('source_redshift', undefined)} />}
+        />
       </div>
     </section>
   );
@@ -256,7 +255,6 @@ function PiecesBlock({
   const types = typesOf(defs, 'lens_piece');
   const names = pieces.map(nameOf);
   const open = ui.open ?? firstOpen(pieces);
-  const [renaming, setRenaming] = useState<string | null>(null);
   const freeName = (base: string, more: (k: number) => string) => {
     let name = base;
     for (let k = 2; names.includes(name); k++) name = more(k);
@@ -273,7 +271,6 @@ function PiecesBlock({
     onUi((u) => ({ ...u, open: new Set([...(u.open ?? firstOpen(pieces)), name]), selected: name }));
   };
   const rename = (from: string, to: string) => {
-    setRenaming(null);
     if (!to || to === from || names.includes(to)) return;
     const moves = new Map((byPiece.get(from) ?? []).map((p) => [p.name, paramName(to, p.key)]));
     draft.edit((s) => ({
@@ -306,31 +303,22 @@ function PiecesBlock({
   const alone = (name: string) => names.length > 1 && !ui.hidden.has(name) && names.every((n) => n === name || ui.hidden.has(n));
   const lensSource = typeof options.source_redshift === 'number' ? options.source_redshift : null;
   return (
-    <section className="lp-block" id="ln-pieces">
-      <h3 className="lp-head">
-        Pieces <span className="lp-count">{pieces.length}</span>
-        <span className="lp-acts">
-          <button type="button" className="lp-icon" title="Unfold every piece" aria-label="Unfold every piece" disabled={names.every((n) => open.has(n))} onClick={() => onUi((u) => ({ ...u, open: new Set(names) }))}>
-            <svg viewBox="0 0 16 16"><path d="M4 6l4-4 4 4M4 10l4 4 4-4" /></svg>
-          </button>
-          <button type="button" className="lp-icon" title="Fold every piece" aria-label="Fold every piece" disabled={names.every((n) => !open.has(n))} onClick={() => onUi((u) => ({ ...u, open: new Set() }))}>
-            <svg viewBox="0 0 16 16"><path d="M4 2l4 4 4-4M4 14l4-4 4 4" /></svg>
-          </button>
-          <DropMenu
-            label="Add a piece"
-            width={300}
-            at="end"
-            entries={types.map((t) => ({ label: t.label, description: t.description, onClick: () => add(t.value) }))}
-            target={
-              <button type="button" className="lp-icon lp-add" title="Add a piece" aria-label="Add a piece">
-                <svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" /></svg>
-              </button>
-            }
+    <section className="sh-block" id="ln-pieces">
+      <h3 className="sh-head">
+        Pieces <span className="sh-count">{pieces.length}</span>
+        <span className="sh-acts">
+          <FoldAll
+            what="piece"
+            canUnfold={!names.every((n) => open.has(n))}
+            canFold={!names.every((n) => !open.has(n))}
+            onUnfold={() => onUi((u) => ({ ...u, open: new Set(names) }))}
+            onFold={() => onUi((u) => ({ ...u, open: new Set() }))}
           />
+          <AddMenu label="Add a piece" entries={types.map((t) => ({ label: t.label, description: t.description, onClick: () => add(t.value) }))} />
         </span>
       </h3>
-      {pieces.length === 0 && <p className="lp-note">No piece yet: + adds an SIE, a power law, an NFW halo, a shear, a sheet, deflection maps or the mass of a galaxy.</p>}
-      <div className="lp-pieces">
+      {pieces.length === 0 && <p className="sh-note">No piece yet: + adds an SIE, a power law, an NFW halo, a shear, a sheet, deflection maps or the mass of a galaxy.</p>}
+      <div className="sh-pieces">
         {pieces.map((piece, i) => {
           const name = names[i];
           const own = byPiece.get(name) ?? [];
@@ -338,89 +326,50 @@ function PiecesBlock({
           const isHidden = ui.hidden.has(name);
           const zs = typeof piece.source_redshift === 'number' ? piece.source_redshift : null;
           return (
-            <div key={i} className="lp-piece" data-open={isOpen || undefined} data-selected={name === ui.selected || undefined} data-hidden={isHidden || undefined} data-bad={badPieces.has(name) || undefined} style={{ ['--piece' as string]: colourOf(i) }}>
-              <div
-                className="lp-piece-head"
-                role="button"
-                tabIndex={0}
-                aria-pressed={name === ui.selected}
-                onClick={() =>
+            <div key={i} className="sh-piece" data-open={isOpen || undefined} data-selected={name === ui.selected || undefined} data-hidden={isHidden || undefined} data-bad={badPieces.has(name) || undefined} style={{ ['--piece' as string]: colourOf(i) }}>
+              <PieceHead
+                kind="piece"
+                name={name}
+                type={titleOf(defs, 'lens_piece', String(piece.type))}
+                summary={piece.type === 'mass' ? `the mass of ${String(piece.galaxy ?? '?')}` : summary(own, properties)}
+                badge={zs !== null && `z_s ${zText(zs)}`}
+                badgeTitle={zs === null ? undefined : `Its own source redshift (not the lens's)`}
+                open={isOpen}
+                selected={name === ui.selected}
+                onFold={() => onUi((u) => ({ ...u, open: toggled(u.open ?? firstOpen(pieces), name) }))}
+                onSelect={() =>
                   // (selected, and unfolded; or, if it was, selected no longer)
                   onUi((u) => (u.selected === name ? { ...u, selected: null } : { ...u, selected: name, open: new Set([...(u.open ?? firstOpen(pieces)), name]) }))
                 }
-                onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.click()}
-              >
-                <button
-                  type="button"
-                  className="lp-fold"
-                  aria-expanded={isOpen}
-                  aria-label={isOpen ? `Fold ${name}` : `Unfold ${name}`}
-                  title={isOpen ? 'Fold it' : 'Unfold it'}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onUi((u) => ({ ...u, open: toggled(u.open ?? firstOpen(pieces), name) }));
-                  }}
-                >
-                  <svg className="lp-chev" viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M6 4l4 4-4 4" />
-                  </svg>
-                </button>
-                <span className="lp-dot" />
-                <span className="lp-piece-text">
-                  <span className="lp-piece-name">
-                    {renaming === name ? (
-                      <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                        <NameText value={name} required onCommit={(to) => rename(name, to)} onCancel={() => setRenaming(null)} autoFocus />
-                      </span>
+                onRename={(to) => rename(name, to)}
+                eye={
+                  <button
+                    type="button"
+                    className="sh-icon"
+                    title={isHidden ? 'Show it in the picture' : 'Hide it in the picture (not saved)'}
+                    aria-label={isHidden ? 'Show the piece in the picture' : 'Hide the piece in the picture'}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onUi((u) => ({ ...u, hidden: toggled(u.hidden, name) }));
+                    }}
+                  >
+                    {isHidden ? (
+                      <svg viewBox="0 0 16 16"><path d="M2 2l12 12" /><path d="M6.2 4c.6-.3 1.2-.5 1.8-.5 4 0 6.5 4.5 6.5 4.5s-.7 1.3-2 2.5M4 5.6C2.4 6.8 1.5 8 1.5 8s2.5 4.5 6.5 4.5c.9 0 1.8-.2 2.6-.6" /></svg>
                     ) : (
-                      <b>{name}</b>
+                      <svg viewBox="0 0 16 16"><path d="M1.5 8s2.5-4.5 6.5-4.5 6.5 4.5 6.5 4.5-2.5 4.5-6.5 4.5S1.5 8 1.5 8z" /><circle cx="8" cy="8" r="1.8" /></svg>
                     )}
-                    <span className="lp-piece-type">{titleOf(defs, 'lens_piece', String(piece.type))}</span>
-                  </span>
-                  {!isOpen && <span className="lp-sum">{piece.type === 'mass' ? `the mass of ${String(piece.galaxy ?? '?')}` : summary(own, properties)}</span>}
-                </span>
-                {/* (its cell kept when empty: the buttons stay in their columns) */}
-                <span className="lp-badge" title={zs === null ? undefined : `Its own source redshift (not the lens's)`}>{zs !== null && `z_s ${zText(zs)}`}</span>
-                <button
-                  type="button"
-                  className="lp-icon"
-                  title={isHidden ? 'Show it in the picture' : 'Hide it in the picture (not saved)'}
-                  aria-label={isHidden ? 'Show the piece in the picture' : 'Hide the piece in the picture'}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onUi((u) => ({ ...u, hidden: toggled(u.hidden, name) }));
-                  }}
-                >
-                  {isHidden ? (
-                    <svg viewBox="0 0 16 16"><path d="M2 2l12 12" /><path d="M6.2 4c.6-.3 1.2-.5 1.8-.5 4 0 6.5 4.5 6.5 4.5s-.7 1.3-2 2.5M4 5.6C2.4 6.8 1.5 8 1.5 8s2.5 4.5 6.5 4.5c.9 0 1.8-.2 2.6-.6" /></svg>
-                  ) : (
-                    <svg viewBox="0 0 16 16"><path d="M1.5 8s2.5-4.5 6.5-4.5 6.5 4.5 6.5 4.5-2.5 4.5-6.5 4.5S1.5 8 1.5 8z" /><circle cx="8" cy="8" r="1.8" /></svg>
-                  )}
-                </button>
-                <span onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                  <DropMenu
-                    label={`The piece ${name}`}
-                    width={240}
-                    at="end"
-                    // (its rename gives the focus to the field of its name)
-                    returnFocus={false}
-                    entries={[
-                      { label: 'Rename', onClick: () => setRenaming(name) },
-                      { label: alone(name) ? 'Show all in the picture' : 'Show it alone in the picture', onClick: () => onUi((u) => ({ ...u, hidden: alone(name) ? new Set() : new Set(names.filter((n) => n !== name)) })) },
-                      { label: 'Duplicate', onClick: () => duplicate(name) },
-                      { label: 'Remove', onClick: () => remove(name) },
-                    ]}
-                    target={
-                      <button type="button" className="lp-icon" title="Rename, show alone, duplicate, remove" aria-label="Its actions">
-                        <svg viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".9" /><circle cx="8" cy="8" r=".9" /><circle cx="12.5" cy="8" r=".9" /></svg>
-                      </button>
-                    }
-                  />
-                </span>
-              </div>
+                  </button>
+                }
+                menu={[
+                  { label: alone(name) ? 'Show all in the picture' : 'Show it alone in the picture', onClick: () => onUi((u) => ({ ...u, hidden: alone(name) ? new Set() : new Set(names.filter((n) => n !== name)) })) },
+                  { label: 'Duplicate', onClick: () => duplicate(name) },
+                  { label: 'Remove', onClick: () => remove(name) },
+                ]}
+                menuTitle="Rename, show alone, duplicate, remove"
+              />
               {isOpen && (
-                <div className="lp-piece-body">
-                  {piece.type === 'mass' && <p className="lp-note">The mass of the galaxy {String(piece.galaxy ?? '?')}: its parameters are the galaxy's, which its setups lay out. Not drawn here.</p>}
+                <div className="sh-piece-body">
+                  {piece.type === 'mass' && <p className="sh-note">The mass of the galaxy {String(piece.galaxy ?? '?')}: its parameters are the galaxy's, which its setups lay out. Not drawn here.</p>}
                   {own.map((p) => (
                     <SliderRow key={p.name} param={p} value={properties[p.name] as ParamValue} field={field} open={ui.row === p.name} onOpen={() => onUi((u) => ({ ...u, row: u.row === p.name ? null : p.name }))} onChange={(value) => onProperty(p.name, value)} />
                   ))}
@@ -445,28 +394,28 @@ function PiecesBlock({
 // faint, until one is set); undefined: the lens's again
 function SourceOption({ own, lens, onChange }: { own: number | null; lens: number | null; onChange: (value: number | undefined) => void }) {
   return (
-    <div className="lp-option">
-      <div className="lp-title">
-        <b>Source redshift</b>
-        <small>{own === null ? 'of the lens' : 'its own'}</small>
-      </div>
-      <NumberInput
-        value={own ?? undefined}
-        label="The redshift of the source its strength is quoted for (by default, that of the lens)"
-        placeholder={lens === null ? 'needed' : zText(lens)}
-        valid={(v) => Number.isFinite(v) && v > 0}
-        onChange={onChange}
-        onClear={() => onChange(undefined)}
-      />
-      <span />
-      {own !== null ? (
-        <button type="button" className="lp-state" title={lens === null ? "Drop its own: use the lens's" : `Drop its own: use the lens's, z ${zText(lens)}`} aria-label="Use the source redshift of the lens" onClick={() => onChange(undefined)}>
-          reset
-        </button>
-      ) : (
-        <span />
-      )}
-    </div>
+    <Row
+      className="lp-option"
+      title="Source redshift"
+      sub={own === null ? 'of the lens' : 'its own'}
+      box={
+        <NumberInput
+          value={own ?? undefined}
+          label="The redshift of the source its strength is quoted for (by default, that of the lens)"
+          placeholder={lens === null ? 'needed' : zText(lens)}
+          valid={(v) => Number.isFinite(v) && v > 0}
+          onChange={onChange}
+          onClear={() => onChange(undefined)}
+        />
+      }
+      pill={
+        own !== null && (
+          <button type="button" className="sh-state" title={lens === null ? "Drop its own: use the lens's" : `Drop its own: use the lens's, z ${zText(lens)}`} aria-label="Use the source redshift of the lens" onClick={() => onChange(undefined)}>
+            reset
+          </button>
+        )
+      }
+    />
   );
 }
 

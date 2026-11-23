@@ -15,7 +15,7 @@ import { useRemembered } from '../../shell/remember';
 import { useStudio } from '../../studio';
 import { useUnsaved } from '../editing';
 import { useGalaxyDraft } from './draft';
-import { kpcPerArcsecOf, Model, type OpenItem } from './Model';
+import { kpcPerArcsecOf, Model } from './Model';
 import { Params } from './Params';
 import { useComponentTypes } from '../../api/queries';
 import type { ComponentTypes } from './types';
@@ -59,9 +59,11 @@ export function GalaxyScreen({ name }: { name: string }) {
   const draft = useGalaxyDraft(project ?? '.', name);
   const head = useBlockHead(project ?? '', 'galaxies', name);
   useUnsaved(draft.dirty);
-  // (the components and parts of the mass open in the sheet, in the order
-  // they were opened, remembered for the galaxy)
-  const [open, setOpen] = useRemembered<OpenItem[]>(`galaxy-open:${project}/${name}`, [{ kind: 'component', index: 0 }]);
+  // (the pieces of the sheet unfolded, by their keys (see Model), in the
+  // order they were, remembered for the galaxy (none yet: its first
+  // component); the one selected)
+  const [unfolded, setUnfolded] = useRemembered<string[] | null>(`galaxy-pieces:${project}/${name}`, null);
+  const [selected, setSelected] = useState<string | null>(null);
   const [isolated, setIsolated] = useState<string | null>(null);
   // (the tab of the sheet: the model, or the list of the parameters)
   const [tab, setTab] = useRemembered<'model' | 'params'>('galaxy-sheet-tab', 'model');
@@ -79,7 +81,8 @@ export function GalaxyScreen({ name }: { name: string }) {
   // its curves, as a rotation curve is fitted)
   const something = (galaxy: Options) => componentsOf(galaxy).length > 0 || asList(galaxy.mass).length > 0;
   const renderProperties = useMemo(() => (rendered ? forRender(rendered.properties, draft.params) : {}), [rendered, draft.params]);
-
+  const names = components.map((c, i) => componentName(c, i));
+  const open = unfolded ?? names.slice(0, 1);
 
   if (project === null) return null;
 
@@ -88,9 +91,9 @@ export function GalaxyScreen({ name }: { name: string }) {
   const radii = components.flatMap((c) => (typeof c.rmax === 'number' ? [c.rmax] : ringRadii(c.rnodes).slice(-1)));
   const field = Math.max(...radii, 0) * MARGIN || 20;
 
-  // (the rings of the component opened last, marked on the profiles)
-  const openComponent = open.filter((o) => o.kind === 'component' && o.index < components.length).at(-1)?.index ?? null;
-  const rings = openComponent === null ? null : ringRadii(components[openComponent]?.rnodes);
+  // (the rings of the component unfolded last, marked on the profiles)
+  const last = open.filter((key) => names.includes(key)).at(-1);
+  const rings = last === undefined ? null : ringRadii(components[names.indexOf(last)].rnodes);
 
   return (
     // (its renders are of it, in the Activity drawer)
@@ -121,7 +124,20 @@ export function GalaxyScreen({ name }: { name: string }) {
               </div>
               <div className="gm-scroll">
                 {tab === 'model' ? (
-                  <Model draft={draft} project={project} galaxy={name} field={field} colours={colours} massColours={massColours} open={open} onOpen={setOpen} isolated={isolated} onIsolate={setIsolated} />
+                  <Model
+                    draft={draft}
+                    project={project}
+                    galaxy={name}
+                    field={field}
+                    colours={colours}
+                    massColours={massColours}
+                    open={open}
+                    onOpen={(change) => setUnfolded((o) => change(o ?? names.slice(0, 1)))}
+                    selected={selected}
+                    onSelect={setSelected}
+                    isolated={isolated}
+                    onIsolate={setIsolated}
+                  />
                 ) : (
                   <Params draft={draft} field={field} colours={colours} types={types} defs={draft.defs} />
                 )}

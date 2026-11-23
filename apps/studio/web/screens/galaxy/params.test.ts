@@ -35,6 +35,9 @@ test('values are written in the form of their property', () => {
   expect(withValues(undefined, p, [1, 2, 3])).toEqual([1, 2, 3]);
   expect(withValues({ value: 1, min: 0, max: 5 }, p, [1, 2, 3])).toEqual({ '*value': [1, 2, 3], min: 0, max: 5 });
   expect(withValues({ '*value': [1, 2, 3], min: 0 }, p, [4, 4, 4])).toEqual({ value: 4, min: 0 });
+  // (the range of a free one grown to hold them, unless it is kept)
+  expect(withValues({ value: 120, min: 100, max: 160 }, param('b', []), [1])).toEqual({ value: 1, min: 1, max: 160 });
+  expect(withValues({ value: 120, min: 100, max: 160 }, param('b', []), [1], false)).toEqual({ value: 1, min: 100, max: 160 });
   const free = withFreedom(2, param('b', []), { kind: 'fixed', values: [2] }, true, [0, 5]);
   expect(free).toEqual({ value: 2, min: 0, max: 5 });
   expect(withFreedom(free, param('b', []), { kind: 'free', values: [2], min: 0, max: 5 }, false, [0, 5])).toBe(2);

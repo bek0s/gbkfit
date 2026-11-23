@@ -1,21 +1,20 @@
 // The parameters of a galaxy as one list, which the keyboard moves
-// through: each its title and name, its value, how a fit takes it (fixed,
-// free or tied) and its range (or its values along its rings), grouped by
-// what owns it (a part of a component, the mass, the galaxy). A search
+// through: each a row (see ParamLine: its title and name, its value, its
+// unit, how a fit takes it; opened, its slider or what sets it), grouped
+// by what owns it (a part of a component, the mass, the galaxy). A search
 // finds them by title or name, and filters keep those free, changed since
 // the save, tied, or with a value per ring.
 //
 // Keys, the list focused: Up and Down move; a digit (or a minus) starts
 // typing the value, Enter sets it; F frees or fixes it; T ties it to an
-// expression; Enter opens its range (and closes it); Escape leaves what is
-// being typed; / finds.
+// expression; Enter opens it (and closes it); Escape closes it, or leaves
+// what is being typed; / finds.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { Defs } from '../../components/SchemaForm';
 import type { GalaxyDraft } from './draft';
-import { ParamEditor, valueText, type NumbersContext } from './Numbers';
+import { ParamLine, type NumbersContext } from './Numbers';
 import { componentName, componentsOf, getAt, ringRadii, type Options } from './options';
-import { unitText } from './ParamField';
-import { freeRange, settingOf, withFreedom, withValues, type Param, type Setting } from './params';
+import { naturalSpan, settingOf, withFreedom, type Param } from './params';
 import { partsOfType, type ComponentTypes } from './types';
 
 type Filter = 'all' | 'free' | 'changed' | 'tied' | 'ring';
@@ -66,8 +65,9 @@ export function Params({ draft, field, colours, types, defs }: ParamsProps) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [selected, setSelected] = useState<string | null>(null);
-  const [typing, setTyping] = useState<{ name: string; kind: 'value' | 'tie'; text: string } | null>(null);
+  // (the row open, and the tie of a parameter as it is typed)
   const [opened, setOpened] = useState<string | null>(null);
+  const [tie, setTie] = useState<{ name: string; text: string } | null>(null);
   const list = useRef<HTMLDivElement>(null);
   const find = useRef<HTMLInputElement>(null);
 
@@ -117,21 +117,20 @@ export function Params({ draft, field, colours, types, defs }: ParamsProps) {
       return { ...s, properties: next === undefined ? rest : { ...rest, [name]: next } };
     });
   const param = (name: string) => params.find((p) => p.name === name)!;
-  const commit = () => {
-    if (!typing) return;
-    const p = param(typing.name);
-    if (typing.kind === 'tie') {
-      const expression = typing.text.trim();
-      if (expression) setProperty(p.name, expression);
-    } else {
-      const value = Number(typing.text);
-      if (typing.text.trim() !== '' && Number.isFinite(value)) setProperty(p.name, withValues(properties[p.name], p, [value]));
-    }
-    setTyping(null);
+  const commitTie = () => {
+    if (!tie) return;
+    const expression = tie.text.trim();
+    if (expression) setProperty(tie.name, expression);
+    setTie(null);
     list.current?.focus();
   };
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (typing || current === null || event.target !== list.current) return;
+    // (a value typed in a row, set or left: the keys to the list again)
+    if (event.target !== list.current) {
+      if ((event.key === 'Enter' || event.key === 'Escape') && (event.target as HTMLElement).matches('.gp-list input.sh-num')) requestAnimationFrame(() => list.current?.focus());
+      return;
+    }
+    if (tie || current === null) return;
     const at = order.indexOf(current);
     const p = param(current);
     const setting = settings.get(current)!;
@@ -143,35 +142,46 @@ export function Params({ draft, field, colours, types, defs }: ParamsProps) {
       setOpened(opened === current ? null : current);
     } else if (event.key === 'f' || event.key === 'F') {
       event.preventDefault();
-      if (setting.kind === 'fixed' || setting.kind === 'free') setProperty(p.name, withFreedom(properties[p.name], p, setting, setting.kind !== 'free', freeRange(p, field)));
+      if (setting.kind === 'fixed' || setting.kind === 'free') setProperty(p.name, withFreedom(properties[p.name], p, setting, setting.kind !== 'free', naturalSpan(p, setting.values, field)));
     } else if (event.key === 't' || event.key === 'T') {
       event.preventDefault();
-      setTyping({ name: current, kind: 'tie', text: setting.kind === 'tied' ? setting.expression : '' });
-    } else if (/^[0-9.-]$/.test(event.key) && p.size === 1) {
-      event.preventDefault();
-      setTyping({ name: current, kind: 'value', text: event.key });
+      setTie({ name: current, text: setting.kind === 'tied' ? setting.expression : '' });
+    } else if (/^[0-9.-]$/.test(event.key)) {
+      // (into the box of the row, the key typed over its value)
+      list.current?.querySelector<HTMLInputElement>(`[data-name="${current}"] input.sh-num`)?.focus();
     } else if (event.key === 'Escape') setOpened(null);
   };
 
   const count = (f: Filter) => found.filter((p) => matches(p, f)).length;
   return (
     <div className="gp">
-      <div className="gp-tools">
-        <label className="gp-find">
-          <input ref={find} value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Find a parameter" aria-label="Find a parameter" onKeyDown={(event) => event.key === 'Escape' && (setQuery(''), list.current?.focus())} />
-          <span className="gp-kbd">/</span>
-        </label>
-      </div>
+      <label className="gp-find">
+        <input ref={find} value={query} onChange={(event) => setQuery(event.currentTarget.value)} placeholder="Find a parameter" aria-label="Find a parameter" onKeyDown={(event) => event.key === 'Escape' && (setQuery(''), list.current?.focus())} />
+        <span className="gp-kbd">/</span>
+      </label>
       <div className="gp-filters" role="group" aria-label="Which parameters">
         {FILTERS.map((f) => (
-          <button key={f.value} data-on={filter === f.value || undefined} onClick={() => setFilter(f.value)}>
+          <button key={f.value} type="button" aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>
             {f.label}
             <em>{count(f.value)}</em>
           </button>
         ))}
       </div>
-      <div className="gp-list" ref={list} tabIndex={0} onKeyDown={onKey} aria-label="The parameters" aria-activedescendant={current ? `gp-${current}` : undefined}>
-        {groups.length === 0 && <p className="gm-empty">{params.length ? 'None matches.' : 'No parameters: the library has not described the galaxy.'}</p>}
+      <div
+        className="gp-list"
+        ref={list}
+        tabIndex={0}
+        onKeyDown={onKey}
+        // (a click on a row, but on what takes the keys itself: the keys to
+        // the list; not one in what opens from a row, out of it)
+        onClick={(event) => {
+          const target = event.target as HTMLElement;
+          if (list.current?.contains(target) && !target.closest('input, button, textarea')) list.current.focus();
+        }}
+        aria-label="The parameters"
+        aria-activedescendant={current ? `gp-${current}` : undefined}
+      >
+        {groups.length === 0 && <p className="sh-note">{params.length ? 'None matches.' : 'No parameters: the library has not described the galaxy.'}</p>}
         {groups.map((g) => (
           <div key={g.key} className="gp-group">
             <div className="gp-ghead">
@@ -179,58 +189,41 @@ export function Params({ draft, field, colours, types, defs }: ParamsProps) {
               {g.label}
             </div>
             {g.params.map((p) => {
-              const setting = settings.get(p.name)!;
               const rings = p.owner[0] === 'components' && typeof p.owner[1] === 'number' ? ringRadii(getAt(options, ['components', p.owner[1], 'rnodes'])) : [];
               return (
                 <div key={p.name} id={`gp-${p.name}`} data-name={p.name}>
-                  <div
-                    className="gp-row"
-                    data-on={current === p.name || undefined}
-                    onClick={() => {
+                  <ParamLine
+                    ctx={ctx}
+                    param={p}
+                    rings={rings.length ? rings : null}
+                    open={opened === p.name}
+                    onOpen={() => {
                       setSelected(p.name);
-                      list.current?.focus();
+                      setOpened((o) => (o === p.name ? null : p.name));
                     }}
-                    onDoubleClick={() => setOpened(opened === p.name ? null : p.name)}
-                  >
-                    <span className="gp-t">
-                      <b>{p.title ?? p.name}</b>
-                      <small>{p.name}</small>
-                    </span>
-                    {typing?.name === p.name ? (
-                      <input
-                        className="gp-type"
-                        autoFocus
-                        value={typing.text}
-                        placeholder={typing.kind === 'tie' ? 'an expression, e.g. gas_incl' : ''}
-                        onChange={(event) => setTyping({ ...typing, text: event.currentTarget.value })}
-                        onBlur={commit}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') commit();
-                          if (event.key === 'Escape') {
-                            setTyping(null);
-                            list.current?.focus();
-                          }
-                        }}
-                        aria-label={typing.kind === 'tie' ? 'Its tie' : 'Its value'}
-                      />
-                    ) : (
-                      <span className="gp-v">
-                        {valueText(setting)}
-                        {setting.kind !== 'tied' && setting.kind !== 'other' && p.unit && <span> {unitText(p.unit)}</span>}
-                      </span>
-                    )}
-                    {/* (how a fit takes it, said of those it does not keep
-                    fixed: most are) */}
-                    <span className="gp-st" data-kind={setting.kind} title={setting.kind === 'fixed' ? 'Fixed' : undefined}>
-                      {setting.kind === 'fixed' ? '' : setting.kind === 'other' ? 'set' : setting.kind}
-                    </span>
-                    <Reach param={p} setting={setting} />
-                  </div>
-                  {opened === p.name && (
-                    <div className="gp-open">
-                      <ParamEditor ctx={ctx} param={p} rings={rings.length ? rings : null} />
-                    </div>
-                  )}
+                    named
+                    current={current === p.name}
+                    box={
+                      tie?.name === p.name ? (
+                        <input
+                          className="sh-num gp-tie"
+                          autoFocus
+                          value={tie.text}
+                          placeholder="e.g. gas_incl"
+                          onChange={(event) => setTie({ ...tie, text: event.currentTarget.value })}
+                          onBlur={commitTie}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') commitTie();
+                            if (event.key === 'Escape') {
+                              setTie(null);
+                              list.current?.focus();
+                            }
+                          }}
+                          aria-label="Its tie"
+                        />
+                      ) : undefined
+                    }
+                  />
                 </div>
               );
             })}
@@ -252,33 +245,9 @@ export function Params({ draft, field, colours, types, defs }: ParamsProps) {
           <span className="gp-kbd">T</span>tie
         </span>
         <span>
-          <span className="gp-kbd">Enter</span>range
+          <span className="gp-kbd">Enter</span>open
         </span>
       </div>
     </div>
-  );
-}
-
-// Where a parameter stands: its values along its rings (one per ring), or
-// of a free one, its value in its range; nothing of a fixed or tied one
-function Reach({ param, setting }: { param: Param; setting: Setting }) {
-  if ((setting.kind === 'fixed' || setting.kind === 'free') && setting.values.length > 1) {
-    const values = setting.values;
-    const low = Math.min(...values);
-    const high = Math.max(...values);
-    const y = (v: number) => 16 - ((v - low) / (high - low || 1)) * 13;
-    const x = (i: number) => (i / (values.length - 1)) * 60 + 1;
-    return (
-      <svg className="gp-spark" viewBox="0 0 62 18" aria-label={`${values.length} values`}>
-        <polyline points={values.map((v, i) => `${x(i)},${y(v)}`).join(' ')} />
-      </svg>
-    );
-  }
-  if (setting.kind !== 'free' || setting.min === null || setting.max === null || setting.max <= setting.min) return <span className="gp-range" data-none />;
-  const at = Math.max(0, Math.min(1, ((setting.values[0] ?? setting.min) - setting.min) / (setting.max - setting.min)));
-  return (
-    <span className="gp-range" title={`${setting.min} to ${setting.max}${param.unit ? ` ${unitText(param.unit)}` : ''}`}>
-      <i style={{ left: `${at * 100}%` }} />
-    </span>
   );
 }

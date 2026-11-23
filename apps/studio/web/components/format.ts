@@ -11,6 +11,13 @@ export function significant(value: number, digits: number): string {
   return String(Number(value.toPrecision(digits)));
 }
 
+// A value short, for a readout or the end of a slider: whole from 100,
+// to a tenth from 10, to a hundredth from 0.01, else to 2 digits
+export function fmt(value: number): string {
+  const size = Math.abs(value);
+  return size >= 100 ? value.toFixed(0) : size >= 10 ? value.toFixed(1) : size >= 0.01 || size === 0 ? value.toFixed(2) : String(Number(value.toPrecision(2)));
+}
+
 // A time (ISO 8601), short, e.g. in a list: of today, its hour; of this
 // year, its day and hour; else its day and year (as given, if it is not
 // a time)

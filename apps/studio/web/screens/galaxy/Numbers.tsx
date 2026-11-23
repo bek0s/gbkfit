@@ -1,16 +1,23 @@
-// The parameters of a part of a galaxy, as numbers: each its short name
-// and its value (tinted if a fit frees it, outlined if tied to an
-// expression, marked if it has a value per ring: a small line of its
-// values along the rings, if they differ), in a line or a line each
-// with its title. A click opens it to set (see ParamField): its value,
-// whether a fit frees it and in what range, or its tie.
+// The parameters of a galaxy as rows of its sheet (see ui/rows), in its
+// model and in the list of its parameters. One of one value, fixed or
+// free: its value typed in its box, its pill free or fixed, and, as its
+// row opens, a slider over its fit range or its natural span (see
+// naturalSpan); its fit range kept as it is typed (not grown to hold the
+// numbers on the way, e.g. 1 and 14 of 140), grown to hold it as it is
+// left. One of several values (e.g. one per ring): the range of them in
+// its box; one tied to an expression: its value greyed in a dashed box,
+// its tie under its title; one set otherwise in its params block (e.g. by
+// element): a dash. A click on one of these opens it to set (see
+// ParamField): its values (a profile, of several), whether a fit frees it
+// and in what range, or its tie.
 import { Popover } from '@mantine/core';
+import type { ReactNode } from 'react';
 import { significant } from '../../components/format';
+import { ParamRow, Row, StatePill } from '../../components/ui/rows';
 import type { GalaxyDraft } from './draft';
-import { RingMark } from './Marks';
 import type { Options } from './options';
 import { ParamField, unitText } from './ParamField';
-import { freeRange, settingOf, shortName, withFreedom, withRange, withValues, type Param, type Setting } from './params';
+import { naturalSpan, settingOf, shortName, valueAt, withFreedom, withRange, withValues, type Param, type Properties, type Setting } from './params';
 
 export interface NumbersContext {
   draft: GalaxyDraft;
@@ -21,38 +28,144 @@ export interface NumbersContext {
   field: number;
 }
 
-// The text of the value of a setting: one value, the range of several, a
-// tie, or what the screen does not edit
+// Values in a few characters: one, or the first and the last of several
+// (e.g. along the rings), or a dash
+function valuesText(values: number[]): string {
+  if (values.length === 0) return '—';
+  const [first, last] = [values[0], values[values.length - 1]];
+  return values.every((v) => v === first) ? significant(first, 4) : `${significant(first, 3)} … ${significant(last, 3)}`;
+}
+
+// The text of the value of a setting: its values, a tie, or what the
+// screen does not edit
 export function valueText(setting: Setting): string {
   if (setting.kind === 'tied') return `= ${setting.expression}`;
   if (setting.kind === 'other') return 'set in its params';
-  const values = setting.values;
-  if (values.length === 0) return '—';
-  const low = Math.min(...values);
-  const high = Math.max(...values);
-  return low === high ? significant(low, 4) : `${significant(low, 3)}…${significant(high, 3)}`;
+  return valuesText(setting.values);
 }
 
-// (bare: without its name, where what it is is said, e.g. in its line)
-export function NumberChip({ ctx, param, rings, limit, bare }: { ctx: NumbersContext; param: Param; rings: number[] | null; limit?: number; bare?: boolean }) {
+// The values of a parameter tied to another, or to an element of it (e.g.
+// 'gas_vsys', 'gas_posa[0]'): those of the other; none of an expression
+// (they are the fit's), or of a tie to a tie
+function tiedValues(expression: string, properties: Properties, params: Param[]): number[] {
+  const match = /^\s*([A-Za-z_]\w*)\s*(?:\[\s*(\d+)\s*\])?\s*$/.exec(expression);
+  const other = match && params.find((p) => p.name === match[1]);
+  const setting = other ? settingOf(properties, other) : null;
+  if (!match || !setting || (setting.kind !== 'fixed' && setting.kind !== 'free')) return [];
+  if (match[2] === undefined) return setting.values;
+  const value = valueAt(setting.values, Number(match[2]));
+  return value === undefined ? [] : [value];
+}
+
+// What sets the property of a parameter (undefined: none, its default);
+// the edits of one gesture (e.g. the drag of a slider) one step of history
+function propertySetter(draft: GalaxyDraft, param: Param) {
+  return (next: unknown, gesture?: string) =>
+    draft.edit((s) => {
+      const { [param.name]: _, ...rest } = s.properties;
+      return { ...s, properties: next === undefined ? rest : { ...rest, [param.name]: next } };
+    }, { gesture });
+}
+
+// A parameter as a row (see the module): its title (else its short name),
+// and under it its name as it opens (always, named), or a note given;
+// limit: the most its lengths reach (e.g. the height of a trait)
+export function ParamLine({
+  ctx,
+  param,
+  rings,
+  limit,
+  open,
+  onOpen,
+  named,
+  current,
+  title,
+  note,
+  box,
+}: {
+  ctx: NumbersContext;
+  param: Param;
+  rings: number[] | null;
+  limit?: number;
+  open: boolean;
+  onOpen: () => void;
+  named?: boolean;
+  current?: boolean;
+  // (e.g. a menu, of the distance)
+  title?: ReactNode;
+  note?: ReactNode;
+  // (in place of its box: e.g. its tie, as it is typed)
+  box?: ReactNode;
+}) {
   const { draft, options, params } = ctx;
-  const setting = settingOf(draft.state?.properties ?? {}, param);
-  const label = shortName(param, options, params);
-  const unit = setting.kind === 'tied' || setting.kind === 'other' ? '' : unitText(param.unit);
+  const properties = draft.state?.properties ?? {};
+  const setting = settingOf(properties, param);
+  const property = properties[param.name];
+  const set = propertySetter(draft, param);
+  const field = limit === undefined ? ctx.field : Math.min(ctx.field, limit);
+  const heading = title ?? param.title ?? shortName(param, options, params);
+  const about = { title: param.desc ?? undefined };
+  const unit = setting.kind === 'other' ? '' : unitText(param.unit);
+  if (param.size === 1 && (setting.kind === 'fixed' || setting.kind === 'free')) {
+    const number = setting.values[0] ?? param.default ?? 0;
+    const natural = naturalSpan(param, [number], field);
+    return (
+      <ParamRow
+        param={param}
+        title={heading}
+        titleProps={about}
+        value={setting.kind === 'free' ? { number, free: true, min: setting.min, max: setting.max } : { number, free: false }}
+        natural={natural}
+        unit={unit}
+        open={open}
+        onOpen={onOpen}
+        onValue={(v) => set(withValues(property, param, [v], false), param.name)}
+        onDone={() => setting.kind === 'free' && (number < (setting.min ?? number) || number > (setting.max ?? number)) && set(withValues(property, param, [number]), param.name)}
+        onFree={(free, span) => set(withFreedom(property, param, setting, free, span))}
+        onRange={(end, v) => {
+          if (setting.kind !== 'free') return;
+          const [min, max] = [setting.min ?? natural[0], setting.max ?? natural[1]];
+          set(withRange(property, end === 'min' ? v : min, end === 'max' ? v : max), `${param.name}/range`);
+        }}
+        note={note ?? (named ? param.name : undefined)}
+        current={current}
+        box={box}
+      />
+    );
+  }
+  const values = setting.kind === 'fixed' || setting.kind === 'free' ? setting.values : setting.kind === 'tied' ? tiedValues(setting.expression, properties, params) : [];
+  const several = param.size > 1 ? `${param.name} · ${rings?.length === param.size ? 'per ring' : `${param.size} values`}` : param.name;
+  const sub = setting.kind === 'tied' ? `${param.name} = ${setting.expression}` : setting.kind === 'other' ? `${param.name} · set in its params` : (note ?? (named || open ? several : undefined));
   return (
-    <Popover position="bottom-start" offset={4} width={320} shadow="md" withinPortal trapFocus={false} classNames={{ dropdown: 'gm-pop' }}>
+    <Popover opened={open} onChange={(next) => next !== open && onOpen()} position="bottom-end" offset={4} width={320} shadow="md" withinPortal trapFocus={false} classNames={{ dropdown: 'gm-pop' }}>
       <Popover.Target>
-        <button
-          className="gm-num"
-          data-kind={setting.kind}
-          data-ring={param.size > 1 || undefined}
-          title={[param.title, param.name, param.desc].filter(Boolean).join(' · ')}
-        >
-          {!bare && <i>{label}</i>}
-          {valueText(setting)}
-          {unit && <span className="gm-unit">{unit}</span>}
-          {param.size > 1 && <RingValues setting={setting} />}
-        </button>
+        <Row
+          title={heading}
+          titleProps={about}
+          sub={sub}
+          open={open}
+          onOpen={onOpen}
+          // (Escape closes what sets it, the focus on its box)
+          onKeyDown={(event) => event.key === 'Escape' && open && onOpen()}
+          current={current}
+          box={
+            box ?? (
+              <button type="button" className="sh-num gm-box" data-kind={setting.kind === 'fixed' || setting.kind === 'free' ? 'many' : setting.kind} title={valueText(setting)} onClick={onOpen}>
+                {valuesText(values)}
+              </button>
+            )
+          }
+          unit={unit}
+          pill={
+            setting.kind === 'fixed' || setting.kind === 'free' ? (
+              <StatePill free={setting.kind === 'free'} onToggle={() => set(withFreedom(property, param, setting, setting.kind !== 'free', naturalSpan(param, setting.values, field)))} />
+            ) : (
+              <span className="sh-state" data-kind={setting.kind}>
+                {setting.kind === 'tied' ? 'tied' : 'set'}
+              </span>
+            )
+          }
+        />
       </Popover.Target>
       <Popover.Dropdown>
         <ParamEditor ctx={ctx} param={param} rings={rings} limit={limit} />
@@ -61,45 +174,26 @@ export function NumberChip({ ctx, param, rings, limit, bare }: { ctx: NumbersCon
   );
 }
 
-// The values of a parameter along its rings, as a small line, low to high
-// (the mark of a value per ring, if they are all the same or tied)
-function RingValues({ setting }: { setting: Setting }) {
-  const values = setting.kind === 'fixed' || setting.kind === 'free' ? setting.values.filter(Number.isFinite) : [];
-  const low = Math.min(...values);
-  const high = Math.max(...values);
-  if (values.length < 2 || !(high > low)) return <RingMark />;
-  const x = (i: number) => 1 + (i / (values.length - 1)) * 24;
-  const y = (v: number) => 8.5 - ((v - low) / (high - low)) * 7;
-  return (
-    <svg className="gm-rspark" viewBox="0 0 26 10" aria-label={`From ${significant(values[0], 3)} to ${significant(values[values.length - 1], 3)} along the rings`}>
-      <polyline points={values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')} />
-    </svg>
-  );
-}
-
 // A parameter to set (see ParamField): its value, whether a fit frees it
 // and in what range, or its tie
 export function ParamEditor({ ctx, param, rings, limit }: { ctx: NumbersContext; param: Param; rings: number[] | null; limit?: number }) {
-  const { draft, options, params, field } = ctx;
+  const { draft, options, params } = ctx;
   const properties = draft.state?.properties ?? {};
   const setting = settingOf(properties, param);
   const property = properties[param.name];
-  const setProperty = (next: unknown, gesture?: string) =>
-    draft.edit((s) => {
-      const { [param.name]: _, ...rest } = s.properties;
-      return { ...s, properties: next === undefined ? rest : { ...rest, [param.name]: next } };
-    }, { gesture });
+  const set = propertySetter(draft, param);
+  const field = limit === undefined ? ctx.field : Math.min(ctx.field, limit);
   return (
     <ParamField
       param={param}
       label={shortName(param, options, params)}
       setting={setting}
-      field={limit === undefined ? field : Math.min(field, limit)}
+      field={field}
       rings={rings}
-      onValues={(values, gesture) => setProperty(withValues(property, param, values), gesture)}
-      onFree={(free) => setProperty(withFreedom(property, param, setting, free, freeRange(param, field)))}
-      onRange={(min, max) => setProperty(withRange(property, min, max), `${param.name}/range`)}
-      onUntie={() => setProperty(undefined)}
+      onValues={(values, gesture) => set(withValues(property, param, values), gesture)}
+      onFree={(free) => setting.kind !== 'tied' && setting.kind !== 'other' && set(withFreedom(property, param, setting, free, naturalSpan(param, setting.values, field)))}
+      onRange={(min, max) => set(withRange(property, min, max), `${param.name}/range`)}
+      onUntie={() => set(undefined)}
     />
   );
 }
@@ -116,26 +210,4 @@ export function paramText(ctx: NumbersContext, param: Param): string {
 export function freeCount(ctx: NumbersContext, params: Param[]): number {
   const properties = ctx.draft.state?.properties ?? {};
   return params.filter((param) => settingOf(properties, param).kind === 'free').length;
-}
-
-// The parameters of a part, a line each in the columns of the card: its
-// short name and its title, and its number (see NumberChip); at a depth
-// under the line of what owns them (0: beside it, e.g. in a frame; 2: under
-// a line that is itself under another, e.g. the height of a trait)
-export function NumberRows({ ctx, owned, rings, limit, depth = 1 }: { ctx: NumbersContext; owned: Param[]; rings: number[] | null; limit?: number; depth?: 0 | 1 | 2 }) {
-  return (
-    <>
-      {owned.map((param) => (
-        <div key={param.name} className="gm-prow" data-depth={depth}>
-          <span className="gm-cell-head">
-            <code className="gm-pn">{shortName(param, ctx.options, ctx.params)}</code>
-            <span className="gm-pt">{param.title}</span>
-          </span>
-          <span className="gm-cell-nums">
-            <NumberChip ctx={ctx} param={param} rings={rings} limit={limit} bare />
-          </span>
-        </div>
-      ))}
-    </>
-  );
 }

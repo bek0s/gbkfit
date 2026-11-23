@@ -11,8 +11,10 @@
 // to the lens again.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LensFrame, LensView } from '../../api/queries';
+import { fmt } from '../../components/format';
+import { Track } from '../../components/ui/rows';
+import { snap } from '../../components/values';
 import type { Dots, Handles } from './LensScreen';
-import { fmt, snap, Track } from './SliderRow';
 
 // A round test source: its centre and its dispersion (arcsec)
 export interface Source {
