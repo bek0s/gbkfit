@@ -388,6 +388,11 @@ function useKeptInPlace() {
     };
     // (the browser's own anchoring of the scroll would fight it)
     pane.style.overflowAnchor = 'none';
+    // (room at once, before what folds is laid out again, as much as all
+    // that could fold: else the pane, shorter than its scroll, is scrolled
+    // back for a frame, and what is under the pointer flashes; the first
+    // follow, before the frame is painted, leaves only the room needed)
+    spacer.style.height = `${spacer.offsetHeight + pane.scrollHeight}px`;
     requestAnimationFrame(follow);
     if (shrinking.current) pane.removeEventListener('scroll', shrinking.current);
     const shrink = () => {
