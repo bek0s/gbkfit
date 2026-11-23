@@ -101,14 +101,14 @@ export function LensPicture({
   return (
     <div className="ob-view lp-view">
       <div className="lp-tools">
-        <span className="lp-grp" role="tablist" aria-label="What the image plane shows">
+        <span className="lp-grp lp-grp-even" role="tablist" aria-label="What the image plane shows">
           {MODES.map(([key, title]) => (
             <button key={key} type="button" role="tab" aria-selected={mode === key} onClick={() => setMode(key)}>
               {title}
             </button>
           ))}
         </span>
-        <span className="lp-grp">
+        <span className="lp-grp lp-grp-even">
           <button type="button" aria-pressed={curves} title="The critical curves and the caustics" onClick={() => setCurves(!curves)}>
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <path className="lp-ic-critical" d="M2 11c2-6 10-6 12 0" />

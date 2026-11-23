@@ -1482,7 +1482,12 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-piece[data-selected] > .lp-piece-head { background: var(--sel); }
 .lp-piece[data-bad] > .lp-piece-head { box-shadow: inset 2px 0 0 var(--err-fill); }
 .lp-piece[data-hidden] .lp-piece-text, .lp-piece[data-hidden] .lp-dot { opacity: .4; }
-.lp-chev { margin-top: 5px; width: 12px; height: 12px; fill: none; stroke: var(--faint); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s; }
+/* (its chevron a button of its own, which folds and unfolds; larger than
+   it to the pointer, by a padding its margins take back) */
+.lp-fold { display: grid; margin: 1px -4px -4px; padding: 4px; border: 0; border-radius: 4px; background: none; cursor: pointer; }
+.lp-fold:hover .lp-chev { stroke: var(--fg); }
+.lp-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lp-chev { width: 12px; height: 12px; fill: none; stroke: var(--faint); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s; }
 .lp-piece[data-open] .lp-chev { transform: rotate(90deg); }
 .lp-dot { margin-top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--piece); }
 .lp-piece-text { display: grid; gap: 2px; min-width: 0; }
@@ -1525,12 +1530,17 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 16px; border-bottom: 1px solid var(--line); color: var(--muted); font: var(--text-label); }
 .lp-grp { display: inline-flex; height: 28px; border: 1px solid var(--line2); border-radius: 6px; overflow: hidden; }
 .lp-grp > * { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border: 0; background: none; color: var(--muted); font: var(--text-label); white-space: nowrap; }
-.lp-grp > * + * { border-left: 1px solid var(--line); }
+.lp-grp > * + * { border-left: 1px solid var(--line2); }
 .lp-grp > button { cursor: pointer; }
 .lp-grp > button:not([aria-selected="true"]):not(:disabled):hover { background: color-mix(in srgb, var(--fg) 5%, transparent); color: var(--fg); }
 .lp-grp > button:disabled { cursor: default; color: var(--faint); }
 .lp-grp > button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.lp-grp > [aria-selected="true"] { background: var(--sel); color: var(--accent-text); font-weight: 600; }
+/* (a choice shown by its ground and colour, not a heavier face, which is
+   wider: nothing moves as one is chosen) */
+.lp-grp > [aria-selected="true"] { background: var(--sel); color: var(--accent-text); }
+/* (a group of choices or toggles: its parts of one width, the widest) */
+.lp-grp-even { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.lp-grp-even > * { justify-content: center; }
 .lp-grp > [aria-pressed="true"], .lp-grp > [aria-pressed="true"]:not(:disabled):hover { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
 .lp-grp > [aria-pressed="false"] { color: var(--faint); }
 .lp-grp > [aria-pressed="false"] svg { opacity: .45; }

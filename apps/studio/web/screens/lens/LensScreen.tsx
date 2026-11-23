@@ -222,9 +222,10 @@ function LensBlock({ draft, options, viewSource }: { draft: LensDraft; options: 
   );
 }
 
-// Its pieces: a line each, which a click unfolds and selects (its handles
-// in the picture; folded, no longer selected); unfolded, its parameters
-// and its own source redshift; its menu renames it, shows it alone in the
+// Its pieces: a line each, which a click selects (its handles in the
+// picture; unfolded, if it was folded) or, if it is selected, selects no
+// longer; its chevron folds or unfolds it, and only that; unfolded, its
+// parameters and its own source redshift; its menu renames it, shows it alone in the
 // picture, duplicates it or removes it, the properties of its parameters
 // with it (moved, copied or dropped, by the names the library gives them);
 // what adds a piece of a type, and unfolds or folds them all
@@ -312,7 +313,7 @@ function PiecesBlock({
           <button type="button" className="lp-icon" title="Unfold every piece" aria-label="Unfold every piece" disabled={names.every((n) => open.has(n))} onClick={() => onUi((u) => ({ ...u, open: new Set(names) }))}>
             <svg viewBox="0 0 16 16"><path d="M4 6l4-4 4 4M4 10l4 4 4-4" /></svg>
           </button>
-          <button type="button" className="lp-icon" title="Fold every piece" aria-label="Fold every piece" disabled={names.every((n) => !open.has(n))} onClick={() => onUi((u) => ({ ...u, open: new Set(), selected: null }))}>
+          <button type="button" className="lp-icon" title="Fold every piece" aria-label="Fold every piece" disabled={names.every((n) => !open.has(n))} onClick={() => onUi((u) => ({ ...u, open: new Set() }))}>
             <svg viewBox="0 0 16 16"><path d="M4 2l4 4 4-4M4 14l4-4 4 4" /></svg>
           </button>
           <DropMenu
@@ -342,16 +343,28 @@ function PiecesBlock({
                 className="lp-piece-head"
                 role="button"
                 tabIndex={0}
-                aria-expanded={isOpen}
+                aria-pressed={name === ui.selected}
                 onClick={() =>
-                  // (unfolded, it is selected; folded, it is no longer)
-                  onUi((u) => ({ ...u, open: toggled(u.open ?? firstOpen(pieces), name), selected: isOpen ? (u.selected === name ? null : u.selected) : name }))
+                  // (selected, and unfolded; or, if it was, selected no longer)
+                  onUi((u) => (u.selected === name ? { ...u, selected: null } : { ...u, selected: name, open: new Set([...(u.open ?? firstOpen(pieces)), name]) }))
                 }
                 onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.click()}
               >
-                <svg className="lp-chev" viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="M6 4l4 4-4 4" />
-                </svg>
+                <button
+                  type="button"
+                  className="lp-fold"
+                  aria-expanded={isOpen}
+                  aria-label={isOpen ? `Fold ${name}` : `Unfold ${name}`}
+                  title={isOpen ? 'Fold it' : 'Unfold it'}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onUi((u) => ({ ...u, open: toggled(u.open ?? firstOpen(pieces), name) }));
+                  }}
+                >
+                  <svg className="lp-chev" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M6 4l4 4-4 4" />
+                  </svg>
+                </button>
                 <span className="lp-dot" />
                 <span className="lp-piece-text">
                   <span className="lp-piece-name">
