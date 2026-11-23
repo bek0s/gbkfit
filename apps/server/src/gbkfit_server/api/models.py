@@ -253,7 +253,7 @@ class LensViewRequest(BaseModel):
     A lens to view (see Lenses.view): as LensRequest, with the properties
     of its parameters (by the names of the lens), the number of points
     across the field, its half-width and its centre (x and y; arcsec; by
-    default, fitted to the lens).
+    default, fitted to the lens), and the pieces hidden in it (by index).
     """
     project: str
     lens: dict[str, Any]
@@ -261,6 +261,7 @@ class LensViewRequest(BaseModel):
     size: int = Field(96, ge=16, le=256)
     half: float | None = Field(None, gt=0)
     centre: tuple[float, float] | None = None
+    hidden: list[int] = []
 
 
 class LensViewInfo(BaseModel):

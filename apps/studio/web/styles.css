@@ -1538,18 +1538,23 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-grp .lp-ic-caustic { stroke: color-mix(in srgb, #ff8fc8 65%, var(--fg)); }
 .lp-grp .lp-ic-fill { fill: currentColor; stroke: none; }
 .lp-grp > .lp-grp-icon { width: 28px; padding: 0; justify-content: center; }
-.lp-grp > .lp-grp-val { min-width: 34px; padding: 0 6px; justify-content: center; font: var(--text-data); color: var(--fg); }
+.lp-grp > .lp-grp-val { width: 52px; padding: 0; justify-content: center; font: var(--text-data); color: var(--fg); }
 .lp-field { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
-/* (the image plane, its caption with it, as large a square as fits the
-   height of the place and its width beside the source plane, which is
-   next to it) */
-.lp-planes { flex: 1; min-height: 0; container-type: size; display: flex; align-items: flex-start; gap: 16px; padding: 16px; }
-.lp-image-box { flex: none; width: max(200px, min(calc(100cqh - 32px), calc(100cqw - 316px))); }
-.lp-source-box { flex: none; width: 300px; }
-.lp-plane-box { display: grid; align-content: start; gap: 6px; margin: 0; min-width: 0; }
-.lp-plane-box figcaption { display: flex; align-items: baseline; gap: 10px; font: var(--text-heading); color: var(--fg); }
-.lp-key { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font: var(--text-caption); color: var(--muted); }
+/* (the source plane at most 300 px, two fifths of the width of the place
+   and what its height leaves it, with its caption and the line of its
+   test source; the image plane, with its caption, as large a square as
+   fits the height and the width beside it: so never the smaller) */
+.lp-planes { --source: min(300px, calc((100cqw - 16px) * .4), calc(100cqh - 56px)); flex: 1; min-height: 0; container-type: size; display: flex; align-items: flex-start; gap: 16px; padding: 16px; }
+.lp-image-box { flex: none; width: min(calc(100cqh - 32px), calc(100cqw - 16px - var(--source))); }
+.lp-source-box { flex: none; width: var(--source); }
+.lp-plane-box { container-type: inline-size; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 6px; margin: 0; min-width: 0; }
+/* (a caption is a line of a fixed height, whatever it holds in any state
+   (the key of the curves, a note, nothing), so that no state moves the
+   planes) */
+.lp-plane-box figcaption { display: flex; align-items: center; gap: 10px; height: 20px; min-width: 0; font: var(--text-heading); color: var(--fg); white-space: nowrap; }
+.lp-key { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; font: var(--text-caption); color: var(--muted); }
 .lp-key[data-off] { visibility: hidden; }
+.lp-key[data-bad] { color: var(--warn); }
 .lp-key i { width: 14px; height: 2px; }
 /* (the colours of the curves on the black of the planes, mixed with the
    text off them, to show in either theme) */
@@ -1572,11 +1577,15 @@ body[data-resizing] { cursor: col-resize; user-select: none; }
 .lp-compass path { stroke: #e9eef3; stroke-width: 1.4; fill: none; }
 .lp-compass .lp-compass-tip { fill: #e9eef3; stroke: none; }
 .lp-compass text { font: 600 8px var(--mono); fill: #e9eef3; }
-.lp-readout { position: absolute; left: 8px; top: 8px; padding: 3px 6px; border-radius: 4px; background: rgba(0, 0, 0, .55); color: #cfd6de; font: var(--text-data-small); pointer-events: none; }
+.lp-readout { white-space: nowrap; position: absolute; left: 8px; top: 8px; padding: 3px 6px; border-radius: 4px; background: rgba(0, 0, 0, .55); color: #cfd6de; font: var(--text-data-small); pointer-events: none; }
 .lp-readout-corner { left: auto; top: auto; right: 8px; bottom: 8px; }
-.lp-src { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; color: var(--fg); font: var(--text-label); }
+.lp-src { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto; align-items: center; gap: 10px; color: var(--fg); font: var(--text-label); }
+.lp-src > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lp-src .lp-knob { box-shadow: 0 0 0 3px var(--bg); }
 .lp-src-v { font: var(--text-data-small); color: var(--fg2); }
+/* (a plane too small for its key, its readout and the name of its test
+   source, e.g. at a large zoom of the browser, shows them not) */
+@container (max-width: 150px) { .lp-key, .lp-readout, .lp-src-name { display: none; } }
 
 /* The compare screen: a grid of cells, a galaxy as an observation sees it
    each, under the heads of the columns and beside those of the rows */

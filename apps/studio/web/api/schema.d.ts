@@ -1745,7 +1745,7 @@ export interface components {
          * @description A lens to view (see Lenses.view): as LensRequest, with the properties
          *     of its parameters (by the names of the lens), the number of points
          *     across the field, its half-width and its centre (x and y; arcsec; by
-         *     default, fitted to the lens).
+         *     default, fitted to the lens), and the pieces hidden in it (by index).
          */
         LensViewRequest: {
             /** Project */
@@ -1770,6 +1770,11 @@ export interface components {
                 number,
                 number
             ] | null;
+            /**
+             * Hidden
+             * @default []
+             */
+            hidden: number[];
         };
         /**
          * ObservationRequest

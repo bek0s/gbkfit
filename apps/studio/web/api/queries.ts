@@ -617,19 +617,19 @@ export function useDatasetCheck(project: string, dataset: Record<string, unknown
 export type LensFrame = { half: number; centre: [number, number] };
 
 // What a lens makes of a source behind it, at the properties of its
-// parameters: its deflection over a field (null: one the server fits to
-// the lens), its critical curves and its caustics (see the server's
-// LensViewInfo)
-export function useLensView(project: string, lens: Record<string, unknown> | undefined, properties: Record<string, unknown>, frame: LensFrame | null, size = 96) {
+// parameters, without its pieces hidden (by index): its deflection over a
+// field (null: one the server fits to the lens), its critical curves and
+// its caustics (see the server's LensViewInfo)
+export function useLensView(project: string, lens: Record<string, unknown> | undefined, properties: Record<string, unknown>, frame: LensFrame | null, hidden: number[], size = 96) {
   const client = useQueryClient();
-  const key = (of: LensFrame | null) => keys.view('lens', project, JSON.stringify(lens ?? null), JSON.stringify(properties), size, JSON.stringify(of));
+  const key = (of: LensFrame | null) => keys.view('lens', project, JSON.stringify(lens ?? null), JSON.stringify(properties), size, JSON.stringify(of), hidden.join(','));
+  // (no placeholder: the screen draws the last view while the next comes)
   return useQuery({
     queryKey: key(frame),
     enabled: lens !== undefined,
-    placeholderData: keepPreviousData,
     retry: false,
     queryFn: async ({ signal }) => {
-      const view = await data(api.POST('/api/v1/views/lens', { signal, body: { project, lens: lens ?? {}, properties, size, half: frame?.half ?? null, centre: frame?.centre ?? null } }));
+      const view = await data(api.POST('/api/v1/views/lens', { signal, body: { project, lens: lens ?? {}, properties, size, half: frame?.half ?? null, centre: frame?.centre ?? null, hidden } }));
       // (a view of a field fitted to the lens is also the view of that
       // field, which is asked for next)
       if (frame === null) client.setQueryData(key({ half: view.half, centre: [view.centre[0], view.centre[1]] }), view);

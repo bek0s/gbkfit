@@ -4222,6 +4222,14 @@
               }
             ],
             "title": "Centre"
+          },
+          "hidden": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Hidden",
+            "default": []
           }
         },
         "type": "object",
@@ -4231,7 +4239,7 @@
           "properties"
         ],
         "title": "LensViewRequest",
-        "description": "A lens to view (see Lenses.view): as LensRequest, with the properties\nof its parameters (by the names of the lens), the number of points\nacross the field, its half-width and its centre (x and y; arcsec; by\ndefault, fitted to the lens)."
+        "description": "A lens to view (see Lenses.view): as LensRequest, with the properties\nof its parameters (by the names of the lens), the number of points\nacross the field, its half-width and its centre (x and y; arcsec; by\ndefault, fitted to the lens), and the pieces hidden in it (by index)."
       },
       "ObservationRequest": {
         "properties": {

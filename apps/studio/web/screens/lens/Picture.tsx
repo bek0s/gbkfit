@@ -47,8 +47,12 @@ export function zoomed(field: number, wider: boolean): number {
   return wider ? rounds.find((r) => r > field + near)! : [...rounds].reverse().find((r) => r < field - near)!;
 }
 
-// A view of no lens (every piece hidden): the source as it is, over a
-// field (by default, 4 arcsec about the origin)
+// What the picture says of what it shows, if not the lens as it is (e.g.
+// the last picture, of a lens with a problem); bad, if it is a problem
+export type PictureNote = { text: string; bad: boolean };
+
+// A view of no lens (no piece shown): the source as it is, over a field
+// (by default, 4 arcsec about the origin)
 export function bareView(frame: LensFrame | null): LensView {
   const { half, centre } = frame ?? { half: 2, centre: [0, 0] as [number, number] };
   return { half, centre, size: 2, alpha_x: [0, 0, 0, 0], alpha_y: [0, 0, 0, 0], critical: [], caustics: [], left_out: [] };
@@ -56,9 +60,7 @@ export function bareView(frame: LensFrame | null): LensView {
 
 export function LensPicture({
   view,
-  bare,
-  error,
-  empty,
+  note,
   onZoom,
   onFit,
   source,
@@ -69,15 +71,11 @@ export function LensPicture({
   onClearPick,
   onHandle,
 }: {
+  // What it draws (none: none yet), and what it says of it
   view: LensView | undefined;
-  // Whether every piece is hidden (the view is bare: see bareView)
-  bare: boolean;
-  error: string | null;
-  // Why there is nothing to draw, if so
-  empty: string | null;
-  // What the zoom does (null: nothing, of no field yet) and what fits the
-  // field to the lens again
-  onZoom: ((wider: boolean) => void) | null;
+  note: PictureNote | null;
+  // What the zoom does and what fits the field to the lens again
+  onZoom: (wider: boolean) => void;
   onFit: () => void;
   source: Source;
   onSource: (source: Source) => void;
@@ -97,9 +95,8 @@ export function LensPicture({
   }, [onClearPick]);
   const [curves, setCurves] = useState(true);
   const [showHandles, setShowHandles] = useState(true);
-  if (empty) return <div className="ob-view"><p className="ob-empty">{empty}</p></div>;
-  if (error) return <div className="ob-view"><p className="ob-empty">{error.replace(/^[A-Za-z]+Error: /, '')}</p></div>;
-  if (!view) return <div className="ob-view"><div className="gx-map-wait" /></div>;
+  // (nothing drawn yet: why, or a wait)
+  if (!view) return <div className="ob-view">{note ? <p className="ob-empty">{note.text}</p> : <div className="gx-map-wait" />}</div>;
   const largest = LARGEST_SOURCE * view.half;
   return (
     <div className="ob-view lp-view">
@@ -131,11 +128,11 @@ export function LensPicture({
         <span className="lp-field">
           Field
           <span className="lp-grp">
-            <button type="button" className="lp-grp-icon" title="Zoom out" aria-label="Zoom out" disabled={!onZoom} onClick={() => onZoom?.(true)}>
+            <button type="button" className="lp-grp-icon" title="Zoom out" aria-label="Zoom out" onClick={() => onZoom(true)}>
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8h8" /></svg>
             </button>
             <span className="lp-grp-val">{roundText(2 * view.half)}″</span>
-            <button type="button" className="lp-grp-icon" title="Zoom in" aria-label="Zoom in" disabled={!onZoom} onClick={() => onZoom?.(false)}>
+            <button type="button" className="lp-grp-icon" title="Zoom in" aria-label="Zoom in" onClick={() => onZoom(false)}>
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8h8M8 4v8" /></svg>
             </button>
             <button type="button" className="lp-grp-icon" title="Fit the field to the lens" aria-label="Fit the field to the lens" onClick={onFit}>
@@ -148,10 +145,12 @@ export function LensPicture({
         <figure className="lp-plane-box lp-image-box">
           <figcaption>
             Image plane
-            {bare ? (
-              <span className="lp-key">Every piece hidden: the source as it is</span>
+            {note ? (
+              <span className="lp-key" data-bad={note.bad || undefined} title={note.text}>
+                {note.text}
+              </span>
             ) : (
-              <span className="lp-key" data-off={!curves || undefined}><i className="lp-key-critical" /> critical curves</span>
+              <span className="lp-key" data-off={!curves || view.critical.length === 0 || undefined}><i className="lp-key-critical" /> critical curves</span>
             )}
           </figcaption>
           <ImagePlane view={view} source={source} mode={mode} curves={curves} handles={showHandles ? handles : null} dots={showHandles ? dots : []} onPick={onPick} onHandle={onHandle} />
@@ -159,11 +158,11 @@ export function LensPicture({
         <figure className="lp-plane-box lp-source-box">
           <figcaption>
             Source plane
-            <span className="lp-key" data-off={!curves || bare || undefined}><i className="lp-key-caustic" /> caustics</span>
+            <span className="lp-key" data-off={!curves || view.caustics.length === 0 || undefined}><i className="lp-key-caustic" /> caustics</span>
           </figcaption>
           <SourcePlane view={view} source={source} curves={curves} onSource={onSource} />
           <div className="lp-src">
-            <span>Test source σ</span>
+            <span><span className="lp-src-name">Test source </span>σ</span>
             <Track at={Math.min(1, source.size / largest)} onAt={(t) => onSource({ ...source, size: Math.max(largest / 50, snap(t * largest, [0, largest])) })} />
             <span className="lp-src-v">{fmt(source.size)}″</span>
           </div>

@@ -24,7 +24,7 @@ import { NameText } from '../galaxy/Model';
 import { typesOf } from '../galaxy/schema';
 import { isObject, useLensDraft, type LensDraft } from './draft';
 import { LightPath } from './LightPath';
-import { bareView, LensPicture, zoomed, type Source } from './Picture';
+import { bareView, LensPicture, zoomed, type PictureNote, type Source } from './Picture';
 import { fmt, NumberInput, numberOf, SliderRow, unitText, useScrub, type LensParam, type ParamValue } from './SliderRow';
 
 // The colours of the pieces, in order (those of the components of a
@@ -58,25 +58,39 @@ export function LensScreen({ name }: { name: string }) {
   const [source, setSource] = useState<Source>({ x: 0.1, y: 0.05, size: 0.1 });
   // (the field of the picture: null until the server fits one to the lens)
   const [frame, setFrame] = useState<LensFrame | null>(null);
-  // (whether every piece is hidden: the picture shows the source as it is)
-  const bare = pieces.length > 0 && problems.length === 0 && described.length > 0 && pieces.every((_, i) => hidden.has(i));
-  // (what the picture is of: the lens without its hidden pieces, at the
-  // values of the properties of its parameters, or their defaults; asked
-  // for once they stand a moment, not at each step of a drag)
+  // (whether no piece is shown, every one hidden or none yet: the picture
+  // shows the source as it is, of no call to the server)
+  const bare = !!options && problems.length === 0 && pieces.every((_, i) => hidden.has(i));
+  // (what the picture is of: the lens, its hidden pieces left out by the
+  // server (the lens is still the whole of it, e.g. its source_redshift
+  // taken by those pieces only), at the values of the properties of its
+  // parameters, or their defaults; asked for once they stand a moment,
+  // not at each step of a drag)
   const shown = useMemo(() => {
     if (!options || problems.length > 0 || described.length === 0 || bare) return null;
-    const kept = pieces.map((_, i) => i).filter((i) => !hidden.has(i));
-    const values = Object.fromEntries(
-      params.filter((p) => !hidden.has(p.owner[1])).map((p) => [p.name, properties[p.name] !== undefined ? properties[p.name] : p.default]),
-    );
-    return { lens: { ...options, pieces: kept.map((i) => pieces[i]) }, values };
+    const values = Object.fromEntries(params.map((p) => [p.name, properties[p.name] !== undefined ? properties[p.name] : p.default]));
+    return { lens: options, values, hidden: pieces.map((_, i) => i).filter((i) => hidden.has(i)) };
   }, [options, problems.length, described.length, bare, params, pieces, hidden, properties]);
-  const bareShown = useMemo(() => (bare ? bareView(frame) : null), [bare, frame]);
+  const bareShown = useMemo(() => (bare ? bareView(frame) : undefined), [bare, frame]);
   const [settled] = useDebouncedValue(shown, 80);
-  const view = useLensView(root, settled?.lens, settled?.values ?? {}, frame);
+  const view = useLensView(root, settled?.lens, settled?.values ?? {}, frame, settled?.hidden ?? []);
+  // (what the picture draws: the view of what is shown, else the last it
+  // drew: while the next comes, or while the lens cannot be drawn; and a
+  // note of why, if it is not the lens as it is)
+  const drawn = useLast(bareShown ?? (settled && !view.isError ? view.data : undefined));
+  const note: PictureNote | null =
+    problems.length > 0
+      ? { text: 'The last picture: the lens has a problem (see the head)', bad: true }
+      : view.isError && !bare
+        ? { text: `The last picture: ${view.error.message.replace(/\b[A-Za-z]+Error: /g, '')}`, bad: true }
+        : pieces.length === 0
+          ? { text: 'No piece yet: the source as it is', bad: false }
+          : bare
+            ? { text: 'Every piece hidden: the source as it is', bad: false }
+            : null;
   // (the field fitted, kept; the test source brought into its source
   // plane, if it is out of it)
-  const fitted = frame === null && view.data && !view.isPlaceholderData ? view.data : null;
+  const fitted = frame === null && view.data ? view.data : null;
   useEffect(() => {
     if (!fitted) return;
     const { half, centre } = fitted;
@@ -134,11 +148,13 @@ export function LensScreen({ name }: { name: string }) {
           }
           picture={
             <LensPicture
-              view={bareShown ?? (settled ? view.data : undefined)}
-              bare={bare}
-              error={bare ? null : (view.error?.message ?? null)}
-              empty={pieces.length === 0 ? 'Add a piece to see what the lens makes of a source.' : problems.length > 0 ? 'The lens has a problem (see above): fix it to draw it.' : null}
-              onZoom={frame ? (wider) => setFrame({ ...frame, half: zoomed(2 * frame.half, wider) / 2 }) : null}
+              view={drawn}
+              note={note}
+              onZoom={(wider) => {
+                // (of the field kept, else of that drawn, e.g. of no piece)
+                const at = frame ?? (drawn && { half: drawn.half, centre: [drawn.centre[0], drawn.centre[1]] as [number, number] });
+                if (at) setFrame({ ...at, half: zoomed(2 * at.half, wider) / 2 });
+              }}
               onFit={() => setFrame(null)}
               source={source}
               onSource={setSource}
@@ -156,6 +172,14 @@ export function LensScreen({ name }: { name: string }) {
       )}
     </section>
   );
+}
+
+// The latest of a value that was given (e.g. the last view drawn, while
+// the next comes)
+function useLast<T>(value: T | undefined): T | undefined {
+  const last = useRef(value);
+  if (value !== undefined) last.current = value;
+  return last.current;
 }
 
 // The lens itself: the path of the light, and its redshift and that of the
@@ -359,7 +383,7 @@ function PiecesBlock({
                   {!isOpen && <span className="lp-sum">{piece.type === 'mass' ? `the mass of ${String(piece.galaxy ?? '?')}` : summary(own, properties)}</span>}
                 </span>
                 {/* (its cell kept when empty: the buttons stay in their columns) */}
-                <span className="lp-badge">{zs !== null && `z_s ${zs}`}</span>
+                <span className="lp-badge" title={zs === null ? undefined : `Its own source redshift (not the lens's)`}>{zs !== null && `z_s ${zs}`}</span>
                 <button
                   type="button"
                   className="lp-icon"
@@ -439,8 +463,8 @@ function SourceOption({ own, lens, onChange }: { own: number | null; lens: numbe
       />
       <span />
       {own !== null ? (
-        <button type="button" className="lp-icon" title="Use the lens's" aria-label="Use the source redshift of the lens" onClick={() => onChange(undefined)}>
-          <svg viewBox="0 0 16 16"><path d="M3 8a5 5 0 1 0 1.5-3.5" /><path d="M3 2.5V5h2.5" /></svg>
+        <button type="button" className="lp-state" title={lens === null ? "Drop its own: use the lens's" : `Drop its own: use the lens's, z ${lens}`} aria-label="Use the source redshift of the lens" onClick={() => onChange(undefined)}>
+          reset
         </button>
       ) : (
         <span />

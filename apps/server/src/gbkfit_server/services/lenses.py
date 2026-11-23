@@ -8,7 +8,7 @@ caustics).
 
 import dataclasses
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any
 
 import contourpy
@@ -112,14 +112,17 @@ class Lenses:
             properties: Mapping[str, Any],
             size: int,
             half: float | None = None,
-            centre: tuple[float, float] | None = None
+            centre: tuple[float, float] | None = None,
+            hidden: Collection[int] = ()
     ) -> LensView:
         """
         Return what a lens of the options of a piece of a project makes of
         a source behind it (see LensView), at the values of the properties
         of its parameters (see ParamSpace), over a field of the given
         half-width and centre (by default, fitted to the lens: see
-        _fitted_centre and _fitted_half).
+        _fitted_centre and _fitted_half), without the pieces hidden (by
+        index; the lens is still the whole of it: e.g. its source_redshift
+        and the source of the view are those of all its pieces).
 
         Raises
         ------
@@ -134,7 +137,15 @@ class Lenses:
             raise Invalid(error_message(e)) from None
         values = {
             name: float(np.ravel(values[name])[0]) for name in made.pdescs()}
-        factors = made.quoted_factors(made.redshift(), DEFAULT)
+        # (a piece hidden deflects nothing)
+        factors = [
+            0.0 if i in hidden else factor for i, factor in enumerate(
+                made.quoted_factors(made.redshift(), DEFAULT))]
+        shown = [
+            piece for i, piece in enumerate(made.pieces()) if i not in hidden]
+        centres = [
+            (values[f'{piece.name()}_xpos'], values[f'{piece.name()}_ypos'])
+            for piece in shown if isinstance(piece, _CENTRED)]
         source = _view_source(made)
         view = 1.0 if source is None \
             else quoted_factor(made.redshift(), source, DEFAULT)
@@ -149,9 +160,9 @@ class Lenses:
             return np.asarray(ax) / view, np.asarray(ay) / view
 
         if centre is None:
-            centre = _fitted_centre(made, values)
+            centre = _fitted_centre(centres)
         if half is None:
-            half = _fitted_half(made, values, centre, deflection)
+            half = _fitted_half(centres, centre, deflection)
         axis_x = np.linspace(centre[0] - half, centre[0] + half, size)
         axis_y = np.linspace(centre[1] - half, centre[1] + half, size)
         x, y = np.meshgrid(axis_x, axis_y)
@@ -175,28 +186,18 @@ class Lenses:
         return LensView(
             float(half), (float(centre[0]), float(centre[1])), size,
             _rounded(ax), _rounded(ay), critical, caustics,
-            [piece.name() for piece in made.pieces()
+            [piece.name() for piece in shown
              if not isinstance(piece, Deflects)])
 
 
-def _centres(
-        lens: Lens, values: Mapping[str, float]
-) -> list[tuple[float, float]]:
-    """Return the centres of the pieces of a lens placed by one."""
-    return [
-        (values[f'{piece.name()}_xpos'], values[f'{piece.name()}_ypos'])
-        for piece in lens.pieces() if isinstance(piece, _CENTRED)]
-
-
 def _fitted_centre(
-        lens: Lens, values: Mapping[str, float]
+        centres: Sequence[tuple[float, float]]
 ) -> tuple[float, float]:
     """
     Return the centre of the field a view of a lens is fitted to: the
-    middle of the centres of its pieces, (0, 0) if none has one (that of a
-    shear and of a sheet).
+    middle of the centres of its pieces (those placed by one), (0, 0) if
+    none has one (as a shear and a sheet).
     """
-    centres = _centres(lens, values)
     if not centres:
         return 0.0, 0.0
     xs, ys = zip(*centres)
@@ -204,8 +205,7 @@ def _fitted_centre(
 
 
 def _fitted_half(
-        lens: Lens,
-        values: Mapping[str, float],
+        centres: Sequence[tuple[float, float]],
         centre: tuple[float, float],
         deflection: Callable[
             [np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]
@@ -214,11 +214,12 @@ def _fitted_half(
     Return the half-width of the field a view of a lens about a centre is
     fitted to: a round field (see _ROUND_FIELDS) that holds its Einstein
     radius times _FIELD_IN_EINSTEIN_RADII (or _FIELD, without one) and the
-    centres of its pieces, and that its deflection covers.
+    centres of its pieces (see _fitted_centre), and that its deflection
+    covers.
     """
     radius, reach = _einstein_radius(centre, deflection)
     half = _FIELD if radius is None else _FIELD_IN_EINSTEIN_RADII * radius
-    for x, y in _centres(lens, values):
+    for x, y in centres:
         half = max(half, 1.25 * math.hypot(x - centre[0], y - centre[1]))
     # (the field, whose corners are within the reach of the deflection)
     largest = 2 * reach / math.sqrt(2)

@@ -22,7 +22,7 @@ export function LightPath({ lens, source }: { lens: number | undefined; source: 
   const xl = lens === undefined ? width / 3 : at(lens);
   const xs = width - x0;
   return (
-    <svg className="lp-path" viewBox={`0 0 ${width} 60`} role="img" aria-label={`The path of the light: you, the lens at z ${lens ?? '?'}, its source at z ${source ?? '?'}`}>
+    <svg className="lp-path" viewBox={`0 0 ${width} 60`} role="img" aria-label={`The path of the light: you, the lens at z ${lens ?? '?'}, the source at z ${source ?? '?'}`}>
       <line className="lp-path-axis" x1={x0} y1={31} x2={xs} y2={31} />
       <path className="lp-path-ray" d={`M${x0} 31 Q ${xl} 13 ${xs} 31`} />
       <path className="lp-path-ray" d={`M${x0} 31 Q ${xl} 49 ${xs} 31`} />
@@ -33,7 +33,7 @@ export function LightPath({ lens, source }: { lens: number | undefined; source: 
       <text className="lp-path-z" x={xs} y={10} textAnchor="end">z {source ?? '?'}</text>
       <text className="lp-path-label" x={x0} y={57} textAnchor="start">you</text>
       <text className="lp-path-label" x={xl} y={57} textAnchor="middle">lens</text>
-      <text className="lp-path-label" x={xs} y={57} textAnchor="end">source of its strengths</text>
+      <text className="lp-path-label" x={xs} y={57} textAnchor="end">source</text>
     </svg>
   );
 }

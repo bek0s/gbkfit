@@ -1578,6 +1578,25 @@ def test_the_field_of_a_lens_is_fitted_to_it(client):
     assert (given['half'], given['centre']) == (1.5, [0.5, 0])
 
 
+def test_a_lens_is_drawn_without_its_hidden_pieces(client):
+    # (as if they deflected nothing, the lens still the whole of it: its
+    # source_redshift, which only its hidden shear takes, is no problem)
+    lens = LENS | dict(pieces=[
+        dict(type='sie', source_redshift=3.0), dict(type='shear')])
+    def view(properties, hidden):
+        response = client.post('/api/v1/views/lens', json=dict(
+            project='study', lens=lens, properties=properties, size=32,
+            half=3, centre=[0, 0], hidden=hidden))
+        assert response.status_code == 200, response.text
+        return response.json()
+    sheared = LENS_PROPERTIES | dict(shear_gamma=0.1)
+    alone = view(LENS_PROPERTIES, [])
+    hidden = view(sheared, [1])
+    assert hidden['alpha_x'] == alone['alpha_x']
+    assert hidden['critical'] == alone['critical']
+    assert view(sheared, [])['alpha_x'] != alone['alpha_x']
+
+
 def test_a_lens_is_drawn_for_one_source(client):
     # (that of the lens, each piece scaled to it from its own: an SIE
     # quoted for a farther source makes a smaller ring for the nearer
