@@ -9,11 +9,11 @@ parameters of the galaxies (as their xpos and ypos), which is the same
 for every observation of them.
 
 The strength of each piece is that of the light of a source at the
-redshift that its normalisation says (see Normalisation): quoted for the
-source_redshift of its lens (SIE, EPL, NFW, shear and sheet, and
-deflection maps made for one source), or at D_ls / D_s = 1 (deflection
-maps of that convention); its lens converts the first to the second
-(see Lens.deflection).
+redshift that its normalisation says (see Normalisation): quoted for a
+source (SIE, EPL, NFW, shear and sheet, and deflection maps made for one
+source), at the source_redshift of the piece or else of its lens, or at
+D_ls / D_s = 1 (deflection maps of that convention); its lens converts
+the first to the second (see Lens.deflection).
 
 The shapes (SIE, EPL and NFW) are placed by their centre (xpos, ypos)
 and oriented by the position angle (posa; degrees, north through east,
@@ -39,7 +39,7 @@ from typing import (
 import numpy as np
 import numpy.typing as npt
 import scipy.ndimage
-from annotated_types import Ge
+from annotated_types import Ge, Gt
 
 from gbkfit.config import (
     Choices, DataFile, TypedSerializable, Unit, check_name,
@@ -99,9 +99,10 @@ class Normalisation(enum.Enum):
     The source whose light the strength of a piece of a lens is that of
     (see LensPiece):
 
-    - QUOTED: a source at the source_redshift of its lens (e.g. the
-      Einstein radius of an SIE, as lens models quote it, or deflection
-      maps made for one source, as glafic and Lenstool make them);
+    - QUOTED: a source at its source_redshift, or else at that of its
+      lens (e.g. the Einstein radius of an SIE, as lens models quote it,
+      or deflection maps made for one source, as glafic and Lenstool
+      make them);
     - UNIT: a source of D_ls / D_s = 1, the deflection angle itself
       (alpha-hat; e.g. the deflection maps of the Hubble Frontier
       Fields).
@@ -137,6 +138,11 @@ class LensPiece(TypedSerializable, abc.ABC):
     name : str, optional
         Its name, which prefixes its parameters when its lens has several
         pieces; its type by default (e.g. 'shear').
+    source_redshift : float, optional
+        Of a piece whose strength is quoted for a source (see
+        Normalisation), the redshift of that source; by default, the
+        source_redshift of its lens (e.g. a piece of a published lens
+        model quoted for another source than the others).
 
     Raises
     ------
@@ -144,22 +150,37 @@ class LensPiece(TypedSerializable, abc.ABC):
         If the name is not valid (see check_name).
     """
 
-    config_titles = dict(name='Name')
+    config_titles = dict(name='Name', source_redshift='Source redshift')
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        return {} if self._name is None else dict(name=self._name)
+        info = {} if self._name is None else dict(name=self._name)
+        if self._source_redshift is not None:
+            info['source_redshift'] = self._source_redshift
+        return info
 
-    def __init__(self, name: str | None = None):
+    def __init__(
+            self,
+            name: str | None = None,
+            source_redshift: Annotated[float, Gt(0)] | None = None
+    ):
         check_options(LensPiece.__init__, locals())
         check_name(name)
         self._name = name
+        self._source_redshift = source_redshift
 
     def name(self) -> str:
         """Return its name: that given, or else its type."""
         return self.type() if self._name is None else self._name
+
+    def source_redshift(self) -> float | None:
+        """
+        Return the redshift of the source its strength is quoted for, if
+        given (see Lens.source_redshift_of: else that of its lens).
+        """
+        return self._source_redshift
 
     @abc.abstractmethod
     def normalisation(self) -> Normalisation:
@@ -348,8 +369,8 @@ class LensSIE(LensPiece):
     ----------
     multipoles : Sequence of int, optional
         The orders of its multipoles (at least 1); none by default.
-    name : str, optional
-        Its name (see LensPiece).
+    name, source_redshift : optional
+        As LensPiece takes them.
 
     Raises
     ------
@@ -370,9 +391,14 @@ class LensSIE(LensPiece):
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return super().dump() | _dump_multipoles(self._multipoles)
 
-    def __init__(self, multipoles: _Orders = (), name: str | None = None):
+    def __init__(
+            self,
+            multipoles: _Orders = (),
+            name: str | None = None,
+            source_redshift: Annotated[float, Gt(0)] | None = None
+    ):
         check_options(LensSIE.__init__, locals())
-        super().__init__(name)
+        super().__init__(name, source_redshift)
         self._multipoles = _Multipoles(multipoles)
 
     def multipoles(self) -> tuple[int, ...]:
@@ -435,8 +461,8 @@ class LensEPL(LensPiece):
     ----------
     multipoles : Sequence of int, optional
         The orders of its multipoles (at least 1); none by default.
-    name : str, optional
-        Its name (see LensPiece).
+    name, source_redshift : optional
+        As LensPiece takes them.
 
     Raises
     ------
@@ -457,9 +483,14 @@ class LensEPL(LensPiece):
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return super().dump() | _dump_multipoles(self._multipoles)
 
-    def __init__(self, multipoles: _Orders = (), name: str | None = None):
+    def __init__(
+            self,
+            multipoles: _Orders = (),
+            name: str | None = None,
+            source_redshift: Annotated[float, Gt(0)] | None = None
+    ):
         check_options(LensEPL.__init__, locals())
-        super().__init__(name)
+        super().__init__(name, source_redshift)
         self._multipoles = _Multipoles(multipoles)
 
     def multipoles(self) -> tuple[int, ...]:
@@ -514,13 +545,13 @@ class LensNFW(LensPiece):
 
     Its parameters (see pdescs): kappa_s, r_s (arcsec, the scale radius),
     q (the axis ratio), posa, xpos and ypos (see the module). Its
-    strength is quoted (see Normalisation): Sigma_cr is that of the
-    source_redshift of its lens.
+    strength is quoted (see Normalisation): Sigma_cr is that of its
+    source.
 
     Parameters
     ----------
-    name : str, optional
-        Its name (see LensPiece).
+    name, source_redshift : optional
+        As LensPiece takes them.
     """
 
     @staticmethod
@@ -586,8 +617,8 @@ class LensShear(LensPiece):
 
     Parameters
     ----------
-    name : str, optional
-        Its name (see LensPiece).
+    name, source_redshift : optional
+        As LensPiece takes them.
     """
 
     @staticmethod
@@ -636,8 +667,8 @@ class LensSheet(LensPiece):
 
     Parameters
     ----------
-    name : str, optional
-        Its name (see LensPiece).
+    name, source_redshift : optional
+        As LensPiece takes them.
     """
 
     @staticmethod
@@ -670,9 +701,8 @@ class LensDeflectionMap(LensPiece):
     A deflection given as maps of it (e.g. from a lens model of a
     cluster), placed by their world coordinates (RA and Dec): at
     D_ls / D_s = 1 (the deflection angle, as the models of the Hubble
-    Frontier Fields publish it), or quoted for the source_redshift of
-    its lens (made for one source, as glafic and Lenstool make them; see
-    Normalisation).
+    Frontier Fields publish it), or quoted for a source (made for one
+    source, as glafic and Lenstool make them; see Normalisation).
 
     Between the pixels of the maps the deflection is interpolated
     bilinearly (it stays within the values of the maps, however noisy
@@ -709,16 +739,17 @@ class LensDeflectionMap(LensPiece):
     shifted : bool, optional
         Whether the maps are shifted (see above).
     quoted : bool, optional
-        Whether the maps are quoted for the source_redshift of the lens;
-        by default, they are at D_ls / D_s = 1.
-    name : str, optional
-        Its name (see LensPiece).
+        Whether the maps are quoted for a source (see Normalisation); by
+        default, they are at D_ls / D_s = 1.
+    name, source_redshift : optional
+        As LensPiece takes them (a source_redshift, of quoted maps only).
 
     Raises
     ------
     ValueError
         If the maps are not two finite images of one shape, of at least
-        two pixels along each axis.
+        two pixels along each axis, or have a source_redshift but are not
+        quoted.
     """
 
     config_constructors = ('from_files',)
@@ -727,7 +758,7 @@ class LensDeflectionMap(LensPiece):
         alpha_x='Deflection along x', alpha_y='Deflection along y',
         unit='Unit', step='Pixel size', rpix='Reference pixel',
         rval='Reference position', rota='Rotation', shifted='Shifted',
-        quoted='Quoted for the source redshift')
+        quoted='Quoted for a source')
 
     @staticmethod
     def type() -> str:
@@ -749,7 +780,8 @@ class LensDeflectionMap(LensPiece):
             rota: _Angle | None = None,
             shifted: bool = False,
             quoted: bool = False,
-            name: str | None = None
+            name: str | None = None,
+            source_redshift: Annotated[float, Gt(0)] | None = None
     ) -> 'LensDeflectionMap':
         """
         Read a piece from files of its deflection maps, with the world
@@ -785,9 +817,9 @@ class LensDeflectionMap(LensPiece):
             vectors with them; by default, that of the headers.
         shifted, quoted : bool, optional
             Whether the maps are shifted, and whether they are quoted for
-            the source_redshift of the lens (see the class).
-        name : str, optional
-            Its name (see LensPiece).
+            a source (see the class).
+        name, source_redshift : optional
+            As LensPiece takes them.
 
         Returns
         -------
@@ -815,7 +847,7 @@ class LensDeflectionMap(LensPiece):
         rota = coords.rota if rota is None else rota
         return cls(
             *_rotated(*along, rota), step, coords.rpix, coords.rval, rota,
-            shifted, quoted, name)
+            shifted, quoted, name, source_redshift)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -847,10 +879,15 @@ class LensDeflectionMap(LensPiece):
             rota: _Angle | None = None,
             shifted: bool = False,
             quoted: bool = False,
-            name: str | None = None
+            name: str | None = None,
+            source_redshift: Annotated[float, Gt(0)] | None = None
     ):
         check_options(LensDeflectionMap.__init__, locals())
-        super().__init__(name)
+        super().__init__(name, source_redshift)
+        if source_redshift is not None and not quoted:
+            raise ValueError(
+                "the deflection maps are at D_ls / D_s = 1, not quoted for "
+                "a source (quoted); their source_redshift says nothing")
         alpha_x = np.asarray(alpha_x, dtype=float)
         alpha_y = np.asarray(alpha_y, dtype=float)
         if alpha_x.ndim != 2 or alpha_x.shape != alpha_y.shape:

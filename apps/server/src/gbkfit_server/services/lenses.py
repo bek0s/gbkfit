@@ -16,7 +16,7 @@ import numpy as np
 from gbkfit.config import ConfigError, error_message
 from gbkfit.cosmology import DEFAULT
 from gbkfit.driver.drivers.host import DriverHost
-from gbkfit.lensing import Deflects, Lens, SkyPoints
+from gbkfit.lensing import Deflects, Lens, SkyPoints, quoted_factor
 from gbkfit.params import ParamSpace
 
 from .errors import Invalid
@@ -45,8 +45,9 @@ class LensDescription:
 @dataclasses.dataclass
 class LensView:
     """
-    What a lens makes of a source behind it, at the redshift of the source
-    of its quoted pieces (or at D_ls / D_s = 1 without them): the field of
+    What a lens makes of a source behind it, at the source_redshift of the
+    lens, or else of its first quoted piece (or at D_ls / D_s = 1 without
+    quoted pieces; see _view_source): the field of
     the view (half its width, arcsec) and the number of points across, the
     deflection at each point of the plane (arcsec, row-major, y up), its
     critical curves and its caustics (lists of points), and the pieces left
@@ -119,16 +120,19 @@ class Lenses:
         if half is None:
             radii = [v for k, v in values.items() if k.endswith('theta_e')]
             half = _FIELD_IN_EINSTEIN_RADII * max(radii) if radii else _FIELD
-        factor = made.quoted_factor(made.redshift(), DEFAULT)
+        factors = made.quoted_factors(made.redshift(), DEFAULT)
+        source = _view_source(made)
+        view = 1.0 if source is None \
+            else quoted_factor(made.redshift(), source, DEFAULT)
         driver = DriverHost()
 
         def deflection(
                 x: np.ndarray, y: np.ndarray
         ) -> tuple[np.ndarray, np.ndarray]:
-            # (at the source of its quoted pieces: alpha-hat D_ls / D_s)
+            # (at the source of the view: alpha-hat D_ls / D_s)
             ax, ay = made.deflection(
-                SkyPoints(x, y, (0.0, 0.0)), values, factor, driver)
-            return np.asarray(ax) / factor, np.asarray(ay) / factor
+                SkyPoints(x, y, (0.0, 0.0)), values, factors, driver)
+            return np.asarray(ax) / view, np.asarray(ay) / view
 
         axis = np.linspace(-half, half, size)
         x, y = np.meshgrid(axis, axis)
@@ -177,3 +181,17 @@ def _points(x: np.ndarray, y: np.ndarray) -> list[list[float]]:
 def _rounded(values: np.ndarray) -> list[float]:
     """Return the values of a map, row-major, rounded."""
     return [round(float(v), 5) for v in values.ravel()]
+
+
+def _view_source(lens: Lens) -> float | None:
+    """
+    Return the redshift of the source a view of a lens is of: its own
+    source_redshift, or else that of its first quoted piece; None without
+    quoted pieces (a view at D_ls / D_s = 1). Each piece is scaled to it
+    from its own source.
+    """
+    if (source := lens.source_redshift()) is not None:
+        return source
+    return next((
+        source for piece in lens.pieces()
+        if (source := lens.source_redshift_of(piece)) is not None), None)

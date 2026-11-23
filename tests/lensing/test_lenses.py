@@ -73,18 +73,56 @@ def test_the_source_redshift_is_that_of_quoted_pieces():
         Lens('lens', 0.35, LensSIE(), source_redshift=0.355)
 
 
+def _quoted(lens_z: float, source_z: float) -> float:
+    """Return D_s / D_ls of a source behind a lens (Planck18)."""
+    return Planck18.angular_diameter_distance(source_z).value \
+        / Planck18.angular_diameter_distance(lens_z, source_z).value
+
+
 def test_the_quoted_factor_is_d_s_over_d_ls_of_the_source():
     lens = Lens('lens', 0.35, LensSIE(), source_redshift=2.1)
-    d_s = Planck18.angular_diameter_distance(2.1).value
-    d_ls = Planck18.angular_diameter_distance(0.35, 2.1).value
-    assert lens.quoted_factor(0.35, DEFAULT) == pytest.approx(d_s / d_ls)
+    assert lens.quoted_factors(0.35, DEFAULT) == pytest.approx(
+        (_quoted(0.35, 2.1),))
     # (of the distance of its plane)
-    d_ls = Planck18.angular_diameter_distance(0.36, 2.1).value
-    assert lens.quoted_factor(0.36, DEFAULT) == pytest.approx(d_s / d_ls)
+    assert lens.quoted_factors(0.36, DEFAULT) == pytest.approx(
+        (_quoted(0.36, 2.1),))
     with pytest.raises(ValueError, match="not behind"):
-        lens.quoted_factor(2.2, DEFAULT)
+        lens.quoted_factors(2.2, DEFAULT)
     deflection = LensDeflectionMap(np.zeros((3, 3)), np.zeros((3, 3)))
-    assert Lens('map', 0.35, deflection).quoted_factor(0.35, DEFAULT) == 1
+    assert Lens('map', 0.35, deflection).quoted_factors(0.35, DEFAULT) \
+        == (1.0,)
+
+
+def test_a_piece_can_be_quoted_for_its_own_source():
+    # (the others of the source of the lens; a map at D_ls / D_s = 1)
+    deflection = LensDeflectionMap(np.zeros((3, 3)), np.zeros((3, 3)))
+    lens = Lens(
+        'lens', 0.35,
+        [LensSIE(source_redshift=3.0), LensShear(), deflection],
+        source_redshift=2.1)
+    assert lens.quoted_factors(0.35, DEFAULT) == pytest.approx(
+        (_quoted(0.35, 3.0), _quoted(0.35, 2.1), 1.0))
+    assert [lens.source_redshift_of(p) for p in lens.pieces()] \
+        == [3.0, 2.1, None]
+    # (each of its own: the lens needs none, and then has none)
+    own = Lens('lens', 0.35, [
+        LensSIE(source_redshift=3.0), LensShear(source_redshift=2.1)])
+    assert own.source_redshift() is None
+    assert lens_parser.load(lens_parser.dump(own)).quoted_factors(
+        0.35, DEFAULT) == pytest.approx(own.quoted_factors(0.35, DEFAULT))
+
+
+def test_the_source_of_each_quoted_piece_must_be_known():
+    with pytest.raises(ValueError, match=r"\['shear'\].*give the redshift"):
+        Lens('lens', 0.35, [LensSIE(source_redshift=3.0), LensShear()])
+    with pytest.raises(ValueError, match="no piece of lens 'lens' takes"):
+        Lens('lens', 0.35, [LensSIE(source_redshift=3.0)],
+             source_redshift=2.1)
+    with pytest.raises(ValueError, match="piece 'sie' of lens 'lens'.*behind"):
+        Lens('lens', 0.35, LensSIE(source_redshift=0.3))
+    with pytest.raises(ValueError, match="not quoted for a source"):
+        LensDeflectionMap(
+            np.zeros((3, 3)), np.zeros((3, 3)), source_redshift=2.0)
 
 
 def test_a_lens_converts_its_quoted_pieces_only():
@@ -96,7 +134,7 @@ def test_a_lens_converts_its_quoted_pieces_only():
                 source_redshift=2.1)
     params = {f'main_{key}': value for key, value in SIE.items()}
     sie = np.array(LensSIE().deflection(POINTS, SIE, HOST))
-    alpha = np.array(lens.deflection(POINTS, params, 1.7, HOST))
+    alpha = np.array(lens.deflection(POINTS, params, (1.7, 1.0), HOST))
     np.testing.assert_allclose(
         alpha, 1.7 * sie + np.array([0.4, -0.1])[:, None, None])
 
@@ -105,7 +143,7 @@ def test_a_lens_deflects_nowhere_off_its_maps():
     deflection = LensDeflectionMap(
         np.zeros((3, 3)), np.zeros((3, 3)), step=0.1, rval=POINTS.origin)
     with pytest.raises(ModelEvaluationError, match="do not cover"):
-        Lens('map', 0.35, deflection).deflection(POINTS, {}, 1, HOST)
+        Lens('map', 0.35, deflection).deflection(POINTS, {}, (1.0,), HOST)
 
 
 def test_lenses_from_configurations(tmp_path):
@@ -130,4 +168,4 @@ def test_lenses_from_configurations(tmp_path):
     again = lens_parser.load(copy.deepcopy(dumped))
     centre = SkyPoints(np.zeros(1), np.zeros(1), (150.0, 2.0))
     np.testing.assert_allclose(
-        again.deflection(centre, {}, 1, HOST), np.ones((2, 1)))
+        again.deflection(centre, {}, (1.0,), HOST), np.ones((2, 1)))

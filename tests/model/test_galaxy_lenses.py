@@ -237,7 +237,8 @@ def test_the_rays_of_a_galaxy_of_stars_and_a_halo(driver):
     shear = LensShear().deflection(
         points, dict(gamma=0.05, posa=10), driver)
     factor = group.tracer().factor(0, 1)
-    quoted = group.lenses()[0].quoted_factor(LENS_Z, group.cosmology())
+    # (of the shear, its second piece)
+    quoted = group.lenses()[0].quoted_factors(LENS_Z, group.cosmology())[1]
     np.testing.assert_allclose(
         rays['ray_x'].data,
         x - factor * (alpha_x + quoted * shear[0]), rtol=0, atol=1e-10)

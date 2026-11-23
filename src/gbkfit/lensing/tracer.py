@@ -39,8 +39,8 @@ class Tracer:
     D_ls / D_s = 1 (alpha-hat; see Lens.deflection), at the point of the
     ray there. The lenses of one plane add their deflections, and do not
     bend the light of its galaxies. With one lens plane and a source at
-    the source_redshift of its lenses, theta_q = theta_1 - alpha, of the
-    strengths they quote.
+    the source of the quoted pieces of its lenses, theta_q = theta_1 -
+    alpha, of the strengths they quote.
 
     The distances are those of the redshifts of the planes, in the
     cosmology, fixed at its construction.
@@ -58,8 +58,8 @@ class Tracer:
     ------
     ValueError
         If the planes are not near to far, do not hold each lens once,
-        or a lens quotes its pieces for a source in front of its plane
-        (see Lens.quoted_factor).
+        or a lens quotes a piece for a source in front of its plane (see
+        Lens.quoted_factors).
     """
 
     def __init__(
@@ -81,10 +81,10 @@ class Tracer:
                 f"once; they hold {held}")
         self._planes = planes
         self._lenses = tuple(lenses)
-        self._quoted = [0.0] * len(lenses)
+        self._quoted: list[tuple[float, ...]] = [()] * len(lenses)
         for plane in planes:
             for i in plane.lenses:
-                self._quoted[i] = lenses[i].quoted_factor(
+                self._quoted[i] = lenses[i].quoted_factors(
                     plane.redshift, cosmology)
         # The factors of each lens plane p, for each plane q behind it
         self._factors = {

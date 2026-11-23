@@ -28,7 +28,8 @@ if TYPE_CHECKING:
 __all__ = [
     'Lens',
     'lens_parser',
-    'lens_piece_parser'
+    'lens_piece_parser',
+    'quoted_factor'
 ]
 
 
@@ -46,10 +47,11 @@ class Lens(Serializable):
     galaxies behind it, of every observation of them (see Tracer).
 
     The strengths of its quoted pieces (see Normalisation; e.g. the
-    Einstein radius of an SIE) are those of a source at its
-    source_redshift, as lens models quote them; the deflection of the
-    light of a source at another redshift is scaled by D_ls / D_s from
-    them (see quoted_factor). Its other pieces are of D_ls / D_s = 1. A
+    Einstein radius of an SIE) are those of a source at the
+    source_redshift of each piece, or else at its own, as lens models
+    quote them; the deflection of the light of a source at another
+    redshift is scaled by D_ls / D_s from them (see quoted_factors). Its
+    other pieces are of D_ls / D_s = 1. A
     piece that is the mass of a galaxy (see OfGalaxy and galaxies) bends
     light by that mass laid out on the sky, which its deflection takes
     (see deflection).
@@ -71,16 +73,19 @@ class Lens(Serializable):
         named after its type by default, see LensPiece).
     source_redshift : float, optional
         The redshift of the source whose light the strengths of its
-        quoted pieces are those of (see Normalisation); required with
-        quoted pieces, and only with them.
+        quoted pieces are those of (see Normalisation), of those without
+        one of their own (see LensPiece); required if one has none, and
+        only then.
 
     Raises
     ------
     ValueError
         If the name is not valid, there are no pieces, several pieces of
-        one name, the source_redshift is missing with
-        quoted pieces, given without them, or not behind the plane of the
-        lens (more than PLANE_LINKING_VELOCITY behind its redshift).
+        one name, a piece that is not quoted has a source_redshift, the
+        source_redshift of the lens is missing where a quoted piece has
+        none or given where none takes it, or a source_redshift is not
+        behind the plane of the lens (more than PLANE_LINKING_VELOCITY
+        behind its redshift).
     """
 
     config_titles = dict(
@@ -128,24 +133,40 @@ class Lens(Serializable):
                 f"the pieces of lens {name!r} repeat names: {names} (a "
                 f"piece is named after its type unless given a name)")
         quoted = [
-            piece.type() for piece in pieces
+            piece for piece in pieces
             if piece.normalisation() is Normalisation.QUOTED]
-        if quoted and source_redshift is None:
+        if unquoted := [
+                piece.name() for piece in pieces
+                if piece not in quoted and piece.source_redshift() is not None]:
             raise ValueError(
-                f"lens {name!r} has pieces whose strengths are quoted for "
-                f"a source ({quoted}): give the redshift of that source "
-                f"(source_redshift)")
-        if not quoted and source_redshift is not None:
+                f"the pieces {unquoted} of lens {name!r} are not quoted for "
+                f"a source; their source_redshift says nothing")
+        # (the quoted pieces of no source_redshift of their own: of that
+        # of the lens)
+        if (taking := [
+                piece.name() for piece in quoted
+                if piece.source_redshift() is None]) \
+                and source_redshift is None:
             raise ValueError(
-                f"lens {name!r} has no pieces whose strengths are quoted for "
-                f"a source; its source_redshift says nothing")
-        if source_redshift is not None and velocity_separation(
-                redshift, source_redshift) <= PLANE_LINKING_VELOCITY:
+                f"the pieces {taking} of lens {name!r} have strengths quoted "
+                f"for a source: give the redshift of that source "
+                f"(source_redshift, of the lens or of each piece)")
+        if not taking and source_redshift is not None:
             raise ValueError(
-                f"the source_redshift of lens {name!r} ({source_redshift}) "
-                f"must be behind its plane: more than "
-                f"{PLANE_LINKING_VELOCITY:g} km/s behind its redshift "
-                f"({redshift})")
+                f"no piece of lens {name!r} takes its source_redshift (none "
+                f"is quoted for a source, or each has its own); it says "
+                f"nothing")
+        for what, value in [
+                (f"lens {name!r}", source_redshift),
+                *((f"piece {piece.name()!r} of lens {name!r}",
+                   piece.source_redshift()) for piece in quoted)]:
+            if value is not None and velocity_separation(
+                    redshift, value) <= PLANE_LINKING_VELOCITY:
+                raise ValueError(
+                    f"the source_redshift of the {what} ({value}) must be "
+                    f"behind its plane: more than "
+                    f"{PLANE_LINKING_VELOCITY:g} km/s behind its redshift "
+                    f"({redshift})")
         self._name = name
         self._redshift = redshift
         self._pieces = pieces
@@ -166,10 +187,21 @@ class Lens(Serializable):
 
     def source_redshift(self) -> float | None:
         """
-        Return the redshift of the source of its quoted pieces, if it has
-        any.
+        Return the redshift of the source of its quoted pieces without one
+        of their own, if any (see source_redshift_of).
         """
         return self._source_redshift
+
+    def source_redshift_of(self, piece: LensPiece) -> float | None:
+        """
+        Return the redshift of the source the strength of one of its
+        pieces is quoted for: its own, or else that of the lens; None if
+        it is not quoted (see Normalisation).
+        """
+        if piece.normalisation() is not Normalisation.QUOTED:
+            return None
+        own = piece.source_redshift()
+        return self._source_redshift if own is None else own
 
     def pieces(self) -> tuple[LensPiece, ...]:
         """Return its pieces."""
@@ -192,12 +224,15 @@ class Lens(Serializable):
         """
         return dict(self._pdescs)
 
-    def quoted_factor(self, redshift: float, cosmology: Cosmology) -> float:
+    def quoted_factors(
+            self, redshift: float, cosmology: Cosmology
+    ) -> tuple[float, ...]:
         """
-        Return the factor that turns the deflections of its quoted pieces
-        (see Normalisation) into those of D_ls / D_s = 1, at the distance
-        of the given redshift (that of its plane; see plane_layout):
-        D_s / D_ls of their source; 1 without quoted pieces.
+        Return the factor that turns the deflection of each of its pieces
+        into that of D_ls / D_s = 1, at the distance of the given redshift
+        (that of its plane; see plane_layout): of a quoted piece (see
+        Normalisation), D_s / D_ls of its source (see source_redshift_of);
+        1 of the others.
 
         Parameters
         ----------
@@ -208,38 +243,38 @@ class Lens(Serializable):
 
         Returns
         -------
-        float
-            The factor.
+        tuple of float
+            The factors, in the order of its pieces.
 
         Raises
         ------
         ValueError
-            If the source is not behind the redshift.
+            If the source of a quoted piece is not behind the redshift.
         """
-        if self._source_redshift is None:
-            return 1.0
-        if not self._source_redshift > redshift:
-            raise ValueError(
-                f"the source of the quoted pieces of lens {self._name!r} "
-                f"(at the redshift {self._source_redshift}) is not behind "
-                f"its plane (at {redshift})")
-        return cosmology.angular_diameter_distance(self._source_redshift) \
-            / cosmology.angular_diameter_distance_between(
-                redshift, self._source_redshift)
+        def factor(piece: LensPiece) -> float:
+            source = self.source_redshift_of(piece)
+            if source is None:
+                return 1.0
+            if not source > redshift:
+                raise ValueError(
+                    f"the source of the quoted piece {piece.name()!r} of lens "
+                    f"{self._name!r} (at the redshift {source}) is not "
+                    f"behind its plane (at {redshift})")
+            return quoted_factor(redshift, source, cosmology)
+        return tuple(factor(piece) for piece in self._pieces)
 
     def deflection(
             self,
             points: SkyPoints,
             params: Mapping[str, float],
-            quoted_factor: float,
+            quoted_factors: Sequence[float],
             driver: 'Driver',
             galaxies: Mapping[str, GalaxyBending] | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Return its deflection at points of its plane, at D_ls / D_s = 1
-        (alpha-hat): the sum of those of its pieces, those of its quoted
-        pieces times the factor that turns them into it (see
-        quoted_factor).
+        (alpha-hat): the sum of those of its pieces, each times the factor
+        that turns it into it (see quoted_factors).
 
         Parameters
         ----------
@@ -247,8 +282,8 @@ class Lens(Serializable):
             The points.
         params : Mapping of str to float
             The values of its parameters, by their names (see pdescs).
-        quoted_factor : float
-            The factor of its quoted pieces (see quoted_factor).
+        quoted_factors : Sequence of float
+            The factor of each of its pieces (see quoted_factors).
         driver : Driver
             The driver whose native kernels compute the deflections of its
             pieces that have any (see Deflects).
@@ -274,7 +309,8 @@ class Lens(Serializable):
         galaxies = {} if galaxies is None else galaxies
         alpha_x = np.zeros(np.shape(points.x))
         alpha_y = np.zeros(np.shape(points.y))
-        for piece, names in zip(self._pieces, self._mappings):
+        for piece, names, scale in zip(
+                self._pieces, self._mappings, quoted_factors):
             if isinstance(piece, OfGalaxy):
                 if (bending := galaxies.get(piece.galaxy())) is None:
                     raise ValueError(
@@ -285,11 +321,22 @@ class Lens(Serializable):
             else:
                 own = {name: params[full] for name, full in names.items()}
                 piece_x, piece_y = piece.deflection(points, own, driver)
-            scale = quoted_factor \
-                if piece.normalisation() is Normalisation.QUOTED else 1.0
             alpha_x += scale * piece_x
             alpha_y += scale * piece_y
         return alpha_x, alpha_y
+
+
+def quoted_factor(
+        redshift: float, source_redshift: float, cosmology: Cosmology
+) -> float:
+    """
+    Return the factor that turns a deflection quoted for a source at a
+    redshift into that of D_ls / D_s = 1, of a plane at another, in front
+    of it: D_s / D_ls (see Lens.quoted_factors).
+    """
+    return cosmology.angular_diameter_distance(source_redshift) \
+        / cosmology.angular_diameter_distance_between(
+            redshift, source_redshift)
 
 
 lens_parser = BasicParser(Lens)

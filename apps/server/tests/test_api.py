@@ -1558,6 +1558,25 @@ def test_the_parameters_of_a_lens_are_described(client):
     assert 'source_redshift' in info['problems'][0]['message']
 
 
+def test_a_lens_is_drawn_for_one_source(client):
+    # (that of the lens, each piece scaled to it from its own: an SIE
+    # quoted for a farther source makes a smaller ring for the nearer
+    # source of the lens; of the first quoted piece, if the lens has none)
+    def ring(lens):
+        view = client.post('/api/v1/views/lens', json=dict(
+            project='study', lens=lens, properties=LENS_PROPERTIES,
+            size=96)).json()
+        curve = max(view['critical'], key=len)
+        return sum(math.hypot(x, y) for x, y in curve) / len(curve)
+    farther = LENS | dict(pieces=[
+        dict(type='sie', source_redshift=3.0), dict(type='shear')])
+    assert ring(farther) < 0.9 * ring(LENS)
+    own = dict(name='lens', redshift=0.5, pieces=[
+        dict(type='sie', source_redshift=3.0),
+        dict(type='shear', source_redshift=1.5)])
+    assert ring(own) == pytest.approx(1.2, rel=0.02)
+
+
 def test_a_lens_shows_its_critical_curves_and_caustics(client):
     # (of a singular isothermal sphere: the Einstein ring, of the Einstein
     # radius, whose caustic is a point at its centre; the field of the view
