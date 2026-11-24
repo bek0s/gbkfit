@@ -242,7 +242,7 @@ class ObservationSky(Observation, abc.ABC):
         The noise of its mock data (see Observation).
     oversampling : Sequence of int, optional
         How many times the model is oversampled along each axis of the
-        data (an accuracy setting); 1 by default. The smooth components
+        data (an accuracy setting); 1 along each by default. The smooth components
         are sampled at the centre of each (sub)pixel, which differs from
         the mean of the pixel where the light or the velocity changes
         within it: at the centre of a disk a few pixels across, at edges
@@ -557,7 +557,7 @@ class ObservationSky(Observation, abc.ABC):
             flux_scale: str | None,
             offsets: Mapping[str, bool] | None,
             noise: Noise | None,
-            oversampling: Sequence[int] | None,
+            oversampling: Sequence[int],
             depth: Depth | None,
             dtype: DType | None,
             fft_dtype: DType,
@@ -594,13 +594,9 @@ class ObservationSky(Observation, abc.ABC):
                 "spectral observations")
         if instrument is None:
             instrument = Instrument()
-        ndim = len(self.size())
-        oversampling = tuple(oversampling) if oversampling is not None \
-            else (1,) * ndim
-        if len(oversampling) != ndim or any(s < 1 for s in oversampling):
-            raise ValueError(
-                f"oversampling must have {ndim} values, each at least 1; it "
-                f"is {oversampling}")
+        # (one value per axis, of at least 1, as its kind's annotation
+        # gives it)
+        oversampling = tuple(oversampling)
         self._components = components
         self._lines = lines
         self._continuum = continuum

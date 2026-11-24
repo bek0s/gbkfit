@@ -133,9 +133,11 @@ def test_grid_options_take_one_value_or_one_for_each_axis():
     observation = ObservationPixelBrightness(size=8, step=0.5)
     assert observation.size() == (8, 8)
     assert observation.step() == (0.5, 0.5)
-    with pytest.raises(ValueError, match="option 'size' must have one"):
+    with pytest.raises(
+            ValueError, match="option 'size' must be a list of 2 values"):
         ObservationPixelBrightness(size=(8, 8, 10))
-    with pytest.raises(ValueError, match="option 'size' must have one"):
+    with pytest.raises(
+            ConfigError, match="option 'size' must be a list of 2 values"):
         observation_parser.load(
             dict(type='pixel_brightness', size=[8, 8, 10]))
 
@@ -510,3 +512,41 @@ def test_a_group_takes_no_data_that_change_its_frames():
     with pytest.raises(ValueError, match="change its parameters or its "
                                          "frame"):
         group.with_datasets({0: moved})
+
+
+def test_oversampling_has_a_value_for_each_axis_of_each_kind():
+    # (the annotation of each kind: one value for each axis of its data,
+    # those on the sky and its spectral axis, of at least 1)
+    import annotated_types
+    import typing
+    from gbkfit.config.types import option_types
+    from gbkfit.observation.sky import base
+    # (the kinds of configurations, not their bases, e.g. of regions)
+    kinds = [
+        cls for cls in _subclasses(base.ObservationSky)
+        if 'type' in vars(cls) and 'oversampling' in option_types(
+            cls.__init__)]
+    assert len(kinds) == 8
+    for cls in kinds:
+        type_ = option_types(cls.__init__)['oversampling']
+        [lengths] = [
+            x for x in type_.__metadata__
+            if isinstance(x, annotated_types.Len)]
+        naxes = 2 if cls.spectral_axis is None else cls.spectral_axis + 1
+        assert lengths.min_length == lengths.max_length == naxes, cls
+
+
+def _subclasses(cls):
+    for sub in cls.__subclasses__():
+        yield sub
+        yield from _subclasses(sub)
+
+
+def test_a_wrong_oversampling_is_a_problem_of_its_option():
+    from gbkfit.observation import ObservationPixelSpectra
+    with pytest.raises(ValueError, match=(
+            r"option 'oversampling' must be a list of 3 values; it is "
+            r"\[2, 2\]")):
+        ObservationPixelSpectra(
+            size=4, spectral=SpectralAxis(size=5, step=10, convention='radio'),
+            oversampling=[2, 2])

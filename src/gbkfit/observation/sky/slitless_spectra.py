@@ -34,7 +34,7 @@ from ..weights import Weights
 from . import _model_cube, _moments
 from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
-from ._options import Rota, Rpix, Rval, Size, Step
+from ._options import Oversampling2, Rota, Rpix, Rval, Size, Step
 from ._sparse_sums import SparseSumsPlan
 from .base import DType, ObservationSky, SkyOptions
 
@@ -488,7 +488,7 @@ class ObservationSlitlessSpectra(ObservationSky):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             noise: Noise | None = None,
-            oversampling: Sequence[int] | None = None,
+            oversampling: Oversampling2 = (1, 1),
             depth: Depth | None = None,
             dtype: DType | None = None,
             fft_dtype: DType = 'float64',

@@ -22,7 +22,7 @@ from ..weights import Weights
 from . import _model_cube
 from ._cube_plan import SkyDrawing
 from ._data_units import flux_data_unit
-from ._options import Rota, Rpix, Rval, Size, Step
+from ._options import Oversampling3, Rota, Rpix, Rval, Size, Step
 from ._regions import (
     ObservationRegions, RegionsPlan, spatial_options_from_regions)
 from .base import DType, SkyOptions
@@ -139,7 +139,7 @@ class ObservationRegionSpectra(ObservationRegions):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             noise: Noise | None = None,
-            oversampling: Sequence[int] | None = None,
+            oversampling: Oversampling3 = (1, 1, 1),
             depth: Depth | None = None,
             dtype: DType | None = None,
             fft_dtype: DType = 'float64',

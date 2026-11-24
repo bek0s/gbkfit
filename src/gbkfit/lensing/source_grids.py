@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
-from annotated_types import Gt
+from annotated_types import Gt, Len
 
 from gbkfit.config import Choices, Serializable, Unit, check_options
 from gbkfit.grid import Grid, make_grid
@@ -95,7 +95,8 @@ class SourceGrid(Serializable):
     Raises
     ------
     ValueError
-        If the extent is not four values of increasing spans.
+        If the extent is not of increasing spans (its four values, see
+        its annotation).
     """
 
     config_titles = dict(step='Pixel size', extent='Extent')
@@ -108,13 +109,13 @@ class SourceGrid(Serializable):
     def __init__(
             self,
             step: _Auto | _Length = 'auto',
-            extent: _Auto | Annotated[Sequence[float], Unit('arcsec')] = 'auto'
+            extent: _Auto | Annotated[
+                Sequence[float], Len(4, 4), Unit('arcsec')] = 'auto'
     ):
         check_options(SourceGrid.__init__, locals())
         if extent != 'auto':
             extent = tuple(float(value) for value in extent)
-            if len(extent) != 4 or not (
-                    extent[0] < extent[1] and extent[2] < extent[3]):
+            if not (extent[0] < extent[1] and extent[2] < extent[3]):
                 raise ValueError(
                     f"the extent of a source grid is (x0, x1, y0, y1), with "
                     f"x0 < x1 and y0 < y1; it is {extent}")

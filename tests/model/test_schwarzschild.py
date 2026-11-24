@@ -68,7 +68,7 @@ def bins(rota=0.0):
     return RegionsBins(index, step=(2, 2), rpix=(15.5, 15.5), rota=rota)
 
 
-def observation(regions, psf=1.0, oversampling=None, data=None):
+def observation(regions, psf=1.0, oversampling=(1, 1), data=None):
     """
     pPXF kinematics of the stars in the bins (by default V 0 and sigma 150
     km/s, h3 and h4 0; or V, sigma, h3 and h4 by order), of the errors 5
@@ -325,7 +325,7 @@ def test_the_weights_of_the_orbits_are_solved(driver):
             group.plan(driver), likelihoods_of(group), params.solves())
 
 
-@pytest.mark.parametrize('rota, oversampling', [(0, None), (30, (2, 2))])
+@pytest.mark.parametrize('rota, oversampling', [(0, (1, 1)), (30, (2, 2))])
 def test_the_sky_grid_of_bins_holds_their_pixels(rota, oversampling):
     # Without a PSF, the share of its own bin in the light of the centre of
     # each pixel is 1, on a grid rotated and oversampled

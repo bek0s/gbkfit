@@ -16,7 +16,7 @@ from annotated_types import Gt
 
 import gbkfit.units
 from gbkfit.config import (
-    BasicParser, Choices, QuantityOrText, Serializable, UnitKinds,
+    BasicParser, Choices, QuantityOrText, Serializable, Unit, UnitKinds,
     check_options)
 
 if typing.TYPE_CHECKING:
@@ -720,9 +720,9 @@ class SpectralAxis(Serializable):
     def __init__(
             self,
             size: Annotated[int, Gt(0)] | None = None,
-            step: Annotated[float, Gt(0)] | None = None,
+            step: Annotated[float, Gt(0), Unit('km/s')] | None = None,
             rpix: float | None = None,
-            rval: float | None = None,
+            rval: Annotated[float, Unit('km/s')] | None = None,
             convention: _Convention | None = None,
             rest: Rest = None,
             medium: _Medium | None = None,

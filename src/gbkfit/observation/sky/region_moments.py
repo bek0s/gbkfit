@@ -17,8 +17,8 @@ from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
 from gbkfit.moments import (
-    FluxFloor, Method, MomentsPlan, check_moment_items, check_moment_orders,
-    moment_item, split_moments)
+    FluxFloor, Method, MomentOrders, MomentsPlan, check_moment_items,
+    check_moment_orders, moment_item, split_moments)
 from .._scene import SeenScenes
 from ..depth import Depth
 from ..noise import Noise
@@ -27,7 +27,7 @@ from ..weights import Weights
 from . import _model_cube, _moments
 from ._cube_plan import SkyDrawing
 from ._data_units import flux_data_unit
-from ._options import Rota, Rpix, Rval, Size, Step
+from ._options import Oversampling2, Rota, Rpix, Rval, Size, Step
 from ._orbit_moments import OrbitMomentsPlan, check_orbits
 from ._regions import (
     ObservationRegions, RegionsPlan, spatial_options_from_regions)
@@ -159,7 +159,7 @@ class ObservationRegionMoments(ObservationRegions):
             rval: Rval | None = None,
             rota: Rota | None = None,
             flux_floor: FluxFloor = 1e-6,
-            orders: Sequence[int] | None = None,
+            orders: MomentOrders | None = None,
             method: Method = 'moments',
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
@@ -172,7 +172,7 @@ class ObservationRegionMoments(ObservationRegions):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             noise: Noise | None = None,
-            oversampling: Sequence[int] | None = None,
+            oversampling: Oversampling2 = (1, 1),
             depth: Depth | None = None,
             dtype: DType | None = None,
             fft_dtype: DType = 'float64',

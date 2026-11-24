@@ -53,7 +53,7 @@ def test_an_extent_given_is_the_span_of_the_centres_of_the_pixels():
 def test_the_options_of_source_grids():
     with pytest.raises(ValueError, match="x0 < x1"):
         SourceGrid(extent=[1, -1, 0, 1])
-    with pytest.raises(ValueError, match="x0, x1, y0, y1"):
+    with pytest.raises(ValueError, match="a list of 4 values of type float"):
         SourceGrid(extent=[0, 1, 0])
     with pytest.raises((ValueError, ConfigError)):
         SourceGrid(step=0)

@@ -244,6 +244,10 @@ class SchemaWriter:
             if (bound := _BOUNDS.get(type(marker))) is not None:
                 keyword, attribute = bound
                 schema[keyword] = getattr(marker, attribute)
+            if isinstance(marker, annotated_types.Len):
+                schema['minItems'] = marker.min_length
+                if marker.max_length is not None:
+                    schema['maxItems'] = marker.max_length
             if isinstance(marker, Choices):
                 schema = _titled_choices(schema, marker)
         return schema

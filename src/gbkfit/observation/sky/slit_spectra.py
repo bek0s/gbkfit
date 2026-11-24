@@ -24,7 +24,8 @@ from . import _model_cube
 from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
 from ._options import (
-    Rota, Rpix, Rval, Size, Step, warn_unsmoothed_weights)
+    Oversampling2, Rota, SkyPosition, SlitRpix, SlitRval, SlitSize,
+    SlitStep, warn_unsmoothed_weights)
 from .base import DType, ObservationSky, SkyOptions, unmasked_pixels
 
 __all__ = [
@@ -159,14 +160,14 @@ class ObservationSlitSpectra(ObservationSky):
 
     def __init__(
             self,
-            size: Size | None = None,
+            size: SlitSize | None = None,
             spectral: SpectralAxis | None = None,
-            step: Step | None = None,
-            rpix: Rpix | None = None,
-            rval: Rval | None = None,
+            step: SlitStep | None = None,
+            rpix: SlitRpix | None = None,
+            rval: SlitRval | None = None,
             slit_pa: Rota | None = None,
             slit_width: _Width | None = None,
-            sky_rval: Rval = (0, 0),
+            sky_rval: SkyPosition = (0, 0),
             smooth_weights: bool = False,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
@@ -179,7 +180,7 @@ class ObservationSlitSpectra(ObservationSky):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             noise: Noise | None = None,
-            oversampling: Sequence[int] | None = None,
+            oversampling: Oversampling2 = (1, 1),
             depth: Depth | None = None,
             dtype: DType | None = None,
             fft_dtype: DType = 'float64',

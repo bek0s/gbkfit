@@ -58,6 +58,21 @@ def test_members_of_families_have_their_options():
     assert by_sigma['properties']['ratio']['default'] == 1.0
 
 
+def test_lists_of_a_length_have_their_bounds():
+    # (one value for both axes, or one for each: their range, and the
+    # length of the list; see gbkfit.observation.sky Size)
+    from gbkfit.observation.sky._options import Oversampling3, Size
+    writer = SchemaWriter()
+    one, each = writer.option(Size)['anyOf']
+    assert one == {'type': 'integer', 'minimum': 1}
+    assert each == {
+        'type': 'array', 'items': {'type': 'integer', 'minimum': 1},
+        'minItems': 2, 'maxItems': 2}
+    assert writer.option(Oversampling3) == {
+        'type': 'array', 'items': {'type': 'integer', 'minimum': 1},
+        'minItems': 3, 'maxItems': 3}
+
+
 def test_options_have_titles_and_say_what_they_name():
     writer = SchemaWriter()
     writer.option(Galaxy)

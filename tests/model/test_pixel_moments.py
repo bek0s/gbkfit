@@ -180,7 +180,8 @@ def test_spectral_axis_partly_from_the_data(given, size, rval):
 def test_at_least_one_moment_order():
     # The moments kernel reads past an empty list of orders
     from gbkfit.observation import ObservationPixelMoments
-    with pytest.raises(ValueError, match="at least one moment order"):
+    with pytest.raises(ValueError, match=(
+            "option 'orders' must be a list of at least 1 value")):
         ObservationPixelMoments(
             size=(8, 8), orders=[],
             spectral=SpectralAxis(convention='relativistic'))

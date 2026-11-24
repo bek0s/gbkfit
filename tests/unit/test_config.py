@@ -11,7 +11,7 @@ from typing import Annotated, Literal
 import astropy.units as u
 import numpy as np
 import pytest
-from annotated_types import Gt, Le
+from annotated_types import Ge, Gt, Le, Len
 
 from gbkfit.config import (
     ConfigError, ConfigProblem, DataFile, Serializable, TypedParser,
@@ -260,6 +260,32 @@ def test_describe_type_keeps_modules_whose_names_end_in_types():
     ((1, 'x'), tuple[int, ...], "item [1] must be of type int; it is 'x'"),
     (1, type(None), "must be of type None; it is 1")])
 def test_problems_say_which_item_is_wrong(value, type_, message):
+    assert type_problem(value, type_) == message
+
+
+# One value of at least 1 for every axis, or one for each of two axes
+_COUNT = Annotated[int, Ge(1)]
+_PER_AXIS = _COUNT | Annotated[Sequence[_COUNT], Len(2, 2)]
+
+
+@pytest.mark.parametrize('value, type_, message', [
+    ([1, 2], _PER_AXIS, None),
+    (3, _PER_AXIS, None),
+    # (of the form of the value: a list's items and length, a number's
+    # range)
+    ([0, 2], _PER_AXIS, "item [0] must be at least 1; it is 0"),
+    ([1, 2, 3], _PER_AXIS, "must be a list of 2 values; it is [1, 2, 3]"),
+    (-1, _PER_AXIS, "must be at least 1; it is -1"),
+    ('a', _PER_AXIS,
+     "must be of type int at least 1 or a list of 2 values of type int at "
+     "least 1; it is 'a'"),
+    ([1, 1], Annotated[Sequence[_COUNT], Len(3, 3)],
+     "must be a list of 3 values; it is [1, 1]"),
+    (2, Annotated[Sequence[_COUNT], Len(3, 3)],
+     "must be a list of 3 values of type int at least 1; it is 2"),
+    ([], Annotated[Sequence[int], Len(1)],
+     "must be a list of at least 1 value; it is []")])
+def test_problems_of_lists_of_a_length(value, type_, message):
     assert type_problem(value, type_) == message
 
 

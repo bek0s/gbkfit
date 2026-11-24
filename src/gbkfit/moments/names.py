@@ -7,6 +7,8 @@ the methods that measure them, each up to its own order.
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Literal, TypeAlias
 
+from annotated_types import Ge, Le, Len
+
 from gbkfit.config import Choices
 
 
@@ -18,6 +20,7 @@ __all__ = [
     'MOMENT_METHODS',
     'MOMENT_ORDERS',
     'Method',
+    'MomentOrders',
     'check_moment_items',
     'check_moment_orders',
     'moment_item',
@@ -50,6 +53,11 @@ Method: TypeAlias = Annotated[Literal[MOMENT_METHODS], Choices(
 # measure them: the moments to 7, the three parameters of a Gaussian, and
 # a Gauss-Hermite series to h4
 _MAX_ORDERS = dict(moments=7, gauss_fit=2, gauss_hermite=4)
+
+# The orders of moment maps, at least one, each of the orders of a method
+# (that of each method, see check_moment_orders)
+MomentOrders: TypeAlias = Annotated[
+    Sequence[Annotated[int, Ge(0), Le(max(MOMENT_ORDERS))]], Len(1)]
 
 
 def moment_item(order: int, method: str) -> str:

@@ -261,7 +261,7 @@ def split_data_file(file: DataFile) -> tuple[str, int | str | None]:
 # pydantic.FiniteFloat; see type_problem)
 _BOUNDS = (
     annotated_types.Gt, annotated_types.Ge, annotated_types.Lt,
-    annotated_types.Le, pydantic.AllowInfNan(False))
+    annotated_types.Le, annotated_types.Len, pydantic.AllowInfNan(False))
 
 
 @functools.cache
@@ -349,8 +349,15 @@ def describe_type(type_: typing.Any) -> str:
         return describe_type(typing.get_args(type_)[0])
     if len(members := union_members(type_)) > 1:
         return ' | '.join(describe_type(x) for x in members)
+    origin, args = typing.get_origin(type_), typing.get_args(type_)
+    if origin in (list, tuple, collections.abc.Sequence) and args:
+        # (of its items without their markers, e.g. Sequence[int], not
+        # Sequence[Annotated[int, Ge(ge=1)]])
+        type_ = origin[tuple(
+            typing.get_args(x)[0] if typing.get_origin(x) is Annotated
+            else x for x in args)]
     name = getattr(type_, '__name__', None)
-    label = str(type_) if typing.get_args(type_) or name is None else name
+    label = str(type_) if args or name is None else name
     return re.sub(r'\b(collections\.abc|types|typing)\.', '', label)
 
 
@@ -491,8 +498,14 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
     if not matches_type(value, type_) and not (
             type(value) is np.ndarray
             and matches_type(value.tolist(), type_)):
-        # A union of choices or ranges is checked by each of its members
+        # A union of one value and a list of them (e.g. one value for
+        # every axis, or one for each): the error of the member of the
+        # form of the value
         members = union_members(type_)
+        if len(members) > 1 \
+                and (member := _member_of_form(value, members)) is not None:
+            return type_error(value, member)
+        # A union of choices or ranges is checked by each of its members
         if len(members) > 1 and any(
                 _literal(x) is not None or _split_bounds(x)[1]
                 for x in members):
@@ -503,6 +516,11 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
             return ValueError(f"must be one of {choices}; it is {value!r}")
         if (item := _item_error(value, type_)) is not None:
             return item
+        # (a list of a given length, as such)
+        if any(isinstance(x, annotated_types.Len) for x in bounds):
+            return TypeError(
+                f"must be {_describe_member(Annotated[type_, *bounds])}; "
+                f"it is {value!r}")
         return TypeError(
             f"must be of type {describe_type(type_)}; it is {value!r}")
     bounds = [_bound(x) for x in bounds]
@@ -514,6 +532,36 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
         return ValueError(
             f"must be in a unit of {kinds.names()}; it is {_shown(value)}")
     return None
+
+
+def _member_of_form(value: Any, members: tuple[Any, ...]) -> Any:
+    """
+    Return the member of a union annotation of the form of a value, if it
+    is the only one, of a union of numbers and lists alone (e.g. one value
+    for every axis, or one for each; not of choices, whose message names
+    them all): of a list or a tuple, its one sequence member; of a number,
+    its one number member; else None.
+    """
+    def form(member: Any) -> str | None:
+        inner = _split_bounds(member)[0]
+        if typing.get_origin(inner) is Annotated:
+            inner = typing.get_args(inner)[0]
+        if typing.get_origin(inner) in (
+                list, tuple, collections.abc.Sequence):
+            return 'sequence'
+        if inner in (int, float):
+            return 'number'
+        return None
+    if any(form(x) is None for x in members):
+        return None
+    if isinstance(value, list | tuple):
+        wanted = 'sequence'
+    elif isinstance(value, int | float) and not isinstance(value, bool):
+        wanted = 'number'
+    else:
+        return None
+    matching = [x for x in members if form(x) == wanted]
+    return matching[0] if len(matching) == 1 else None
 
 
 def _shown(value: Any) -> str:
@@ -580,6 +628,18 @@ def _describe_member(type_: Any) -> str:
     if (literal := _literal(type_)) is not None:
         return ', '.join(repr(x) for x in typing.get_args(literal))
     inner, bounds = _split_bounds(type_)
+    lengths = [x for x in bounds if isinstance(x, annotated_types.Len)]
+    # (a list of a given length: its length and its items, e.g. "a list
+    # of 2 values of type int at least 1")
+    # (of the sequence under its other markers, e.g. a unit)
+    base = typing.get_args(inner)[0] \
+        if typing.get_origin(inner) is Annotated else inner
+    args = typing.get_args(base)
+    if lengths and args and typing.get_origin(base) in (
+            list, tuple, collections.abc.Sequence):
+        length = lengths[0]
+        return f"{_length_words(length.min_length, length.max_length)} " \
+            f"{_describe_member(args[0])}"
     within = ' and '.join(_bound(x)[0] for x in bounds)
     return f"of type {describe_type(inner)}" + (f" {within}" if within else "")
 
@@ -600,7 +660,22 @@ def _bound(bound: Any) -> tuple[str, Callable[[Any], bool]]:
             return f"at most {b}", lambda x: x <= b
         case pydantic.AllowInfNan(allow_inf_nan=False):
             return "finite", math.isfinite
+        case annotated_types.Len(min_length=low, max_length=high):
+            return _length_words(low, high), \
+                lambda x: low <= len(x) and (high is None or len(x) <= high)
     raise TypeError(f"unknown bound {bound!r}")
+
+
+def _length_words(low: int, high: int | None) -> str:
+    """
+    Return the wording of the bounds of the length of a sequence (see
+    annotated_types.Len), e.g. 'a list of 2 values'.
+    """
+    if high == low:
+        return f"a list of {low} value{'s' if low != 1 else ''}"
+    if high is None:
+        return f"a list of at least {low} value{'s' if low != 1 else ''}"
+    return f"a list of {low} to {high} values"
 
 
 def unit_kinds_of(type_: Any) -> UnitKinds | None:

@@ -22,7 +22,8 @@ from . import _model_cube
 from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
 from ._options import (
-    MedianSize, Rota, Rpix, Rval, Size, Step, check_median_size)
+    MedianSize, Oversampling2, Rota, Rpix, Rval, Size, Step,
+    check_median_size)
 from .base import DType, ObservationSky, SkyOptions, unmasked_pixels
 
 __all__ = [
@@ -120,7 +121,7 @@ class ObservationPixelBrightness(ObservationSky):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             noise: Noise | None = None,
-            oversampling: Sequence[int] | None = None,
+            oversampling: Oversampling2 = (1, 1),
             depth: Depth | None = None,
             dtype: DType | None = None,
             fft_dtype: DType = 'float64',

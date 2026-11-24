@@ -11,7 +11,7 @@ import astropy.units
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.config import Choices, Unit, check_options
+from gbkfit.config import Choices, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
@@ -27,7 +27,7 @@ from ..weights import Weights
 from . import _model_cube
 from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import flux_data_unit
-from ._options import Rota, Rpix, Rval
+from ._options import Lengths, Oversampling3, Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
 from .base import DType, ObservationSky, SkyOptions
 
@@ -38,9 +38,7 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-# The lengths on the sky of x and y, or one for both, and the transforms
-# of the models (see uv_transforms)
-_Lengths: TypeAlias = Annotated[float | Sequence[float], Unit('arcsec')]
+# The transforms of the models (see uv_transforms)
 _Transform: TypeAlias = Annotated[
     Literal[tuple(uv_transforms)], Choices(
         exact='Exact', sin='SIN projection',
@@ -205,9 +203,9 @@ class ObservationVisibilities(ObservationSky):
 
     def __init__(
             self,
-            fov: _Lengths,
+            fov: Lengths,
             coverage: UVCoverage | None = None,
-            step: _Lengths | None = None,
+            step: Lengths | None = None,
             rpix: Rpix | None = None,
             rval: Rval | None = None,
             rota: Rota = 0,
@@ -224,7 +222,7 @@ class ObservationVisibilities(ObservationSky):
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             noise: Noise | None = None,
-            oversampling: Sequence[int] | None = None,
+            oversampling: Oversampling3 = (1, 1, 1),
             depth: Depth | None = None,
             dtype: DType | None = None,
             fft_dtype: DType = 'float64',
@@ -235,10 +233,6 @@ class ObservationVisibilities(ObservationSky):
         coverage = self._options(dict(coverage=coverage))[
             'coverage']
         fov = (fov,) * 2 if np.ndim(fov) == 0 else tuple(fov)
-        if len(fov) != 2 or not all(value > 0 for value in fov):
-            raise ValueError(
-                f"fov is the field of the cube on the sky (arcsec), of x and "
-                f"y, or one for both, positive; it is {fov}")
         if step is None:
             step = _default_step(coverage)
         step = (step,) * 2 if np.ndim(step) == 0 else tuple(step)
