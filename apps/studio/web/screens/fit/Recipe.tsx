@@ -2,8 +2,9 @@
 // words of the setups (of:, use:; see recipe.ts). The galaxies and the
 // lenses it puts in place, each a piece of the project (by a name in the
 // fit when there are several: its parameters are then named after it);
-// its observations, each with its data and the noise of its mock data,
-// and their likelihood; its parameters, in one table by item, each with
+// its observations, each paired with its data (at its place in the section
+// datasets) and with the noise of its mock data, and their likelihood;
+// its parameters, in one table by item, each with
 // what gives it its properties (the values of a piece, shared by the fits
 // that use it, or this fit's own, where the edits go: a fit changes no
 // piece); and its fitter.
@@ -12,6 +13,7 @@ import { useState, type ReactNode } from 'react';
 import { api, data } from '../../api/client';
 import { keys, useCreateBlock, useProject, useSchema, useUpdateBlock } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
+import { ProblemField, ProblemsProvider, type Problem as FieldProblem } from '../../components/Problems';
 import { SchemaForm, type Defs } from '../../components/SchemaForm';
 import { Dock, DockSection } from '../../components/ui/dock';
 import { Choice, NumberField, Segments } from '../../components/ui/inputs';
@@ -21,7 +23,7 @@ import { isObject } from '../galaxy/options';
 import { typesOf } from '../galaxy/schema';
 import type { SetupDraft } from './FitScreen';
 import { plain } from './Start';
-import { itemsOf, nameFor, ownProperties, sourceOf, withItemName, withItems, withOwnProperty, type Item, type Options, type Section } from './recipe';
+import { datasetOf, itemsOf, nameFor, ownProperties, sourceOf, withDataset, withItemName, withItems, withObservation, withoutObservation, withOwnProperty, type Item, type Options, type Section } from './recipe';
 
 // A parameter of the setup, as the server describes it (see SetupInfo)
 export interface SetupParam {
@@ -69,23 +71,27 @@ export function RecipeSheet({
   const fixed = params.length - free - tied;
   const setupFile = path.slice(project.length + 1);
   return (
-    <Dock label="The recipe of the fit">
-      <DockSection id="fx-galaxies" title="Galaxies" note={itemsOf(setup, 'galaxies').map((g) => g.name ?? g.piece ?? 'in place').join(' · ')} needed={itemsOf(setup, 'galaxies').length === 0}>
-        <Items section="galaxies" setup={setup} draft={draft} all={pieces?.galaxies ?? []} params={params} valued={valued} onChange={(items) => setItems('galaxies', items)} />
-      </DockSection>
-      <DockSection id="fx-lenses" title="Lenses" note={itemsOf(setup, 'lenses').length ? itemsOf(setup, 'lenses').map((l) => l.name ?? l.piece).join(' · ') : 'none'} folded={itemsOf(setup, 'lenses').length === 0}>
-        <Items section="lenses" setup={setup} draft={draft} all={pieces?.lenses ?? []} params={params} valued={valued} onChange={(items) => setItems('lenses', items)} />
-      </DockSection>
-      <DockSection id="fx-observations" title="Observations" note={String(itemsOf(setup, 'observations').length)} needed={itemsOf(setup, 'observations').length === 0}>
-        <Observations project={project} setup={setup} draft={draft} all={pieces?.observations ?? []} defs={defs} onChange={(items) => setItems('observations', items)} />
-      </DockSection>
-      <DockSection id="fx-params" title="Parameters" note={params.length ? [`${free} free`, fixed && `${fixed} fixed`, tied && `${tied} tied`].filter(Boolean).join(' · ') : described ? 'none yet' : '…'}>
-        <Params project={project} setup={setup} draft={draft} params={params} setupFile={setupFile} problems={problems} valued={valued} />
-      </DockSection>
-      <DockSection id="fx-fitter" title="Fitter" note={typeof setup.fitter === 'string' ? setup.fitter : isObject(setup.fitter) ? String(setup.fitter.type ?? '') : 'none'} needed={setup.fitter === undefined}>
-        <Fitter project={project} setup={setup} draft={draft} all={pieces?.fitters ?? []} defs={defs} />
-      </DockSection>
-    </Dock>
+    // (the problems of the library at the fields that fix them: so far,
+    // the data of each observation)
+    <ProblemsProvider problems={problems as FieldProblem[]}>
+      <Dock label="The recipe of the fit">
+        <DockSection id="fx-galaxies" title="Galaxies" note={itemsOf(setup, 'galaxies').map((g) => g.name ?? g.piece ?? 'in place').join(' · ')} needed={itemsOf(setup, 'galaxies').length === 0}>
+          <Items section="galaxies" setup={setup} draft={draft} all={pieces?.galaxies ?? []} params={params} valued={valued} onChange={(items) => setItems('galaxies', items)} />
+        </DockSection>
+        <DockSection id="fx-lenses" title="Lenses" note={itemsOf(setup, 'lenses').length ? itemsOf(setup, 'lenses').map((l) => l.name ?? l.piece).join(' · ') : 'none'} folded={itemsOf(setup, 'lenses').length === 0}>
+          <Items section="lenses" setup={setup} draft={draft} all={pieces?.lenses ?? []} params={params} valued={valued} onChange={(items) => setItems('lenses', items)} />
+        </DockSection>
+        <DockSection id="fx-observations" title="Observations" note={String(itemsOf(setup, 'observations').length)} needed={itemsOf(setup, 'observations').length === 0}>
+          <Observations project={project} setup={setup} draft={draft} all={pieces?.observations ?? []} datasets={pieces?.datasets ?? []} valued={valued} defs={defs} onChange={(items) => setItems('observations', items)} />
+        </DockSection>
+        <DockSection id="fx-params" title="Parameters" note={params.length ? [`${free} free`, fixed && `${fixed} fixed`, tied && `${tied} tied`].filter(Boolean).join(' · ') : described ? 'none yet' : '…'}>
+          <Params project={project} setup={setup} draft={draft} params={params} setupFile={setupFile} problems={problems} valued={valued} />
+        </DockSection>
+        <DockSection id="fx-fitter" title="Fitter" note={typeof setup.fitter === 'string' ? setup.fitter : isObject(setup.fitter) ? String(setup.fitter.type ?? '') : 'none'} needed={setup.fitter === undefined}>
+          <Fitter project={project} setup={setup} draft={draft} all={pieces?.fitters ?? []} defs={defs} />
+        </DockSection>
+      </Dock>
+    </ProblemsProvider>
   );
 }
 
@@ -192,9 +198,10 @@ function NameField({ value, label, onChange }: { value: string; label: string; o
   );
 }
 
-// The observations of the fit: each its piece, with its data and the noise
-// of its mock data; and their likelihood (one for all)
-function Observations({ project, setup, draft, all, defs, onChange }: { project: string; setup: Options; draft: SetupDraft; all: string[]; defs: Defs | undefined; onChange: (items: Item[]) => void }) {
+// The observations of the fit: each its piece, paired with its data (a
+// dataset of the project, or none: a model alone) and with the noise of
+// its mock data; and their likelihood (one for all)
+function Observations({ project, setup, draft, all, datasets, valued, defs, onChange }: { project: string; setup: Options; draft: SetupDraft; all: string[]; datasets: string[]; valued: Set<string>; defs: Defs | undefined; onChange: (items: Item[]) => void }) {
   const { go } = useStudio();
   const items = itemsOf(setup, 'observations');
   const seen = useQueries({
@@ -209,7 +216,7 @@ function Observations({ project, setup, draft, all, defs, onChange }: { project:
     <div className="fx-placed-list">
       {items.map((item, i) => {
         const options = item.options ?? (isObject(seen[i]?.data) ? (seen[i].data as Options) : null);
-        const dataset = options?.dataset;
+        const dataset = datasetOf(setup, i);
         const noise = options?.noise;
         return (
           <div key={i} className="fx-seen">
@@ -226,16 +233,16 @@ function Observations({ project, setup, draft, all, defs, onChange }: { project:
                   Open →
                 </button>
               )}
-              <button className="fx-x" aria-label="Take the observation out" title="Take the observation out of the fit" onClick={() => onChange(items.filter((_, j) => j !== i))}>
+              <button className="fx-x" aria-label="Take the observation out" title="Take the observation out of the fit" onClick={() => draft.edit((s) => withoutObservation(s, i, valued))}>
                 ×
               </button>
             </div>
             <div className="fx-seen-lines">
               <span className="ob-label">Data</span>
-              <span className="fx-small">{typeof dataset === 'string' ? dataset : isObject(dataset) ? 'written in the observation' : <span className="fx-faint">none: a model alone, fitted to nothing</span>}</span>
+              <DataChoice index={i} dataset={dataset} datasets={datasets} onChange={(name) => draft.edit((s) => withDataset(s, i, name))} />
               <span className="ob-label">Noise</span>
               <span className="fx-small" title="The noise of its mock data (its option noise)">
-                {typeof noise === 'string' ? noise : isObject(noise) ? `${String(noise.type)}, its own` : dataset !== undefined ? 'Gaussian, of the errors of its data' : <span className="fx-faint">none</span>}
+                {typeof noise === 'string' ? noise : isObject(noise) ? `${String(noise.type)}, its own` : dataset !== null ? 'Gaussian, of the errors of its data' : <span className="fx-faint">none</span>}
               </span>
             </div>
           </div>
@@ -243,7 +250,7 @@ function Observations({ project, setup, draft, all, defs, onChange }: { project:
       })}
       <DropMenu
         label="Add an observation"
-        entries={all.length ? all.map((name) => ({ label: name, onClick: () => onChange([...items, { name: null, piece: name, options: null }]) })) : [{ label: 'The project has no observation yet', onClick: () => {} }]}
+        entries={all.length ? all.map((name) => ({ label: name, onClick: () => draft.edit((s) => withObservation(s, name, valued)) })) : [{ label: 'The project has no observation yet', onClick: () => {} }]}
         target={<button className="gm-add">{items.length ? '+ Another observation (a joint fit)' : '+ Add an observation'}</button>}
       />
       <div className="fx-seen-lines">
@@ -257,6 +264,41 @@ function Observations({ project, setup, draft, all, defs, onChange }: { project:
         )}
       </div>
     </div>
+  );
+}
+
+// The data an observation of the fit is paired with: none, a dataset of the
+// project (which opens), or one written in the fit; marked by the problems
+// of its pairing (the section datasets at its place; of the section as a
+// whole, e.g. of a length not that of the observations, which a choice
+// makes right: the first)
+function DataChoice({ index, dataset, datasets, onChange }: { index: number; dataset: unknown; datasets: string[]; onChange: (dataset: string | null) => void }) {
+  const { go } = useStudio();
+  const here = '(written here)';
+  const value = typeof dataset === 'string' ? dataset : isObject(dataset) ? here : '';
+  return (
+    <ProblemField path={['datasets', index]} catches={['datasets']} label={`The data of observation ${index + 1}`}>
+      <span className="fx-placed">
+        <span className="fx-placed-piece">
+          <Choice
+            label="The data the observation is fitted to"
+            value={value}
+            onChange={(chosen) => chosen !== here && onChange(chosen || null)}
+            items={[
+              { value: '', label: 'None: a model alone, fitted to nothing' },
+              // (one it names that the project has not, as it is)
+              ...(typeof dataset === 'string' && !datasets.includes(dataset) ? [dataset] : []).concat(datasets).map((each) => ({ value: each, label: each })),
+              ...(value === here ? [{ value: here, label: 'Written in the fit', disabled: true }] : []),
+            ]}
+          />
+        </span>
+        {typeof dataset === 'string' && datasets.includes(dataset) && (
+          <button className="fx-link" onClick={() => go({ kind: 'block', folder: 'datasets', name: dataset })}>
+            Open →
+          </button>
+        )}
+      </span>
+    </ProblemField>
   );
 }
 

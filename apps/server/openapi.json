@@ -1665,7 +1665,7 @@
     "/api/v1/observations/describe": {
       "post": {
         "summary": "Observation Problems",
-        "description": "Describe an observation of the options of a piece of a project, as\nthe library does from the headers of its data, without reading them:\nits problems, each at the path of its option (see gbkfit's\ndescribe_observation).",
+        "description": "Describe an observation of the options of a piece of a project alone,\nwithout data, as the library does: its problems, each at the path of\nits option (see gbkfit's describe_observation). Those of the data it\nis paired with are of the setups that pair them (see\n/setups/describe).",
         "operationId": "observation_problems_api_v1_observations_describe_post",
         "requestBody": {
           "content": {
@@ -1934,7 +1934,7 @@
     "/api/v1/views/observed": {
       "post": {
         "summary": "View Observed",
-        "description": "Evaluate a galaxy through an observation of its project (see\nRenders.observed), and keep its arrays (the model of each item, and\nthe data and errors of the observation, if it has them) for the views\nof cubes (channel, spectrum and moments), each at the path returned.\nThe render is cancelled if the client goes away (see RenderPool).",
+        "description": "Evaluate a galaxy through an observation of its project, paired with\na dataset if given (see Renders.observed), and keep its arrays (the\nmodel of each item, and the data and errors of the dataset, if any)\nfor the views of cubes (channel, spectrum and moments), each at the\npath returned. The render is cancelled if the client goes away (see\nRenderPool).",
         "operationId": "view_observed_api_v1_views_observed_post",
         "requestBody": {
           "content": {
@@ -4271,7 +4271,7 @@
           "observation"
         ],
         "title": "ObservationRequest",
-        "description": "An observation to describe: the project of its piece, and its options\n(the pieces it names, of the project; its files relative to it)."
+        "description": "An observation to describe, alone (without data): the project of its\npiece, and its options (the pieces it names, of the project; its files\nrelative to it)."
       },
       "ObservedArrayInfo": {
         "properties": {
@@ -4377,6 +4377,21 @@
             "type": "string",
             "title": "Observation"
           },
+          "dataset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset"
+          },
           "label": {
             "anyOf": [
               {
@@ -4396,7 +4411,7 @@
           "observation"
         ],
         "title": "ObservedRequest",
-        "description": "A galaxy to observe (see Renders.observed): the project of its piece,\nits options and the values of its parameters (as a galaxy to render;\nthe defaults for those not given, also of the observation), and the\nobservation of the project that sees it, by name; and what the galaxy\nis, for the pages that show the renders that run long."
+        "description": "A galaxy to observe (see Renders.observed): the project of its piece,\nits options and the values of its parameters (as a galaxy to render;\nthe defaults for those not given, also of the observation), the\nobservation of the project that sees it, by name, and the dataset it\nis paired with, if any (a piece of the project by name, or its\noptions); and what the galaxy is, for the pages that show the renders\nthat run long."
       },
       "PSFRequest": {
         "properties": {

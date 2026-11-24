@@ -421,10 +421,11 @@ def lens_parameters(server: ServerDep, request: LensRequest) -> LensInfo:
 def observation_problems(
         server: ServerDep, request: ObservationRequest) -> list[Problem]:
     """
-    Describe an observation of the options of a piece of a project, as
-    the library does from the headers of its data, without reading them:
-    its problems, each at the path of its option (see gbkfit's
-    describe_observation).
+    Describe an observation of the options of a piece of a project alone,
+    without data, as the library does: its problems, each at the path of
+    its option (see gbkfit's describe_observation). Those of the data it
+    is paired with are of the setups that pair them (see
+    /setups/describe).
     """
     return [
         Problem.model_validate(problem)
@@ -570,15 +571,17 @@ async def view_observed(
         server: ServerDep, request: ObservedRequest,
         connection: Request) -> ObservedInfo:
     """
-    Evaluate a galaxy through an observation of its project (see
-    Renders.observed), and keep its arrays (the model of each item, and
-    the data and errors of the observation, if it has them) for the views
-    of cubes (channel, spectrum and moments), each at the path returned.
-    The render is cancelled if the client goes away (see RenderPool).
+    Evaluate a galaxy through an observation of its project, paired with
+    a dataset if given (see Renders.observed), and keep its arrays (the
+    model of each item, and the data and errors of the dataset, if any)
+    for the views of cubes (channel, spectrum and moments), each at the
+    path returned. The render is cancelled if the client goes away (see
+    RenderPool).
     """
     observed = await server.renders.render('observed', dict(
         project=request.project, options=request.galaxy,
-        properties=request.properties, observation=request.observation),
+        properties=request.properties, observation=request.observation,
+        dataset=request.dataset),
         f"{_what(request.label)} through {request.observation}",
         connection.is_disconnected)
     return _observed_info(server, observed)

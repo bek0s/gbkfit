@@ -446,10 +446,11 @@ export interface paths {
         put?: never;
         /**
          * Observation Problems
-         * @description Describe an observation of the options of a piece of a project, as
-         *     the library does from the headers of its data, without reading them:
-         *     its problems, each at the path of its option (see gbkfit's
-         *     describe_observation).
+         * @description Describe an observation of the options of a piece of a project alone,
+         *     without data, as the library does: its problems, each at the path of
+         *     its option (see gbkfit's describe_observation). Those of the data it
+         *     is paired with are of the setups that pair them (see
+         *     /setups/describe).
          */
         post: operations["observation_problems_api_v1_observations_describe_post"];
         delete?: never;
@@ -610,11 +611,12 @@ export interface paths {
         put?: never;
         /**
          * View Observed
-         * @description Evaluate a galaxy through an observation of its project (see
-         *     Renders.observed), and keep its arrays (the model of each item, and
-         *     the data and errors of the observation, if it has them) for the views
-         *     of cubes (channel, spectrum and moments), each at the path returned.
-         *     The render is cancelled if the client goes away (see RenderPool).
+         * @description Evaluate a galaxy through an observation of its project, paired with
+         *     a dataset if given (see Renders.observed), and keep its arrays (the
+         *     model of each item, and the data and errors of the dataset, if any)
+         *     for the views of cubes (channel, spectrum and moments), each at the
+         *     path returned. The render is cancelled if the client goes away (see
+         *     RenderPool).
          */
         post: operations["view_observed_api_v1_views_observed_post"];
         delete?: never;
@@ -1780,8 +1782,9 @@ export interface components {
         };
         /**
          * ObservationRequest
-         * @description An observation to describe: the project of its piece, and its options
-         *     (the pieces it names, of the project; its files relative to it).
+         * @description An observation to describe, alone (without data): the project of its
+         *     piece, and its options (the pieces it names, of the project; its files
+         *     relative to it).
          */
         ObservationRequest: {
             /** Project */
@@ -1836,9 +1839,11 @@ export interface components {
          * ObservedRequest
          * @description A galaxy to observe (see Renders.observed): the project of its piece,
          *     its options and the values of its parameters (as a galaxy to render;
-         *     the defaults for those not given, also of the observation), and the
-         *     observation of the project that sees it, by name; and what the galaxy
-         *     is, for the pages that show the renders that run long.
+         *     the defaults for those not given, also of the observation), the
+         *     observation of the project that sees it, by name, and the dataset it
+         *     is paired with, if any (a piece of the project by name, or its
+         *     options); and what the galaxy is, for the pages that show the renders
+         *     that run long.
          */
         ObservedRequest: {
             /** Project */
@@ -1856,6 +1861,10 @@ export interface components {
             };
             /** Observation */
             observation: string;
+            /** Dataset */
+            dataset?: string | {
+                [key: string]: unknown;
+            } | null;
             /** Label */
             label?: string | null;
         };

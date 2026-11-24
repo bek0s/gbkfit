@@ -26,19 +26,17 @@ yaml = ruamel.yaml.YAML(typ='safe')
 
 def write_data_setup(root):
     """
-    Write a setup of the project whose observation has data
+    Write a setup of the project whose observation is paired with data
     (data/image.fits, with errors of 0.01).
     """
     study = pathlib.Path(root, 'study')
     yaml.dump(dict(
-        type='pixel_brightness',
-        dataset=dict(
-            type='pixel_brightness', data='data/image.fits', error=0.01,
-            step=[1, 1])),
-        study / 'observations/image-data.yaml')
-    yaml.dump(dict(
         driver=dict(type='host'), galaxies=['disk'],
-        observations='image-data', params=['disk']),
+        observations=['image'],
+        datasets=[dict(
+            type='pixel_brightness', data='data/image.fits', error=0.01,
+            step=[1, 1])],
+        params=['disk']),
         study / 'setups/fit.yaml')
 
 

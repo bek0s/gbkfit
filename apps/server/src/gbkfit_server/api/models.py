@@ -196,8 +196,9 @@ class LensInfo(BaseModel):
 
 class ObservationRequest(BaseModel):
     """
-    An observation to describe: the project of its piece, and its options
-    (the pieces it names, of the project; its files relative to it).
+    An observation to describe, alone (without data): the project of its
+    piece, and its options (the pieces it names, of the project; its files
+    relative to it).
     """
     project: str
     observation: dict[str, Any]
@@ -332,14 +333,17 @@ class ObservedRequest(BaseModel):
     """
     A galaxy to observe (see Renders.observed): the project of its piece,
     its options and the values of its parameters (as a galaxy to render;
-    the defaults for those not given, also of the observation), and the
-    observation of the project that sees it, by name; and what the galaxy
-    is, for the pages that show the renders that run long.
+    the defaults for those not given, also of the observation), the
+    observation of the project that sees it, by name, and the dataset it
+    is paired with, if any (a piece of the project by name, or its
+    options); and what the galaxy is, for the pages that show the renders
+    that run long.
     """
     project: str
     galaxy: dict[str, Any]
     properties: dict[str, Any] = {}
     observation: str
+    dataset: str | dict[str, Any] | None = None
     label: str | None = None
 
 

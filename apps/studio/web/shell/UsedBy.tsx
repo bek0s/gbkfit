@@ -1,6 +1,7 @@
-// The blocks of the project that name a block (e.g. the observations that
-// see a dataset, or have a PSF in their instrument), a section of the dock
-// of its screen; each opens from it, but fits (seen in the Fit section).
+// The blocks of the project that name a block (e.g. the fits that pair a
+// dataset with an observation, or the observations that have a PSF in
+// their instrument), a section of the dock of its screen; each opens from
+// it.
 import { useReferences } from '../api/queries';
 import { NavItem } from '../components/ui/basics';
 import { DockSection } from '../components/ui/dock';
@@ -13,7 +14,7 @@ export function UsedBy({ path }: { path: string }) {
   return (
     <DockSection id="used-by" title="Used by">
       {references.length === 0 ? (
-        <p className="note">No observation uses it yet.</p>
+        <p className="note">Nothing uses it yet.</p>
       ) : (
         references.map((r) => (
           <NavItem
@@ -21,7 +22,7 @@ export function UsedBy({ path }: { path: string }) {
             mono
             label={r.name}
             right={<small>{kindOf(r.folder)}</small>}
-            onClick={() => r.folder !== 'setups' && go({ kind: 'block', folder: r.folder, name: r.name })}
+            onClick={() => go({ kind: 'block', folder: r.folder, name: r.name })}
           />
         ))
       )}

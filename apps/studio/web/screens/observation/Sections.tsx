@@ -1,21 +1,19 @@
 // The sections of the dock of an observation on the sky, in the order of
 // the path of the light: what it sees (galaxies, components, lines or a
 // band), its instrument (primary beam, PSF, LSF), what it records (its kind
-// of data and its grid: the data's, read only, with data), the noise of its
-// mock data, its data and how they meet the model, and how accurately and
-// fast its model is made. The common choices are made by hand; the options
-// of each choice are a form of the schema (see SchemaForm), titled by the
-// library. How its data are compared with its model, its likelihood, is
-// not of the observation but of the fits of it (the section likelihoods of
-// a setup).
+// of data and its own sampling), the noise of its mock data, and how
+// accurately and fast its model is made. The common choices are made by
+// hand; the options of each choice are a form of the schema (see
+// SchemaForm), titled by the library. The data it is fitted to, and how
+// they are compared with its model (its likelihood), are not of the
+// observation but of the fits of it (the sections datasets and
+// likelihoods of a setup).
 import { useState, type ReactNode } from 'react';
-import type { ArrayInfo } from '../../api/client';
 import { useLines } from '../../api/queries';
 import { membersOf, propertiesOf, SchemaForm, typeOf, type Defs, type Options, type Schema } from '../../components/SchemaForm';
-import { Button } from '../../components/ui/basics';
 import { Choice, NumberField, Segments } from '../../components/ui/inputs';
 import { DropMenu } from '../../components/ui/overlays';
-import { ACCURACY_KEYS, dataHaveChannels, gridOptions, isObject, isRecorded, isSpectral, MEETING_KEYS, objectAt, observationMember, skyKeys, withKey, type Ellipse } from './model';
+import { ACCURACY_KEYS, isObject, isRecorded, isSpectral, objectAt, observationMember, skyKeys, withKey, type Ellipse } from './model';
 
 interface Common {
   defs: Defs;
@@ -24,46 +22,6 @@ interface Common {
   onChange: (options: Options) => void;
   blocks: Record<string, string[]>;
   openBlock: (folder: string, name: string) => void;
-}
-
-// ---------------------------------------------------------------------------
-// The data
-
-export function DataFields({ defs, project, options, onChange, blocks, openBlock, datasetType, titleOf, member }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string; member: Schema }) {
-  const datasets = blocks.datasets ?? [];
-  const value = typeof options.dataset === 'string' ? options.dataset : options.dataset ? '(in place)' : '';
-  return (
-    <div className="ob-form">
-      <Row label="Dataset">
-        <Choice
-          items={[
-            { value: '', label: 'None: a model' },
-            ...datasets.map((name) => ({ value: name, label: name })),
-            ...(value === '(in place)' ? [{ value, label: 'Given in place (in the file)', disabled: true }] : []),
-          ]}
-          value={value}
-          label="The dataset of the observation"
-          // (the observation keeps its own grid, which serves without data)
-          onChange={(name) => onChange(withKey(options, 'dataset', name || undefined))}
-        />
-      </Row>
-      {typeof options.dataset === 'string' && datasets.includes(options.dataset) && (
-        <p className="ob-text">
-          {datasetType ? `${titleOf(datasetType)}. ` : ''}
-          <button className="ob-link" onClick={() => openBlock('datasets', options.dataset as string)}>
-            Open the dataset →
-          </button>
-        </p>
-      )}
-      {options.dataset == null && <p className="ob-text">Without data, the observation makes a model on a grid of its own (see Records), or mock data.</p>}
-      {options.dataset != null && (
-        <>
-          <div className="ob-sub">Meeting the model</div>
-          <OptionFields defs={defs} project={project} options={options} onChange={onChange} blocks={blocks} openBlock={openBlock} member={member} keys={MEETING_KEYS} />
-        </>
-      )}
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -79,12 +37,7 @@ export function AccuracyFields(props: Common & { member: Schema }) {
 // The options of the kind set by hand: its grid on the sky and its channels
 const GRID_KEYS = ['size', 'step', 'spectral'];
 
-export function RecordsFields({ defs, project, options, onChange, blocks, datasetType, titleOf, array }: Common & { datasetType: string | undefined; titleOf: (type: unknown) => string; array: ArrayInfo | undefined }) {
-  const withData = options.dataset != null;
-  // (the channels of data of a spectral axis are those of the model; moment
-  // maps have none, and the model needs its own)
-  const fromData = withData && dataHaveChannels(datasetType);
-  const extra = withData ? gridOptions(defs, options) : [];
+export function RecordsFields({ defs, project, options, onChange, blocks, titleOf }: Common & { titleOf: (type: unknown) => string }) {
   const sky = skyKeys(defs);
   const types = membersOf(defs.observation ?? {}, defs)
     .map((m) => typeOf(m))
@@ -110,42 +63,32 @@ export function RecordsFields({ defs, project, options, onChange, blocks, datase
       <Row label="Type">
         <Choice items={types.map((type) => ({ value: type, label: titleOf(type) }))} value={String(options.type ?? '')} label="The kind of data of the observation" onChange={setType} />
       </Row>
-      {withData && datasetType !== undefined && datasetType !== options.type && (
-        <div className="ob-warn">
-          The data are {titleOf(datasetType)}.{' '}
-          <Button kind="small" onClick={() => setType(datasetType)}>
-            Make it {titleOf(datasetType)}
-          </Button>
-        </div>
-      )}
-      {withData && array && <FromData array={array} spectral={isSpectral(options.type) && dataHaveChannels(datasetType)} />}
-      {extra.length > 0 && <p className="ob-text">The observation's own {extra.join(', ')} serve only without data.</p>}
-      {'size' in properties && !withData && (
+      {'size' in properties && (
         <>
           <Row label="Pixels" unit="px">
             <span className="ob-pair">
-              <NumberOption value={size[0]} placeholder={withData ? 'from the data' : 'nx'} label="The number of pixels along x" onChange={(nx) => setKey('size', joined(nx, size[1]))} />
+              <NumberOption value={size[0]} placeholder="nx" label="The number of pixels along x" onChange={(nx) => setKey('size', joined(nx, size[1]))} />
               <span>×</span>
-              <NumberOption value={size[1]} placeholder={withData ? 'from the data' : 'ny'} label="The number of pixels along y" onChange={(ny) => setKey('size', joined(size[0], ny))} />
+              <NumberOption value={size[1]} placeholder="ny" label="The number of pixels along y" onChange={(ny) => setKey('size', joined(size[0], ny))} />
             </span>
           </Row>
           <Row label="Pixel size" unit="″">
             <span className="ob-pair">
-              <NumberOption value={step[0]} placeholder={withData ? 'from the data' : '1'} label="The size of a pixel along x" onChange={(sx) => setKey('step', joined(sx, step[1]))} />
+              <NumberOption value={step[0]} placeholder="1" label="The size of a pixel along x" onChange={(sx) => setKey('step', joined(sx, step[1]))} />
               <span>×</span>
-              <NumberOption value={step[1]} placeholder={withData ? 'from the data' : '1'} label="The size of a pixel along y" onChange={(sy) => setKey('step', joined(step[0], sy))} />
+              <NumberOption value={step[1]} placeholder="1" label="The size of a pixel along y" onChange={(sy) => setKey('step', joined(step[0], sy))} />
             </span>
           </Row>
         </>
       )}
-      {'spectral' in properties && isSpectral(options.type) && !fromData && (
+      {'spectral' in properties && isSpectral(options.type) && (
         <>
-          <div className="ob-sub">{withData ? 'Channels of the model' : 'Channels'}</div>
+          <div className="ob-sub">Channels</div>
           <Row label="Channels">
-            <NumberOption value={spectral.size} placeholder={fromData ? 'from the data' : 'needed'} label="The number of channels" onChange={(value) => setSpectral('size', value)} />
+            <NumberOption value={spectral.size} placeholder="needed" label="The number of channels" onChange={(value) => setSpectral('size', value)} />
           </Row>
           <Row label="Width" unit="km/s">
-            <NumberOption value={spectral.step} placeholder={fromData ? 'from the data' : 'needed'} label="The width of a channel" onChange={(value) => setSpectral('step', value)} />
+            <NumberOption value={spectral.step} placeholder="needed" label="The width of a channel" onChange={(value) => setSpectral('step', value)} />
           </Row>
           <Row label="Centre" unit="km/s">
             <NumberOption value={spectral.rval} placeholder="0" label="The velocity of the middle channel" onChange={(value) => setSpectral('rval', value)} />
@@ -181,43 +124,6 @@ export function RecordsFields({ defs, project, options, onChange, blocks, datase
   );
 }
 
-// The grid of the data, read only: their pixels and their size on the sky,
-// and of data with channels, their number and width (see ArrayInfo: the
-// first two axes on the sky, the third the spectral one)
-function FromData({ array, spectral }: { array: ArrayInfo; spectral: boolean }) {
-  const [nx, ny, nz] = array.shape;
-  const [sx, , sz] = array.step ?? [];
-  return (
-    <div className="ob-fromdata">
-      <div className="ob-sub">From the data</div>
-      <Row label="Pixels">
-        <span className="ob-value">
-          {nx} × {ny}
-        </span>
-      </Row>
-      {sx !== undefined && (
-        <Row label="Pixel size">
-          <span className="ob-value">
-            {round(Math.abs(sx))}″ <small>{round(Math.abs(sx) * nx)}″ across</small>
-          </span>
-        </Row>
-      )}
-      {spectral && nz !== undefined && (
-        <>
-          <Row label="Channels">
-            <span className="ob-value">{nz}</span>
-          </Row>
-          {sz !== undefined && (
-            <Row label="Channel width">
-              <span className="ob-value">{round(Math.abs(sz))} km/s</span>
-            </Row>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // The instrument
 
@@ -228,15 +134,13 @@ export function InstrumentFields({
   onChange,
   blocks,
   openBlock,
-  beam,
   psf,
   lsfWidth,
   channel,
   titleOf,
 }: Common & {
-  // The beam of the header of the data (none: none), the PSF as the
-  // server measures it, and the FWHM of the LSF and the width of a channel
-  beam: Ellipse | null;
+  // The PSF as the server measures it, and the FWHM of the LSF and the
+  // width of a channel
   psf: Ellipse | null;
   lsfWidth: number | null;
   channel: number | null;
@@ -247,9 +151,6 @@ export function InstrumentFields({
     const next = withKey(instrument, key, value);
     onChange(withKey(options, 'instrument', Object.keys(next).length ? next : undefined));
   };
-  const beamPsf = beam && { type: 'gauss', bmaj: round(beam.major), bmin: round(beam.minor), bpa: round(beam.angle) };
-  // (a PSF within 5% of the beam is that of the beam)
-  const psfIsBeam = beam !== null && psf !== null && Math.abs(psf.major / beam.major - 1) < 0.05 && Math.abs(psf.minor / beam.minor - 1) < 0.05;
   return (
     <div className="ob-form">
       <Response family="primary_beam" folder="" title="Primary beam" none="None: no attenuation" value={instrument.primary_beam} onChange={(value) => set('primary_beam', value)} defs={defs} project={project} blocks={blocks} openBlock={openBlock} titleOf={titleOf} />
@@ -258,16 +159,6 @@ export function InstrumentFields({
         <p className="ob-measure">
           FWHM {round(psf.major)}″{Math.abs(psf.minor - psf.major) > 1e-6 * psf.major ? ` × ${round(psf.minor)}″ at ${round(psf.angle)}°` : ''}
         </p>
-      )}
-      {beamPsf && !psfIsBeam && (
-        <div className="ob-hint">
-          <span>
-            The data have a beam of {round(beam.major)}″ × {round(beam.minor)}″ at {round(beam.angle)}°.
-          </span>
-          <Button kind="small" onClick={() => set('psf', beamPsf)}>
-            Use it as the PSF
-          </Button>
-        </div>
       )}
       {isSpectral(options.type) && (
         <>
@@ -464,29 +355,16 @@ function NamesField({ value, placeholder, label, onChange }: { value: string; pl
 
 // ---------------------------------------------------------------------------
 // The noise of its mock data: none, a noise of the project, or one in place;
-// what it does with the data it has (and, without one, what its mock data
-// take)
+// and, without one, what its mock data take
 
-export function NoiseFields({ defs, project, options, onChange, blocks, openBlock, titleOf, errors, rms }: Common & { titleOf: (family: string, type: unknown) => string; errors: boolean; rms: number | null }) {
-  const withData = options.dataset != null;
-  const recorded = isRecorded(options.type);
+export function NoiseFields({ defs, project, options, onChange, blocks, openBlock, titleOf }: Common & { titleOf: (family: string, type: unknown) => string }) {
   let note: string;
-  if (options.noise != null) note = withData ? 'Only the mock data of the observation use it (a setup with mock); fits of its data use their own errors.' : 'Its mock data: the model plus this noise (a setup with mock draws them).';
-  else if (withData && recorded && errors) note = 'Its mock data take the errors of its data, as Gaussian noise.';
-  else if (withData && !recorded) note = 'Its data are measured from what its instrument records (e.g. moments of a cube), to which the noise is added: its mock data need a noise here.';
-  else if (withData) note = 'Its data have no errors: its mock data need a noise here.';
-  else note = 'Without data, its mock data need a noise here.';
+  if (options.noise != null) note = 'Its mock data: the model plus this noise (a setup with mock draws them); fits of data use their own errors.';
+  else if (isRecorded(options.type)) note = 'Without one, its mock data take the errors of the data a setup pairs it with, as Gaussian noise; without data, they need a noise here.';
+  else note = 'Its data are measured from what its instrument records (e.g. moments of a cube), to which the noise is added: its mock data need a noise here.';
   return (
     <div className="ob-form">
       <Response family="noise" folder="noise" title="Kind" none="None" value={options.noise} onChange={(value) => onChange(withKey(options, 'noise', value))} defs={defs} project={project} blocks={blocks} openBlock={openBlock} titleOf={titleOf} />
-      {options.noise == null && rms !== null && rms > 0 && (
-        <div className="ob-hint">
-          <span>The data have an rms of {round(rms)}.</span>
-          <Button kind="small" onClick={() => onChange(withKey(options, 'noise', { type: 'gauss', rms: round(rms) }))}>
-            Use it
-          </Button>
-        </div>
-      )}
       <p className="ob-text">{note}</p>
     </div>
   );

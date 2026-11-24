@@ -8,7 +8,8 @@ components that emit lines, through an ideal cube of channels that hold
 their light), of its options as a piece of a project gives them (their
 files relative to it) and of values of its parameters; and a galaxy as
 an observation of its project sees it (its model, on the grid of the
-observation, through its instrument; and its data, if it has them).
+observation, through its instrument; and the data it is paired with, if
+any).
 """
 
 import dataclasses
@@ -31,6 +32,7 @@ import gbkfit.project
 import gbkfit.setup
 import gbkfit.units
 from gbkfit.config import ConfigError, error_message, paths_relative_to
+from gbkfit.dataset import dataset_parser
 from gbkfit.driver import Driver
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.grid import doppler
@@ -483,38 +485,47 @@ class Renders:
             options: Mapping[str, Any],
             properties: Mapping[str, Any],
             observation: str,
+            dataset: str | Mapping[str, Any] | None = None,
             progress: Callable[[str], None] | None = None
     ) -> Observed:
         """
         Evaluate a galaxy of the options of a piece of a project, at the
         values of its parameters of the given properties (the defaults for
         the others, also of the observation), through an observation of
-        the project (by name: the pieces it names, its dataset, PSF and
-        LSF, in place): its model on the grid of the observation, through
-        its instrument and line of sight, and its data, if it has them;
-        telling progress the stage it reaches, if given.
+        the project (by name: the pieces it names, its PSF, LSF and noise,
+        in place), paired with a dataset if given (a piece of the project
+        by name, or its options; the data win, as in a setup: their
+        sampling replaces that of the observation): its model on the grid
+        of the observation, through its instrument and line of sight, and
+        the data, if any; telling progress the stage it reaches, if given.
 
         Raises
         ------
         Invalid
-            If the galaxy, the observation or the values are not valid, or
-            the observation cannot see the galaxy (e.g. a thick disk along
-            a flat line of sight).
+            If the galaxy, the observation, the dataset or the values are
+            not valid, or the observation cannot see the galaxy (e.g. a
+            thick disk along a flat line of sight).
         """
         tell = progress or _quiet
         tell('setting up')
         root = self._workspace.path(project)
         notes: list[str] = []
+        # (the dataset at the place of the observation, as a setup pairs
+        # them: the pieces resolved in place)
+        config: dict[str, Any] = dict(observations=[observation])
+        if dataset is not None:
+            config['datasets'] = [dataset]
         try:
             with _noted(notes):
                 resolved = gbkfit.project.resolve(
-                    dict(observations=[observation]),
-                    os.path.join(root, 'observe.yaml'),
+                    config, os.path.join(root, 'observe.yaml'),
                     gbkfit.project.open(root))
                 with paths_relative_to(root):
                     galaxy = galaxy_parser.load(dict(options))
+                    data = None if dataset is None else dataset_parser.load(
+                        resolved.config['datasets'][0])
                     seen = observation_parser.load(
-                        resolved.config['observations'])
+                        resolved.config['observations'], dataset=[data])
                 group = ObservationGroup([galaxy], seen)
                 values = _values(group, properties)
                 plan = group.plan(_driver())

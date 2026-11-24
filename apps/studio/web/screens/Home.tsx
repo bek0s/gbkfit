@@ -15,9 +15,9 @@ import { useStudio } from '../studio';
 type Link = components['schemas']['PieceLink'];
 
 // The columns of the map, as the work is said: a model is fitted to data
-// (with a fitter). The data are the observations (a dataset as an
-// instrument sees it, each naming its dataset), the models the galaxies,
-// and the fits between them, where they meet.
+// (with a fitter). The data are the observations (how an instrument sees
+// the galaxies; the fits pair each with its dataset), the models the
+// galaxies, and the fits between them, where they meet.
 const COLUMNS = [
   { folder: 'observations', title: 'Data' },
   { folder: 'setups', title: 'Fits' },
@@ -33,8 +33,7 @@ const MAKE = [
 ];
 
 // The links the map draws (of a source folder to a target folder); the
-// others (e.g. of an observation to its dataset, or of a fit to its
-// fitter) are said on the boxes
+// others (e.g. of a fit to its fitter) are said on the boxes
 const DRAWN = new Set(['setups>observations', 'setups>galaxies']);
 
 export function Home() {
@@ -130,8 +129,8 @@ function Panel({ title, note, children, className }: { title: string; note?: str
 // The map of the project: the blocks of each folder in a column, and the
 // links between them, ordered so that the links cross little; a block
 // lights its links as it is hovered, and opens as it is clicked. The
-// blocks with no link (e.g. a dataset in no observation) are chips at the
-// foot of their column. The map scrolls inside its panel rather than
+// blocks with no link (e.g. a dataset in no fit) are chips at the foot of
+// their column. The map scrolls inside its panel rather than
 // squeeze: across a narrow window, and down a large project.
 function ProjectMap() {
   const { project, go } = useStudio();
@@ -144,8 +143,9 @@ function ProjectMap() {
   const id = (folder: string, name: string) => `${folder}/${name}`;
   const order = mapOrder(info.data?.pieces ?? {}, links);
   const linked = new Set(links.flatMap((link) => [id(link.source.folder, link.source.name), id(link.target.folder, link.target.name)]));
-  const unobserved = (info.data?.pieces.datasets ?? []).filter(
-    (name) => !(info.data?.links ?? []).some((link) => link.source.folder === 'observations' && link.target.folder === 'datasets' && link.target.name === name),
+  // (the datasets no fit pairs with an observation)
+  const unpaired = (info.data?.pieces.datasets ?? []).filter(
+    (name) => !(info.data?.links ?? []).some((link) => link.source.folder === 'setups' && link.target.folder === 'datasets' && link.target.name === name),
   );
   // (the edges, drawn once the boxes are laid out, and again as they move)
   useLayoutEffect(() => {
@@ -243,11 +243,11 @@ function ProjectMap() {
                     </div>
                   </div>
                 )}
-                {column.folder === 'observations' && unobserved.length > 0 && (
+                {column.folder === 'observations' && unpaired.length > 0 && (
                   <div className="pmap-loose">
-                    <span>datasets not observed yet</span>
+                    <span>datasets in no fit yet</span>
                     <div className="pmap-chips">
-                      {unobserved.map((name) => (
+                      {unpaired.map((name) => (
                         <button key={name} type="button" className="pmap-chip" onClick={() => go({ kind: 'block', folder: 'datasets', name })}>
                           {name}
                         </button>
@@ -301,20 +301,17 @@ function mapOrder(pieces: Record<string, string[]>, links: Link[]): Record<strin
   return order;
 }
 
-// A word on a block of the map: the dataset of an observation, the fitter
-// of a fit, how many fits a galaxy is in
+// A word on a block of the map: the fitter of a fit, how many fits a
+// galaxy or an observation is in
 function describe(folder: string, name: string, links: Link[]): string {
   const uses = links.filter((link) => link.source.folder === folder && link.source.name === name);
-  const used = links.filter((link) => link.target.folder === folder && link.target.name === name);
-  if (folder === 'observations') {
-    const data = uses.find((link) => link.target.folder === 'datasets');
-    return data ? `the dataset ${data.target.name}` : 'no data: a mock';
-  }
+  // (the fits it is in: not the comparisons of the Studio)
+  const fits = links.filter((link) => link.source.folder === 'setups' && link.target.folder === folder && link.target.name === name).length;
   if (folder === 'setups') {
     const fitter = uses.find((link) => link.target.folder === 'fitters');
     return fitter ? `with ${fitter.target.name}` : 'no fitter yet';
   }
-  return `in ${used.length} ${used.length === 1 ? 'fit' : 'fits'}`;
+  return `in ${fits} ${fits === 1 ? 'fit' : 'fits'}`;
 }
 
 // What runs, in brief (the Activity drawer of the bar has it all)
@@ -340,7 +337,7 @@ function Now() {
 // The next steps, from the links of the project: what nothing uses yet,
 // and what is named but missing
 function NextSteps() {
-  const { project, go, startAdding } = useStudio();
+  const { project, go } = useStudio();
   const info = useProject(project);
   const links = info.data?.links ?? [];
   const names = (folder: string) => info.data?.pieces[folder] ?? [];
@@ -355,13 +352,14 @@ function NextSteps() {
         run: () => go({ kind: 'block', folder: link.source.folder, name: link.source.name }),
         tone: 'err' as const,
       })),
+    // (of the data, those no fit pairs: a comparison does not fit them)
     ...names('datasets')
-      .filter((name) => !used('datasets', name))
+      .filter((name) => !links.some((link) => link.source.folder === 'setups' && link.target.folder === 'datasets' && link.target.name === name))
       .map((name) => ({
-        key: `observe/${name}`,
-        text: `The dataset ${name} is in no observation, so nothing can use it.`,
-        act: 'Observe it',
-        run: () => startAdding('observations'),
+        key: `pair/${name}`,
+        text: `The dataset ${name} is in no fit yet.`,
+        act: 'Open it',
+        run: () => go({ kind: 'block', folder: 'datasets', name }),
         tone: 'warn' as const,
       })),
     ...names('galaxies')

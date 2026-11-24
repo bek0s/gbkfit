@@ -219,20 +219,16 @@ function Group({
 
 // The families of the schema of the blocks of a folder that are told by
 // their type
-const FAMILIES: Record<string, string> = { psfs: 'psf', lsfs: 'lsf', noise: 'noise', fitters: 'fitter' };
+const FAMILIES: Record<string, string> = { observations: 'observation', psfs: 'psf', lsfs: 'lsf', noise: 'noise', fitters: 'fitter' };
 
 // What a block of the list is, in a word or two (none where its name says
-// enough): a dataset its kind, an observation the dataset it sees, a PSF,
-// LSF, noise or fitter its type, a fit how its latest run went
+// enough): a dataset its kind, an observation, a PSF, LSF, noise or fitter
+// its type, a fit how its latest run went
 function detailOf(folder: string, name: string, info: ProjectInfo, defs: Defs | undefined): ReactNode {
   const type = info.types?.[folder]?.[name];
   if (folder === 'datasets') {
     const kind = Object.values(KINDS).find((each) => each.type === type);
     return detail(kind?.title ?? (type ? titleOf(defs, 'dataset', type) : null));
-  }
-  if (folder === 'observations') {
-    const data = info.links.find((link) => link.source.folder === folder && link.source.name === name && link.target.folder === 'datasets');
-    return detail(data ? data.target.name : 'no data', data ? undefined : 'none');
   }
   if (folder in FAMILIES) return detail(type ? titleOf(defs, FAMILIES[folder], type) : null);
   if (folder === 'setups') {

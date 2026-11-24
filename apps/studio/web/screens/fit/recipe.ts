@@ -10,7 +10,9 @@
 // piece for one galaxy without a name, else {of: <name>, use: <piece>});
 // the layers the user wrote, kept as they are; and the fit's own layer,
 // the last one in place (its properties, in the names of the fit), where
-// the edits of the screen go.
+// the edits of the screen go. Its section datasets pairs its observations
+// with data by position: at the place of each, a dataset of the project by
+// name, one in place, or null (none); no section, no data at all.
 import { isObject, type Options } from '../galaxy/options';
 
 export type { Options };
@@ -126,6 +128,54 @@ export function nameFor(piece: string, taken: string[]): string {
   let name = base;
   for (let i = 2; taken.includes(name); i++) name = `${base}${i}`;
   return name;
+}
+
+// The section datasets: the data of the observations, by position (a
+// list, or one item; none: no section)
+function datasetsOf(setup: Options): unknown[] {
+  const value = setup.datasets;
+  return Array.isArray(value) ? value : value === undefined ? [] : [value];
+}
+
+// The data the observation at an index is paired with (null: none)
+export function datasetOf(setup: Options, index: number): unknown {
+  return datasetsOf(setup)[index] ?? null;
+}
+
+// The setup with its section datasets of the data of its observations, by
+// position: none if no observation has any
+function withDatasets(setup: Options, datasets: unknown[]): Options {
+  const { datasets: _old, ...rest } = setup;
+  return datasets.some((dataset) => dataset !== null) ? { ...rest, datasets } : rest;
+}
+
+// The data of every observation, at its place (null: none), for a number
+// of them
+function datasetsFor(setup: Options, count: number): unknown[] {
+  const datasets = datasetsOf(setup);
+  return Array.from({ length: count }, (_, i) => datasets[i] ?? null);
+}
+
+// The setup with the observation at an index paired with a dataset of the
+// project (by name; null: with none)
+export function withDataset(setup: Options, index: number, dataset: string | null): Options {
+  const datasets = datasetsFor(setup, itemsOf(setup, 'observations').length);
+  datasets[index] = dataset;
+  return withDatasets(setup, datasets);
+}
+
+// The setup with an observation of a piece added, without data
+export function withObservation(setup: Options, piece: string, valued: Set<string>): Options {
+  const items = itemsOf(setup, 'observations');
+  const next = withItems(setup, 'observations', [...items, { name: null, piece, options: null }], valued);
+  return withDatasets(next, datasetsFor(setup, items.length + 1));
+}
+
+// The setup without the observation at an index, and without its data
+export function withoutObservation(setup: Options, index: number, valued: Set<string>): Options {
+  const items = itemsOf(setup, 'observations');
+  const next = withItems(setup, 'observations', items.filter((_, i) => i !== index), valued);
+  return withDatasets(next, datasetsFor(setup, items.length).filter((_, i) => i !== index));
 }
 
 // What gives a parameter its properties, for people: the fit's own layer

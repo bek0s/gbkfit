@@ -26,7 +26,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 # a folder; the pieces of the options of observations are only read (see
 # _uses)
 _SECTIONS = dict(
-    galaxies='galaxies', observations='observations', datasets='dataset',
+    galaxies='galaxies', observations='observations', datasets='datasets',
     psfs='psf', lsfs='lsf', noise='noise', params='params',
     fitters='fitter')
 
@@ -107,7 +107,10 @@ def _uses(setup: Path, section: str, name: str) -> list[list[str | int]]:
         value = [value]
     if not isinstance(value, list):
         return []
-    return [[section, i] for i, item in enumerate(value) if item == name]
+    # (by name, or under a name of the setup: {name, use})
+    return [
+        [section, i] for i, item in enumerate(value)
+        if item == name or isinstance(item, dict) and item.get('use') == name]
 
 
 def _line(document: Any, path: list[str | int]) -> int:

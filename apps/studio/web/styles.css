@@ -1178,11 +1178,9 @@ button.sh-num:hover, button.sh-num[aria-expanded="true"] { border-color: var(--m
 .ob-ellipses { position: absolute; inset: 0; pointer-events: none; }
 .ob-ellipse-box { fill: color-mix(in srgb, var(--panel) 70%, transparent); stroke: var(--line2); }
 .ob-psf { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 1.6; }
-.ob-beam { fill: none; stroke: var(--fg2); stroke-width: 1.4; stroke-dasharray: 4 3; }
 .ob-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font: var(--text-data-small); letter-spacing: 0; color: var(--muted); }
 .ob-legend i { display: inline-block; width: 16px; margin-right: 5px; vertical-align: middle; }
 .ob-key-psf { border-top: 2px solid var(--accent); }
-.ob-key-beam { border-top: 2px dashed var(--fg2); }
 .ob-empty { margin: auto; padding: 20px; color: var(--muted); font: var(--text-body); text-align: center; }
 .ob-plot { width: 100%; height: 92px; }
 .ob-channel { stroke: var(--line2); stroke-width: 1; vector-effect: non-scaling-stroke; }
@@ -1212,16 +1210,10 @@ button.sh-num:hover, button.sh-num[aria-expanded="true"] { border-color: var(--m
 .ob-text { margin: 0; color: var(--muted); font: var(--text-label); }
 .ob-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: var(--text-label); }
 .ob-link:hover { text-decoration: underline; }
-.ob-warn, .ob-hint { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 10px; padding: 7px 9px; border-radius: 6px; font: var(--text-label); }
-.ob-warn { border-left: 3px solid var(--warn-fill); background: color-mix(in srgb, var(--warn-fill) 11%, transparent); }
-.ob-hint { border: 1px dashed var(--line2); color: var(--muted); }
 .ob-response { display: grid; gap: 8px; }
 .ob-nested { padding-left: 10px; border-left: 2px solid var(--line2); }
 /* (read only: the numbers of the data; the FWHM measured of a PSF or an
    LSF, under it) */
-.ob-fromdata { display: grid; gap: 6px; }
-.ob-value { font: var(--text-data); color: var(--fg2); }
-.ob-value small { margin-left: 8px; font: var(--text-data-small); color: var(--faint); }
 .ob-measure { margin: -4px 0 0 112px; font: var(--text-data-small); color: var(--muted); }
 /* (names as chips, and what adds one) */
 .ob-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 26px; }
@@ -1678,8 +1670,6 @@ button.sh-num:hover, button.sh-num[aria-expanded="true"] { border-color: var(--m
 .ov-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; }
 /* (a link in a row to a block it names: plain, e.g. a dataset; or, of a
    part an observation shares, a chip after what the part is) */
-.ov-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 3px; cursor: pointer; }
-.ov-link:hover { text-decoration-color: currentColor; }
 .ov-given { display: inline-flex; align-items: center; gap: 8px; }
 .ov-shared { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px 0 4px; border: 0; border-radius: 4px; background: var(--sel); color: var(--accent-text); font: var(--text-data-small); cursor: pointer; }
 .ov-shared:hover { text-decoration: underline; text-underline-offset: 2px; }

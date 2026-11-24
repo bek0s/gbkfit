@@ -71,11 +71,13 @@ _PIECES = (
 # The folders of the pieces of the Studio, which the library does not
 # know: comparisons, of galaxies seen by observations side by side (their
 # options a dictionary, with lists of the names of the galaxies and the
-# observations they compare). The workspace writes them itself; by folder,
-# the options of their pieces that name pieces of the project: a list of
-# names of the folder of the same name. As a piece is renamed, the pieces
-# of the Studio that name it follow.
-_STUDIO_PIECES = {'comparisons': ('galaxies', 'observations')}
+# observations they compare, and of the datasets the observations are
+# paired with, by position, as in a setup: null for one without). The
+# workspace writes them itself; by folder, the options of their pieces
+# that name pieces of the project: a list of names of the folder of the
+# same name. As a piece is renamed, the pieces of the Studio that name it
+# follow.
+_STUDIO_PIECES = {'comparisons': ('galaxies', 'observations', 'datasets')}
 
 
 @dataclasses.dataclass
@@ -990,7 +992,10 @@ def _rename_in_studio(project: str, folder: str, old: str, new: str) -> None:
 
 
 def _names(value: Any) -> list[str]:
-    """Return the names of pieces of a list of them (none of another)."""
+    """
+    Return the names of pieces of a list of them (none of another; its
+    other items, e.g. null, left out).
+    """
     if not isinstance(value, list):
         return []
     return [name for name in value if isinstance(name, str)]

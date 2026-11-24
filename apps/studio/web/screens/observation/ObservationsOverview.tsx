@@ -3,15 +3,14 @@
 // section (its observations, and the PSFs, LSFs and noise they can share
 // by name), each with how many there are, and a table of the blocks of the
 // tab shown (see BlockRow), which the page remembers. An observation has
-// its kind, its dataset (a link), its grid (of its data, or its own), and
-// its PSF, LSF and noise in a few words, each with a link to its block if
-// it is shared; a shared part has its kind and its size (the FWHM of a PSF
-// or an LSF as the server draws it, the level of a noise). A sign before
-// a name says the worst of its problems, as the library finds them (of an
-// observation, from the headers of its data alone), all of them on hover.
-// A click on the head of a column sorts by it, as the page remembers.
+// its kind, its grid (its own: the data a setup pairs it with have
+// theirs), and its PSF, LSF and noise in a few words, each with a link to
+// its block if it is shared; a shared part has its kind and its size (the
+// FWHM of a PSF or an LSF as the server draws it, the level of a noise). A
+// sign before a name says the worst of its problems, as the library finds
+// them (of an observation, alone), all of them on hover. A click on the
+// head of a column sorts by it, as the page remembers.
 import { useMemo, type ReactNode } from 'react';
-import type { ArrayInfo } from '../../api/client';
 import { useLsfView, useObservationProblems, usePartProblems, usePiece, useProject, usePsfView, useSchema } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
 import { significant, when } from '../../components/format';
@@ -24,9 +23,7 @@ import { useRemembered } from '../../shell/remember';
 import { ScreenHead } from '../../shell/ScreenHead';
 import { kindOf, sectionNamed } from '../../shell/sections';
 import { useStudio } from '../../studio';
-import { useResolved } from '../dataset/hooks';
-import { draftOfDataset, kindOfType, NO_DRAFT } from '../dataset/model';
-import { datasetHasErrors, isObject, isRecorded, noiseOf, objectAt, pairOf, textAt } from './model';
+import { isObject, noiseOf, objectAt, pairOf, textAt } from './model';
 
 // The folders of the section, a tab each
 type Folder = 'observations' | 'psfs' | 'lsfs' | 'noise';
@@ -43,7 +40,6 @@ const TABS: { key: Folder; title: string; adds: string; tip?: string }[] = [
 const OBSERVATION_COLUMNS: Column[] = [
   { key: 'name', title: 'Observation', by: 'name' },
   { key: 'kind', title: 'Kind', by: 'kind' },
-  { key: 'dataset', title: 'Dataset', by: 'dataset' },
   { key: 'grid', title: 'Grid', by: 'the number of values', numeric: true },
   { key: 'psf', title: 'PSF', by: 'the FWHM of the PSF' },
   { key: 'lsf', title: 'LSF', by: 'the FWHM of the LSF' },
@@ -124,7 +120,7 @@ function ObservationTable({
   const [values, report] = useRowValues();
   const sorted = sortedKeys(names, values, sort);
   const focusOf = useRowFocus(sorted);
-  if (names.length === 0) return <p className="ov-empty">The project has no observation yet: how an instrument sees the galaxies, and the data it is fitted to.</p>;
+  if (names.length === 0) return <p className="ov-empty">The project has no observation yet: how an instrument sees the galaxies.</p>;
   return (
     <table className="ov-table">
       <ColumnHeads columns={OBSERVATION_COLUMNS} sort={sort} onSort={setSort} />
@@ -162,20 +158,9 @@ function ObservationRow({
   // given in place)
   const pathOf = (folder: string, value: unknown) => (typeof value === 'string' && (pieces[folder] ?? []).includes(value) ? joinPath(project, `${folder}/${value}.yaml`) : null);
 
-  // (its dataset, and the array of the data of its first item: of a
-  // dataset of maps, the first)
-  const datasetPiece = optionsOf(usePiece(pathOf('datasets', options?.dataset)).data);
-  const dataset = isObject(options?.dataset) ? options.dataset : datasetPiece;
-  const kind = kindOfType(dataset?.type);
-  const draft = useMemo(() => (kind && dataset ? draftOfDataset(kind, dataset, project) : NO_DRAFT), [kind, dataset, project]);
-  const resolved = useResolved(kind ?? 'cube', draft);
-  const first = Object.keys(draft.items)[0];
-  const arrays = first === undefined ? undefined : resolved.arrays[first];
-  const array = arrays?.found.data;
-
   // (its PSF, LSF and noise: of the project, or given in place; its LSF at
-  // the rest of the observation or of its data, which its widths of
-  // wavelength or frequency need)
+  // the rest of the observation, which its widths of wavelength or
+  // frequency need)
   const instrument = options ? objectAt(options, 'instrument') : {};
   const psfPiece = optionsOf(usePiece(pathOf('psfs', instrument.psf)).data);
   const lsfPiece = optionsOf(usePiece(pathOf('lsfs', instrument.lsf)).data);
@@ -183,45 +168,37 @@ function ObservationRow({
   const psfOptions = isObject(instrument.psf) ? instrument.psf : psfPiece;
   const lsfOptions = isObject(instrument.lsf) ? instrument.lsf : lsfPiece;
   const noiseOptions = isObject(options?.noise) ? options.noise : noisePiece;
-  const rest = textAt(objectAt(options ?? {}, 'spectral'), 'rest') ?? textAt(objectAt(dataset ?? {}, 'spectral'), 'rest') ?? array?.rest ?? null;
+  const rest = textAt(objectAt(options ?? {}, 'spectral'), 'rest');
   const psf = usePartSize(project, 'psf', psfOptions, null);
   const lsf = usePartSize(project, 'lsf', lsfOptions, rest);
 
   const reading = options === undefined;
   const dash = <span className="ov-faint">{reading ? '…' : '—'}</span>;
   const kindTitle = options ? title('observation', options.type) : null;
-  const datasetText = typeof options?.dataset === 'string' ? options.dataset : isObject(options?.dataset) ? 'in place' : null;
-  const grid = gridOf(options, array);
-  // (of its data while they are read)
-  const gridReading = reading || (dataset !== undefined && arrays?.errors.data === undefined && array === undefined);
+  const grid = gridOf(options);
   const psfText = partText(instrument.psf, psfOptions, psf, (type) => title('psf', type), pathOf('psfs', instrument.psf) !== null);
   const lsfText = partText(instrument.lsf, lsfOptions, lsf, (type) => title('lsf', type), pathOf('lsfs', instrument.lsf) !== null);
   const noiseText = noiseOptions ? noiseOf(noiseOptions, title) : null;
-  // (with no noise of its own, that of the errors of its data, if it
-  // records them and they have errors)
-  const errorNoise = options?.noise == null && options?.dataset != null && isRecorded(options?.type) && datasetHasErrors(dataset);
-  const problems = problemsOf(useObservationProblems(project, options, [datasetPiece, psfPiece, lsfPiece, noisePiece]));
+  const problems = problemsOf(useObservationProblems(project, options, [psfPiece, lsfPiece, noisePiece]));
 
   // (what the row sorts by)
   const time = modified === null ? null : Date.parse(modified);
-  const noiseSort = noiseText ?? (errorNoise ? 'errors' : null);
   const row = useMemo<RowValues>(
-    () => ({ name, kind: kindTitle, dataset: datasetText, grid: grid?.count ?? null, psf: psf.value, lsf: lsf.value, noise: noiseSort, modified: time }),
-    [name, kindTitle, datasetText, grid?.count, psf.value, lsf.value, noiseSort, time],
+    () => ({ name, kind: kindTitle, grid: grid?.count ?? null, psf: psf.value, lsf: lsf.value, noise: noiseText, modified: time }),
+    [name, kindTitle, grid?.count, psf.value, lsf.value, noiseText, time],
   );
   useReportRow(name, row, onValues);
   return (
     <BlockRow project={project} folder="observations" name={name} focus={focus} problems={problems}>
       <td>{kindTitle ?? dash}</td>
-      <td>{typeof options?.dataset === 'string' ? <BlockLink folder="datasets" name={options.dataset} exists={pathOf('datasets', options.dataset) !== null} plain /> : (datasetText ?? dash)}</td>
-      <td className="ov-num">{grid?.text ?? <span className="ov-faint">{gridReading ? '…' : '—'}</span>}</td>
+      <td className="ov-num">{grid?.text ?? dash}</td>
       <PartCell folder="psfs" value={instrument.psf} exists={pathOf('psfs', instrument.psf) !== null} text={psfText ?? dash} tip={psf.error} />
       <PartCell folder="lsfs" value={instrument.lsf} exists={pathOf('lsfs', instrument.lsf) !== null} text={lsfText ?? dash} tip={lsf.error} />
       <PartCell
         folder="noise"
         value={options?.noise}
         exists={pathOf('noise', options?.noise) !== null}
-        text={noiseText ?? (errorNoise ? <span className="ov-faint">the data's errors</span> : dash)}
+        text={noiseText ?? dash}
       />
       <td className="ov-time">{modified === null ? dash : when(modified)}</td>
     </BlockRow>
@@ -243,15 +220,15 @@ function PartCell({ folder, value, exists, text, tip }: { folder: string; value:
 }
 
 // A link in a row to a block of the project it names (not a click on the
-// row), as a chip with a sign of a link, or plain (e.g. a dataset); its
-// name alone if the project has none of that name
-function BlockLink({ folder, name, exists, plain = false }: { folder: string; name: string; exists: boolean; plain?: boolean }) {
+// row), as a chip with a sign of a link; its name alone if the project has
+// none of that name
+function BlockLink({ folder, name, exists }: { folder: string; name: string; exists: boolean }) {
   const { go } = useStudio();
   const kind = kindOf(folder).toLowerCase();
   if (!exists) {
     return (
-      <span className={plain ? undefined : 'ov-shared'} data-missing title={`The project has no ${kind} ${name}`}>
-        {!plain && <LinkIcon />}
+      <span className="ov-shared" data-missing title={`The project has no ${kind} ${name}`}>
+        <LinkIcon />
         {name}
       </span>
     );
@@ -261,14 +238,14 @@ function BlockLink({ folder, name, exists, plain = false }: { folder: string; na
       type="button"
       // (not a stop of Tab: the row is)
       tabIndex={-1}
-      className={plain ? 'ov-link' : 'ov-shared'}
-      title={plain ? `Open the ${kind} ${name}` : `Shared: open the ${kind} ${name}`}
+      className="ov-shared"
+      title={`Shared: open the ${kind} ${name}`}
       onClick={(event) => {
         event.stopPropagation();
         go({ kind: 'block', folder, name });
       }}
     >
-      {!plain && <LinkIcon />}
+      <LinkIcon />
       {name}
     </button>
   );
@@ -286,12 +263,10 @@ function partText(value: unknown, options: Options | undefined, size: Size, titl
 
 // The grid of an observation in a few words (e.g. '114 × 114 · 115': its
 // pixels, and its channels if it has them), and its number of values,
-// which its column sorts by: of the array of its data, or its own (its
-// size, and the number of its channels if given); none while its data are
-// read, or if it has none
-function gridOf(options: Options | undefined, array: ArrayInfo | undefined): { text: string; count: number } | null {
-  if (array) return gridText(array.shape);
-  if (!options || options.dataset != null || options.size == null) return null;
+// which its column sorts by: its size, and the number of its channels if
+// given; none if it has none
+function gridOf(options: Options | undefined): { text: string; count: number } | null {
+  if (!options || options.size == null) return null;
   const channels = objectAt(options, 'spectral').size;
   return gridText(typeof channels === 'number' ? [...pairOf(options.size), channels] : pairOf(options.size));
 }

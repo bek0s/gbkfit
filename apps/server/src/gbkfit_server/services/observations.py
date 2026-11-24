@@ -1,9 +1,9 @@
 """
 The observations of the projects, as their home shows them: the problems
-of an observation of the options of a piece, as the library finds them
-from the headers of its data (see gbkfit.setup.describe_observation),
-and those of a part that observations share by name (a PSF, an LSF or a
-noise).
+of an observation of the options of a piece alone, without data, as the
+library finds them (see gbkfit.setup.describe_observation; those of the
+data it is paired with are of the setups that pair them), and those of a
+part that observations share by name (a PSF, an LSF or a noise).
 """
 
 import os
@@ -40,9 +40,9 @@ class Observations:
     ) -> list[dict[str, Any]]:
         """
         Return the problems of an observation of the options of a piece of
-        a project (with the pieces it names, of the project), each at the
-        path of its option, as the library finds them from the headers of
-        its data (see describe_observation).
+        a project alone, without data (with the pieces it names, of the
+        project), each at the path of its option, as the library finds
+        them (see describe_observation).
         """
         root = self._workspace.path(project)
         resolved = None

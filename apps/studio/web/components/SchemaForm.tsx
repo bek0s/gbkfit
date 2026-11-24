@@ -183,8 +183,8 @@ function Field({
   return <PlainField node={resolved} value={value} onChange={onChange} slider={slider} />;
 }
 
-// A block of the project named in place of options (e.g. the dataset of
-// an observation): its name, which can be another, or options in place
+// A block of the project named in place of options (e.g. the PSF of an
+// instrument): its name, which can be another, or options in place
 // instead; it opens
 function BlockField({ family, value, onChange }: { family: string; value: string; onChange: (value: unknown) => void }) {
   const { blocks, starts, openBlock } = useForm();

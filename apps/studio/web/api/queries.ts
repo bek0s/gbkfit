@@ -573,10 +573,10 @@ export function useLensDescription(project: string, lens: Record<string, unknown
   });
 }
 
-// The problems of an observation of options of a piece of a project, as
-// the library finds them from the headers of its data, without reading
-// them (see the server's /observations/describe); of the pieces it names
-// too (depends: what they are, read by the caller, which its key takes)
+// The problems of an observation of options of a piece of a project
+// alone, without data, as the library finds them (see the server's
+// /observations/describe); of the pieces it names too (depends: what they
+// are, read by the caller, which its key takes)
 export function useObservationProblems(project: string, observation: Record<string, unknown> | undefined, depends: unknown = null) {
   return useQuery({
     queryKey: keys.view('observation-describe', project, JSON.stringify(observation ?? null), JSON.stringify(depends)),
@@ -850,10 +850,11 @@ export function useGalaxyRender(
 }
 
 // A galaxy as an observation of its project sees it (see the server's
-// /views/observed): its model of each item (and the data of the
-// observation, if it has them), each kept by the server for the views of
-// cubes; the type of the observation; and what the library noted. Asked
-// again as the galaxy, its values or the observation change.
+// /views/observed), paired with a dataset of the project if given (the
+// data win: their grid is that of the model): its model of each item (and
+// the data, if any), each kept by the server for the views of cubes; the
+// type of the observation; and what the library noted. Asked again as the
+// galaxy, its values, the observation or the dataset change.
 // A setup of a project of the given options (e.g. as it is edited), as
 // the library describes it (see the server's /setups/describe): its
 // parameters, each with the properties its layers give it and the file of
@@ -888,21 +889,23 @@ export function useObserved(
   galaxy: Record<string, unknown> | undefined,
   properties: Record<string, unknown>,
   observation: string | null,
-  // (the options of the observation, so that it is asked again as they
-  // change)
+  // (the options of the observation, and of the dataset, so that it is
+  // asked again as they change)
   seen: unknown,
   // (what it is of, for the Activity drawer: else as the screen says)
   of?: string,
+  // (the dataset of the project it is paired with, by name; none: none)
+  dataset: string | null = null,
 ) {
   const screen = useContext(RenderLabel);
   const label = of ?? screen;
   return useQuery({
-    queryKey: keys.view('observed', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), observation ?? '', JSON.stringify(seen ?? null)),
+    queryKey: keys.view('observed', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), observation ?? '', dataset ?? '', JSON.stringify(seen ?? null)),
     enabled: galaxy !== undefined && observation !== null,
     placeholderData: keepPreviousData,
     retry: false,
     // (its arrays are kept by the server for a while only)
     gcTime: 0,
-    queryFn: ({ signal }) => data(api.POST('/api/v1/views/observed', { signal, body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '', label } })),
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/observed', { signal, body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '', dataset, label } })),
   });
 }

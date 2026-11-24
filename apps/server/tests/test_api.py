@@ -34,6 +34,23 @@ CONTRACT = pathlib.Path(__file__).parents[1] / 'openapi.json'
 SKY_REFERENCES = dict(CRVAL1=10.0, CRPIX1=1.0, CRVAL2=-30.0, CRPIX2=1.0)
 
 
+def write_data(root):
+    """
+    Write an image of 6 x 5 pixels of 1 arcsec (data/map.fits) and its
+    dataset of the project (datasets/map.yaml, with errors of 0.1).
+    """
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--TAN', CDELT2=1 / 3600, CUNIT2='deg') | SKY_REFERENCES)
+    pathlib.Path(root, 'study/data').mkdir(exist_ok=True)
+    fits.writeto(
+        pathlib.Path(root, 'study/data/map.fits'),
+        np.ones((5, 6), np.float32), header, overwrite=True)
+    pathlib.Path(root, 'study/datasets').mkdir(exist_ok=True)
+    pathlib.Path(root, 'study/datasets/map.yaml').write_text(
+        'type: pixel_brightness\ndata: data/map.fits\nerror: 0.1\n')
+
+
 @pytest.fixture
 def client(root):
     """A client of a server of the workspace, with the token."""
@@ -131,6 +148,35 @@ def test_a_text_is_checked_in_place(client, root, setup):
     assert 'ptraits' in lines[diagnostic['line'] - 1]
 
 
+def test_a_dataset_is_checked_in_the_setups_that_pair_it(
+        client, root, setup):
+    # (at the place of its observation in their section datasets)
+    write_data(root)
+    content = client.get(f'/api/v1/pieces/{setup}').json()
+    client.put(f'/api/v1/pieces/{setup}', json=content | dict(
+        datasets=['map']))
+    piece = 'study/datasets/map.yaml'
+    text = (pathlib.Path(root) / piece).read_text() + 'bogus: 1\n'
+    (diagnostic,) = client.post('/api/v1/check', json=dict(
+        path=piece, text=text)).json()['diagnostics']
+    assert diagnostic['severity'] == 'error'
+    assert "'bogus'" in diagnostic['message']
+    assert diagnostic['message'].endswith('(in setups/disk.yaml)')
+
+
+def test_a_piece_used_under_a_name_of_a_setup_is_checked_in_it(
+        client, root, setup):
+    content = client.get(f'/api/v1/pieces/{setup}').json()
+    client.put(f'/api/v1/pieces/{setup}', json=content | dict(
+        observations=[dict(name='sky', use='image')]))
+    piece = 'study/observations/image.yaml'
+    text = (pathlib.Path(root) / piece).read_text() + 'bogus: 1\n'
+    (diagnostic,) = client.post('/api/v1/check', json=dict(
+        path=piece, text=text)).json()['diagnostics']
+    assert "'bogus'" in diagnostic['message']
+    assert diagnostic['message'].endswith('(in setups/disk.yaml)')
+
+
 def test_projects_and_pieces_are_created_from_templates(client):
     response = client.post('/api/v1/projects', json=dict(path='new'))
     assert response.status_code == 201
@@ -196,6 +242,27 @@ def test_a_project_gives_the_links_of_its_pieces(client):
         '/api/v1/projects/study').json()['links']
 
 
+def test_a_dataset_paired_in_a_setup_is_linked_and_follows_its_name(
+        client, root, setup):
+    # (a setup pairs its observations with datasets of the project by
+    # position, in its section datasets: the setup names them, and follows
+    # them as they are renamed)
+    write_data(root)
+    content = client.get(f'/api/v1/pieces/{setup}').json()
+    client.put(f'/api/v1/pieces/{setup}', json=content | dict(
+        datasets=['map']))
+    assert dict(
+        source=dict(folder='setups', name='disk'),
+        target=dict(folder='datasets', name='map'), missing=False) \
+        in client.get('/api/v1/projects/study').json()['links']
+    assert client.get('/api/v1/references/study/datasets/map.yaml') \
+        .json() == [dict(folder='setups', name='disk')]
+    client.patch('/api/v1/pieces/study/datasets/map.yaml',
+                 json=dict(name='hi'))
+    assert client.get(f'/api/v1/pieces/{setup}').json()['datasets'] == \
+        ['hi']
+
+
 def test_comparisons_are_pieces_of_the_studio_that_follow_their_names(
         client, root):
     # (the library does not know them: the workspace writes them, and they
@@ -229,6 +296,30 @@ def test_comparisons_are_pieces_of_the_studio_that_follow_their_names(
         'comparisons'] == []
 
 
+def test_comparisons_pair_observations_with_datasets_that_follow_names(
+        client, root):
+    # (a comparison pairs its observations with datasets by position, as a
+    # setup does, null for one without: it names the datasets, and follows
+    # them as they are renamed)
+    write_data(root)
+    content = dict(
+        galaxies=['disk'], observations=['image', 'other'],
+        datasets=['map', None])
+    path = client.post('/api/v1/pieces', json=dict(
+        project='study', folder='comparisons', name='paired',
+        content=content)).json()
+    assert dict(
+        source=dict(folder='comparisons', name='paired'),
+        target=dict(folder='datasets', name='map'), missing=False) \
+        in client.get('/api/v1/projects/study').json()['links']
+    assert dict(folder='comparisons', name='paired') in client.get(
+        '/api/v1/references/study/datasets/map.yaml').json()
+    client.patch('/api/v1/pieces/study/datasets/map.yaml',
+                 json=dict(name='hi'))
+    assert client.get(f'/api/v1/pieces/{path}').json()['datasets'] == \
+        ['hi', None]
+
+
 def test_a_setup_gives_each_parameter_the_file_of_its_layer(client, setup):
     # (as edited: a layer in place after the params piece of the galaxy
     # replaces its inclination; a parameter no layer gives has none)
@@ -259,6 +350,25 @@ def test_a_setup_is_observed_at_its_starts(client, setup):
     assert model['kind'] == 'model' and model['shape'] == [16, 12, 1]
     assert client.post('/api/v1/views/setup-observed', json=dict(
         path=setup, setup=content, observation=1)).status_code == 400
+
+
+def test_a_setup_is_observed_with_the_data_it_pairs(client, root, setup):
+    # (the data win: their grid replaces that of the observation, and they
+    # come with the model)
+    write_data(root)
+    content = client.get(f'/api/v1/pieces/{setup}').json()
+    content['datasets'] = ['map']
+    observed = client.post('/api/v1/views/setup-observed', json=dict(
+        path=setup, setup=content, observation=0)).json()
+    kinds = {array['kind']: array['shape'] for array in observed['arrays']}
+    assert kinds['model'] == kinds['data'] == [6, 5, 1]
+    # (a dataset of another kind is a problem of the setup at its place)
+    content['datasets'] = [dict(
+        type='pixel_moments', moment0=dict(data='data/map.fits'))]
+    problems = client.post('/api/v1/setups/describe', json=dict(
+        path=setup, setup=content)).json()['problems']
+    assert [p['path'] for p in problems if p['severity'] == 'error'] \
+        == [['datasets', 0]]
 
 
 def test_pieces_are_updated_and_their_comments_stay(client):
@@ -598,34 +708,21 @@ def test_the_files_of_a_dataset_are_checked_together(client, root):
     assert response.status_code == 400
 
 
-def test_an_observation_is_described_from_the_headers_of_its_data(
-        client, root, monkeypatch):
+def test_an_observation_is_described_alone_without_data(client):
     # (with the pieces it names, of the project: its problems at the paths
-    # of its own options; the values of its data are not read)
-    header = fits.Header(dict(
-        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CUNIT1='deg',
-        CTYPE2='DEC--TAN', CDELT2=1 / 3600, CUNIT2='deg') | SKY_REFERENCES)
-    fits.writeto(
-        pathlib.Path(root, 'study/data/map.fits'),
-        np.ones((4, 5), np.float32), header)
-    pathlib.Path(root, 'study/datasets').mkdir(exist_ok=True)
-    pathlib.Path(root, 'study/datasets/map.yaml').write_text(
-        'type: pixel_brightness\ndata: data/map.fits\n')
-
-    def refused(filename, key):
-        raise AssertionError(f"the values of {filename} were read")
-    monkeypatch.setattr(gbkfit.io.formats.fits, 'read_image', refused)
-
+    # of its own options; it has no dataset, and gives its own sampling)
     def problems(observation):
         return client.post('/api/v1/observations/describe', json=dict(
             project='study', observation=observation)).json()
-    assert problems(dict(type='pixel_brightness', dataset='map')) == []
-    assert problems(dict(type='pixel_spectra', dataset='map')) == [dict(
-        severity='error', path=['dataset'],
-        message='data of pixel brightness (image) · needs pixel spectra '
-                '(cube)')]
+    assert problems(dict(type='pixel_brightness', size=[4, 5])) == []
+    [problem] = problems(dict(type='pixel_brightness'))
+    assert problem['severity'] == 'error' and problem['path'] == []
+    assert "without data needs the options ['size']" in problem['message']
+    [problem] = problems(dict(
+        type='pixel_brightness', size=[4, 5], dataset='map'))
+    assert problem['severity'] == 'error' and 'dataset' in problem['message']
     assert problems(dict(
-        type='pixel_brightness', dataset='map',
+        type='pixel_brightness', size=[4, 5],
         instrument=dict(psf='nosuch'))) == [dict(
             severity='error', path=['instrument', 'psf'],
             message="the project has no piece 'nosuch' of psfs "
@@ -1421,6 +1518,27 @@ def test_a_galaxy_is_observed_by_an_observation_of_its_project(client):
     assert client.post('/api/v1/views/observed', json=dict(
         project='study', galaxy=galaxy, observation='none')
     ).status_code in (400, 404)
+
+
+def test_a_galaxy_is_observed_paired_with_a_dataset(client, root):
+    # (a dataset of the project by name, or in place: the data win, their
+    # grid replacing that of the observation, and they come with the model)
+    write_data(root)
+    galaxy = client.get('/api/v1/pieces/study/galaxies/disk.yaml').json()
+    for dataset in ('map', dict(
+            type='pixel_brightness', data='data/map.fits', error=0.1)):
+        info = client.post('/api/v1/views/observed', json=dict(
+            project='study', galaxy=galaxy, observation='image',
+            dataset=dataset)).json()
+        kinds = {array['kind']: array['shape'] for array in info['arrays']}
+        assert kinds['model'] == kinds['data'] == [6, 5, 1]
+    # (data of another kind are refused)
+    response = client.post('/api/v1/views/observed', json=dict(
+        project='study', galaxy=galaxy, observation='image',
+        dataset=dict(
+            type='pixel_moments', moment0=dict(data='data/map.fits'))))
+    assert response.status_code == 400
+    assert 'needs pixel brightness' in response.json()['detail']
 
 
 def test_the_cube_of_a_galaxy_is_rendered_and_viewed(client):

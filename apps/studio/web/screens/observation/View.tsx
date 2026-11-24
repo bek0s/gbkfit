@@ -1,13 +1,9 @@
 // The view of an observation: its stages at a glance (each leads to its
-// section of the dock), the sky as it sees it (the map of its data, or its
-// grid, with its PSF and the beam of the data drawn to scale at a corner),
-// its spectral resolution (the LSF against the channels), a patch of the
-// noise of its mock data, and its checks.
+// section of the dock), the sky as it sees it (its grid, with its PSF
+// drawn to scale at a corner), its spectral resolution (the LSF against
+// the channels), a patch of the noise of its mock data, and its checks.
 import { useEffect, useRef } from 'react';
-import type { ArrayInfo } from '../../api/client';
-import { useChannel, useMoments, type Reading } from '../../api/queries';
-import { MapPanel, robustRange, useFitted } from '../../components/MapPanel';
-import { frameOf } from '../../components/sky';
+import { useFitted } from '../../components/MapPanel';
 import { showSection } from '../../components/ui/dock';
 import type { Options } from '../../components/SchemaForm';
 import { glanceOf, STAGES, type Check, type Ellipse } from './model';
@@ -100,42 +96,21 @@ function smoothed(values: Float32Array, n: number, sigma: number): Float32Array 
   return pass(along, (i, k) => ((Math.floor(i / n) + k + n) % n) * n + (i % n));
 }
 
-// The data as the observation sees them: an array of a file and how to
-// make a map of it (a cube: its quick moment 0; a map: itself)
-export interface SkyData {
-  path: string;
-  array: ArrayInfo;
-  cube: boolean;
-  // (how its channels are read, as its dataset reads them)
-  reading: Reading;
-}
-
-export function Sky({ data, grid, psf, beam }: { data: SkyData | null; grid: { size: [number, number]; step: [number, number] } | null; psf: Ellipse | null; beam: Ellipse | null }) {
+export function Sky({ grid, psf }: { grid: { size: [number, number]; step: [number, number] } | null; psf: Ellipse | null }) {
   return (
     <figure className="ob-figure ob-sky">
       <figcaption>
         <span>On the sky</span>
-        <Legend psf={psf} beam={beam} />
+        {psf && (
+          <span className="ob-legend">
+            <span>
+              <i className="ob-key-psf" /> PSF {size(psf)}
+            </span>
+          </span>
+        )}
       </figcaption>
-      {data ? <DataSky data={data} psf={psf} beam={beam} /> : grid ? <GridSky grid={grid} psf={psf} /> : <p className="ob-empty">Give the data, or the grid of the observation, to see the sky.</p>}
+      {grid ? <GridSky grid={grid} psf={psf} /> : <p className="ob-empty">Give the grid of the observation to see the sky.</p>}
     </figure>
-  );
-}
-
-function Legend({ psf, beam }: { psf: Ellipse | null; beam: Ellipse | null }) {
-  return (
-    <span className="ob-legend">
-      {psf && (
-        <span>
-          <i className="ob-key-psf" /> PSF {size(psf)}
-        </span>
-      )}
-      {beam && (
-        <span>
-          <i className="ob-key-beam" /> beam of the data {size(beam)}
-        </span>
-      )}
-    </span>
   );
 }
 
@@ -144,36 +119,7 @@ function size(ellipse: Ellipse): string {
   return ellipse.major === ellipse.minor ? `${r(ellipse.major)}″` : `${r(ellipse.major)}″ × ${r(ellipse.minor)}″ at ${r(ellipse.angle)}°`;
 }
 
-// The map of the data, in a map panel (see MapPanel: as every map of the
-// Studio), with the ellipses at its lower left corner
-function DataSky({ data, psf, beam }: { data: SkyData; psf: Ellipse | null; beam: Ellipse | null }) {
-  const moments = useMoments(data.path, data.array.index, 3, data.cube, 'moments', data.reading);
-  const plane = useChannel(data.cube ? null : data.path, data.array.index, 0);
-  const map = data.cube ? moments.data?.find((array) => array.info.name === 'flux') : plane.data?.plane;
-  const [ny, nx] = map?.shape ?? [1, 1];
-  const step = data.array.step ? Math.abs(data.array.step[0]) : null;
-  const error = (data.cube ? moments.error : plane.error)?.message;
-  const unit = data.array.unit ?? '';
-  return (
-    <MapPanel
-      key={`${data.path}:${data.array.index}`}
-      values={map?.values ?? null}
-      shape={[ny, nx]}
-      range={map ? robustRange(map.values, 'sequential') : [0, 1]}
-      unit={data.cube ? (unit ? `${unit} km/s` : 'km/s') : unit}
-      stretchKey="observation/data"
-      frame={frameOf(data.array.step, data.array.rpix)}
-      label="The data"
-      note={error ? <p className="error">{error}</p> : <p className="ob-empty">{data.cube ? 'Measuring the intensity of the cube…' : 'Reading the map…'}</p>}
-      tags={data.cube && <span className="map-source derived" title="The intensity (moment 0) of the cube, measured here">≈ intensity</span>}
-      over={(size, shown) =>
-        step && <Ellipses width={size[0]} height={size[1]} scale={size[0] / ((shown[1] - shown[0] + 1) * step)} psf={psf} beam={beam} />
-      }
-    />
-  );
-}
-
-// The grid of an observation without data: a frame of its size on the sky
+// The grid of an observation: a frame of its size on the sky
 function GridSky({ grid, psf }: { grid: { size: [number, number]; step: [number, number] }; psf: Ellipse | null }) {
   const [nx, ny] = grid.size;
   const fitted = useFitted(nx, ny, 0);
@@ -189,37 +135,25 @@ function GridSky({ grid, psf }: { grid: { size: [number, number]; step: [number,
           <span className="ob-grid-size">
             {nx} × {ny} px of {sx === sy ? `${sx}″` : `${sx}″ × ${sy}″`} · {Number((nx * sx).toPrecision(4))}″ × {Number((ny * sy).toPrecision(4))}″
           </span>
-          <Ellipses width={fitted.size[0]} height={fitted.size[1]} scale={fitted.size[0] / (nx * sx)} psf={psf} beam={null} />
+          <PsfEllipse width={fitted.size[0]} height={fitted.size[1]} scale={fitted.size[0] / (nx * sx)} psf={psf} />
         </div>
       )}
     </div>
   );
 }
 
-// The ellipses of the PSF and of the beam at the lower left corner of a
-// map (north up, east to the left), to the scale of the map (screen
-// pixels per arcsec)
-function Ellipses({ width, height, scale, psf, beam }: { width: number; height: number; scale: number; psf: Ellipse | null; beam: Ellipse | null }) {
-  const largest = Math.max(psf?.major ?? 0, beam?.major ?? 0) * scale;
-  if (largest === 0) return null;
+// The ellipse of the PSF at the lower left corner of a map (north up, east
+// to the left), to the scale of the map (screen pixels per arcsec)
+function PsfEllipse({ width, height, scale, psf }: { width: number; height: number; scale: number; psf: Ellipse | null }) {
+  const largest = (psf?.major ?? 0) * scale;
+  if (psf === null || largest === 0) return null;
   const margin = 14;
   const [cx, cy] = [margin + largest / 2, height - margin - largest / 2];
   // (a position angle east of north: from up, towards the left)
-  const shape = (ellipse: Ellipse, className: string) => (
-    <ellipse
-      className={className}
-      cx={cx}
-      cy={cy}
-      rx={(ellipse.major * scale) / 2}
-      ry={(ellipse.minor * scale) / 2}
-      transform={`rotate(${-90 - ellipse.angle} ${cx} ${cy})`}
-    />
-  );
   return (
     <svg className="ob-ellipses" width={width} height={height} aria-hidden>
       <rect className="ob-ellipse-box" x={cx - largest / 2 - 6} y={cy - largest / 2 - 6} width={largest + 12} height={largest + 12} rx={6} />
-      {beam && shape(beam, 'ob-beam')}
-      {psf && shape(psf, 'ob-psf')}
+      <ellipse className="ob-psf" cx={cx} cy={cy} rx={(psf.major * scale) / 2} ry={(psf.minor * scale) / 2} transform={`rotate(${-90 - psf.angle} ${cx} ${cy})`} />
     </svg>
   );
 }

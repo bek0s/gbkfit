@@ -415,28 +415,26 @@ function SizeField({ value, unit, label, onChange }: { value: string; unit: stri
 type Grid = { step: Step; rest: string | null; pending: boolean; problem: string | null };
 
 // What a response is drawn on of an observation or a dataset (none: of
-// none): of an observation, of its dataset, if it names one (its data are
-// those the model is drawn on), its own spectral options first, or else
-// what its grid and channels give; of a dataset, from the header of the
-// file of its data (of its first map, of moment maps), read as the dataset
-// reads it (its rest as the server writes it, e.g. '6562.8 Angstrom')
+// none): of an observation, what its grid and channels give; of a dataset,
+// from the header of the file of its data (of its first map, of moment
+// maps), read as the dataset reads it (its rest as the server writes it,
+// e.g. '6562.8 Angstrom')
 function useGridOf(project: string, family: Family, of: Of | null): Grid {
   const observation = usePiece(of?.source === 'observation' ? joinPath(project, `observations/${of.name}.yaml`) : null);
   const options = observation.data as Options | undefined;
   const spectral = objectAt(options ?? {}, 'spectral');
-  const name = of?.source === 'dataset' ? of.name : textAt(options ?? {}, 'dataset');
+  const name = of?.source === 'dataset' ? of.name : null;
   const datasetPiece = usePiece(name === null ? null : joinPath(project, `datasets/${name}.yaml`));
   const dataset = datasetPiece.data as Options | undefined;
   const item = (dataset?.type === 'pixel_moments' ? (dataset.moment0 ?? dataset.moment1) : dataset) as Options | undefined;
   const data = item?.data as string | { file?: string; hdu?: string | number } | undefined;
   const file = typeof data === 'string' ? data : data?.file;
   const hdu = typeof data === 'object' ? data.hdu : undefined;
-  // (its spectral axis as the dataset reads it: of the rest of the
-  // observation or of the dataset, the convention of velocities its header
-  // leaves ambiguous, the type of an axis FITS does not define and the unit
-  // of one whose header gives none)
+  // (its spectral axis as the dataset reads it: of its rest, the
+  // convention of velocities its header leaves ambiguous, the type of an
+  // axis FITS does not define and the unit of one whose header gives none)
   const axis = objectAt(dataset ?? {}, 'spectral');
-  const given = textAt(spectral, 'rest') ?? textAt(axis, 'rest');
+  const given = textAt(axis, 'rest');
   const velocity = axis.convention === 'radio' || axis.convention === 'optical' ? (axis.convention as Velocity) : null;
   const reading = { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null, spectralUnit: textAt(axis, 'unit'), dataUnit: null };
   const arrays = useDescription(file ? joinPath(project, file) : null, reading);
@@ -445,8 +443,8 @@ function useGridOf(project: string, family: Family, of: Of | null): Grid {
   if (of === null) return { step: null, rest: null, pending: false, problem: null };
   if (pending) return { step: null, rest: null, pending, problem: `Reading ${name ?? of.name}…` };
   if (of.source === 'observation' && options === undefined) return { step: null, rest: null, pending, problem: `Cannot read ${of.name}.` };
-  // (without data, what its grid and channels give: of a PSF, a number of x
-  // and y, or its x and y)
+  // (of an observation, what its grid and channels give: of a PSF, a number
+  // of x and y, or its x and y)
   if (name === null) {
     const step = family === 'psf' ? options?.step : spectral.step;
     const own: Step =
@@ -457,7 +455,7 @@ function useGridOf(project: string, family: Family, of: Of | null): Grid {
         : family === 'psf' && Array.isArray(step) && step.length === 2 && step.every((n) => typeof n === 'number')
           ? (step as number[]).map(Math.abs)
           : null;
-    return { step: own, rest: textAt(spectral, 'rest'), pending: false, problem: own === null ? `${of.name} has no data and gives no ${UNITS[family].of}.` : null };
+    return { step: own, rest: textAt(spectral, 'rest'), pending: false, problem: own === null ? `${of.name} gives no ${UNITS[family].of}.` : null };
   }
   // (of a PSF, its x and y; of an LSF, the width of its channels)
   const step: Step = array?.step ? (family === 'psf' ? [Math.abs(array.step[0]), Math.abs(array.step[1])] : array.step.length === 3 ? [Math.abs(array.step[2])] : null) : null;

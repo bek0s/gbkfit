@@ -1,21 +1,23 @@
 // The screen of a comparison: galaxies of the project seen by observations
 // of it, side by side, in a grid (a comparison of the Studio, which the
 // library does not know: comparisons/<name>, its galaxies, its
-// observations and how it shows them; saved as it changes). Each cell is a
+// observations, the datasets they are paired with, by position, as a setup
+// pairs them, and how it shows them; saved as it changes). Each cell is a
 // galaxy as an observation sees it (see the server's /views/observed), at
 // the values of its parameters as saved (its params block of the same
 // name): one map, the same in every cell (its intensity, velocity or
 // dispersion; the moments of a cube measured as from data), or what is
 // left of the data by it (the residual: data less model). The data of each
-// observation that has them are a row (or a column) of their own. The
+// observation paired with them are a row (or a column) of their own. The
 // maps of one observation share their colours, so that they read alike
 // (or each has its own, as chosen, e.g. of models far fainter than the
 // data): those of its data, if it has them, or else those that hold all
 // its models; the residuals, colours about zero that hold them all.
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { api, data } from '../../api/client';
 import { keys, useGalaxyParameters, useObserved, usePiece, useProject, useUpdateBlock } from '../../api/queries';
+import { Choice } from '../../components/ui/inputs';
 import { joinPath } from '../../components/FilePicker';
 import { MapPanel, robustRange } from '../../components/MapPanel';
 import { SHOWN, useObservedMap, type Colours, type Shown } from '../../components/observedMaps';
@@ -26,7 +28,7 @@ import { SheetLayout } from '../../components/ui/sheet';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
-import { isObject, type Options } from '../galaxy/options';
+import { isObject } from '../galaxy/options';
 import { forRender, type Param, type Properties } from '../galaxy/params';
 
 // The sizes of the cells (their height, px)
@@ -37,6 +39,9 @@ type Size = keyof typeof SIZES;
 interface Comparison {
   galaxies: string[];
   observations: string[];
+  // (the dataset of the project each observation is paired with, at its
+  // place; null: none)
+  datasets: (string | null)[];
   // (the rows: the galaxies, an observation a column; or the observations)
   rows: 'galaxies' | 'observations';
   show: Shown;
@@ -49,9 +54,12 @@ interface Comparison {
 function comparisonOf(content: unknown): Comparison {
   const options = isObject(content) ? content : {};
   const names = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []);
+  const observations = names(options.observations);
+  const datasets = Array.isArray(options.datasets) ? options.datasets : [];
   return {
     galaxies: names(options.galaxies),
-    observations: names(options.observations),
+    observations,
+    datasets: observations.map((_, i) => (typeof datasets[i] === 'string' ? (datasets[i] as string) : null)),
     rows: options.rows === 'observations' ? 'observations' : 'galaxies',
     show: SHOWN.some((s) => s.value === options.show) ? (options.show as Shown) : 'intensity',
     residuals: options.residuals === true,
@@ -77,7 +85,9 @@ export function CompareScreen({ name }: { name: string }) {
     if (comparison === null) return;
     const changed = { ...comparison, ...next };
     setComparison(changed);
-    update.mutate({ path, content: { ...changed } });
+    // (no datasets: none paired)
+    const { datasets, ...rest } = changed;
+    update.mutate({ path, content: datasets.some((dataset) => dataset !== null) ? changed : rest });
   };
   if (project === null) return null;
   const count = comparison ? `${comparison.galaxies.length} × ${comparison.observations.length}` : '';
@@ -102,9 +112,29 @@ export function CompareScreen({ name }: { name: string }) {
                     <Toggles all={pieces?.galaxies ?? []} chosen={comparison.galaxies} what="galaxy" onChange={(galaxies) => change({ galaxies })} />
                   </Row>
                   <Row label="Observations">
-                    <Toggles all={pieces?.observations ?? []} chosen={comparison.observations} what="observation" onChange={(observations) => change({ observations })} />
+                    <Toggles
+                      all={pieces?.observations ?? []}
+                      chosen={comparison.observations}
+                      what="observation"
+                      // (the data of each kept at its place; one added, none)
+                      onChange={(observations) => change({ observations, datasets: observations.map((o) => comparison.datasets[comparison.observations.indexOf(o)] ?? null) })}
+                    />
                   </Row>
-                  <p className="ob-text">Each galaxy at the values of its parameters as saved, seen through each observation.</p>
+                  {comparison.observations.map((o, i) => (
+                    <Row key={o} label={`Data of ${o}`}>
+                      <Choice
+                        label={`The data ${o} is paired with`}
+                        value={comparison.datasets[i] ?? ''}
+                        onChange={(dataset) => change({ datasets: comparison.datasets.map((each, j) => (j === i ? dataset || null : each)) })}
+                        items={[
+                          { value: '', label: 'None: models alone' },
+                          // (one it names that the project has not, as it is)
+                          ...[...new Set([...(comparison.datasets[i] ? [comparison.datasets[i]] : []), ...(pieces?.datasets ?? [])])].map((name) => ({ value: name, label: name })),
+                        ]}
+                      />
+                    </Row>
+                  ))}
+                  <p className="ob-text">Each galaxy at the values of its parameters as saved, seen through each observation: paired with data, on their grid.</p>
                 </div>
               </DockSection>
               <DockSection id="cmp-show" title="Show">
@@ -116,7 +146,7 @@ export function CompareScreen({ name }: { name: string }) {
                     <Segments
                       items={[
                         { value: 'model', label: 'Model' },
-                        { value: 'residual', label: 'Residual', title: 'The data less the model, of the observations with data' },
+                        { value: 'residual', label: 'Residual', title: 'The data less the model, of the observations paired with data' },
                       ]}
                       value={comparison.residuals ? 'residual' : 'model'}
                       onChange={(of) => change({ residuals: of === 'residual' })}
@@ -222,17 +252,12 @@ function sharedRange(ranges: Ranges, observation: string, galaxies: string[], re
 // that have them), and a row of each galaxy; or, its rows the
 // observations, a column of the data and one of each galaxy
 function Grid({ project, comparison }: { project: string; comparison: Comparison }) {
-  const { galaxies, observations, rows, show, residuals, colours, size } = comparison;
+  const { galaxies, observations, datasets, rows, show, residuals, colours, size } = comparison;
   const [ranges, setRanges] = useState<Ranges>({});
   const report = useCallback((key: string, range: [number, number]) => setRanges((all) => (all[key]?.[0] === range[0] && all[key]?.[1] === range[1] ? all : { ...all, [key]: range })), []);
-  // (the observations as saved: whether each has data)
-  const seen = useQueries({
-    queries: observations.map((o) => {
-      const path = joinPath(project, `observations/${o}.yaml`);
-      return { queryKey: keys.piece(path), queryFn: () => data(api.GET('/api/v1/pieces/{path}', { params: { path: { path } } })) };
-    }),
-  });
-  const withData = observations.filter((_, i) => isObject(seen[i]?.data) && (seen[i].data as Options).dataset != null);
+  // (the dataset of each observation, by its name)
+  const dataOf = (observation: string) => datasets[observations.indexOf(observation)] ?? null;
+  const withData = observations.filter((o) => dataOf(o) !== null);
   if (galaxies.length === 0 || observations.length === 0) {
     return (
       <div className="cmp-picture cmp-empty">
@@ -246,6 +271,7 @@ function Grid({ project, comparison }: { project: string; comparison: Comparison
       project={project}
       galaxy={galaxy}
       observation={observation}
+      dataset={dataOf(observation)}
       show={show}
       residual={residuals && withData.includes(observation)}
       range={colours === 'own' ? null : sharedRange(ranges, observation, galaxies, residuals && withData.includes(observation))}
@@ -254,7 +280,7 @@ function Grid({ project, comparison }: { project: string; comparison: Comparison
   );
   const dataCell = (observation: string) =>
     withData.includes(observation) ? (
-      <Cell key={`|${observation}`} project={project} galaxy={galaxies[0]} observation={observation} show={show} ofData range={colours === 'own' ? null : sharedRange(ranges, observation, galaxies, false)} onRange={report} />
+      <Cell key={`|${observation}`} project={project} galaxy={galaxies[0]} observation={observation} dataset={dataOf(observation)} show={show} ofData range={colours === 'own' ? null : sharedRange(ranges, observation, galaxies, false)} onRange={report} />
     ) : (
       <div key={`|${observation}`} className="cmp-cell cmp-none">
         <span>No data</span>
@@ -345,13 +371,14 @@ function useSavedGalaxy(project: string, name: string) {
   return { options: properties === undefined ? undefined : options, properties: properties ?? {}, error: galaxy.error ?? described.error };
 }
 
-// A cell: a galaxy as an observation sees it (its model, or the residual
-// of its data), or the data of the observation, in the colours the
-// observation shares (until they are known, its own)
+// A cell: a galaxy as an observation sees it, paired with its dataset if
+// any (its model, or the residual of the data), or the data, in the
+// colours the observation shares (until they are known, its own)
 function Cell({
   project,
   galaxy,
   observation,
+  dataset,
   show,
   residual = false,
   ofData = false,
@@ -361,6 +388,7 @@ function Cell({
   project: string;
   galaxy: string;
   observation: string;
+  dataset: string | null;
   show: Shown;
   residual?: boolean;
   ofData?: boolean;
@@ -369,7 +397,8 @@ function Cell({
 }) {
   const saved = useSavedGalaxy(project, galaxy);
   const seen = usePiece(joinPath(project, `observations/${observation}.yaml`));
-  const observed = useObserved(project, saved.options, saved.properties, observation, seen.data, galaxy);
+  const datasetPiece = usePiece(dataset === null ? null : joinPath(project, `datasets/${dataset}.yaml`));
+  const observed = useObserved(project, saved.options, saved.properties, observation, [seen.data, datasetPiece.data], galaxy, dataset);
   const model = useObservedMap(observed.data, 'model', show);
   const measured = useObservedMap(observed.data, 'data', show);
   const values = useMemo(() => {
