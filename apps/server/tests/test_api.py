@@ -1520,6 +1520,98 @@ def test_a_galaxy_is_observed_by_an_observation_of_its_project(client):
     ).status_code in (400, 404)
 
 
+def test_a_galaxy_is_observed_through_options_and_placed(client):
+    # (an observation of options, as it is edited, not saved: a cube whose
+    # reference pixel is off the image, so that its field is away from
+    # the origin of the model)
+    cube = dict(
+        type='pixel_spectra', size=[20, 10], step=2, rpix=[-10, 30],
+        spectral=dict(size=30, step=10, rval=300, convention='radio'))
+    sampling = client.post('/api/v1/observations/sampling', json=dict(
+        project='study', observation=cube)).json()
+    # (the field: its centre where its middle pixel is, x from the
+    # reference pixel: (9.5 + 10) * 2, y: (4.5 - 30) * 2)
+    assert sampling['field']['centre'] == pytest.approx([39, -51])
+    assert sampling['field']['size'] == pytest.approx([40, 20])
+    assert sampling['channels'] == dict(
+        first=pytest.approx(155), last=pytest.approx(445), step=10, size=30)
+    galaxy = copy.deepcopy(RENDERED)
+    del galaxy['components'][1]
+    placed = dict(gas_xpos=39, gas_ypos=-51, gas_vsys=300, gas_vpt_vt=100)
+    info = client.post('/api/v1/views/observed', json=dict(
+        project='study', galaxy=galaxy, properties=placed,
+        observation=cube)).json()
+    assert info['type'] == 'pixel_spectra'
+    placement = info['placement']
+    assert placement['centre'] == pytest.approx([39, -51])
+    assert placement['velocity'] == pytest.approx(300, abs=1)
+    assert placement['in_field'] and placement['in_channels']
+    # (at the origin and at 30 km/s, out of both)
+    info = client.post('/api/v1/views/observed', json=dict(
+        project='study', galaxy=galaxy, properties=dict(gas_vsys=30),
+        observation=cube)).json()
+    assert info['placement']['in_field'] is False
+    assert info['placement']['in_channels'] is False
+    # (at the origin, shifted into the field, as dragged in a picture)
+    info = client.post('/api/v1/views/observed', json=dict(
+        project='study', galaxy=galaxy, properties=dict(gas_vsys=300),
+        observation=cube, shift=[39, -51])).json()
+    assert info['placement']['centre'] == pytest.approx([39, -51])
+    assert info['placement']['in_field'] is True
+
+
+def test_the_sampling_of_an_observation_that_cannot_be_made(client):
+    # (none known: no size, which an image without data needs)
+    assert client.post('/api/v1/observations/sampling', json=dict(
+        project='study', observation=dict(type='pixel_brightness'))
+    ).json() == dict(field=None, channels=None)
+    # (an image has no channels)
+    sampling = client.post('/api/v1/observations/sampling', json=dict(
+        project='study', observation=dict(
+            type='pixel_brightness', size=[16, 12]))).json()
+    assert sampling['channels'] is None
+    assert sampling['field']['centre'] == pytest.approx([0, 0])
+
+
+def test_a_dataset_gives_an_observation_its_sampling_and_beam(client, root):
+    write_data(root)
+    given = client.post('/api/v1/observations/of-dataset', json=dict(
+        project='study', type='pixel_brightness', dataset='map')).json()
+    assert given['sampling']['size'] == [6, 5]
+    assert given['sampling']['step'] == pytest.approx([1, 1])
+    assert given['psf'] is None and 'no beam' in given['psf_note']
+    # (a beam in the header: the Gaussian of it)
+    with fits.open(pathlib.Path(root, 'study/data/map.fits'), 'update') \
+            as hdus:
+        hdus[0].header.update(BMAJ=3 / 3600, BMIN=2 / 3600, BPA=20)
+    given = client.post('/api/v1/observations/of-dataset', json=dict(
+        project='study', type='pixel_brightness', dataset='map')).json()
+    assert given['psf'] == dict(
+        type='gauss', bmaj=pytest.approx(3), bmin=pytest.approx(2),
+        bpa=pytest.approx(20))
+    # (data of another kind, or none, are refused)
+    for type_, dataset in (('pixel_spectra', 'map'), (
+            'pixel_brightness', 'nosuch')):
+        response = client.post('/api/v1/observations/of-dataset', json=dict(
+            project='study', type=type_, dataset=dataset))
+        assert response.status_code in (400, 404)
+
+
+def test_a_galaxy_is_rendered_over_a_field_given(client):
+    # (a field 40 arcsec wide about (100, 0): the disk at the origin is out
+    # of it, and one at (100, 0) is in the middle)
+    header, maps = render(
+        client, RENDERED, size=32, field=40, centre=[100, 0])
+    assert header['step'] == pytest.approx(40 / 32)
+    assert np.nansum(maps['light']) == 0
+    _, maps = render(
+        client, RENDERED, size=32, field=40, centre=[100, 0],
+        properties=dict(gas_xpos=100, stars_xpos=100))
+    light = np.nan_to_num(maps['light'])
+    assert np.unravel_index(light.argmax(), light.shape) in (
+        (15, 15), (15, 16), (16, 15), (16, 16))
+
+
 def test_a_galaxy_is_observed_paired_with_a_dataset(client, root):
     # (a dataset of the project by name, or in place: the data win, their
     # grid replacing that of the observation, and they come with the model)

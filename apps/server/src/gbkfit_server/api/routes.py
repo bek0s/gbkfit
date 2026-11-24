@@ -32,19 +32,19 @@ from gbkfit_server.services.units import rest_text
 from gbkfit_server.services.views import Cube, Reading
 from .models import (
     ArrayInfo, CatalogueLine, CheckRequest, CheckResult, ComponentPartInfo,
-    ComponentType, CubeRenderInfo, DatasetRequest, FolderInfo,
-    GalaxyExtraRequest,
+    ComponentType, CubeRenderInfo, DatasetGivesInfo, DatasetGivesRequest,
+    DatasetRequest, FolderInfo, GalaxyExtraRequest,
     GalaxyInfo, GalaxyRenderRequest, GalaxyRequest, GalaxyVolumeRequest,
     HeaderInfo, ImportRequest,
     JobInfo, JobRequest, LensInfo, LensRequest, LensViewInfo,
     LensViewRequest, LSFRequest, LSFViewInfo, ObservationRequest,
     ObservedArrayInfo, ObservedInfo, ObservedRequest, PartRequest,
     PSFRequest, PSFViewInfo,
-    PieceContent, PieceReference, PieceRename, PieceRequest,
+    PieceContent, PieceReference, PieceRename, PieceRequest, PlacementInfo,
     PreferencesInfo,
     PreparationInfo, Problem,
     ProjectInfo, ProjectRename, ProjectRequest, RenderInfo, RunInfo,
-    SessionInfo, SessionRequest, SetupInfo, SetupObservedRequest,
+    SamplingInfo, SessionInfo, SessionRequest, SetupInfo, SetupObservedRequest,
     SetupRequest, SpectrumView)
 
 
@@ -433,6 +433,36 @@ def observation_problems(
             request.project, request.observation)]
 
 
+@router.post('/observations/sampling')
+def observation_sampling(
+        server: ServerDep, request: ObservationRequest) -> SamplingInfo:
+    """
+    Return the sampling of an observation of the options of a piece of a
+    project alone (with the pieces it names): its field on the sky (its
+    centre as the model measures positions, which galaxies are placed
+    by, and its size) and its channels, as far as the library can make
+    it (see Observations.sampling).
+    """
+    return SamplingInfo.model_validate(
+        server.observations.sampling(request.project, request.observation),
+        from_attributes=True)
+
+
+@router.post('/observations/of-dataset')
+def observation_of_dataset(
+        server: ServerDep, request: DatasetGivesRequest) -> DatasetGivesInfo:
+    """
+    Return what a dataset gives an observation of a type, to copy into it
+    (e.g. a mock observation like those data, without them): the options
+    of its sampling and the Gaussian of its beam (see
+    Observations.of_dataset).
+    """
+    return DatasetGivesInfo.model_validate(
+        server.observations.of_dataset(
+            request.project, request.type, request.dataset),
+        from_attributes=True)
+
+
 @router.post('/observations/parts/describe')
 def part_problems(server: ServerDep, request: PartRequest) -> list[Problem]:
     """
@@ -469,7 +499,8 @@ async def view_galaxy(
         connection: Request) -> Response:
     """
     Render a galaxy of the options of a piece of a project at values of
-    its parameters, through an ideal observation (see Renders.galaxy): a
+    its parameters, through an ideal observation (see Renders.galaxy;
+    over a field of a width and centre, if given): a
     frame of its maps (ny, nx; named 'light', 'velocity', 'vx', 'vy',
     'dispersion' and '{component}/{map}'; NaN where there is no light),
     whose header has the size of the pixels (step, arcsec), the pixels
@@ -480,7 +511,7 @@ async def view_galaxy(
     render = await server.renders.render('galaxy', dict(
         project=request.project, options=request.galaxy,
         properties=request.properties, view=request.view,
-        size=request.size),
+        size=request.size, field=request.field, centre=request.centre),
         f"{_what(request.label)}, {request.view}",
         connection.is_disconnected)
     header = dict(
@@ -571,18 +602,21 @@ async def view_observed(
         server: ServerDep, request: ObservedRequest,
         connection: Request) -> ObservedInfo:
     """
-    Evaluate a galaxy through an observation of its project, paired with
-    a dataset if given (see Renders.observed), and keep its arrays (the
-    model of each item, and the data and errors of the dataset, if any)
-    for the views of cubes (channel, spectrum and moments), each at the
-    path returned. The render is cancelled if the client goes away (see
+    Evaluate a galaxy through an observation of its project (by name, or
+    its options), paired with a dataset if given (see Renders.observed),
+    and keep its arrays (the model of each item, and the data and errors
+    of the dataset, if any) for the views of cubes (channel, spectrum and
+    moments), each at the path returned; with where the galaxy is for the
+    observation. The render is cancelled if the client goes away (see
     RenderPool).
     """
+    seen = request.observation if isinstance(request.observation, str) \
+        else "an observation"
     observed = await server.renders.render('observed', dict(
         project=request.project, options=request.galaxy,
         properties=request.properties, observation=request.observation,
-        dataset=request.dataset),
-        f"{_what(request.label)} through {request.observation}",
+        dataset=request.dataset, shift=request.shift),
+        f"{_what(request.label)} through {seen}",
         connection.is_disconnected)
     return _observed_info(server, observed)
 
@@ -634,8 +668,12 @@ def _observed_info(server: Server, observed: Any) -> ObservedInfo:
             kind=array.kind, item=array.item, path=server.views.put(cube),
             shape=[nx, ny, nchannels], unit=array.unit,
             step=list(observed.step), rpix=list(observed.rpix)))
+    placement = None if observed.placement is None \
+        else PlacementInfo.model_validate(
+            observed.placement, from_attributes=True)
     return ObservedInfo(
-        type=observed.type, arrays=arrays, notes=observed.notes)
+        type=observed.type, arrays=arrays, notes=observed.notes,
+        placement=placement)
 
 
 @router.get('/renders')

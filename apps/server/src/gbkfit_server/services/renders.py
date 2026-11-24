@@ -35,13 +35,14 @@ from gbkfit.config import ConfigError, error_message, paths_relative_to
 from gbkfit.dataset import dataset_parser
 from gbkfit.driver import Driver
 from gbkfit.driver.drivers.host import DriverHost
-from gbkfit.grid import doppler
+from gbkfit.grid import doppler, sky_to_pixel
 from gbkfit.model import (
     Component, Extras, Galaxy, GalaxyFunctions, galaxy_parser)
 from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.params import ParamSpace
 
 from .errors import Invalid
+from .observations import channels_of, field_of
 from .setups import setup_text
 from .views import Cube, CubeAxis
 from .workspace import Workspace
@@ -55,6 +56,7 @@ __all__ = [
     'GalaxyVolume',
     'Observed',
     'ObservedArray',
+    'Placement',
     'Renders',
     'View'
 ]
@@ -185,6 +187,23 @@ class ObservedArray:
 
 
 @dataclasses.dataclass
+class Placement:
+    """
+    Where a galaxy is for an observation: its centre (x, y; arcsec, as the
+    model measures positions) and its systemic velocity where its lines
+    land on the channels (km/s; see _observed_velocities), those of its
+    first component with an orientation (its components share one), or of
+    its first component (None for what it has not, e.g. no lines); and
+    whether they are in the field and in the channels of the observation
+    (None for what it or the galaxy has not).
+    """
+    centre: tuple[float, float] | None
+    velocity: float | None
+    in_field: bool | None
+    in_channels: bool | None
+
+
+@dataclasses.dataclass
 class Observed:
     """
     A galaxy as an observation sees it (see Renders.observed): the type of
@@ -193,7 +212,8 @@ class Observed:
     its channels (km/s; None without a spectral axis), and the warnings of
     the library as it set them up (e.g. a PSF narrower than the pixels),
     and its pixels on the sky: their size (x, y; arcsec) and the pixel (x,
-    y; 0-based) that the model measures positions from.
+    y; 0-based) that the model measures positions from; and where the
+    galaxy is for it (see Placement; None of a setup, of many galaxies).
     """
     type: str
     arrays: list[ObservedArray]
@@ -201,6 +221,7 @@ class Observed:
     notes: list[str]
     step: tuple[float, float]
     rpix: tuple[float, float]
+    placement: Placement | None = None
 
 
 class Renders:
@@ -223,15 +244,19 @@ class Renders:
             properties: Mapping[str, Any],
             view: View = 'sky',
             size: int = _SIZE,
+            field: float | None = None,
+            centre: tuple[float, float] | None = None,
             progress: Callable[[str], None] | None = None
     ) -> GalaxyRender:
         """
         Render a galaxy of the options of a piece of a project, at the
         values of its parameters of the given properties (numbers, or
         lists of them for vectors; the defaults for the others), telling
-        progress the stage it reaches, if given (e.g. 'evaluating'). A
-        galaxy that emits no light (e.g. of mass alone) has its curves
-        but no maps (see _unlit).
+        progress the stage it reaches, if given (e.g. 'evaluating'); over
+        a field of the given width and centre (arcsec, x and y as the
+        model measures them), if given (by default, about the origin, as
+        wide as the galaxy). A galaxy that emits no light (e.g. of mass
+        alone) has its curves but no maps (see _unlit).
 
         Raises
         ------
@@ -242,7 +267,8 @@ class Renders:
         tell = progress or _quiet
         try:
             galaxy, values, extras, radius, step = self._evaluate(
-                project, options, properties, view, size, tell)
+                project, options, properties, view, size, tell, field,
+                centre)
         except _NoLight:
             return self._unlit(project, options, properties, view, size, tell)
         maps = _maps(galaxy, extras)
@@ -389,12 +415,15 @@ class Renders:
             properties: Mapping[str, Any],
             view: View,
             size: int,
-            tell: Callable[[str], None]
+            tell: Callable[[str], None],
+            field: float | None = None,
+            centre: tuple[float, float] | None = None
     ) -> tuple[Galaxy, dict[str, Any], Extras, float, float]:
         """
         Evaluate a galaxy of the options of a piece of a project through
-        its ideal observations (see _observations), seen as given: return
-        the galaxy, the values of its parameters, the extra outputs of the
+        its ideal observations (see _observations), seen as given, over a
+        field of a width and centre, if given (see galaxy): return the
+        galaxy, the values of its parameters, the extra outputs of the
         evaluation, its largest radius and the size of its pixels (arcsec).
 
         Raises
@@ -405,8 +434,14 @@ class Renders:
         """
         tell('setting up')
         galaxy, radius, step = self._load(project, options, view, size)
+        if field is not None:
+            if not field > 0:
+                raise Invalid(f"the field must be wider than 0; it is {field}")
+            step = field / size
+        rpix = None if centre is None else [
+            (size - 1) / 2 - c / step for c in centre]
         try:
-            observations = _observations(galaxy, size, step)
+            observations = _observations(galaxy, size, step, rpix=rpix)
             if not observations:
                 raise _NoLight("the galaxy has no component that emits light")
             group = ObservationGroup([galaxy], observations)
@@ -484,20 +519,24 @@ class Renders:
             project: str,
             options: Mapping[str, Any],
             properties: Mapping[str, Any],
-            observation: str,
+            observation: str | Mapping[str, Any],
             dataset: str | Mapping[str, Any] | None = None,
+            shift: tuple[float, float] | None = None,
             progress: Callable[[str], None] | None = None
     ) -> Observed:
         """
         Evaluate a galaxy of the options of a piece of a project, at the
         values of its parameters of the given properties (the defaults for
         the others, also of the observation), through an observation of
-        the project (by name: the pieces it names, its PSF, LSF and noise,
-        in place), paired with a dataset if given (a piece of the project
-        by name, or its options; the data win, as in a setup: their
-        sampling replaces that of the observation): its model on the grid
-        of the observation, through its instrument and line of sight, and
-        the data, if any; telling progress the stage it reaches, if given.
+        the project (by name, or its options, e.g. as it is edited: the
+        pieces it names, its PSF, LSF and noise, in place), paired with a
+        dataset if given (a piece of the project by name, or its options;
+        the data win, as in a setup: their sampling replaces that of the
+        observation): its model on the grid of the observation, through its
+        instrument and line of sight, the data, if any, and where the
+        galaxy is for it (see Placement); the galaxy moved on the sky by
+        the given shift, if any (x, y; arcsec; see _shifted); telling
+        progress the stage it reaches, if given.
 
         Raises
         ------
@@ -512,7 +551,9 @@ class Renders:
         notes: list[str] = []
         # (the dataset at the place of the observation, as a setup pairs
         # them: the pieces resolved in place)
-        config: dict[str, Any] = dict(observations=[observation])
+        config: dict[str, Any] = dict(observations=[
+            observation if isinstance(observation, str)
+            else dict(observation)])
         if dataset is not None:
             config['datasets'] = [dataset]
         try:
@@ -527,7 +568,7 @@ class Renders:
                     seen = observation_parser.load(
                         resolved.config['observations'], dataset=[data])
                 group = ObservationGroup([galaxy], seen)
-                values = _values(group, properties)
+                values = _shifted(galaxy, _values(group, properties), shift)
                 plan = group.plan(_driver())
                 tell('evaluating')
                 outputs = gbkfit.setup.evaluation_outputs(
@@ -535,7 +576,9 @@ class Renders:
                     | gbkfit.setup.data_outputs(plan)
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
-        return _observed(seen[0], outputs, None, notes)
+        observed = _observed(seen[0], outputs, None, notes)
+        observed.placement = _placement(galaxy, values, seen[0])
+        return observed
 
     def setup_observed(
             self,
@@ -695,16 +738,18 @@ def _seen(galaxy: Galaxy, view: gbkfit.model.View) -> list[Component]:
 
 def _observations(
         galaxy: Galaxy, size: int, step: float,
-        spectral: dict[str, Any] | None = None
+        spectral: dict[str, Any] | None = None,
+        rpix: list[float] | None = None
 ) -> list[Any]:
     """
     Return the ideal observations of a galaxy, of size pixels of the given
-    step: a cube of the components that emit lines (of the channels of the
-    options of a spectral axis given, or else of two, whose velocities its
-    maps hold whatever its channels; at the rest of the first line named,
-    if any), and an image of those that emit in
-    bands; each evaluated along the line of sight as what it sees needs
-    (see Scene.evaluation of gbkfit.model).
+    step (their reference pixel, where the model measures positions from,
+    that given, else the centre): a cube of the components that emit
+    lines (of the channels of the options of a spectral axis given, or
+    else of two, whose velocities its maps hold whatever its channels; at
+    the rest of the first line named, if any), and an image of those that
+    emit in bands; each evaluated along the line of sight as what it sees
+    needs (see Scene.evaluation of gbkfit.model).
     """
     infos = []
     for view, info in (
@@ -723,6 +768,8 @@ def _observations(
                 key: value for key, value in info['spectral'].items()
                 if key != 'convention'} | dict(rest=rest))
         infos.append(info | dict(size=[size, size], step=[step, step]))
+        if rpix is not None:
+            infos[-1]['rpix'] = list(rpix)
     return observation_parser.load(infos)
 
 
@@ -881,6 +928,46 @@ def _observed(
         (float(step[0]), float(step[1])), (float(rpix[0]), float(rpix[1])))
 
 
+def _placement(
+        galaxy: Galaxy, values: Mapping[str, Any], observation: Any
+) -> Placement:
+    """
+    Return where a galaxy is for an observation, at the values of its
+    parameters (see Placement).
+    """
+    frames = [
+        galaxy.component_frame_params(index)
+        for index in range(len(galaxy.components()))]
+    oriented = [frame for frame in frames if frame.posa is not None]
+    frame = (oriented or frames or [None])[0]
+
+    def first(name: str | None) -> float | None:
+        # (the value of a parameter, the first of a vector)
+        if name is None:
+            return None
+        return float(np.ravel(np.asarray(values[name], dtype=float))[0])
+    x, y = (None, None) if frame is None else (first(frame.x), first(frame.y))
+    centre = None if x is None or y is None else (x, y)
+    vsys = None if frame is None else first(frame.vsys)
+    lines = _seen(galaxy, gbkfit.model.View(spectral=True))
+    velocity = None if vsys is None or not lines else _observed_velocities(
+        (vsys, vsys), _cube_axis(galaxy.redshift(), lines))[0]
+    in_field = None
+    if centre is not None and field_of(observation) is not None:
+        grid = observation.grid()
+        matrix, offset = sky_to_pixel(grid)
+        pixel = matrix @ np.asarray(centre) + offset
+        in_field = all(
+            -0.5 <= float(p) <= n - 0.5 for p, n in zip(pixel, grid.size))
+    in_channels = None
+    channels = channels_of(observation)
+    if velocity is not None and channels is not None:
+        low, high = sorted((channels.first, channels.last))
+        half = abs(channels.step) / 2
+        in_channels = low - half <= velocity <= high + half
+    return Placement(centre, velocity, in_field, in_channels)
+
+
 def _values(
         group: ObservationGroup | Galaxy, properties: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -907,6 +994,31 @@ def _values(
         if name not in named}
     space = ParamSpace.from_properties(pdescs, filled)
     return dict(space.evaluate())
+
+
+def _shifted(
+        galaxy: Galaxy, values: Mapping[str, Any],
+        shift: tuple[float, float] | None
+) -> dict[str, Any]:
+    """
+    Return the values of the parameters of a galaxy moved on the sky by a
+    shift (x, y; arcsec), if given: the centre of each of its components
+    (of every ring, of a vector) moved by it, once for a centre that
+    several share.
+    """
+    moved = dict(values)
+    if shift is None:
+        return moved
+    names = set()
+    for index in range(len(galaxy.components())):
+        frame = galaxy.component_frame_params(index)
+        for name, delta in ((frame.x, shift[0]), (frame.y, shift[1])):
+            if name is None or name in names:
+                continue
+            names.add(name)
+            value = np.asarray(moved[name], dtype=float) + delta
+            moved[name] = float(value) if value.ndim == 0 else value
+    return moved
 
 
 def _default(desc: Any) -> Any:

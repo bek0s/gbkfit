@@ -1705,6 +1705,84 @@
         }
       }
     },
+    "/api/v1/observations/sampling": {
+      "post": {
+        "summary": "Observation Sampling",
+        "description": "Return the sampling of an observation of the options of a piece of a\nproject alone (with the pieces it names): its field on the sky (its\ncentre as the model measures positions, which galaxies are placed\nby, and its size) and its channels, as far as the library can make\nit (see Observations.sampling).",
+        "operationId": "observation_sampling_api_v1_observations_sampling_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObservationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SamplingInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observations/of-dataset": {
+      "post": {
+        "summary": "Observation Of Dataset",
+        "description": "Return what a dataset gives an observation of a type, to copy into it\n(e.g. a mock observation like those data, without them): the options\nof its sampling and the Gaussian of its beam (see\nObservations.of_dataset).",
+        "operationId": "observation_of_dataset_api_v1_observations_of_dataset_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetGivesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetGivesInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/observations/parts/describe": {
       "post": {
         "summary": "Part Problems",
@@ -1790,7 +1868,7 @@
     "/api/v1/views/galaxy": {
       "post": {
         "summary": "View Galaxy",
-        "description": "Render a galaxy of the options of a piece of a project at values of\nits parameters, through an ideal observation (see Renders.galaxy): a\nframe of its maps (ny, nx; named 'light', 'velocity', 'vx', 'vy',\n'dispersion' and '{component}/{map}'; NaN where there is no light),\nwhose header has the size of the pixels (step, arcsec), the pixels\nacross (size), its curves (by name, with 'radius'; null where not\ndefined) and the problems of those that could not be drawn. The\nrender is cancelled if the client goes away (see RenderPool).",
+        "description": "Render a galaxy of the options of a piece of a project at values of\nits parameters, through an ideal observation (see Renders.galaxy;\nover a field of a width and centre, if given): a\nframe of its maps (ny, nx; named 'light', 'velocity', 'vx', 'vy',\n'dispersion' and '{component}/{map}'; NaN where there is no light),\nwhose header has the size of the pixels (step, arcsec), the pixels\nacross (size), its curves (by name, with 'radius'; null where not\ndefined) and the problems of those that could not be drawn. The\nrender is cancelled if the client goes away (see RenderPool).",
         "operationId": "view_galaxy_api_v1_views_galaxy_post",
         "requestBody": {
           "content": {
@@ -1934,7 +2012,7 @@
     "/api/v1/views/observed": {
       "post": {
         "summary": "View Observed",
-        "description": "Evaluate a galaxy through an observation of its project, paired with\na dataset if given (see Renders.observed), and keep its arrays (the\nmodel of each item, and the data and errors of the dataset, if any)\nfor the views of cubes (channel, spectrum and moments), each at the\npath returned. The render is cancelled if the client goes away (see\nRenderPool).",
+        "description": "Evaluate a galaxy through an observation of its project (by name, or\nits options), paired with a dataset if given (see Renders.observed),\nand keep its arrays (the model of each item, and the data and errors\nof the dataset, if any) for the views of cubes (channel, spectrum and\nmoments), each at the path returned; with where the galaxy is for the\nobservation. The render is cancelled if the client goes away (see\nRenderPool).",
         "operationId": "view_observed_api_v1_views_observed_post",
         "requestBody": {
           "content": {
@@ -3255,6 +3333,35 @@
         "title": "CatalogueLine",
         "description": "An emission line of the catalogue of GBKFIT (see its LineCatalogue):\nits name, its rest as text (e.g. '6564.61 Angstrom', in vacuum), and\nas a number: its rest wavelength in vacuum (m) and in air (m; above\n2000 Angstrom, where air wavelengths are used), or its rest frequency\n(Hz), as the catalogue gives it."
       },
+      "ChannelsInfo": {
+        "properties": {
+          "first": {
+            "type": "number",
+            "title": "First"
+          },
+          "last": {
+            "type": "number",
+            "title": "Last"
+          },
+          "step": {
+            "type": "number",
+            "title": "Step"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "first",
+          "last",
+          "step",
+          "size"
+        ],
+        "title": "ChannelsInfo",
+        "description": "The channels of an observation: the velocities of the first and the\nlast (km/s), their width (km/s) and their number."
+      },
       "CheckRequest": {
         "properties": {
           "path": {
@@ -3408,6 +3515,78 @@
         "title": "CubeRenderInfo",
         "description": "The cube of a galaxy rendered (see Renders.cube): the path the views\nof cubes take it at (its array 0; kept for a while, see Views.put), its\nshape in the order of the model (nx, ny, nchannels), the unit of the\ncoordinates of its channels (km/s), the size of its pixels (arcsec),\nand how the velocities of the galaxy land on its channels (see\nCubeAxis): the convention of their velocities ('optical', 'radio' or\n'relativistic') and the 1 + z of its lines (shift)."
       },
+      "DatasetGivesInfo": {
+        "properties": {
+          "sampling": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Sampling"
+          },
+          "psf": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Psf"
+          },
+          "psf_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Psf Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sampling",
+          "psf",
+          "psf_note"
+        ],
+        "title": "DatasetGivesInfo",
+        "description": "What a dataset gives an observation of a kind, to copy into it: the\noptions of its sampling, and its PSF (the Gaussian of the beam of the\ndata; null if they have none, or one for each channel, with why in\npsf_note)."
+      },
+      "DatasetGivesRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "dataset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ],
+            "title": "Dataset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "type",
+          "dataset"
+        ],
+        "title": "DatasetGivesRequest",
+        "description": "A dataset to copy into an observation of a type (see\nObservations.of_dataset): the project, the type of the observation,\nand the dataset (a piece of the project by name, or its options)."
+      },
       "DatasetRequest": {
         "properties": {
           "project": {
@@ -3455,6 +3634,50 @@
         ],
         "title": "Diagnostic",
         "description": "A problem of a text: its line (from 1), severity and message."
+      },
+      "FieldInfo": {
+        "properties": {
+          "centre": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Centre"
+          },
+          "size": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Size"
+          },
+          "rota": {
+            "type": "number",
+            "title": "Rota"
+          }
+        },
+        "type": "object",
+        "required": [
+          "centre",
+          "size",
+          "rota"
+        ],
+        "title": "FieldInfo",
+        "description": "The field of an observation on the sky (see Field): its centre (x, y;\narcsec, as the model measures positions, from its reference pixel,\nwhich can be off the image), its width and height (arcsec), and the\nrotation of its pixels (degrees)."
       },
       "FileEntry": {
         "properties": {
@@ -3634,6 +3857,38 @@
             "title": "Size",
             "default": 160
           },
+          "field": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "centre": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Centre"
+          },
           "label": {
             "anyOf": [
               {
@@ -3652,7 +3907,7 @@
           "galaxy"
         ],
         "title": "GalaxyRenderRequest",
-        "description": "A galaxy to render (see Renders.galaxy): the project of its piece, its\noptions (its files relative to the project), the values of its\nparameters (numbers, or lists of them for vectors; the defaults for\nthose not given), how it is seen ('sky', 'face-on' or 'edge-on'), and\nthe pixels across; and what it is, for the pages that show the\nrenders that run long (e.g. the name of its piece)."
+        "description": "A galaxy to render (see Renders.galaxy): the project of its piece, its\noptions (its files relative to the project), the values of its\nparameters (numbers, or lists of them for vectors; the defaults for\nthose not given), how it is seen ('sky', 'face-on' or 'edge-on'), the\npixels across, and the width and the centre of its field (arcsec; x\nand y as the model measures them), if given (by default, about the\norigin, as wide as the galaxy); and what it is, for the pages that\nshow the renders that run long (e.g. the name of its piece)."
       },
       "GalaxyRequest": {
         "properties": {
@@ -4345,6 +4600,16 @@
             },
             "type": "array",
             "title": "Notes"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlacementInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -4354,7 +4619,7 @@
           "notes"
         ],
         "title": "ObservedInfo",
-        "description": "A galaxy as an observation of its project sees it: the type of the\nobservation (e.g. 'pixel_spectra'), its arrays (the model of each item,\nand the data and errors of the data, if it has them), and the warnings\nof the library as it set them up."
+        "description": "A galaxy as an observation of its project sees it: the type of the\nobservation (e.g. 'pixel_spectra'), its arrays (the model of each item,\nand the data and errors of the data, if it has them), the warnings of\nthe library as it set them up, and where the galaxy is for it (null of\na setup, of many galaxies)."
       },
       "ObservedRequest": {
         "properties": {
@@ -4374,7 +4639,15 @@
             "default": {}
           },
           "observation": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ],
             "title": "Observation"
           },
           "dataset": {
@@ -4391,6 +4664,27 @@
               }
             ],
             "title": "Dataset"
+          },
+          "shift": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shift"
           },
           "label": {
             "anyOf": [
@@ -4411,7 +4705,7 @@
           "observation"
         ],
         "title": "ObservedRequest",
-        "description": "A galaxy to observe (see Renders.observed): the project of its piece,\nits options and the values of its parameters (as a galaxy to render;\nthe defaults for those not given, also of the observation), the\nobservation of the project that sees it, by name, and the dataset it\nis paired with, if any (a piece of the project by name, or its\noptions); and what the galaxy is, for the pages that show the renders\nthat run long."
+        "description": "A galaxy to observe (see Renders.observed): the project of its piece,\nits options and the values of its parameters (as a galaxy to render;\nthe defaults for those not given, also of the observation), the\nobservation of the project that sees it, by name, or its options\n(e.g. as it is edited), and the dataset it is paired with, if any (a\npiece of the project by name, or its options); a shift of the galaxy\non the sky, if any (x, y; arcsec: e.g. as it is dragged in a picture;\nsee Renders.observed); and what the galaxy is, for the pages that\nshow the renders that run long."
       },
       "PSFRequest": {
         "properties": {
@@ -4680,6 +4974,73 @@
         ],
         "title": "PieceRequest",
         "description": "A piece (or a setup) to create: its project, its folder (e.g.\ngalaxies, psfs or setups), its name (its path in the folder, without\n.yaml), and its content (its options); by default, that of the\ntemplate of its folder."
+      },
+      "PlacementInfo": {
+        "properties": {
+          "centre": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Centre"
+          },
+          "velocity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Velocity"
+          },
+          "in_field": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Field"
+          },
+          "in_channels": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Channels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "centre",
+          "velocity",
+          "in_field",
+          "in_channels"
+        ],
+        "title": "PlacementInfo",
+        "description": "Where a galaxy is for an observation (see Placement): its centre (x,\ny; arcsec), its systemic velocity on the channels (km/s), and whether\nthey are in the field and in the channels of the observation (null\nfor what it or the galaxy has not)."
       },
       "PreferencesInfo": {
         "properties": {
@@ -4980,6 +5341,37 @@
         ],
         "title": "RunInfo",
         "description": "A run: its manifest (see gbkfit.outputs)."
+      },
+      "SamplingInfo": {
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FieldInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "channels": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChannelsInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "channels"
+        ],
+        "title": "SamplingInfo",
+        "description": "The sampling of an observation alone, as far as the library can make\nit (null for what it has not, or cannot be made): its field on the\nsky and its channels."
       },
       "ServerInfo": {
         "properties": {

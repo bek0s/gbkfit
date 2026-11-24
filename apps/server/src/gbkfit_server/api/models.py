@@ -13,11 +13,15 @@ from gbkfit_server.services.jobs import TASKS
 __all__ = [
     'ArrayInfo',
     'ArrayProblem',
+    'ChannelsInfo',
     'CheckRequest',
     'CheckResult',
     'ComponentPartInfo',
     'ComponentType',
+    'DatasetGivesInfo',
+    'DatasetGivesRequest',
     'Diagnostic',
+    'FieldInfo',
     'FileEntry',
     'FolderInfo',
     'GalaxyExtraRequest',
@@ -40,12 +44,14 @@ __all__ = [
     'PieceReference',
     'PieceRename',
     'PieceRequest',
+    'PlacementInfo',
     'PreferencesInfo',
     'ProjectInfo',
     'ProjectRename',
     'ProjectRequest',
     'RenderInfo',
     'RunInfo',
+    'SamplingInfo',
     'ServerInfo',
     'SessionInfo',
     'SessionRequest',
@@ -204,6 +210,17 @@ class ObservationRequest(BaseModel):
     observation: dict[str, Any]
 
 
+class DatasetGivesRequest(BaseModel):
+    """
+    A dataset to copy into an observation of a type (see
+    Observations.of_dataset): the project, the type of the observation,
+    and the dataset (a piece of the project by name, or its options).
+    """
+    project: str
+    type: str
+    dataset: str | dict[str, Any]
+
+
 class PartRequest(BaseModel):
     """
     A part that observations share to describe: the project of its piece,
@@ -317,15 +334,19 @@ class GalaxyRenderRequest(BaseModel):
     A galaxy to render (see Renders.galaxy): the project of its piece, its
     options (its files relative to the project), the values of its
     parameters (numbers, or lists of them for vectors; the defaults for
-    those not given), how it is seen ('sky', 'face-on' or 'edge-on'), and
-    the pixels across; and what it is, for the pages that show the
-    renders that run long (e.g. the name of its piece).
+    those not given), how it is seen ('sky', 'face-on' or 'edge-on'), the
+    pixels across, and the width and the centre of its field (arcsec; x
+    and y as the model measures them), if given (by default, about the
+    origin, as wide as the galaxy); and what it is, for the pages that
+    show the renders that run long (e.g. the name of its piece).
     """
     project: str
     galaxy: dict[str, Any]
     properties: dict[str, Any] = {}
     view: Literal['sky', 'face-on', 'edge-on'] = 'sky'
     size: int = 160
+    field: float | None = None
+    centre: tuple[float, float] | None = None
     label: str | None = None
 
 
@@ -334,16 +355,19 @@ class ObservedRequest(BaseModel):
     A galaxy to observe (see Renders.observed): the project of its piece,
     its options and the values of its parameters (as a galaxy to render;
     the defaults for those not given, also of the observation), the
-    observation of the project that sees it, by name, and the dataset it
-    is paired with, if any (a piece of the project by name, or its
-    options); and what the galaxy is, for the pages that show the renders
-    that run long.
+    observation of the project that sees it, by name, or its options
+    (e.g. as it is edited), and the dataset it is paired with, if any (a
+    piece of the project by name, or its options); a shift of the galaxy
+    on the sky, if any (x, y; arcsec: e.g. as it is dragged in a picture;
+    see Renders.observed); and what the galaxy is, for the pages that
+    show the renders that run long.
     """
     project: str
     galaxy: dict[str, Any]
     properties: dict[str, Any] = {}
-    observation: str
+    observation: str | dict[str, Any]
     dataset: str | dict[str, Any] | None = None
+    shift: tuple[float, float] | None = None
     label: str | None = None
 
 
@@ -380,16 +404,76 @@ class ObservedArrayInfo(BaseModel):
     rpix: list[float]
 
 
+class PlacementInfo(BaseModel):
+    """
+    Where a galaxy is for an observation (see Placement): its centre (x,
+    y; arcsec), its systemic velocity on the channels (km/s), and whether
+    they are in the field and in the channels of the observation (null
+    for what it or the galaxy has not).
+    """
+    centre: tuple[float, float] | None
+    velocity: float | None
+    in_field: bool | None
+    in_channels: bool | None
+
+
 class ObservedInfo(BaseModel):
     """
     A galaxy as an observation of its project sees it: the type of the
     observation (e.g. 'pixel_spectra'), its arrays (the model of each item,
-    and the data and errors of the data, if it has them), and the warnings
-    of the library as it set them up.
+    and the data and errors of the data, if it has them), the warnings of
+    the library as it set them up, and where the galaxy is for it (null of
+    a setup, of many galaxies).
     """
     type: str
     arrays: list[ObservedArrayInfo]
     notes: list[str]
+    placement: PlacementInfo | None = None
+
+
+class FieldInfo(BaseModel):
+    """
+    The field of an observation on the sky (see Field): its centre (x, y;
+    arcsec, as the model measures positions, from its reference pixel,
+    which can be off the image), its width and height (arcsec), and the
+    rotation of its pixels (degrees).
+    """
+    centre: tuple[float, float]
+    size: tuple[float, float]
+    rota: float
+
+
+class ChannelsInfo(BaseModel):
+    """
+    The channels of an observation: the velocities of the first and the
+    last (km/s), their width (km/s) and their number.
+    """
+    first: float
+    last: float
+    step: float
+    size: int
+
+
+class SamplingInfo(BaseModel):
+    """
+    The sampling of an observation alone, as far as the library can make
+    it (null for what it has not, or cannot be made): its field on the
+    sky and its channels.
+    """
+    field: FieldInfo | None
+    channels: ChannelsInfo | None
+
+
+class DatasetGivesInfo(BaseModel):
+    """
+    What a dataset gives an observation of a kind, to copy into it: the
+    options of its sampling, and its PSF (the Gaussian of the beam of the
+    data; null if they have none, or one for each channel, with why in
+    psf_note).
+    """
+    sampling: dict[str, Any]
+    psf: dict[str, Any] | None
+    psf_note: str | None
 
 
 class CubeRenderInfo(BaseModel):
