@@ -20,13 +20,13 @@ import { significant } from '../../components/format';
 import { Close } from '../../components/ui/basics';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
 import { AddMenu, FoldAll, PieceHead } from '../../components/ui/pieces';
-import { NumberInput, Row } from '../../components/ui/rows';
+import { ChoiceBox, NumberInput, Row } from '../../components/ui/rows';
 import { useRemembered } from '../../shell/remember';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { DirectionMark, RingMark } from './Marks';
 import { freeCount, ParamLine, paramText, type NumbersContext } from './Numbers';
 import { asList, asOneOrList, componentName, componentsOf, freshName, getAt, isObject, itemText, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
-import { unitText } from './ParamField';
+import { unitText } from '../../components/units';
 import { ownedBy, settingOf, type Param } from './params';
 import { memberOf, propertiesOf, restOf, retyped, startOf, titled, typesOf, type TypeChoice } from './schema';
 import { extentOf, familyOfOption, HEAD_OPTIONS, nameBase, optionTitle, partsOfType, referencesOf, settingsOfType, withReferencesRenamed, type ComponentTypes, type PartInfo } from './types';
@@ -1762,23 +1762,6 @@ function MassPiece({
 
 // ---------------------------------------------------------------------
 // Small parts
-
-// A choice, in the box of a row: what is chosen, and a menu of the
-// choices
-function ChoiceBox({ label, text, title, entries, width = 240 }: { label: string; text: ReactNode; title?: string; entries: MenuEntry[]; width?: number }) {
-  return (
-    <DropMenu
-      label={label}
-      width={width}
-      entries={entries}
-      target={
-        <button type="button" className="sh-num gm-choice" title={title ?? (typeof text === 'string' ? text : undefined)}>
-          <span>{text}</span>
-        </button>
-      }
-    />
-  );
-}
 
 // A type of a family to choose (e.g. of a velocity trait), in the box of a
 // row: its title (or the text given, e.g. its type), a menu of the types,

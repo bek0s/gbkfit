@@ -16,7 +16,8 @@ import { significant } from '../../components/format';
 import { ParamRow, Row, StatePill } from '../../components/ui/rows';
 import type { GalaxyDraft } from './draft';
 import type { Options } from './options';
-import { ParamField, unitText } from './ParamField';
+import { ParamField } from './ParamField';
+import { unitText } from '../../components/units';
 import { naturalSpan, settingOf, shortName, valueAt, withFreedom, withRange, withValues, type Param, type Properties, type Setting } from './params';
 
 export interface NumbersContext {

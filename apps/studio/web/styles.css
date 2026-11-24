@@ -1153,104 +1153,146 @@ button.sh-num:hover, button.sh-num[aria-expanded="true"] { border-color: var(--m
   .ds-body[data-side="right"] { grid-template-columns: minmax(0, 1fr) 340px; }
 }
 
-/* the screen of an observation: its view (its stages, the sky, its
-   spectral resolution and its checks) and its dock */
+/* the view beside a sheet or a dock (of the lens, of a fit), and what
+   it says while it has nothing to show */
 .ob-view { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 14px 18px 16px; }
-.ob-stages { display: flex; gap: 0; margin: 0; padding: 0; list-style: none; overflow-x: auto; flex: none; }
-.ob-stages li { flex: 1 1 0; min-width: 120px; position: relative; }
-.ob-stages li + li::before { content: ''; position: absolute; left: -5px; top: 50%; width: 9px; height: 9px; transform: translateY(-50%) rotate(45deg); border-top: 1px solid var(--line2); border-right: 1px solid var(--line2); background: var(--bg); z-index: 1; }
-.ob-stages button { width: 100%; height: 100%; display: grid; gap: 3px; padding: 8px 14px; border: 1px solid var(--line); border-left-width: 0; background: var(--panel); color: var(--fg); text-align: left; }
-.ob-stages li:first-child button { border-left-width: 1px; border-radius: 9px 0 0 9px; }
-.ob-stages li:last-child button { border-radius: 0 9px 9px 0; }
-.ob-stages button:hover { background: var(--panel2); }
-.ob-stage-title { font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
-.ob-stage-glance { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--text-body); }
-.ob-figures { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 14px; }
-.ob-side { min-height: 0; display: flex; flex-direction: column; gap: 14px; overflow: auto; }
-.ob-figure { margin: 0; display: flex; flex-direction: column; min-height: 0; padding: 10px 12px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
-.ob-figure figcaption { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 14px; padding: 0 2px 8px; font: var(--text-heading); color: var(--fg2); }
-.ob-sky { min-height: 0; }
-.ob-stage { flex: 1; min-height: 200px; display: grid; place-items: center; overflow: hidden; }
-.ob-canvas { position: relative; }
-.ob-canvas .map canvas { border-radius: 6px; }
-.ob-grid { --cell: 0px; border: 1px dashed var(--line2); border-radius: 6px; background-color: var(--panel2); background-image: linear-gradient(to right, var(--line) 1px, transparent 1px), linear-gradient(to bottom, var(--line) 1px, transparent 1px); background-size: var(--cell) var(--cell); }
-.ob-grid-size { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 6px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-data-small); }
-.ob-ellipses { position: absolute; inset: 0; pointer-events: none; }
-.ob-ellipse-box { fill: color-mix(in srgb, var(--panel) 70%, transparent); stroke: var(--line2); }
-.ob-psf { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 1.6; }
-.ob-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font: var(--text-data-small); letter-spacing: 0; color: var(--muted); }
-.ob-legend i { display: inline-block; width: 16px; margin-right: 5px; vertical-align: middle; }
-.ob-key-psf { border-top: 2px solid var(--accent); }
 .ob-empty { margin: auto; padding: 20px; color: var(--muted); font: var(--text-body); text-align: center; }
-.ob-plot { width: 100%; height: 92px; }
-.ob-channel { stroke: var(--line2); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.ob-lsf { fill: none; stroke: var(--accent); stroke-width: 1.8; vector-effect: non-scaling-stroke; }
-.ob-fwhm { stroke: var(--fg2); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-.ob-axis { stroke: var(--line2); vector-effect: non-scaling-stroke; }
-.ob-caption { margin: 4px 0 0; font: var(--text-data-small); color: var(--muted); }
-.ob-checks ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font: var(--text-body); }
-.ob-checks li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 6px; color: var(--muted); }
-.ob-checks li[data-ok="true"] .ob-check-mark { color: var(--ok); }
-.ob-checks li[data-ok="false"] { color: var(--fg); }
-.ob-checks li[data-ok="false"] .ob-check-mark { color: var(--warn); font-weight: 600; }
 
-/* (the forms of the dock of an observation) */
+/* (the forms of docks of rows of a label and a field: of a fit) */
 .ob-form { display: grid; gap: 10px; }
 .ob-row { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
 .ob-label { font: var(--text-label); color: var(--muted); }
-/* (the forms of the schema in the sections, in the columns of their rows:
-   their labels in the same words and type) */
+/* (the forms of the schema in them, in the columns of their rows: their
+   labels in the same words and type) */
 .ob-form .schema-row { grid-template-columns: 104px minmax(0, 1fr); }
 .ob-form .schema-label { font: var(--text-label); }
 .ob-field { min-width: 0; }
 .ob-field .ui-segments { justify-self: start; }
-.ob-unit { min-width: 28px; font: var(--text-data-small); color: var(--faint); }
-.ob-pair { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px; color: var(--faint); }
-.ob-sub { margin-top: 4px; font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
 .ob-text { margin: 0; color: var(--muted); font: var(--text-label); }
-.ob-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: var(--text-label); }
-.ob-link:hover { text-decoration: underline; }
-.ob-response { display: grid; gap: 8px; }
-.ob-nested { padding-left: 10px; border-left: 2px solid var(--line2); }
-/* (read only: the numbers of the data; the FWHM measured of a PSF or an
-   LSF, under it) */
-.ob-measure { margin: -4px 0 0 112px; font: var(--text-data-small); color: var(--muted); }
-/* (names as chips, and what adds one) */
-.ob-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 26px; }
-.ob-chip { display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 3px 0 9px; border-radius: 11px; background: var(--panel2); font: var(--text-data-small); color: var(--fg); }
-.ob-chip button { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 3px; background: none; color: var(--faint); font: 13px/1 var(--sans); }
-.ob-chip button:hover { color: var(--err); }
-.ob-chip-add { height: 22px; padding: 0 6px; border: 0; border-radius: 5px; background: none; color: var(--muted); font: var(--text-label); }
-.ob-chip-add:hover, .ob-chip-add[aria-expanded="true"] { background: var(--panel2); color: var(--fg); }
-.ob-chip-input { flex: 1; min-width: 90px; height: 24px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--fg); font: var(--text-label); outline: none; }
-.ob-chip-input:hover { border-color: var(--line2); }
-.ob-chip-input:focus { border-color: var(--accent); background: var(--field); }
-.ob-chip-input::placeholder { color: var(--faint); }
-/* (a patch of the noise of the mock data, and what it is) */
-.ob-noise-body { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 12px; }
-.ob-noise-body canvas { width: 96px; height: 96px; border-radius: 6px; image-rendering: pixelated; }
-.ob-noise-body span { display: grid; gap: 4px; font: var(--text-body); }
-.ob-noise-body small { font: var(--text-data-small); color: var(--muted); }
-.ob-more { border-top: 1px solid var(--line); padding-top: 8px; }
-.ob-more > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--muted); font: var(--text-label); }
-.ob-more > summary:hover { color: var(--fg); }
-.ob-more > summary small { margin-left: auto; font: var(--text-data-small); color: var(--faint); }
-.ob-more-body { margin-top: 8px; }
-.ob-schema .schema-row, .ob-nested .schema-row, .ob-more .schema-row { grid-template-columns: 96px minmax(0, 1fr); }
 
-/* (a narrower sheet on narrow screens, on the side the user prefers) */
+/* (a narrower sheet on narrow screens, on the side the user prefers: of
+   the lens and of the observation) */
 @media (max-width: 1280px) {
   .ob-body[data-side="left"] { grid-template-columns: 360px minmax(0, 1fr); }
   .ob-body[data-side="right"] { grid-template-columns: minmax(0, 1fr) 360px; }
-  .ob-figures { grid-template-columns: minmax(0, 1fr); overflow: auto; }
 }
-.ob-names { width: 100%; height: 28px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 6px; background: var(--field); color: var(--fg); font: var(--text-data); outline: none; }
-.ob-names:focus { border-color: var(--accent); }
-.ob-names::placeholder { color: var(--faint); font-family: var(--sans); }
-.ob-checks-row { display: flex; flex-wrap: wrap; gap: 6px 14px; font: var(--text-body); color: var(--fg2); }
-.ob-checks-row label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-.ob-checks-row input { accent-color: var(--accent); }
-.ob-number { display: block; min-width: 0; }
+
+/* the screen of an observation (see screens/observation): its sheet, in
+   the blocks of the sheets of the lens and the galaxy (.sh-*), its units
+   as wide as a galaxy's; and its picture, as the lens's (.lp-*) */
+.lp-sheet.ob-sheet { --unit: 34px; border-right: 1px solid var(--line); }
+/* (its rows: no pills; a box column of 160 px, in which single numbers
+   and short choices keep the 88 px of the other sheets, right-aligned,
+   and pairs and long choices take all of it; the units in one column) */
+.ob-sheet .sh-row { grid-template-columns: minmax(0, 1fr) 160px var(--unit); }
+.ob-sheet .sh-pill-room { display: none; }
+.ob-sheet .sh-row > .sh-num { justify-self: end; width: 88px; }
+.ob-sheet .sh-wide-box { grid-column: 2; }
+/* (a group of options: its head, as the title of a row, and its rows,
+   indented by a rule; of a list of typed items, a button that adds one) */
+.ob-group-head { padding: 6px 6px 2px 4px; }
+.ob-group { display: grid; gap: 2px; margin: 0 0 6px 6px; padding-left: 10px; border-left: 2px solid var(--line2); }
+.ob-add { justify-self: start; margin: 2px 0 0 4px; padding: 3px 8px; border: 1px dashed var(--line2); border-radius: 5px; background: none; color: var(--muted); font: var(--text-label); cursor: pointer; }
+.ob-add:hover { color: var(--fg); border-color: var(--fg2); }
+.sheet-layout[data-side="right"] > .ob-sheet { border-right: 0; border-left: 1px solid var(--line); }
+.sh-say { font: var(--text-caption); letter-spacing: normal; text-transform: none; color: var(--faint); }
+/* (its kind: the first and largest choice, its title and what it is) */
+.ob-kind { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line2); border-radius: 7px; background: var(--field); color: var(--fg); text-align: left; cursor: pointer; }
+.ob-kind::after { content: "\25BE"; color: var(--faint); font-size: 11px; }
+.ob-kind:hover, .ob-kind[aria-expanded="true"] { border-color: var(--muted); }
+.ob-kind:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.ob-kind span { display: grid; min-width: 0; }
+.ob-kind b { font: var(--text-heading); color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-kind small { font: var(--text-data-small); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* (a value by default, in a choice: faint) */
+.gm-choice [data-default] { color: var(--faint); }
+/* (the parts of its instrument: no mark, no colour of their own) */
+.ob-piece { --piece: var(--line2); }
+.ob-piece > .problem-field > .sh-piece-head { grid-template-columns: 12px minmax(0, 1fr) auto auto auto; }
+.ob-piece .sh-dot { display: none; }
+.ob-piece[data-none] .sh-piece-type { color: var(--faint); }
+.ob-piece[data-open] > .problem-field > .sh-piece-head .sh-chev { transform: rotate(90deg); }
+.ob-piece .sh-piece-body { border-left-color: var(--line2); }
+.ob-none-note { padding: 4px 4px 6px; }
+/* (a value set elsewhere, read only: dashed; a text, from its left; the
+   unit of a quantity, a menu of its units) */
+.sh-num.ob-ro { display: block; overflow: hidden; border-style: dashed; background: none; color: var(--faint); line-height: 24px; text-overflow: ellipsis; white-space: nowrap; }
+.sh-num.ob-text-box { text-align: left; font: var(--text-label); }
+.ob-unit-pick { max-width: 100%; height: 20px; padding: 0 3px; border: 0; border-radius: 4px; background: none; color: var(--faint); font: var(--text-data-small); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-unit-pick:hover, .ob-unit-pick[aria-expanded="true"] { background: color-mix(in srgb, var(--fg) 13%, transparent); color: var(--fg); }
+.ob-form-row { display: grid; gap: 2px; }
+/* (an item that folds, in a block: its line marked by the problems in
+   it while folded) */
+.ob-item > .gm-item-body[hidden] { display: none; }
+.ob-item[data-severity] > .gm-item-head { box-shadow: inset 2px 0 0 var(--err); }
+.ob-item[data-severity="warning"] > .gm-item-head { box-shadow: inset 2px 0 0 var(--warn); }
+
+/* (its picture: the main view, a galaxy as the observation sees it, with
+   its colour bar and, of a cube, the spectrum of a pixel under it; the
+   galaxy itself beside it, with its knobs; the checks under them. The
+   view of the galaxy at most 300 px, two fifths of the width left; the
+   main one as large a square as the height and the width leave it, so
+   never the smaller; every caption and line of a fixed height, whatever
+   it holds) */
+.ob-planes { --side: min(300px, calc((100cqw - 16px) * .4)); --under: 92px; --main: max(120px, min(calc(100cqh - var(--under)), calc(100cqw - 16px - var(--side)))); flex: 1; min-height: 0; container-type: size; overflow: auto; display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-start; gap: 14px 16px; padding: 16px; }
+.ob-planes[data-spectral] { --under: 264px; }
+.ob-main { flex: none; width: var(--main); display: grid; gap: 14px; min-width: 0; }
+.ob-galaxy-box { flex: none; width: var(--side); }
+.ob-checks { flex: 1 0 100%; min-width: 0; }
+.ob-plane { cursor: default; }
+.ob-plane[data-picks] { cursor: crosshair; }
+.ob-picked { fill: none; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.ob-psf-mark ellipse { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+.ob-key { display: inline-flex; align-items: center; gap: 5px; }
+.ob-key + .ob-key { margin-left: 10px; }
+.ob-key[data-off] { visibility: hidden; }
+.ob-key i { width: 14px; height: 0; }
+.ob-key-psf { border-top: 2px solid var(--accent); }
+.ob-key-pixels { border-top: 2px dashed var(--fg2); }
+.ob-key-spectrum { border-top: 2px solid var(--fg); }
+.ob-key-lsf { border-top: 2px solid var(--cat5); }
+.lp-grp .ob-ic-psf { stroke: var(--accent); }
+/* (a line under a plane: the ends of its colours and its unit, or of its
+   axis) */
+.ob-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 8px; height: 16px; font: var(--text-data-small); color: var(--faint); white-space: nowrap; }
+.ob-bar i { height: 6px; border-radius: 3px; }
+.ob-bar[data-off] i { visibility: hidden; }
+.ob-axis-line { grid-template-columns: auto minmax(0, 1fr) auto; }
+.ob-strip-box { height: 110px; border-radius: 8px; background: var(--panel); overflow: hidden; }
+.ob-strip { display: block; width: 100%; height: 100%; }
+.ob-tick { stroke: var(--line2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ob-axis { stroke: var(--line2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ob-spectrum { fill: none; stroke: var(--fg); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.ob-lsf { fill: none; stroke: var(--cat5); stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+/* (the knobs of the test galaxy, four lines; a note of the same height
+   for a galaxy of the project) */
+.ob-knobs { position: relative; display: grid; align-content: start; gap: 6px; height: 106px; padding-top: 4px; }
+.ob-knobs[data-off] > .ob-knob { visibility: hidden; }
+.ob-knob { display: grid; grid-template-columns: 96px minmax(0, 1fr) 64px; align-items: center; gap: 10px; height: 22px; color: var(--fg); font: var(--text-label); }
+.ob-knob > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-knob .lp-src-v { text-align: right; }
+.ob-knob .sh-knob { box-shadow: 0 0 0 3px var(--bg); }
+.ob-knobs-note { position: absolute; inset: 4px 0 auto; }
+/* (a narrow view, e.g. at a large zoom of the browser: each knob its name
+   and value over its track) */
+@container (max-width: 240px) {
+  .ob-knobs { height: auto; }
+  .ob-knob { grid-template-columns: minmax(0, 1fr) auto; row-gap: 0; height: auto; }
+  .ob-knob .sh-track { grid-column: 1 / -1; grid-row: 2; }
+}
+/* (the checks, chips) */
+.ob-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ob-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 24px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--fg2); font: var(--text-label); }
+.ob-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-chip b { font: var(--text-data-small); font-weight: 600; }
+.ob-chip[data-kind="ok"] b { color: var(--ok); }
+.ob-chip[data-kind="note"] b { color: var(--faint); }
+.ob-chip[data-kind="warn"] { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.ob-chip[data-kind="warn"] b { color: var(--warn); }
+/* (the galaxy of the picture, a choice in the bar) */
+.ob-pick { display: inline-flex; align-items: center; gap: 8px; }
+.sh-num.ob-pick-box { width: 140px; height: 28px; }
+@container (max-width: 150px) { .ob-key, .lp-compass { display: none; } }
 
 /* a galaxy seen by an observation (see screens/galaxy/Seen.tsx): the
    notes of the library over the viewer, or why the observation cannot see
@@ -1336,6 +1378,18 @@ button.sh-num:hover, button.sh-num[aria-expanded="true"] { border-color: var(--m
    box across them) */
 .sh-tools { grid-column: 3 / 5; display: flex; align-items: center; justify-content: flex-end; gap: 2px; min-width: 0; }
 .sh-wide { grid-column: 2 / 5; min-width: 0; }
+.sh-wide-box { grid-column: 2 / 4; min-width: 0; }
+/* (a pair of the sky: x, the link that ties them or room, y) */
+.sh-pair { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr); align-items: center; min-width: 0; }
+.sh-pair > .sh-num { padding: 0 5px; }
+.sh-pair[data-count] { column-gap: 4px; }
+.sh-pair[data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sh-pair[data-count="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.sh-link { width: 18px; height: 26px; padding: 0; border: 0; border-radius: 4px; background: none; display: grid; place-items: center; color: var(--faint); cursor: pointer; }
+.sh-link:hover { background: var(--panel2); }
+.sh-link:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sh-link[aria-pressed="true"] { color: var(--accent); }
+.sh-link svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
 .sh-state { height: 20px; padding: 0 8px; border: 1px solid var(--line2); border-radius: 999px; background: none; color: var(--muted); font: var(--text-caption); cursor: pointer; }
 .sh-state[data-free] { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: transparent; color: var(--fg); }
 .sh-state[data-free]::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 5px; border-radius: 50%; background: var(--accent); vertical-align: 1px; }

@@ -211,11 +211,13 @@ export function useSpectrum(
   pixel: [number, number] | null,
   region: [number, number, number, number] | null,
   reading: Reading | null = null,
+  enabled = true,
 ) {
   const where = pixel !== null ? { x: pixel[0], y: pixel[1] } : region !== null ? { x0: region[0], x1: region[1], y0: region[2], y1: region[3] } : {};
   const query = { hdu, ...where, ...readingQuery(reading) };
   return useQuery({
     queryKey: keys.view('spectrum', path, hdu, pixel?.join() ?? '', region?.join() ?? '', readingKey(reading)),
+    enabled,
     placeholderData: keepPreviousData,
     queryFn: () => data(api.GET('/api/v1/views/spectrum/{path}', { params: { path: { path }, query } })),
   });
@@ -819,16 +821,18 @@ export function useGalaxyCube(
   });
 }
 
+// (over a field of a width and centre, if given: see GalaxyField)
 export function useGalaxyRender(
   project: string,
   galaxy: Record<string, unknown> | undefined,
   properties: Record<string, unknown>,
   view: 'sky' | 'face-on' | 'edge-on',
   size = 160,
+  field: GalaxyField | null = null,
 ) {
   const label = useContext(RenderLabel);
   return useQuery({
-    queryKey: keys.view('galaxy', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), view, size),
+    queryKey: keys.view('galaxy', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), view, size, JSON.stringify(field)),
     enabled: galaxy !== undefined,
     placeholderData: keepPreviousData,
     retry: false,
@@ -837,7 +841,7 @@ export function useGalaxyRender(
         await data(
           api.POST('/api/v1/views/galaxy', {
             signal,
-            body: { project, galaxy: galaxy ?? {}, properties, view, size, label },
+            body: { project, galaxy: galaxy ?? {}, properties, view, size, label, field: field?.width ?? null, centre: field?.centre ?? null },
             parseAs: 'arrayBuffer',
           }),
         ),
@@ -849,12 +853,6 @@ export function useGalaxyRender(
   });
 }
 
-// A galaxy as an observation of its project sees it (see the server's
-// /views/observed), paired with a dataset of the project if given (the
-// data win: their grid is that of the model): its model of each item (and
-// the data, if any), each kept by the server for the views of cubes; the
-// type of the observation; and what the library noted. Asked again as the
-// galaxy, its values, the observation or the dataset change.
 // A setup of a project of the given options (e.g. as it is edited), as
 // the library describes it (see the server's /setups/describe): its
 // parameters, each with the properties its layers give it and the file of
@@ -884,11 +882,19 @@ export function useSetupObserved(path: string, setup: Record<string, unknown> | 
   });
 }
 
+// A galaxy as an observation of its project sees it (see the server's
+// /views/observed): the observation by name, or its options (e.g. as it
+// is edited), paired with a dataset of the project if given (the data
+// win: their grid is that of the model): its model of each item (and the
+// data, if any), each kept by the server for the views of cubes; the type
+// of the observation; what the library noted; and where the galaxy is for
+// it. Asked again as the galaxy, its values, the observation or the
+// dataset change.
 export function useObserved(
   project: string,
   galaxy: Record<string, unknown> | undefined,
   properties: Record<string, unknown>,
-  observation: string | null,
+  observation: string | Record<string, unknown> | null,
   // (the options of the observation, and of the dataset, so that it is
   // asked again as they change)
   seen: unknown,
@@ -896,16 +902,52 @@ export function useObserved(
   of?: string,
   // (the dataset of the project it is paired with, by name; none: none)
   dataset: string | null = null,
+  // (the galaxy moved on the sky, x and y, arcsec: e.g. as it is dragged
+  // in a picture; none: none)
+  shift: [number, number] | null = null,
 ) {
   const screen = useContext(RenderLabel);
   const label = of ?? screen;
   return useQuery({
-    queryKey: keys.view('observed', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), observation ?? '', dataset ?? '', JSON.stringify(seen ?? null)),
+    queryKey: keys.view('observed', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), JSON.stringify(observation), dataset ?? '', JSON.stringify(seen ?? null), JSON.stringify(shift)),
     enabled: galaxy !== undefined && observation !== null,
     placeholderData: keepPreviousData,
     retry: false,
     // (its arrays are kept by the server for a while only)
     gcTime: 0,
-    queryFn: ({ signal }) => data(api.POST('/api/v1/views/observed', { signal, body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '', dataset, label } })),
+    queryFn: ({ signal }) => data(api.POST('/api/v1/views/observed', { signal, body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '', dataset, shift, label } })),
+  });
+}
+
+// A galaxy as an observation sees it (see useObserved)
+export type Observed = NonNullable<ReturnType<typeof useObserved>['data']>;
+
+// The field of a render of a galaxy: its width and its centre (x, y;
+// arcsec, as the model measures positions)
+export type GalaxyField = { width: number; centre: [number, number] };
+
+// The sampling of an observation of options of a piece of a project alone
+// (see the server's /observations/sampling): its field on the sky and its
+// channels, as far as the library can make it; the last stays while the
+// next comes
+export function useObservationSampling(project: string, observation: Record<string, unknown> | undefined, depends: unknown = null) {
+  return useQuery({
+    queryKey: keys.view('observation-sampling', project, JSON.stringify(observation ?? null), JSON.stringify(depends)),
+    enabled: observation !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: ({ signal }) => data(api.POST('/api/v1/observations/sampling', { signal, body: { project, observation: observation ?? {} } })),
+  });
+}
+
+// The sampling of an observation (see useObservationSampling)
+export type ObservationSampling = NonNullable<ReturnType<typeof useObservationSampling>['data']>;
+
+// What a dataset of a project gives an observation of a type, to copy
+// into it (see the server's /observations/of-dataset): the options of its
+// sampling, and the Gaussian of its beam, if it has one
+export function useDatasetGives() {
+  return useMutation({
+    mutationFn: ({ project, type, dataset }: { project: string; type: string; dataset: string }) => data(api.POST('/api/v1/observations/of-dataset', { body: { project, type, dataset } })),
   });
 }

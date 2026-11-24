@@ -4,7 +4,7 @@
 // shows (the field, of a position), or about its value.
 import { ParamRow } from '../../components/ui/rows';
 import { rangeOf } from '../../components/values';
-import { unitText } from '../galaxy/ParamField';
+import { unitText } from '../../components/units';
 import { isObject } from './draft';
 
 // A parameter as the server describes it (see LensInfo): its name in the

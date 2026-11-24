@@ -1,26 +1,27 @@
 // The screen of an observation of the project: how an instrument sees the
-// galaxies, on a sampling of its own (the data it is fitted to are paired
-// with it by the setups). Its view shows it at a glance (its stages, the
-// sky of its grid with its PSF to scale, its spectral resolution, a patch
-// of the noise of its mock data, and its checks); its dock sets it, a
-// section for each stage, in the order of the path of the light (what it
-// sees, its instrument, what it records, the noise of its mock data), and
-// then how accurately and fast its model is made. The problems the library
-// finds in it, alone, lead from the head to their sections. Its options
-// are edited as a whole, and saved or reverted (see editing).
-import { useLsfView, useObservationProblems, usePiece, usePsfView } from '../../api/queries';
+// galaxies, on a sampling of its own (the data a fit pairs it with have
+// theirs). Its sheet sets it (see Sheet: its kind first, which decides the
+// rest; its sampling; its instrument; what it sees; the noise of its mock
+// data; more), and its picture shows a galaxy as it sees it beside the
+// galaxy itself (see Picture). The problems the library finds in it,
+// alone, are at their rows, and counted in the head. Its options are
+// edited as a whole, and saved or reverted (see editing).
+import { useEffect, useState } from 'react';
+import { useDatasetGives, useLsfView, useObservationProblems, useObservationSampling, usePiece, usePsfView } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
-import { membersOf, SchemaForm, titleOf, typeOf, type Options } from '../../components/SchemaForm';
-import { Dock, DockSection, NeedsNote } from '../../components/ui/dock';
+import { ProblemCounter, ProblemsProvider, type Problem } from '../../components/Problems';
+import { propertiesOf, resolve, titleOf, type Defs, type Options } from '../../components/SchemaForm';
+import { SheetLayout } from '../../components/ui/sheet';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
 import { useEditedBlock } from '../editing';
 import { problemText } from '../galaxy/Model';
-import { ACCURACY_KEYS, checksOf, HANDLED_KEYS, isObject, isSpectral, LIGHT_KEYS, noiseText, objectAt, pairOf, psfEllipse, sectionOf, skyKeys, textAt } from './model';
-import { AccuracyFields, InstrumentFields, NoiseFields, OptionFields, RecordsFields, SeesFields } from './Sections';
-import { Checks, NoisePatch, Resolution, Sky, Stages } from './View';
-import { SheetLayout } from '../../components/ui/sheet';
+import { InstrumentBlock } from './Instrument';
+import { hasOption, isObject, noiseOf, objectAt, observationMember, psfEllipse, samplingKeys, textAt, withKey } from './model';
+import type { RowsContext } from './OptionRows';
+import { ObservationPicture } from './Picture';
+import { KindBlock, MoreBlock, NoiseBlock, SamplingBlock, SeesBlock } from './Sheet';
 
 export function ObservationScreen({ name }: { name: string }) {
   const { project, go } = useStudio();
@@ -29,119 +30,153 @@ export function ObservationScreen({ name }: { name: string }) {
   const head = useBlockHead(root, 'observations', name);
   const options = edited.options;
   const defs = edited.defs;
-  const named = (folder: string, value: unknown) => (typeof value === 'string' && (edited.blocks[folder] ?? []).includes(value) ? joinPath(root, `${folder}/${value}.yaml`) : null);
+  const blocks = edited.blocks;
+  const named = (folder: string, value: unknown) => (typeof value === 'string' && (blocks[folder] ?? []).includes(value) ? joinPath(root, `${folder}/${value}.yaml`) : null);
 
-  // (its PSF and its LSF, of the project or given in place, as the server
-  // draws them)
+  // (its PSF, LSF and noise, of the project or given in place, and their
+  // widths as the server draws them)
   const instrument = options ? objectAt(options, 'instrument') : {};
-  const spectral = options ? objectAt(options, 'spectral') : {};
   const psfPiece = usePiece(named('psfs', instrument.psf)).data as Options | undefined;
   const lsfPiece = usePiece(named('lsfs', instrument.lsf)).data as Options | undefined;
+  const noisePiece = usePiece(named('noise', options?.noise)).data as Options | undefined;
   const psfOptions = isObject(instrument.psf) ? instrument.psf : psfPiece;
   const lsfOptions = isObject(instrument.lsf) ? instrument.lsf : lsfPiece;
   const psfView = usePsfView(root, psfOptions ?? {}, null, psfOptions !== undefined && typeof psfOptions.type === 'string');
-  // (its LSF at its rest: of its widths of wavelength or frequency)
+  const spectral = options ? objectAt(options, 'spectral') : {};
   const lsfView = useLsfView(root, lsfOptions ?? {}, { step: null, rest: textAt(spectral, 'rest'), unit: null, channel: null }, lsfOptions !== undefined && typeof lsfOptions.type === 'string');
-  // (the noise of its mock data, of the project or in place)
-  const noisePiece = usePiece(named('noise', options?.noise)).data as Options | undefined;
-  const noiseOptions = isObject(options?.noise) ? options.noise : noisePiece;
-  // (its problems as the library finds them, alone; asked again as the
-  // pieces it names change)
-  const described = useObservationProblems(root, options, [psfPiece, lsfPiece, noisePiece]);
+  // (its problems as the library finds them, alone, and its sampling;
+  // asked again as the pieces it names change)
+  const pieces = [psfPiece, lsfPiece, noisePiece];
+  const described = useObservationProblems(root, options, pieces);
+  const sampling = useObservationSampling(root, options, pieces);
 
+  // (a dataset copied: its sampling, or the beam of its data as its PSF;
+  // what went wrong, at the row of what was copied, until the next edit)
+  const gives = useDatasetGives();
+  const [copyProblem, setCopyProblem] = useState<Problem | null>(null);
+  // (the parts of its instrument hidden in the picture, not saved)
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => setCopyProblem(null), [options]);
   if (project === null) return null;
+  const set = edited.set;
+  const copySampling = async (dataset: string) => {
+    if (!options) return;
+    try {
+      const given = await gives.mutateAsync({ project, type: String(options.type), dataset });
+      const keys = samplingKeys(observationMember(defs, options.type));
+      const kept = Object.fromEntries(Object.entries(options).filter(([key]) => !keys.includes(key)));
+      set({ ...kept, ...given.sampling });
+    } catch (e) {
+      setCopyProblem({ severity: 'error', path: [], message: `${dataset}: ${(e as Error).message}` });
+    }
+  };
+  const copyBeam = async (dataset: string) => {
+    if (!options) return;
+    try {
+      const given = await gives.mutateAsync({ project, type: String(options.type), dataset });
+      if (!given.psf) throw new Error(given.psf_note ?? 'the data have no beam');
+      set(withKey(options, 'instrument', { ...instrument, psf: given.psf }));
+    } catch (e) {
+      setCopyProblem({ severity: 'error', path: ['instrument', 'psf'], message: `${dataset}: ${(e as Error).message}` });
+    }
+  };
+
   const title = (family: string, type: unknown) => (type === undefined ? '—' : titleOf(defs, family, String(type)));
-  // (of a kind of data on the sky; a profile has the form of the schema)
-  const sky = defs && options && options.type !== 'profile' ? membersOf(defs.observation ?? {}, defs).find((m) => typeOf(m) === options.type) : undefined;
+  const member = options ? observationMember(defs, options.type) : undefined;
+  const problems: Problem[] = [...(described.data ?? []).map((p) => ({ ...p, message: problemText(p.message) })), ...(copyProblem ? [copyProblem] : [])];
+  // (whether it can be drawn: none of its problems is an error; null
+  // while the problems of the options as they are come)
+  const canDraw = described.data && !described.isPlaceholderData ? !described.data.some((p) => p.severity === 'error') : null;
+  // (a quantity of an observation with channels starts in their unit:
+  // e.g. the width of its LSF in km/s)
+  const channelUnit = member && hasOption(member, 'spectral') ? unitOfChannels(defs) : null;
+  const ctx: RowsContext | null = defs ? { defs, project, blocks, openBlock: (folder, block) => go({ kind: 'block', folder, name: block }), units: channelUnit ? [channelUnit] : [] } : null;
+  const noise = options?.noise == null ? null : isObject(options.noise) ? noiseOf(options.noise, title) : noisePiece ? `${options.noise}: ${noiseOf(noisePiece, title)}` : String(options.noise);
+  const datasets = blocks.datasets ?? [];
   const psf = instrument.psf == null ? null : psfEllipse(psfView.data?.axes as [number, number, number | null] | undefined);
-  const lsfWidth = instrument.lsf == null ? null : (lsfView.data?.fwhm ?? null);
-  const channel = typeof spectral.step === 'number' ? spectral.step : null;
-  const grid = options && (Array.isArray(options.size) || typeof options.size === 'number') ? { size: pairOf(options.size), step: pairOf(options.step ?? 1) } : null;
-  const noise = noiseText(options?.noise, noiseOptions, title);
-  const checks = options ? checksOf({ options, psf, lsfWidth, noise }) : [];
-  // (the options of every observation on the sky that no section sets)
-  const others = sky && defs ? skyKeys(defs).filter((key) => !HANDLED_KEYS.includes(key)) : [];
-  const needs = (described.data ?? []).map((problem) => ({ text: problemText(problem.message), section: sky ? sectionOf(problem.path, others) : 'ob-all' }));
-  const needed = (section: string) => needs.some((need) => need.section === section);
-  const common = defs && options ? { defs, project, options, onChange: edited.set, blocks: edited.blocks, openBlock: (folder: string, block: string) => go({ kind: 'block', folder, name: block }) } : null;
+  const lsfFwhm = instrument.lsf == null ? null : (lsfView.data?.fwhm ?? null);
+  // (the observation in the picture: without the parts hidden; without a
+  // PSF, without its unit too, of light per beam, which needs one)
+  const shown = options && hidden.size ? pictured(options, instrument, hidden) : options;
+  const hide = (key: string) => setHidden((now) => (now.has(key) ? new Set([...now].filter((k) => k !== key)) : new Set([...now, key])));
 
   return (
-    <section className="screen ob-screen">
-      <ScreenHead up="observations" tags={options ? [title('observation', options.type)] : []} title={head.title}>
-        <NeedsNote needs={needs.map((need) => ({ text: need.text, at: need.section }))} />
-        <SaveControls saving={edited} />
-        {head.menu}
-      </ScreenHead>
-      {edited.error && <p className="error screen-error">{edited.error.message}</p>}
-      {!options || !common ? (
-        <p className="note screen-error">Reading the observation…</p>
-      ) : !sky ? (
-        <SheetLayout
-          className="ob-body"
-          width={400}
-          picture={
-            <div className="ob-view">
-              <p className="ob-empty">An observation of {title('observation', options.type).toLowerCase()}: its options are at the right.</p>
-            </div>
-          }
-          sheet={
-            <Dock label="The observation">
-              <DockSection id="ob-all" title="Options" needed={needed('ob-all')}>
-                <div className="ob-schema">
-                  <SchemaForm defs={common.defs} def="observation" project={project} value={options} onChange={edited.set} blocks={edited.blocks} openBlock={common.openBlock} />
-                </div>
-              </DockSection>
-            </Dock>
-          }
-        />
-      ) : (
-        <SheetLayout
-          className="ob-body"
-          width={400}
-          picture={
-            <div className="ob-view">
-              <Stages options={options} titleOf={title} noise={noise} />
-              <div className="ob-figures">
-                <Sky grid={grid} psf={psf} />
-                <div className="ob-side">
-                  {isSpectral(options.type) && <Resolution fwhm={lsfWidth} channel={channel} named={instrument.lsf != null} />}
-                  <NoisePatch noise={noiseOptions} text={noise} psf={psf} pixel={grid ? grid.step[0] : null} />
-                  <Checks checks={checks} />
-                </div>
-              </div>
-            </div>
-          }
-          sheet={
-            <Dock label="The observation">
-              <DockSection id="ob-sees" title="Sees" note={setCount(options, LIGHT_KEYS)} needed={needed('ob-sees')}>
-                <SeesFields {...common} />
-              </DockSection>
-              <DockSection id="ob-instrument" title="Instrument" needed={needed('ob-instrument')}>
-                <InstrumentFields {...common} psf={psf} lsfWidth={lsfWidth} channel={channel} titleOf={title} />
-              </DockSection>
-              <DockSection id="ob-records" title="Records" needed={needed('ob-records')}>
-                <RecordsFields {...common} titleOf={(type) => title('observation', type)} />
-              </DockSection>
-              <DockSection id="ob-noise" title="Noise" note={options.noise == null ? undefined : noise} needed={needed('ob-noise')}>
-                <NoiseFields {...common} titleOf={title} />
-              </DockSection>
-              <DockSection id="ob-accuracy" title="Accuracy and speed" note={setCount(options, ACCURACY_KEYS) ?? 'as by default'} needed={needed('ob-accuracy')} folded>
-                <AccuracyFields {...common} member={sky} />
-              </DockSection>
-              {others.length > 0 && (
-                <DockSection id="ob-more" title="Other options" note={setCount(options, others)} needed={needed('ob-more')}>
-                  <OptionFields {...common} member={sky} keys={others} />
-                </DockSection>
-              )}
-            </Dock>
-          }
-        />
-      )}
-    </section>
+    <ProblemsProvider problems={problems}>
+      <section className="screen ob-screen">
+        <ScreenHead up="observations" title={head.title}>
+          <ProblemCounter />
+          <SaveControls saving={edited} />
+          {head.menu}
+        </ScreenHead>
+        {edited.error && <p className="error screen-error">{edited.error.message}</p>}
+        {!options || !ctx ? (
+          <p className="note screen-error">Reading the observation…</p>
+        ) : (
+          <SheetLayout
+            className="ob-body"
+            width={400}
+            sheet={
+              <aside className="lp-sheet ob-sheet" aria-label="The observation">
+                <KindBlock ctx={ctx} options={options} member={member} onChange={set} />
+                {member && (
+                  <>
+                    <SamplingBlock ctx={ctx} options={options} member={member} sampling={sampling.data} onChange={set} datasets={datasets} onCopy={copySampling} />
+                    {hasOption(member, 'instrument') && (
+                      <InstrumentBlock
+                        ctx={ctx}
+                        options={options}
+                        onChange={set}
+                        shared={{ psf: psfPiece, lsf: lsfPiece }}
+                        psf={psf}
+                        lsfFwhm={lsfFwhm}
+                        channel={sampling.data?.channels?.step ?? null}
+                        datasets={datasets}
+                        onCopyBeam={copyBeam}
+                        hidden={hidden}
+                        onHide={hide}
+                      />
+                    )}
+                    <SeesBlock ctx={ctx} options={options} member={member} galaxies={blocks.galaxies ?? []} onChange={set} />
+                    <NoiseBlock ctx={ctx} options={options} member={member} shared={noisePiece} onChange={set} titleOf={title} />
+                    <MoreBlock ctx={ctx} options={options} member={member} onChange={set} />
+                  </>
+                )}
+              </aside>
+            }
+            picture={
+              <ObservationPicture
+                project={project}
+                options={shown ?? options}
+                canDraw={canDraw}
+                kindTitle={title('observation', options.type)}
+                sampling={sampling.data}
+                psf={hidden.has('psf') ? null : psf}
+                lsf={instrument.lsf != null && !hidden.has('lsf') && lsfView.data ? { values: lsfView.data.values, step: lsfView.data.step } : null}
+                lsfFwhm={hidden.has('lsf') ? null : lsfFwhm}
+                noise={noise}
+                galaxies={blocks.galaxies ?? []}
+              />
+            }
+          />
+        )}
+      </section>
+    </ProblemsProvider>
   );
 }
 
-function setCount(options: Options, keys: string[]): string | undefined {
-  const count = keys.filter((key) => options[key] != null).length;
-  return count ? `${count} set` : undefined;
+// An observation as its picture draws it: without the parts of its
+// instrument that are hidden; without a PSF, without its unit too (light
+// per beam needs a beam; the picture then shows its model in its own
+// unit)
+function pictured(options: Options, instrument: Options, hidden: ReadonlySet<string>): Options {
+  const kept = Object.fromEntries(Object.entries(instrument).filter(([key]) => !hidden.has(key)));
+  const next = withKey(options, 'instrument', Object.keys(kept).length ? kept : undefined);
+  return hidden.has('psf') ? withKey(next, 'unit', undefined) : next;
+}
+
+// The unit of the channels of an observation, as its schema gives it
+// (that of the width of the channels of a spectral axis), if any
+function unitOfChannels(defs: Defs | undefined): string | null {
+  const step = defs ? propertiesOf(resolve({ $ref: '#/$defs/SpectralAxis' }, defs)).step : undefined;
+  return typeof step?.unit === 'string' ? step.unit : null;
 }

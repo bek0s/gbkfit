@@ -11,7 +11,7 @@
 // over a field fitted to the lens as the screen opens (or fitted again,
 // or zoomed), kept as it is edited.
 import { useDebouncedValue } from '@mantine/hooks';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLensDescription, useLensView, type LensFrame } from '../../api/queries';
 import { membersOf, propertiesOf, titleOf, typeOf, type Defs, type Options } from '../../components/SchemaForm';
 import { fmt } from '../../components/format';
@@ -19,12 +19,13 @@ import { NeedsNote } from '../../components/ui/dock';
 import { AddMenu, FoldAll, PieceHead } from '../../components/ui/pieces';
 import { NumberInput, Row, useScrub } from '../../components/ui/rows';
 import { SheetLayout } from '../../components/ui/sheet';
+import { useLast } from '../../components/useLast';
 import { settled, snap } from '../../components/values';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { SaveControls, ScreenHead } from '../../shell/ScreenHead';
 import { useStudio } from '../../studio';
 import { problemText } from '../galaxy/Model';
-import { unitText } from '../galaxy/ParamField';
+import { unitText } from '../../components/units';
 import { typesOf } from '../galaxy/schema';
 import { isObject, useLensDraft, type LensDraft } from './draft';
 import { LightPath } from './LightPath';
@@ -177,14 +178,6 @@ export function LensScreen({ name }: { name: string }) {
       )}
     </section>
   );
-}
-
-// The latest of a value that was given (e.g. the last view drawn, while
-// the next comes)
-function useLast<T>(value: T | undefined): T | undefined {
-  const last = useRef(value);
-  if (value !== undefined) last.current = value;
-  return last.current;
 }
 
 // The lens itself: the path of the light, and its redshift and that of the

@@ -16,6 +16,7 @@ import { useFileSource } from './FileSources';
 import { Button, Close, TextField } from './ui/basics';
 import { joinPath } from './FilePicker';
 import { Choice, QuantityInput } from './ui/inputs';
+import { unitText } from './units';
 
 // A node of a JSON Schema (as the library writes them), and its
 // definitions (its $defs)
@@ -379,7 +380,7 @@ function Row({ name, node, required, children }: { name: string; node: Schema; r
       <div className="schema-field">
         {children}
         {/* (a column of units in every row, so that the fields line up) */}
-        <span className="schema-unit">{unit ?? ''}</span>
+        <span className="schema-unit">{unitText(unit)}</span>
       </div>
     </div>
   );

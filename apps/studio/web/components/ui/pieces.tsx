@@ -12,8 +12,8 @@ const stop = (event: { stopPropagation: () => void }) => event.stopPropagation()
 // that; its colour (that of the piece, --piece), name and type, and,
 // folded, what it is in a few words; a badge (its cell kept when empty);
 // its eye (or the room for one, so that nothing moves as it comes); and
-// its menu, which renames it (onRename; the field of its name in its
-// place) and does what else is given. A click on the line selects it
+// its menu, which renames it (onRename, if it can be renamed; the field
+// of its name in its place) and does what else is given. A click on the line selects it
 // (unfolded, if it was folded) or, if it is selected, selects it no
 // longer (see onSelect). What folds or selects it is given the line.
 export function PieceHead({
@@ -43,7 +43,7 @@ export function PieceHead({
   selected: boolean;
   onFold: (line: HTMLElement) => void;
   onSelect: (line: HTMLElement) => void;
-  onRename: (name: string) => void;
+  onRename?: (name: string) => void;
   eye?: ReactNode;
   menu: MenuEntry[];
   menuTitle: string;
@@ -82,7 +82,7 @@ export function PieceHead({
                 value={name}
                 onCommit={(to) => {
                   setRenaming(false);
-                  onRename(to);
+                  onRename?.(to);
                 }}
                 onCancel={() => setRenaming(false)}
               />
@@ -105,7 +105,7 @@ export function PieceHead({
           at="end"
           // (its rename gives the focus to the field of its name)
           returnFocus={false}
-          entries={[{ label: 'Rename', onClick: () => setRenaming(true) }, ...menu]}
+          entries={onRename ? [{ label: 'Rename', onClick: () => setRenaming(true) }, ...menu] : menu}
           target={
             <button type="button" className="sh-icon" title={menuTitle} aria-label="Its actions">
               <svg viewBox="0 0 16 16">

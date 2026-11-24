@@ -23,7 +23,7 @@ import { useStudio } from '../../studio';
 import { COLOURS } from './GalaxyScreen';
 import { valueText } from './Numbers';
 import { asList, componentName, componentsOf, isObject, itemText, type Options } from './options';
-import { unitText } from './ParamField';
+import { unitText } from '../../components/units';
 import { settingOf, type Param, type Properties } from './params';
 import { titled } from './schema';
 

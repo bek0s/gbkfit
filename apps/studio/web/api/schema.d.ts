@@ -459,6 +459,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/observations/sampling": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Observation Sampling
+         * @description Return the sampling of an observation of the options of a piece of a
+         *     project alone (with the pieces it names): its field on the sky (its
+         *     centre as the model measures positions, which galaxies are placed
+         *     by, and its size) and its channels, as far as the library can make
+         *     it (see Observations.sampling).
+         */
+        post: operations["observation_sampling_api_v1_observations_sampling_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/observations/of-dataset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Observation Of Dataset
+         * @description Return what a dataset gives an observation of a type, to copy into it
+         *     (e.g. a mock observation like those data, without them): the options
+         *     of its sampling and the Gaussian of its beam (see
+         *     Observations.of_dataset).
+         */
+        post: operations["observation_of_dataset_api_v1_observations_of_dataset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/observations/parts/describe": {
         parameters: {
             query?: never;
@@ -514,7 +561,8 @@ export interface paths {
         /**
          * View Galaxy
          * @description Render a galaxy of the options of a piece of a project at values of
-         *     its parameters, through an ideal observation (see Renders.galaxy): a
+         *     its parameters, through an ideal observation (see Renders.galaxy;
+         *     over a field of a width and centre, if given): a
          *     frame of its maps (ny, nx; named 'light', 'velocity', 'vx', 'vy',
          *     'dispersion' and '{component}/{map}'; NaN where there is no light),
          *     whose header has the size of the pixels (step, arcsec), the pixels
@@ -611,11 +659,12 @@ export interface paths {
         put?: never;
         /**
          * View Observed
-         * @description Evaluate a galaxy through an observation of its project, paired with
-         *     a dataset if given (see Renders.observed), and keep its arrays (the
-         *     model of each item, and the data and errors of the dataset, if any)
-         *     for the views of cubes (channel, spectrum and moments), each at the
-         *     path returned. The render is cancelled if the client goes away (see
+         * @description Evaluate a galaxy through an observation of its project (by name, or
+         *     its options), paired with a dataset if given (see Renders.observed),
+         *     and keep its arrays (the model of each item, and the data and errors
+         *     of the dataset, if any) for the views of cubes (channel, spectrum and
+         *     moments), each at the path returned; with where the galaxy is for the
+         *     observation. The render is cancelled if the client goes away (see
          *     RenderPool).
          */
         post: operations["view_observed_api_v1_views_observed_post"];
@@ -1274,6 +1323,21 @@ export interface components {
             frequency: number | null;
         };
         /**
+         * ChannelsInfo
+         * @description The channels of an observation: the velocities of the first and the
+         *     last (km/s), their width (km/s) and their number.
+         */
+        ChannelsInfo: {
+            /** First */
+            first: number;
+            /** Last */
+            last: number;
+            /** Step */
+            step: number;
+            /** Size */
+            size: number;
+        };
+        /**
          * CheckRequest
          * @description The text of a file to check (e.g. not saved yet), and its path.
          */
@@ -1350,6 +1414,41 @@ export interface components {
             shift: number;
         };
         /**
+         * DatasetGivesInfo
+         * @description What a dataset gives an observation of a kind, to copy into it: the
+         *     options of its sampling, and its PSF (the Gaussian of the beam of the
+         *     data; null if they have none, or one for each channel, with why in
+         *     psf_note).
+         */
+        DatasetGivesInfo: {
+            /** Sampling */
+            sampling: {
+                [key: string]: unknown;
+            };
+            /** Psf */
+            psf: {
+                [key: string]: unknown;
+            } | null;
+            /** Psf Note */
+            psf_note: string | null;
+        };
+        /**
+         * DatasetGivesRequest
+         * @description A dataset to copy into an observation of a type (see
+         *     Observations.of_dataset): the project, the type of the observation,
+         *     and the dataset (a piece of the project by name, or its options).
+         */
+        DatasetGivesRequest: {
+            /** Project */
+            project: string;
+            /** Type */
+            type: string;
+            /** Dataset */
+            dataset: string | {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * DatasetRequest
          * @description A dataset to check: the project of its piece, and its options (its
          *     files relative to the project).
@@ -1376,6 +1475,27 @@ export interface components {
             severity: "error" | "warning";
             /** Message */
             message: string;
+        };
+        /**
+         * FieldInfo
+         * @description The field of an observation on the sky (see Field): its centre (x, y;
+         *     arcsec, as the model measures positions, from its reference pixel,
+         *     which can be off the image), its width and height (arcsec), and the
+         *     rotation of its pixels (degrees).
+         */
+        FieldInfo: {
+            /** Centre */
+            centre: [
+                number,
+                number
+            ];
+            /** Size */
+            size: [
+                number,
+                number
+            ];
+            /** Rota */
+            rota: number;
         };
         /**
          * FileEntry
@@ -1468,9 +1588,11 @@ export interface components {
          * @description A galaxy to render (see Renders.galaxy): the project of its piece, its
          *     options (its files relative to the project), the values of its
          *     parameters (numbers, or lists of them for vectors; the defaults for
-         *     those not given), how it is seen ('sky', 'face-on' or 'edge-on'), and
-         *     the pixels across; and what it is, for the pages that show the
-         *     renders that run long (e.g. the name of its piece).
+         *     those not given), how it is seen ('sky', 'face-on' or 'edge-on'), the
+         *     pixels across, and the width and the centre of its field (arcsec; x
+         *     and y as the model measures them), if given (by default, about the
+         *     origin, as wide as the galaxy); and what it is, for the pages that
+         *     show the renders that run long (e.g. the name of its piece).
          */
         GalaxyRenderRequest: {
             /** Project */
@@ -1497,6 +1619,13 @@ export interface components {
              * @default 160
              */
             size: number;
+            /** Field */
+            field?: number | null;
+            /** Centre */
+            centre?: [
+                number,
+                number
+            ] | null;
             /** Label */
             label?: string | null;
         };
@@ -1824,8 +1953,9 @@ export interface components {
          * ObservedInfo
          * @description A galaxy as an observation of its project sees it: the type of the
          *     observation (e.g. 'pixel_spectra'), its arrays (the model of each item,
-         *     and the data and errors of the data, if it has them), and the warnings
-         *     of the library as it set them up.
+         *     and the data and errors of the data, if it has them), the warnings of
+         *     the library as it set them up, and where the galaxy is for it (null of
+         *     a setup, of many galaxies).
          */
         ObservedInfo: {
             /** Type */
@@ -1834,16 +1964,19 @@ export interface components {
             arrays: components["schemas"]["ObservedArrayInfo"][];
             /** Notes */
             notes: string[];
+            placement?: components["schemas"]["PlacementInfo"] | null;
         };
         /**
          * ObservedRequest
          * @description A galaxy to observe (see Renders.observed): the project of its piece,
          *     its options and the values of its parameters (as a galaxy to render;
          *     the defaults for those not given, also of the observation), the
-         *     observation of the project that sees it, by name, and the dataset it
-         *     is paired with, if any (a piece of the project by name, or its
-         *     options); and what the galaxy is, for the pages that show the renders
-         *     that run long.
+         *     observation of the project that sees it, by name, or its options
+         *     (e.g. as it is edited), and the dataset it is paired with, if any (a
+         *     piece of the project by name, or its options); a shift of the galaxy
+         *     on the sky, if any (x, y; arcsec: e.g. as it is dragged in a picture;
+         *     see Renders.observed); and what the galaxy is, for the pages that
+         *     show the renders that run long.
          */
         ObservedRequest: {
             /** Project */
@@ -1860,11 +1993,18 @@ export interface components {
                 [key: string]: unknown;
             };
             /** Observation */
-            observation: string;
+            observation: string | {
+                [key: string]: unknown;
+            };
             /** Dataset */
             dataset?: string | {
                 [key: string]: unknown;
             } | null;
+            /** Shift */
+            shift?: [
+                number,
+                number
+            ] | null;
             /** Label */
             label?: string | null;
         };
@@ -1993,6 +2133,26 @@ export interface components {
             content?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * PlacementInfo
+         * @description Where a galaxy is for an observation (see Placement): its centre (x,
+         *     y; arcsec), its systemic velocity on the channels (km/s), and whether
+         *     they are in the field and in the channels of the observation (null
+         *     for what it or the galaxy has not).
+         */
+        PlacementInfo: {
+            /** Centre */
+            centre: [
+                number,
+                number
+            ] | null;
+            /** Velocity */
+            velocity: number | null;
+            /** In Field */
+            in_field: boolean | null;
+            /** In Channels */
+            in_channels: boolean | null;
         };
         /**
          * PreferencesInfo
@@ -2160,6 +2320,16 @@ export interface components {
             products: {
                 [key: string]: unknown;
             }[];
+        };
+        /**
+         * SamplingInfo
+         * @description The sampling of an observation alone, as far as the library can make
+         *     it (null for what it has not, or cannot be made): its field on the
+         *     sky and its channels.
+         */
+        SamplingInfo: {
+            field: components["schemas"]["FieldInfo"] | null;
+            channels: components["schemas"]["ChannelsInfo"] | null;
         };
         /**
          * ServerInfo
@@ -3122,6 +3292,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observation_sampling_api_v1_observations_sampling_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObservationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SamplingInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    observation_of_dataset_api_v1_observations_of_dataset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetGivesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetGivesInfo"];
                 };
             };
             /** @description Validation Error */

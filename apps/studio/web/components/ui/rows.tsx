@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode, type Ref } from 'react';
 import { fmt } from '../format';
 import { isValid, settled, snap, type Bounds } from '../values';
+import { DropMenu, type MenuEntry } from './overlays';
 
 // The parameter of a row: its name (e.g. gas_vsys) and title, and what
 // settles its values
@@ -32,9 +33,10 @@ export interface RowValue {
 
 // A row: what it is (its title, and a line under it), its box, its unit
 // and its pill, or what changes it (tools) in their place, or its box
-// across them (wide); what it holds across the row under them (e.g. a
-// slider). One that opens (onOpen) is opened by a click on it, but on
-// what it holds that takes a click (its box, its pill, its slider).
+// across them (wide), or across its unit alone (wideBox, e.g. a choice of
+// long titles); what it holds across the row under them (e.g. a slider).
+// One that opens (onOpen) is opened by a click on it, but on what it
+// holds that takes a click (its box, its pill, its slider).
 export function Row({
   title,
   titleProps,
@@ -44,6 +46,7 @@ export function Row({
   pill,
   tools,
   wide,
+  wideBox,
   open,
   onOpen,
   current,
@@ -62,6 +65,7 @@ export function Row({
   pill?: ReactNode;
   tools?: ReactNode;
   wide?: boolean;
+  wideBox?: boolean;
   open?: boolean;
   onOpen?: () => void;
   // (the row the keys act on, in a list)
@@ -92,6 +96,11 @@ export function Row({
       </div>
       {wide ? (
         <div className="sh-wide">{box}</div>
+      ) : wideBox ? (
+        <>
+          <div className="sh-wide-box">{box}</div>
+          {pill || <span className="sh-pill-room" />}
+        </>
       ) : (
         <>
           {box || <span />}
@@ -103,7 +112,8 @@ export function Row({
               <span className="sh-unit" title={typeof unit === 'string' && unit.length > 6 ? unit : undefined}>
                 {unit}
               </span>
-              {pill || <span />}
+              {/* (the room of a pill, which a sheet without pills drops) */}
+              {pill || <span className="sh-pill-room" />}
             </>
           )}
         </>
@@ -322,5 +332,22 @@ export function Track({ at, onAt }: { at: number; onAt: (at: number) => void }) 
       <div className="sh-fill" style={{ width: `${at * 100}%` }} />
       <div className="sh-knob" style={{ left: `${at * 100}%` }} />
     </div>
+  );
+}
+
+// A choice, in the box of a row: what is chosen, and a menu of the
+// choices
+export function ChoiceBox({ label, text, title, entries, width = 240 }: { label: string; text: ReactNode; title?: string; entries: MenuEntry[]; width?: number }) {
+  return (
+    <DropMenu
+      label={label}
+      width={width}
+      entries={entries}
+      target={
+        <button type="button" className="sh-num gm-choice" title={title ?? (typeof text === 'string' ? text : undefined)}>
+          <span>{text}</span>
+        </button>
+      }
+    />
   );
 }

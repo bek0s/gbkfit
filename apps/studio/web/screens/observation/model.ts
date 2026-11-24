@@ -1,49 +1,102 @@
 // The model of an observation of the Studio, without React: its options
-// (those of the library: see gbkfit.observation), what each stage of it
-// is at a glance, its checks, and the sections of the dock where the
-// problems the library finds in it are fixed. An observation stands
-// alone, on a sampling of its own: the data it is fitted to are paired
-// with it by the setups (their section datasets).
+// (those of the library: see gbkfit.observation), in the blocks of its
+// sheet (its kind, its sampling, its instrument, what it sees, the noise
+// of its mock data, and more), and what each is in a few words. An
+// observation stands alone, on a sampling of its own: the data it is
+// fitted to are paired with it by the fits.
 import { membersOf, propertiesOf, typeOf, type Defs, type Options, type Schema } from '../../components/SchemaForm';
+import { firstSentence } from '../galaxy/schema';
 
-// The stages of an observation on the sky, in the order of the path of the
-// light, from the galaxies to its mock data, as the dock and the strip
-// have them (by the id of their section)
-export const STAGES = [
-  { key: 'sees', title: 'Sees', section: 'ob-sees' },
-  { key: 'instrument', title: 'Instrument', section: 'ob-instrument' },
-  { key: 'records', title: 'Records', section: 'ob-records' },
-  { key: 'noise', title: 'Noise', section: 'ob-noise' },
-] as const;
+// The options of an observation by the block of the sheet that sets them
+// (which block shows an option; every rule of them is the library's):
+// what it sees; its instrument and the noise of its mock data; how its
+// model is matched to the data a fit pairs it with; and how accurately
+// and fast it is made. The others of its kind (e.g. its pixels, its
+// channels, its regions, its UV coverage) are its sampling.
+export const SEES_KEYS = ['galaxies', 'components', 'lines', 'continuum', 'band'];
+export const MATCHING_KEYS = ['unit', 'offsets', 'flux_scale', 'pixel_weights', 'smooth_weights', 'median_size', 'name'];
+export const ACCURACY_KEYS = ['oversampling', 'depth', 'source_grid', 'dtype', 'fft_dtype'];
+const GROUPED = new Set(['type', 'instrument', 'noise', ...SEES_KEYS, ...MATCHING_KEYS, ...ACCURACY_KEYS]);
 
-// The options of a sky observation, by the section that sets them: what it
-// sees; how accurately and fast its model is made (folded); the others are
-// those its sections set by hand, and the rest are its other options
-export const LIGHT_KEYS = ['galaxies', 'components', 'lines', 'continuum', 'band'];
-export const ACCURACY_KEYS = ['oversampling', 'depth', 'source_grid', 'dtype', 'fft_dtype', 'name'];
-export const HANDLED_KEYS = ['type', 'instrument', 'noise', 'unit', ...LIGHT_KEYS, ...ACCURACY_KEYS];
+// The options of the sampling that place it on the sky (its reference
+// pixel and position there, its rotation): of a fold of their own, under
+// the others
+export const PLACE_KEYS = ['rpix', 'rval', 'rota', 'sky_rval', 'slit_pa'];
 
-// The kinds of observations whose data are what their instrument records
-// plus the noise, in one item (whose errors are then the noise of their mock
-// data, by default, paired with data that have errors; see the library's
-// noise_of): not those measured from it (e.g. moments of a cube)
-const RECORDED = ['pixel_spectra', 'pixel_brightness', 'slit_spectra', 'slitless_spectra', 'visibilities'];
+// The pairs of the sky whose x and y the sheet links (one value typed sets
+// both): the number and the size of pixels, a field of view; not those of
+// two coordinates (a reference pixel, RA and Dec)
+export const LINKED_PAIRS = ['size', 'step', 'fov'];
 
-export function isRecorded(type: unknown): boolean {
-  return RECORDED.includes(String(type));
+// The options of a spectral axis shown first (its channels: how many, how
+// wide, where, and the convention of their velocities); the others in a
+// fold
+export const CHANNEL_KEYS = ['size', 'step', 'rval', 'convention'];
+
+// The member of the observation of a type (its schema)
+export function observationMember(defs: Defs | undefined, type: unknown): Schema | undefined {
+  if (!defs) return undefined;
+  return membersOf(defs.observation ?? {}, defs).find((m) => typeOf(m) === type);
 }
 
-// The noise of mock data of an observation in a few words, with the name
-// of the noise of the project it is (its options, of the project or in
-// place; undefined: not read yet)
-export function noiseText(noise: unknown, options: Options | undefined, titleOf: (family: string, type: unknown) => string): string {
-  if (noise == null) return 'None';
-  if (!options) return typeof noise === 'string' ? noise : '…';
-  return `${typeof noise === 'string' ? `${noise}: ` : ''}${noiseOf(options, titleOf)}`;
+// The kinds of observations, in the order of the library: each its type,
+// title and what it is in a line (the first clause of its description)
+export function kindsOf(defs: Defs | undefined): { type: string; title: string; line: string }[] {
+  if (!defs) return [];
+  const seen = new Set<string>();
+  return membersOf(defs.observation ?? {}, defs).flatMap((m) => {
+    const type = typeOf(m);
+    if (type === undefined || seen.has(type)) return [];
+    seen.add(type);
+    return [{ type, title: typeof m.title === 'string' ? m.title : type, line: kindLine(m.description) }];
+  });
 }
 
-// A noise of its options in a few words: its kind, its level and how it
-// is correlated (e.g. 'Gaussian 0.01 · as the PSF')
+// What a kind is in a line: the first clause of its description (to its
+// first colon), else its first sentence
+export function kindLine(description: unknown): string {
+  if (typeof description !== 'string') return '';
+  const sentence = firstSentence(description);
+  const clause = sentence.split(':')[0].replace(/\.$/, '');
+  return clause.trim();
+}
+
+// The form of a member of a family (e.g. a Gaussian PSF by its dispersion,
+// or by the axes of a beam) that options are of: the first of their type
+// whose required options they have, else the first of their type; and
+// the forms of their type
+export function formsOf(defs: Defs, family: string, options: Options): { form: Schema | undefined; forms: Schema[] } {
+  const forms = membersOf(defs[family] ?? {}, defs).filter((m) => typeOf(m) === options.type);
+  const form = forms.find((m) => ((m.required as string[] | undefined) ?? []).every((key) => key === 'type' || key in options)) ?? forms[0];
+  return { form, forms };
+}
+
+// The options of the sampling of a kind (see the module), in the order of
+// its schema
+export function samplingKeys(member: Schema | undefined): string[] {
+  return member ? Object.keys(propertiesOf(member)).filter((key) => !GROUPED.has(key)) : [];
+}
+
+// Whether a kind has an option (by its schema)
+export function hasOption(member: Schema | undefined, key: string): boolean {
+  return member !== undefined && key in propertiesOf(member);
+}
+
+// An option given another kind: the options of the observation that the
+// new kind has too are kept (what it sees, its instrument, its noise,
+// and e.g. its pixels), the others dropped
+export function retypedObservation(options: Options, member: Schema | undefined, type: string): Options {
+  const keys = member ? Object.keys(propertiesOf(member)) : [];
+  return { ...Object.fromEntries(Object.entries(options).filter(([key]) => key !== 'type' && keys.includes(key))), type };
+}
+
+// The number of the options of keys that are given
+export function givenCount(options: Options, keys: string[]): number {
+  return keys.filter((key) => options[key] != null).length;
+}
+
+// The noise of mock data of its options in a few words: its kind, its
+// level and how it is correlated (e.g. 'Gaussian 0.01 · as the PSF')
 export function noiseOf(options: Options, titleOf: (family: string, type: unknown) => string): string {
   const kind = titleOf('noise', options.type);
   const level = typeof options.rms === 'number' ? ` ${options.rms}` : options.error != null ? ' of an error map' : '';
@@ -57,13 +110,6 @@ export function noiseOf(options: Options, titleOf: (family: string, type: unknow
 export function pairOf(value: unknown): [number, number] {
   const [a, b] = Array.isArray(value) ? value : [value, value];
   return [Number(a) || 1, Number(b ?? a) || 1];
-}
-
-// The kinds of observations (and datasets) whose data have a spectral axis
-const SPECTRAL = ['pixel_spectra', 'pixel_moments', 'slit_spectra', 'slitless_spectra', 'region_spectra', 'region_moments', 'visibilities'];
-
-export function isSpectral(type: unknown): boolean {
-  return SPECTRAL.includes(String(type));
 }
 
 export function isObject(value: unknown): value is Options {
@@ -88,25 +134,12 @@ export function withKey(options: Options, key: string, value: unknown): Options 
   return value === undefined ? rest : { ...rest, [key]: value };
 }
 
-// What a stage of an observation is, at a glance (the noise as given; see
-// noiseText)
-export function glanceOf(key: (typeof STAGES)[number]['key'], options: Options, titleOf: (family: string, type: unknown) => string, noise: string): string {
-  if (key === 'sees') {
-    const galaxies = options.galaxies;
-    const lines = Array.isArray(options.lines) && options.lines.length ? ` · ${options.lines.join(', ')}` : '';
-    return `${Array.isArray(galaxies) && galaxies.length ? galaxies.join(', ') : 'All of the setup'}${lines}`;
-  }
-  if (key === 'instrument') {
-    const instrument = objectAt(options, 'instrument');
-    const parts = (['psf', 'lsf'] as const).flatMap((part) => {
-      const value = instrument[part];
-      if (value == null) return [];
-      return [`${part.toUpperCase()} ${typeof value === 'string' ? value : titleOf(part, (value as Options).type)}`];
-    });
-    return parts.join(' · ') || 'A perfect one';
-  }
-  if (key === 'records') return titleOf('observation', options.type);
-  return noise;
+// An option set or removed at a path of options (an object made on the
+// way, one left empty removed)
+export function withPath(options: Options, path: string[], value: unknown): Options {
+  if (path.length === 1) return withKey(options, path[0], value);
+  const inner = withPath(objectAt(options, path[0]), path.slice(1), value);
+  return withKey(options, path[0], Object.keys(inner).length ? inner : undefined);
 }
 
 // The ellipse of a PSF or a beam at half its maximum: the FWHM of its
@@ -123,78 +156,7 @@ export function psfEllipse(axes: [number, number, number | null] | null | undefi
   return axes ? { major: axes[0], minor: axes[1], angle: axes[2] ?? 0 } : null;
 }
 
-// A check of an observation: passed, failed, or a note
-export interface Check {
-  ok: boolean | null;
-  text: string;
-}
-
-export function checksOf({
-  options,
-  psf,
-  lsfWidth,
-  noise,
-}: {
-  options: Options;
-  psf: Ellipse | null;
-  lsfWidth: number | null;
-  // The noise of mock data in a few words (see noiseText)
-  noise: string;
-}): Check[] {
-  const checks: Check[] = [];
-  const instrument = objectAt(options, 'instrument');
-  if (instrument.psf == null) checks.push({ ok: null, text: 'No PSF: a perfect instrument on the sky.' });
-  const spectral = objectAt(options, 'spectral');
-  const width = typeof spectral.step === 'number' ? Math.abs(spectral.step) : null;
-  if (isSpectral(options.type)) {
-    if (instrument.lsf == null) checks.push({ ok: null, text: 'No LSF: a perfect spectrograph.' });
-    else if (lsfWidth !== null && width !== null) {
-      checks.push({ ok: null, text: `The LSF is ${fixed(lsfWidth)} km/s across (FWHM): ${fixed(lsfWidth / width)} channels.` });
-    }
-  }
-  // (the sampling of the PSF: at least two pixels across its FWHM)
-  const pixel = typeof options.step === 'number' ? options.step : Array.isArray(options.step) ? Number(options.step[0]) : null;
-  if (psf && pixel) {
-    const across = psf.major / pixel;
-    checks.push(across >= 2 ? { ok: true, text: `The PSF spans ${fixed(across)} pixels: well sampled.` } : { ok: false, text: `The PSF spans ${fixed(across)} pixels: under-sampled (at least 2 are needed).` });
-  }
-  if (options.noise != null) checks.push({ ok: null, text: `Mock noise: ${noise}.` });
-  else if (isRecorded(options.type)) checks.push({ ok: null, text: 'No noise for mock data: they take the errors of the data a setup pairs it with, if any (or give it one in Noise).' });
-  else checks.push({ ok: null, text: 'No noise for mock data: a setup cannot draw them (give it one in Noise).' });
-  return checks;
-}
-
-function fixed(value: number): string {
-  return Number(value.toPrecision(3)).toString();
-}
-
-// The member of the observation of a type (see the schema)
-export function observationMember(defs: Defs, type: unknown): Schema | undefined {
-  return membersOf(defs.observation ?? {}, defs).find((m) => typeOf(m) === type);
-}
-
-// The options of the grid of a kind on the sky
-const GRID = ['size', 'step', 'rpix', 'rval', 'rota', 'slit_pa'];
-
-// The options of every observation on the sky: those that all the kinds of
-// data share, but their grids (the others are of each kind: its grid, its
-// channels...)
-export function skyKeys(defs: Defs): string[] {
-  const kinds = membersOf(defs.observation ?? {}, defs).filter((m) => typeOf(m) !== 'profile');
-  const keys = kinds.map((m) => Object.keys(propertiesOf(m)));
-  return keys.length ? keys[0].filter((key) => !GRID.includes(key) && keys.every((own) => own.includes(key))) : [];
-}
-
-// The section of the dock where a problem the library finds is fixed, by
-// the option of its path: what it sees, its instrument, its noise, its
-// accuracy, its other options (others: their keys), or else its kind and
-// sampling (as the problems of the whole observation)
-export function sectionOf(path: (string | number)[], others: string[]): string {
-  const key = String(path[0] ?? '');
-  if (LIGHT_KEYS.includes(key)) return 'ob-sees';
-  if (key === 'instrument') return 'ob-instrument';
-  if (key === 'noise') return 'ob-noise';
-  if (ACCURACY_KEYS.includes(key)) return 'ob-accuracy';
-  if (others.includes(key)) return 'ob-more';
-  return 'ob-records';
+// A number in a few digits (e.g. of a FWHM)
+export function short(value: number, digits = 3): string {
+  return String(Number(value.toPrecision(digits)));
 }

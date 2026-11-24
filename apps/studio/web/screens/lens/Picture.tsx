@@ -175,7 +175,7 @@ export function LensPicture({
 }
 
 // A round length (e.g. of a field), as few digits as it has
-function roundText(length: number): string {
+export function roundText(length: number): string {
   return String(Number(length.toPrecision(3)));
 }
 
@@ -426,7 +426,7 @@ function SourcePlane({ view, source, curves, onSource }: { view: LensView; sourc
 // The length of the scale bars (arcsec): a round one (1, 2 or 5 times a
 // power of ten) of at most a fifth of the image plane, of a half-width;
 // the same in the source plane, so that the planes compare
-function barLength(half: number): number {
+export function barLength(half: number): number {
   const most = (2 * half) / 5;
   const power = 10 ** Math.floor(Math.log10(most));
   return [5, 2, 1].map((r) => r * power).find((r) => r <= most * (1 + 1e-9))!;
@@ -434,7 +434,7 @@ function barLength(half: number): number {
 
 // A bar of a length, in the lower left of a plane of a half-width (its
 // label of the same size in every plane)
-function ScaleBar({ length, half }: { length: number; half: number }) {
+export function ScaleBar({ length, half }: { length: number; half: number }) {
   return (
     <span className="lp-scale" style={{ width: `${(length / (2 * half)) * 100}%` }}>
       {roundText(length)}″
@@ -443,7 +443,7 @@ function ScaleBar({ length, half }: { length: number; half: number }) {
 }
 
 // North up, east left: two arms from a corner, as sky charts mark them
-function Compass() {
+export function Compass() {
   return (
     <svg className="lp-compass" viewBox="0 0 40 40" aria-label="North up, east left">
       <path d="M32 32V14M32 32H14" />
