@@ -16,7 +16,8 @@ import gbkfit.io.formats.fits
 from gbkfit.dataset import *
 from gbkfit.grid import SpectralAxis
 from gbkfit.observation import observation_parser
-from gbkfit.setup import describe_observation
+from gbkfit.config import FORMAT_VERSION
+from gbkfit.setup import describe
 
 
 @pytest.fixture
@@ -67,29 +68,40 @@ def test_a_loaded_dataset_reads_its_values_when_first_used(tmp_path, reads):
 
 def test_an_observation_of_data_is_built_from_their_headers(tmp_path, reads):
     config, _ = _cube(tmp_path)
-    observation = observation_parser.load(dict(
-        type='pixel_spectra', dataset=config,
-        instrument=dict(psf=dict(type='gauss', sigma=1))))
+    observation = observation_parser.load(
+        dict(type='pixel_spectra',
+             instrument=dict(psf=dict(type='gauss', sigma=1))),
+        dataset=dataset_parser.load(config))
     assert reads == []
     assert observation.grid() == observation.dataset().grid()
 
 
-def test_describing_an_observation_reads_no_values(tmp_path, monkeypatch):
+def test_describing_a_setup_reads_no_values(tmp_path, monkeypatch):
     config, _ = _cube(tmp_path)
 
     def refused(filename, key):
         raise AssertionError(f"the values of {filename} were read")
     monkeypatch.setattr(gbkfit.io.formats.fits, 'read_image', refused)
-    described = describe_observation(dict(
-        type='pixel_spectra', dataset=config))
-    assert described.problems == ()
-    assert described.observation is not None
-    # (of data of another kind, the problem is of the option dataset)
-    described = describe_observation(dict(
-        type='pixel_brightness', dataset=config))
-    assert described.observation is None
-    [problem] = described.problems
-    assert list(problem.path) == ['dataset']
+    setup = dict(
+        version=FORMAT_VERSION, galaxies=[dict(components=[dict(
+            type='thin_disk', rnodes=[0, 1, 2],
+            rptraits=dict(type='exponential'),
+            vptraits=dict(type='arctan', direction='tan'),
+            dptraits=dict(type='uniform'), emission=dict(type='lines'))])],
+        observations=[dict(type='pixel_spectra')],
+        datasets=[config], params=dict(properties=dict(
+            xpos=0, ypos=0, vsys=0, posa=0, incl=45, rpt_a=1, rpt_s=1,
+            vpt_rt=1, vpt_vt=100, dpt_a=10)))
+    described = describe(setup)
+    assert not [p for p in described.problems if p.severity == 'error']
+    assert described.group.observations()[0].dataset() is not None
+    # (of data of another kind, the problem is of the dataset of the
+    # observation)
+    described = describe(setup | dict(
+        observations=[dict(type='pixel_brightness')]))
+    assert described.group is None
+    [problem] = [p for p in described.problems if p.severity == 'error']
+    assert list(problem.path) == ['datasets', 0]
     assert "data of pixel spectra (cube) · needs pixel brightness" \
         in problem.message
 

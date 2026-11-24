@@ -744,6 +744,15 @@ class SpectralAxis(Serializable):
         self._type = type
         self._unit = None if unit is None else spectral_unit(unit)
 
+    def __eq__(self, other: object) -> bool:
+        # (an axis is its options, those given; e.g. the copies of an
+        # observation with other data share its plan if their spectral
+        # axes are equal, see ObservationSky.same_plan)
+        return isinstance(other, SpectralAxis) and self.dump() == other.dump()
+
+    def __hash__(self) -> int:
+        return hash(tuple(self.dump().items()))
+
     def size(self) -> int | None:
         """Return the number of channels, if given."""
         return self._size

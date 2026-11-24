@@ -12,7 +12,7 @@ from gbkfit.dataset import (
     ApertureCircle, AperturePolygon, ApertureRectangle, Data,
     DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
     DatasetRegionMoments, DatasetRegionSpectra, RegionsApertures,
-    RegionsBins)
+    RegionsBins, dataset_parser)
 
 
 def test_a_spike_in_a_velocity_map_is_masked_not_its_gradient():
@@ -92,8 +92,8 @@ def test_the_data_of_an_observation_are_screened_as_they_are_read(
         type='pixel_brightness', data=str(tmp_path / 'image.fits'),
         outliers=dict(size=[3, 3], nsigma=6))
     with caplog.at_level(logging.INFO):
-        observation = observation_parser.load(dict(
-            type='pixel_brightness', dataset=data))
+        observation = observation_parser.load(
+            dict(type='pixel_brightness'), dataset=dataset_parser.load(data))
         # (screened as the values are first used)
         assert "outliers masked" not in caplog.text
         screened = observation.dataset()['brightness'].data()

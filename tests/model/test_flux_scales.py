@@ -50,9 +50,8 @@ def group_plan(driver, data, error):
         Data(data, error=np.full_like(data, error)), step=STEP[:2],
         spectral=SpectralAxis(step=STEP[2], convention='relativistic'))
     return ObservationGroup(
-        [galaxy_parser.load(GALAXY)], [ObservationPixelSpectra(
-            dataset=dataset,
-            flux_scale='per_spectrum', name='obs')]
+        [galaxy_parser.load(GALAXY)], [ObservationPixelSpectra.paired(
+            dataset, flux_scale='per_spectrum', name='obs')]
     ).plan(driver)
 
 
@@ -145,10 +144,10 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
             0: Data(moment0, error=np.full_like(moment0, 1e-3)),
             1: Data(moment1, error=np.full_like(moment1, 1.0))})
         return ObservationGroup(
-            [galaxy_parser.load(GALAXY)], [ObservationPixelMoments(
-                spectral=SpectralAxis(
-                size=21, step=20, convention='relativistic'),
-                dataset=dataset, flux_scale='one', name='obs')]
+            [galaxy_parser.load(GALAXY)], [ObservationPixelMoments.paired(
+                dataset, spectral=SpectralAxis(
+                    size=21, step=20, convention='relativistic'),
+                flux_scale='one', name='obs')]
         ).plan(driver)
     blank = moments(np.zeros(SIZE[1::-1]), np.zeros(SIZE[1::-1]))
     model = blank.model_h(ParamSpace.from_properties(
@@ -270,12 +269,12 @@ def test_a_likelihood_of_no_weight_has_no_terms_of_solved_scales(driver):
 def test_flux_scales_need_light_and_a_name():
     data = DatasetPixelMoments({1: Data(np.zeros((4, 4)))})
     with pytest.raises(ValueError, match=r"has the flux scales \[\]"):
-        ObservationPixelMoments(
-            SpectralAxis(convention='relativistic'), dataset=data,
+        ObservationPixelMoments.paired(
+            data, spectral=SpectralAxis(convention='relativistic'),
             flux_scale='one', name='obs')
     with pytest.raises(ValueError, match="needs a name"):
-        ObservationPixelSpectra(
-            dataset=DatasetPixelSpectra(
+        ObservationPixelSpectra.paired(
+            DatasetPixelSpectra(
                 Data(np.zeros((5, 4, 4))),
                 spectral=SpectralAxis(convention='relativistic')),
             flux_scale='per_spectrum')

@@ -1,6 +1,6 @@
 # fr_gravity_response: A gas disk rotating in Hu-Sawicki f(R) gravity (log_fr0) of a stellar disk, and an NFW halo contracted by it (gnedin04, screened); a profile observation of vcirc and the rotation of the gas at radii in arcsec, and small moment maps.
 # (written by make_golden.py; do not edit)
-version: 20
+version: 21
 driver: {type: host}
 galaxies:
 - components:
@@ -28,36 +28,36 @@ galaxies:
     type: hu_sawicki
     screened: [halo]
 observations:
-- type: profile
-  name: rc
-  dataset:
-    file: rc_profile.ecsv
-    radius: {column: radius}
-    vcirc: {column: vcirc, mask: vcirc_mask, error: vcirc_error}
-    rotation_gas: {column: rotation_gas, mask: rotation_gas_mask, error: rotation_gas_error}
+- {type: profile, name: rc}
 - type: pixel_moments
   name: maps
-  dataset:
-    type: pixel_moments
-    step: [1, 1]
-    rpix: [7.5, 7.5]
-    rval: [0, 0]
-    rota: 0
-    moment0: {data: maps_moment0_d.fits, error: maps_moment0_e.fits}
-    moment1: {data: maps_moment1_d.fits, mask: maps_moment1_m.fits, error: maps_moment1_e.fits}
-    moment2: {data: maps_moment2_d.fits, mask: maps_moment2_m.fits, error: maps_moment2_e.fits}
-  dtype: float64
-  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  instrument:
-    primary_beam: null
-    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20.0 km s-1}
   spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
   flux_floor: 1.0e-06
   method: moments
   median_size: null
+  dtype: float64
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
+  source_grid: {step: auto, extent: auto}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20.0 km s-1}
   oversampling: [1, 1]
   fft_dtype: float64
+datasets:
+- type: profile
+  file: rc_profile.ecsv
+  radius: {column: radius}
+  vcirc: {column: vcirc, mask: vcirc_mask, error: vcirc_error}
+  rotation_gas: {column: rotation_gas, mask: rotation_gas_mask, error: rotation_gas_error}
+- type: pixel_moments
+  step: [1, 1]
+  rpix: [7.5, 7.5]
+  rval: [0, 0]
+  rota: 0
+  moment0: {data: maps_moment0_d.fits, error: maps_moment0_e.fits}
+  moment1: {data: maps_moment1_d.fits, mask: maps_moment1_m.fits, error: maps_moment1_e.fits}
+  moment2: {data: maps_moment2_d.fits, mask: maps_moment2_m.fits, error: maps_moment2_e.fits}
 likelihoods:
   rc: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   maps: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}

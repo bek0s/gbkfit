@@ -13,7 +13,7 @@ from astropy.io import fits
 
 from gbkfit import outputs
 from gbkfit.config import FORMAT_VERSION
-from test_eval import data_grid
+from test_eval import data_grid, pair
 
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
@@ -57,9 +57,9 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
     fits.writeto(tmp_path / 'data.fits', model)
     # Fit three of its parameters, from elsewhere
     observation = config['observations'][0]
-    observation['dataset'] = dict(
-        data='data.fits', error=0.01 * float(model.max())) \
-        | data_grid(observation)
+    pair(config, dict(
+        data='data.fits', error=0.01 * float(model.max()))
+        | data_grid(observation))
     truth = dict(config['params']['properties'])
     config['params']['properties'] |= dict(
         xpos=dict(value=0, min=-3, max=3),
@@ -147,9 +147,9 @@ def test_a_fit_resumes_from_its_output_directory(tmp_path):
     model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     observation = config['observations'][0]
-    observation['dataset'] = dict(
-        data='data.fits', error=0.01 * float(model.max())) \
-        | data_grid(observation)
+    pair(config, dict(
+        data='data.fits', error=0.01 * float(model.max()))
+        | data_grid(observation))
     config['params']['properties'] |= dict(
         xpos=dict(value=0, min=-3, max=3),
         posa=dict(value=40, min=0, max=90))
@@ -179,9 +179,9 @@ def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
     model = read(tmp_path / 'model', 'model').data
     fits.writeto(tmp_path / 'data.fits', model)
     observation = config['observations'][0]
-    observation['dataset'] = dict(
-        data='data.fits', error=0.01 * float(model.max())) \
-        | data_grid(observation)
+    pair(config, dict(
+        data='data.fits', error=0.01 * float(model.max()))
+        | data_grid(observation))
     config['params']['properties'] |= dict(
         xpos=dict(value=0, min=-3, max=3),
         posa=dict(value=40, min=0, max=90))

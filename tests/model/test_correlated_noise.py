@@ -35,8 +35,8 @@ def objective(driver, data, likelihood):
     """The objective of a disk seen in a cube, under a likelihood."""
     dataset = DatasetPixelSpectra(data, step=STEP[:2], spectral=SPECTRAL)
     group = ObservationGroup(
-        [galaxy_parser.load(GALAXY)], [ObservationPixelSpectra(
-            dataset=dataset)])
+        [galaxy_parser.load(GALAXY)],
+        [ObservationPixelSpectra.paired(dataset)])
     likelihoods = Likelihoods(group, likelihood)
     return (Objective(group.plan(driver), likelihoods),
             ParamSpace.from_properties(
@@ -136,9 +136,8 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
         noisy_cube(np.random.default_rng(9), None), step=STEP[:2],
         spectral=SPECTRAL)
     group = ObservationGroup(
-        [galaxy_parser.load(GALAXY)], [ObservationPixelSpectra(
-            dataset=dataset,
-            flux_scale='one', name='obs')])
+        [galaxy_parser.load(GALAXY)], [ObservationPixelSpectra.paired(
+            dataset, flux_scale='one', name='obs')])
     with pytest.raises(ValueError, match="has correlated noise"):
         Objective(group.plan(driver),
                   solves=dict(obs_flux_scale=SolveGauss(1, 0.5, 0)))
@@ -208,7 +207,7 @@ def test_slit_spectra_have_the_chi2_of_their_spectral_correlation(
     dataset = DatasetSlitSpectra(
         data, step=(1,), spectral=SPECTRAL, slit_pa=-60)
     obj, params = spectra_objective(
-        driver, ObservationSlitSpectra(dataset=dataset),
+        driver, ObservationSlitSpectra.paired(dataset),
         LikelihoodGauss(white_floor=0.05))
     check_spectral_chi2(obj, params, data)
 
@@ -225,8 +224,8 @@ def test_region_spectra_have_the_chi2_of_their_spectral_correlation(
     data = noisy_spectra(np.random.default_rng(12), 6, blank)
     dataset = DatasetRegionSpectra(data, regions, spectral=SPECTRAL)
     obj, params = spectra_objective(
-        driver, ObservationRegionSpectra(
-            size=SIZE[:2], step=STEP[:2], dataset=dataset),
+        driver, ObservationRegionSpectra.paired(
+            dataset, size=SIZE[:2], step=STEP[:2]),
         LikelihoodGauss(white_floor=0.05))
     check_spectral_chi2(obj, params, data)
 
@@ -240,8 +239,8 @@ def test_spectra_of_correlated_noise_keep_whole_spectra(tmp_path):
 
     def likelihoods(dataset):
         return Likelihoods(ObservationGroup(
-            [galaxy_parser.load(GALAXY)], [ObservationSlitSpectra(
-                dataset=dataset)]))
+            [galaxy_parser.load(GALAXY)],
+            [ObservationSlitSpectra.paired(dataset)]))
     data = noisy_spectra(np.random.default_rng(13), 14, [])
     mask = data.mask().copy()
     mask[3, 6] = 0

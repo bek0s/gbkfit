@@ -1,6 +1,6 @@
 # points_particles_band: An image of a point (a nucleus) and of the particles of a table (the stars of a disk), which emit in a band.
 # (written by make_golden.py; do not edit)
-version: 20
+version: 21
 driver: {type: host}
 galaxies:
 - components:
@@ -13,23 +13,24 @@ galaxies:
     emission: {type: band}
 observations:
 - type: pixel_brightness
-  dataset:
-    type: pixel_brightness
-    step: [0.5, 0.5]
-    rpix: [15.5, 15.5]
-    rval: [0, 0]
-    rota: 0
-    data: observation0_brightness_d.fits
-    error: 0.02
+  median_size: null
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
+  source_grid: {step: auto, extent: auto}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: null
-  median_size: null
   oversampling: [1, 1]
   fft_dtype: float64
+datasets:
+- type: pixel_brightness
+  step: [0.5, 0.5]
+  rpix: [15.5, 15.5]
+  rval: [0, 0]
+  rota: 0
+  data: observation0_brightness_d.fits
+  error: 0.02
 likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
 params:
   properties:

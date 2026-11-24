@@ -61,8 +61,8 @@ def test_the_dirty_image_of_casa_is_the_point(driver):
     # the dirty beam peaks at the phase centre with 1
     from gbkfit.observation import ObservationVisibilities
     dataset = DatasetVisibilities.from_ms(str(MS), rest=REST)
-    observation = ObservationVisibilities(
-        fov=(61, 41), step=1, transform='sin', dataset=dataset)
+    observation = ObservationVisibilities.paired(
+        dataset, fov=(61, 41), step=1, transform='sin')
     weights = {key: 1 / dataset[key].error() ** 2 for key in ('re', 'im')}
     dirty = observation.images(
         driver, {key: dataset[key].data() for key in ('re', 'im')},

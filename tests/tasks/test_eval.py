@@ -47,6 +47,14 @@ def data_grid(observation):
         spectral=spectral)
 
 
+def pair(config, dataset):
+    """
+    Pair the observation of a configuration with data (its section
+    datasets).
+    """
+    config['datasets'] = [dataset]
+
+
 def run_eval(mode, config, workdir, profile_iters=0, extra_outputs=False):
     """
     Run the eval task on a configuration (or on a configuration file) in a
@@ -91,7 +99,7 @@ def mock_data(run, k):
     filename = pathlib.Path(run.filename(run.product('mock_config', mock=k)))
     config = yaml.load(filename)
     root = filename.parent / config['root']
-    data = config['observations'][0]['dataset']
+    [data] = config['datasets']
     return filename, *(
         np.array(fits.getdata(root / data[part])) for part in ('data', 'error'))
 
@@ -110,9 +118,9 @@ def test_objective_residuals(tmp_path):
     assert not model_run.products('extra')
     fits.writeto(tmp_path / 'data.fits', model + 1)
     observation = config['observations'][0]
-    observation['dataset'] = dict(
-        data=str(tmp_path / 'data.fits'), error=2.0) \
-        | data_grid(observation)
+    pair(config, dict(
+        data=str(tmp_path / 'data.fits'), error=2.0)
+        | data_grid(observation))
     config['likelihoods'] = dict(type='gauss', weights=0.5)
     # (a configuration of a fit evaluates too: its fitter is left)
     config['fitter'] = dict(type='scipy.least_squares')
@@ -145,9 +153,9 @@ def test_profiling_writes_the_timings(tmp_path, mode):
         model = array(run_eval('model', config, tmp_path / 'model'), 'model')
         fits.writeto(tmp_path / 'data.fits', model)
         observation = config['observations'][0]
-        observation['dataset'] = dict(
-            data=str(tmp_path / 'data.fits'), error=1.0) \
-            | data_grid(observation)
+        pair(config, dict(
+            data=str(tmp_path / 'data.fits'), error=1.0)
+            | data_grid(observation))
     run = run_eval(mode, config, tmp_path / mode, profile_iters=3)
     timings = run.read(run.product('timings'))
     assert timings['model_eval']['count'] == 3
@@ -250,9 +258,9 @@ def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     # data and the residuals, 1, as those the task writes
     fits.writeto(tmp_path / 'data.fits', expected + 1)
     observation = config['observations'][0]
-    observation['dataset'] = dict(
-        data=str(tmp_path / 'data.fits'), error=2.0) \
-        | data_grid(observation)
+    pair(config, dict(
+        data=str(tmp_path / 'data.fits'), error=2.0)
+        | data_grid(observation))
     yaml.dump(config, tmp_path / 'data.yaml')
     setup = gbkfit.load(str(tmp_path / 'data.yaml'))
     outputs = setup.outputs(setup.evaluate(), data=True)
@@ -273,16 +281,16 @@ def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
     project.create(str(study))
     fits.writeto(study / 'data/cube.fits', model + 1)
     observation = config['observations'][0]
-    observation['dataset'] = dict(
-        data='data/cube.fits', error=2.0) \
-        | data_grid(observation)
+    pair(config, dict(
+        data='data/cube.fits', error=2.0)
+        | data_grid(observation))
     for path, piece in (
             ('galaxies/disk.yaml', config['galaxies'][0]),
             ('observations/cube.yaml', observation),
             ('params/model.yaml', config['params']),
             ('setups/disk/cube.yaml', dict(
                 driver=config['driver'], galaxies=['disk'],
-                observations='cube',
+                observations='cube', datasets=config['datasets'],
                 params=['model', dict(properties=dict(incl=60))]))):
         (study / path).parent.mkdir(parents=True, exist_ok=True)
         yaml.dump(piece, study / path)
@@ -353,9 +361,9 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
     fits.writeto(tmp_path / 'data.fits', model + 1, header)
     for key in ('regions', 'spectral'):
         observation.pop(key)
-    observation['dataset'] = dict(
+    pair(config, dict(
         type='region_spectra', regions=regions,
-        data=str(tmp_path / 'data.fits'), error=2.0)
+        data=str(tmp_path / 'data.fits'), error=2.0))
     run = run_eval('objective', config, tmp_path / 'objective')
     np.testing.assert_allclose(array(run, 'residual'), 1, rtol=1e-5)
     np.testing.assert_allclose(array(run, 'wresidual'), 0.5, rtol=1e-5)

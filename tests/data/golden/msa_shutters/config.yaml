@@ -1,6 +1,6 @@
 # msa_shutters: Slitless spectra behind a slitlet of three MSA shutters: two nods subtracted (A - B, B - A) and aligned on the sky (sky and image offsets, weights), blurred by the LSF behind the slit mask.
 # (written by make_golden.py; do not edit)
-version: 20
+version: 21
 driver: {type: host}
 galaxies:
 - components:
@@ -14,21 +14,8 @@ galaxies:
     emission: {type: lines}
 observations:
 - type: slitless_spectra
-  dataset:
-    type: slitless_spectra
-    step: [1, 1]
-    rpix: [15.5, 11.5]
-    rval: [0, 0]
-    rota: 0
-    data: observation0_spectra_d.fits
-    error: 0.005
-  dtype: float64
-  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  instrument:
-    primary_beam: null
-    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 40.0 km s-1}
-  spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical, rest: 4e-06 m}
+  spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical, rest: 4e-06
+      m}
   trace:
     type: polynomial
     wave: 4e-06 m
@@ -55,8 +42,23 @@ observations:
     weight: -1.0
   sky_sampling: 2
   resampled: false
+  dtype: float64
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
+  source_grid: {step: auto, extent: auto}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 40.0 km s-1}
   oversampling: [1, 1]
   fft_dtype: float64
+datasets:
+- type: slitless_spectra
+  step: [1, 1]
+  rpix: [15.5, 11.5]
+  rval: [0, 0]
+  rota: 0
+  data: observation0_spectra_d.fits
+  error: 0.005
 likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
 params:
   properties:

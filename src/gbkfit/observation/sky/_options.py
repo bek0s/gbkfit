@@ -1,7 +1,7 @@
 """
 The options of the kinds of observations on the sky: the types of the
-options of their grids, the configuration of grids, the options their
-data give, and checks of options.
+options of their grids, the configuration of grids and of the options
+their data give, and checks of options.
 """
 
 from collections.abc import Sequence
@@ -10,8 +10,9 @@ from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 from annotated_types import Ge
 
 from gbkfit.config import Unit, warn
-from gbkfit.dataset import Dataset
-from gbkfit.grid import Grid, grid_options
+from gbkfit.dataset import (
+    Dataset, Regions, RegionsBins, UVCoverage, regions_parser)
+from gbkfit.grid import Grid, SpectralAxis, grid_options
 from gbkfit.instrument import Instrument
 
 if TYPE_CHECKING:
@@ -45,6 +46,38 @@ def dump_grid(grid: Grid) -> dict[str, Any]:
     return options
 
 
+def in_files(value: Any) -> bool:
+    """
+    Return whether the value of an option of the kind of an observation on
+    the sky that data give is in a file in its configuration (regions in
+    bins, and a UV coverage; see config_value).
+    """
+    return isinstance(value, (RegionsBins, UVCoverage))
+
+
+def config_value(
+        value: Any, prefix: str | None, dump_path: bool, overwrite: bool
+) -> Any:
+    """
+    Return the value of an option of the kind of an observation on the
+    sky that data give (see ObservationSky.data_options) as a
+    configuration: a spectral axis, regions and a UV coverage dumped (the
+    files of those in files named with the prefix, which they need; see
+    in_files and Regions.dump), a tuple as a list, and others as they are
+    (numbers).
+    """
+    if isinstance(value, SpectralAxis):
+        return value.dump()
+    if isinstance(value, Regions):
+        return regions_parser.dump(
+            value, prefix=prefix, dump_path=dump_path, overwrite=overwrite)
+    if isinstance(value, UVCoverage):
+        return value.dump(prefix, dump_path, overwrite)
+    if isinstance(value, tuple):
+        return list(value)
+    return value
+
+
 def without_options_from_data(
         observation: 'ObservationSky',
         info: dict[str, Any],
@@ -53,7 +86,7 @@ def without_options_from_data(
     """
     Return the options of the kind of an observation (info, as dumped)
     without those its data give (see ObservationSky.options_from_data), if
-    it has data.
+    it is paired with data.
     """
     if dataset is None:
         return info

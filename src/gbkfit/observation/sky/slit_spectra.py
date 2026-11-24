@@ -57,9 +57,9 @@ class ObservationSlitSpectra(ObservationSky):
     +x axis, the way the positions along it increase.
 
     Its options are those below, then those of every observation on the
-    sky (see ObservationSky). Its data give those of its grid and slit_pa
-    (given too, they serve only without data); without data, size and
-    spectral are required.
+    sky (see ObservationSky). Data paired with it give those of its grid
+    and slit_pa (given too, they serve only without data); without data,
+    size and spectral are required.
 
     Parameters
     ----------
@@ -118,7 +118,7 @@ class ObservationSlitSpectra(ObservationSky):
         slit_pa='Slit position angle', slit_width='Slit width',
         sky_rval='Sky reference position')
 
-    config_required_without = dict(dataset=('size', 'spectral'))
+    required_without_data = ('size', 'spectral')
     defaults_without_data = dict(step=(1,), rval=(0,), slit_pa=-90)
 
     @classmethod
@@ -130,12 +130,12 @@ class ObservationSlitSpectra(ObservationSky):
             | dict(slit_pa=dataset.slit_pa())
 
     @classmethod
-    def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
+    def sampling_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
         # (the orientation of the slit, in place of the rotation of the
         # grid)
         return tuple(
             'slit_pa' if option == 'rota' else option
-            for option in super().options_from_data(dataset))
+            for option in super().sampling_from_data(dataset))
 
     def _dump_grid(self) -> dict[str, Any]:
         # (the orientation of the slit, in place of the rotation of the
@@ -178,7 +178,6 @@ class ObservationSlitSpectra(ObservationSky):
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
-            dataset: Dataset | None = None,
             noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
@@ -188,7 +187,7 @@ class ObservationSlitSpectra(ObservationSky):
             unit: str | None = None
     ):
         check_options(ObservationSlitSpectra.__init__, locals())
-        options = self._options(dataset, dict(
+        options = self._options(dict(
             size=size, spectral=spectral, step=step, rpix=rpix, rval=rval,
             slit_pa=slit_pa))
         self._slit_pa = float(options['slit_pa'])
@@ -208,8 +207,8 @@ class ObservationSlitSpectra(ObservationSky):
         self._smooth_weights = smooth_weights
         super().__init__(
             grid, source_grid, instrument, galaxies, components, lines,
-            continuum, band, pixel_weights, flux_scale, offsets, dataset,
-            noise, oversampling, depth, dtype, fft_dtype, name, unit)
+            continuum, band, pixel_weights, flux_scale, offsets, noise,
+            oversampling, depth, dtype, fft_dtype, name, unit)
 
     def slit_pa(self) -> float:
         """Return the position angle of the slit (see the class)."""

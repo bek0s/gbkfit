@@ -8,9 +8,9 @@ Depth), through the gravitational lenses in front of them (see
 gbkfit.lensing) and an instrument; an observation of
 profiles (ObservationProfile) gives values of functions of a galaxy at
 radii. Observations are evaluated in groups (see ObservationGroup and
-GroupPlan), those with data compared with them under the likelihoods
-that their setup gives them (see gbkfit.objective), and draw mock data
-(see draw_mocks).
+GroupPlan), those paired with data compared with them under the
+likelihoods that their setup gives them (see gbkfit.objective), and draw
+mock data (see draw_mocks).
 """
 
 from . import (

@@ -210,8 +210,9 @@ class SlitPositionAngles(Rule):
                 if isinstance(options, MutableMapping) \
                         and options.get('type') == 'slit_spectra':
                     changes += _slit_pa(options, path + [key])
-        # (the dataset pieces of a project, of their type)
-        for path, data in items(config, 'dataset'):
+        # (the dataset pieces of a project, of their type: the section
+        # datasets of its pieces, see PiecesView)
+        for path, data in items(config, 'datasets'):
             if data.get('type') == 'slit_spectra':
                 changes += _slit_pa(data, path)
         return changes

@@ -20,8 +20,9 @@ from gbkfit.config import FORMAT_VERSION, ConfigError
 import gbkfit.project
 from . import (
     v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16,
-    v17, v18, v19, v20)
-from .rules import Change, PiecesView, Rule, ViewedPiece, insert_first
+    v17, v18, v19, v20, v21)
+from .rules import (
+    Change, PiecesView, Rule, ViewedPiece, insert_first, like)
 
 
 __all__ = [
@@ -84,7 +85,7 @@ RULES: tuple[Rule, ...] = (
     *v8.RULES, *v9.RULES, *v10.RULES, *v11.RULES, *v12.RULES,
     *v13.RULES,
     *v14.RULES, *v15.RULES, *v16.RULES, *v17.RULES, *v18.RULES,
-    *v19.RULES, *v20.RULES)
+    *v19.RULES, *v20.RULES, *v21.RULES)
 
 
 def migrate(
@@ -231,8 +232,12 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
             for item in _listed(setup, section) if isinstance(item, Mapping)]
         for section in _VIEWED}
     by_piece: dict[tuple[str, int], list[Change]] = {}
-    view = PiecesView(pieces, **{
-        section: pieces[section] + inline[section] for section in _VIEWED})
+    view = PiecesView(
+        pieces, project=project, names={
+            section: project.names(gbkfit.project.piece_folder(section))
+            for section in _SECTIONS},
+        **{section: pieces[section] + inline[section]
+           for section in _VIEWED})
     for change in _rewrite(view, version):
         section, index, *rest = change.path
         # (not the copies of the viewed pieces of the setups;
@@ -288,17 +293,19 @@ def _setup_view(
 ) -> tuple[dict[str, Any], dict[str, set[int]]]:
     """
     Return a view of a setup with its galaxies, observations and lenses
-    that name pieces replaced by copies of the pieces as they were
-    (originals, by section and name; see ViewedPiece), so that the rules
-    that take what the setup takes of them know them (e.g. those that
-    rename parameters; the rest is the setup itself, rewritten in place),
-    and the positions of those items, by section (whose changes are those
-    of the pieces, not of the setup).
+    that name pieces (by name, or under a name of the setup: {name: <name>,
+    use: <piece>}, see gbkfit.project.resolve) replaced by copies of the
+    pieces as they were (originals, by section and name; see ViewedPiece;
+    of those under a name of the setup, with that name), so that the
+    rules that take what the setup takes of them know them (e.g. those
+    that rename parameters; the rest is the setup itself, rewritten in
+    place), and the positions of those items, by section (whose changes
+    are those of the pieces, not of the setup).
     """
     named = {
         section: {
             i for i, item in enumerate(_listed(setup, section))
-            if isinstance(item, str) and item in originals[section]}
+            if _used_piece(item) in originals[section]}
         for section in _NAMED}
     named = {section: found for section, found in named.items() if found}
     if not named:
@@ -306,10 +313,34 @@ def _setup_view(
     view = dict(setup)
     for section, found in named.items():
         view[section] = [
-            ViewedPiece(item, copy.deepcopy(originals[section][item]))
-            if i in found else item
+            _viewed(item, originals[section]) if i in found else item
             for i, item in enumerate(_listed(setup, section))]
     return view, named
+
+
+def _used_piece(item: Any) -> str | None:
+    """
+    Return the name of the piece that an item of a section of a setup
+    names (see _setup_view), if it names one.
+    """
+    if isinstance(item, Mapping) and isinstance(item.get('use'), str):
+        return item['use']
+    return item if isinstance(item, str) else None
+
+
+def _viewed(
+        item: str | Mapping[str, Any], originals: Mapping[str, Any]
+) -> ViewedPiece:
+    """
+    Return a copy of the piece that an item of a section of a setup names
+    as the setup sees it (see _setup_view): under the name that the setup
+    gives it, if it gives one.
+    """
+    piece = _used_piece(item)
+    content = copy.deepcopy(originals[piece])
+    if isinstance(item, Mapping) and isinstance(content, MutableMapping):
+        content['name'] = item.get('name')
+    return ViewedPiece(piece, content)
 
 
 def _write_back(
@@ -328,11 +359,12 @@ def _write_back(
         if key in named:
             continue
         # (a piece that the rules named, as the setup sees it, by its name:
-        # see ViewedPiece)
-        if isinstance(value, list):
-            value = [
+        # see ViewedPiece; other lists stay as they are, of their style)
+        if isinstance(value, list) and any(
+                isinstance(item, ViewedPiece) for item in value):
+            value = like(value, [
                 item.piece if isinstance(item, ViewedPiece) else item
-                for item in value]
+                for item in value])
         # (a new section where the rules put it, e.g. after another)
         if key not in setup and isinstance(setup, CommentedMap):
             setup.insert(position, key, value)

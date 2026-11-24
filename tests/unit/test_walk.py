@@ -47,17 +47,17 @@ def test_files_are_changed_in_a_copy():
 def test_the_leaves_of_a_setup_carry_their_section():
     config = dict(
         galaxies=GALAXY,
-        observations=[dict(
-            type='pixel_moments', dataset=dict(
-                type='pixel_moments',
-                moment0=dict(data='m0.fits', error='m0_e.fits')))],
+        observations=[dict(type='pixel_moments')],
+        datasets=[dict(
+            type='pixel_moments',
+            moment0=dict(data='m0.fits', error='m0_e.fits'))],
         likelihoods=dict(
             maps=dict(type='user', file='noise.py', func='f')))
     leaves = list(setup_leaves(config))
     assert ConfigLeaf(
         ('galaxies', 'mass', 0, 'component'), 'components', 'gas') in leaves
     assert ConfigLeaf(
-        ('observations', 0, 'dataset', 'moment0', 'data'), 'file',
+        ('datasets', 0, 'moment0', 'data'), 'file',
         'm0.fits') in leaves
     assert ConfigLeaf(
         ('likelihoods', 'maps', 'file'), 'file', 'noise.py') in leaves

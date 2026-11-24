@@ -85,12 +85,12 @@ def observation(regions, psf=1.0, oversampling=None, data=None):
     # (V and sigma, and the coefficients h3 and h4)
     dataset = DatasetRegionMoments(
         {m: item(m) for m in (1, 2)}, regions, {m: item(m) for m in (3, 4)})
-    return ObservationRegionMoments(
-        method='gauss_hermite',
+    return ObservationRegionMoments.paired(
+        dataset, method='gauss_hermite',
         spectral=SpectralAxis(convention='log', rest='5000 Angstrom'),
         depth=Depth(step=2),
         instrument=Instrument(psf=None if psf is None else PSFGauss(psf)),
-        lines=[], continuum=True, dataset=dataset, dtype='float64',
+        lines=[], continuum=True, dtype='float64',
         oversampling=oversampling)
 
 
@@ -220,7 +220,8 @@ def test_orbits_are_seen_without_what_their_recording_ignores(driver):
         seen, depth=seen.depth(),
         instrument=Instrument(
             psf=PSFGauss(1.0), lsf=LSFGauss(20.0 * u.km / u.s)),
-        lines=[], continuum=True, dataset=seen.dataset(), dtype='float64')
+        lines=[], continuum=True, dtype='float64'
+    ).with_dataset(seen.dataset())
     with pytest.raises(ValueError, match="without an LSF"):
         ObservationGroup([galaxy()], [with_lsf]).plan(driver)
 
@@ -231,8 +232,7 @@ def test_an_image_sees_the_light_of_stars_on_orbits(driver):
     from gbkfit.observation import ObservationPixelBrightness
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
-    image = ObservationPixelBrightness(
-        dataset=dataset)
+    image = ObservationPixelBrightness.paired(dataset)
     group = ObservationGroup([galaxy()], [observation(bins()), image])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
@@ -259,12 +259,11 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
     seen = observation(bins())
     stars = moments_of(
         seen, depth=seen.depth(), instrument=seen.instrument(),
-        lines=[], continuum=True, dataset=seen.dataset(), dtype='float64', name='bins')
+        lines=[], continuum=True, dtype='float64', name='bins'
+    ).with_dataset(seen.dataset())
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
-    image = ObservationPixelBrightness(
-        dataset=dataset,
-        name='image')
+    image = ObservationPixelBrightness.paired(dataset, name='image')
     group = ObservationGroup([galaxy()], [stars, image])
     likelihoods = Likelihoods(group, dict(
         bins=LikelihoodGauss(
@@ -615,12 +614,12 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
         2: Data(mock.sigma, error=mock.sigma_error)}, regions, {
         3: Data(mock.h[:, 0], error=mock.h_error[:, 0]),
         4: Data(mock.h[:, 1], error=mock.h_error[:, 1])})
-    obs = ObservationRegionMoments(
-        method='gauss_hermite',
+    obs = ObservationRegionMoments.paired(
+        dataset, method='gauss_hermite',
         spectral=SpectralAxis(convention='log', rest='5000 Angstrom'),
         depth=Depth(step=2),
         instrument=Instrument(psf=PSFGauss(0.5 / np.sqrt(8 * np.log(2)))),
-        lines=[], continuum=True, dataset=dataset)
+        lines=[], continuum=True)
     a = light.a / mock.kpc_per_arcsec()
     sigma, i0 = hernquist_mge(a)
     spheroid = SPHEROID | dict(
@@ -707,10 +706,10 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
             model[KEYS[m]].data, error=np.full(regions.nregions(), errors[m]))
     dataset = DatasetRegionMoments(
         {m: item(m) for m in (1, 2)}, regions, {m: item(m) for m in (3, 4)})
-    obs = ObservationRegionMoments(
-        method='gauss_hermite',
+    obs = ObservationRegionMoments.paired(
+        dataset, method='gauss_hermite',
         spectral=SpectralAxis(convention='log', rest='5000 Angstrom'),
-        depth=depth, instrument=instrument, lines=[], continuum=True, dataset=dataset)
+        depth=depth, instrument=instrument, lines=[], continuum=True)
     group = ObservationGroup(
         [stars(dict(norbits=1500, turns=30))], [obs])
     solve = dict(solve=dict(

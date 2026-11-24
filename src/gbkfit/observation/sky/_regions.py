@@ -86,17 +86,17 @@ class ObservationRegions(ObservationSky):
     a grid (bins), or given (apertures; see spatial_grid_of_regions): of
     its options, regions and the spatial grid of the cube (size, step,
     rpix, rval, rota), for regions on the sky; size is then required, and
-    regions on a grid give it, when it must not be given. Its data give
-    its regions, which its configuration without data has in a file (see
-    _dump_kind). It does not support pixel weights yet.
+    regions on a grid give it, when it must not be given. Data paired with
+    it give its regions, which its configuration without data has in a
+    file (see _dump_kind). It does not support pixel weights yet.
     """
 
     config_titles = dict(regions='Regions')
 
-    # (its data give its regions; regions on the sky need the size of
-    # the grid of the cube, which regions on a grid give, see
+    # (data give its regions; regions on the sky need the size of the
+    # grid of the cube, which regions on a grid give, see
     # spatial_grid_of_regions)
-    config_required_without = dict(dataset=('regions',))
+    required_without_data = ('regions',)
     defaults_without_data = {}
 
     def _regions_grid(

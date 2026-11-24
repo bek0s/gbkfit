@@ -24,27 +24,22 @@ if TYPE_CHECKING:
 
 def light_unit(
         unit: str,
-        dataset: Dataset | None,
         observation: 'ObservationSky',
         instrument: Instrument
 ) -> tuple[LightUnit, Beam | None]:
     """
     Return the unit of the light of the model of an observation without
-    data, as given (see ObservationSky: unit), and its beam: for a unit
-    per beam, that of the PSF of its instrument (see _psf_beam), of each
-    channel of the spectral axis of the observation for a PSF that
-    varies; else None.
+    data, as given (see ObservationSky: unit; data paired with it give
+    theirs), and its beam: for a unit per beam, that of the PSF of its
+    instrument (see _psf_beam), of each channel of the spectral axis of
+    the observation for a PSF that varies; else None.
 
     Raises
     ------
     ValueError
-        If it has data, which give the unit, the unit is not a unit, or a
-        unit per beam has no PSF, or one without a beam.
+        If the unit is not a unit, or a unit per beam has no PSF, or one
+        without a beam.
     """
-    if dataset is not None:
-        raise ValueError(
-            "the data of an observation give the unit of its model; remove "
-            "its unit")
     with config_path('unit'):
         unit = gbkfit.units.parse_unit(unit)
     if gbkfit.units.spatial_unit(unit) != astropy.units.beam:

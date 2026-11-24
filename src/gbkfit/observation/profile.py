@@ -3,9 +3,8 @@ The observation of profiles of a galaxy: the values of functions of the
 galaxy at radii (e.g. its rotation curve).
 """
 
-import logging
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Any
 
 import astropy.units as u
 import numpy as np
@@ -31,9 +30,6 @@ if TYPE_CHECKING:
 __all__ = [
     'ObservationProfile'
 ]
-
-
-_log = logging.getLogger(__name__)
 
 
 # The families of the functions of rotation velocities (see
@@ -78,13 +74,10 @@ class ObservationProfile(Observation):
     galaxy (see GalaxyState), with the profiles of the disks sampled on
     its driver, and copied to its driver.
 
-    In its configuration (type 'profile'), its dataset (the option
-    dataset) has the form of DatasetProfile (no type; see
-    DatasetProfile.from_file).
-
-    The data give its functions, radii and assumed distance (given too,
-    they serve only without data, and are left out with a line in the
-    log).
+    Data paired with it (a DatasetProfile, see Observation.with_dataset)
+    give its functions, radii and assumed distance (given too, they serve
+    only without data, and are left out with a line in the log); without
+    data, its functions and radii are required.
 
     Parameters
     ----------
@@ -100,21 +93,20 @@ class ObservationProfile(Observation):
         The inclination (degrees) at which its rotation velocities were
         deprojected: its parameter '{name}_incl' is then the inclination
         of the galaxy (degrees), and its name is required.
-    galaxies, dataset, noise, name
+    galaxies, noise, name
         See Observation.
 
     Raises
     ------
     ValueError
-        If it has data whose functions, radii or distance are not those it
-        gives, or neither data nor functions and radii, an item is not a
-        function of radii, or its data are not in a unit of the kind of
-        its own (they are converted to it), the radii or the distance are
-        invalid (see check_profile_radii), a slope has a
-        radius of 0, it sees more than one galaxy, the inclination is not
-        above 0 and at most 90, or it has no name or no rotation
-        velocities, or see Observation.
+        If its functions or its radii are not given, an item is not a
+        function of radii, the radii or the distance are invalid (see
+        check_profile_radii), a slope has a radius of 0, it sees more than
+        one galaxy, the inclination is not above 0 and at most 90, or it
+        has no name or no rotation velocities, or see Observation.
     """
+
+    dataset_class = DatasetProfile
 
     config_titles = dict(
         functions='Functions', radii='Radii',
@@ -136,11 +128,15 @@ class ObservationProfile(Observation):
         """
         Dump the observation to its configuration.
 
+        Its options that its data give, if it is paired with data, are
+        left out (see options_from_data); it has no data (a setup pairs it
+        with its dataset).
+
         Parameters
         ----------
         prefix : str, optional
-            The start of the names of the files of its data (see
-            DatasetProfile.dump).
+            The start of the names of the files of its options (see
+            Noise.dump).
         dump_path : bool, optional
             Whether the configuration has the paths of the files, or only
             their names.
@@ -162,19 +158,37 @@ class ObservationProfile(Observation):
                 self._noise, prefix=prefix, dump_path=dump_path,
                 overwrite=overwrite)
         if self._dataset is not None:
-            # (the form of the data is that of a profile: no type)
-            dataset = self._dataset.dump(prefix, dump_path, overwrite)
-            return info | dict(
-                dataset={k: v for k, v in dataset.items() if k != 'type'})
-        info |= dict(
-            functions=list(self.keys()),
-            radii=dict(
-                value=self._radii.value.tolist(),
-                unit=gbkfit.units.format_unit(self._radii.unit)))
-        if self._assumed_distance is not None:
-            info['assumed_distance'] = float(
-                self._assumed_distance.to_value(u.Mpc))
-        return info
+            return info
+        return info | _profile_options(
+            self.keys(), self._radii, self._assumed_distance)
+
+    @classmethod
+    def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
+        # (its functions, at the radii of the data and their distance)
+        return 'functions', 'radii', 'assumed_distance'
+
+    @classmethod
+    def _options_from_data(
+            cls, dataset: DatasetProfile, options: dict[str, Any]
+    ) -> dict[str, Any]:
+        distance = dataset.assumed_distance()
+        return dict(
+            functions=tuple(dataset.keys()), radii=dataset.radii(),
+            assumed_distance=None if distance is None
+            else float(distance.to_value(u.Mpc)))
+
+    @classmethod
+    def data_options(
+            cls,
+            dataset: Dataset,
+            prefix: str | None = None,
+            dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        cls.check_dataset_class(dataset)
+        return _profile_options(
+            tuple(dataset.keys()), dataset.radii(),
+            dataset.assumed_distance())
 
     def __init__(
             self,
@@ -185,31 +199,13 @@ class ObservationProfile(Observation):
             inclination:
             Annotated[float, Gt(0), Le(90), Unit('deg')] | None = None,
             galaxies: Sequence[str] | None = None,
-            dataset: DatasetProfile | None = None,
             noise: Noise | None = None,
             name: str | None = None
     ):
         check_options(ObservationProfile.__init__, locals())
         if assumed_distance is not None:
             assumed_distance = assumed_distance * u.Mpc
-        if dataset is not None:
-            if not isinstance(dataset, DatasetProfile):
-                raise ValueError(
-                    f"the data of a profile are a table of it "
-                    f"(DatasetProfile); they are {type(dataset).__name__}")
-            # (the data give them: those given serve only without data)
-            if given := [
-                    key for key, value in (
-                        ('functions', functions), ('radii', radii),
-                        ('assumed_distance', assumed_distance))
-                    if value is not None]:
-                _log.info(
-                    "a profile: its data give the options %s; those given "
-                    "are used only without data", given)
-            functions = tuple(dataset.keys())
-            radii = dataset.radii()
-            assumed_distance = dataset.assumed_distance()
-        elif functions is None or radii is None:
+        if functions is None or radii is None:
             raise ValueError(
                 "a profile without data needs its functions and its radii")
         keys = tuple(functions)
@@ -238,15 +234,13 @@ class ObservationProfile(Observation):
                 raise ValueError(
                     "an inclination scales rotation velocities (e.g. vcirc, "
                     "rotation_gas); the profile has none")
-        if dataset is not None:
-            dataset = _checked_data(dataset, keys, radii, assumed_distance)
         self._radii = radii
         self._assumed_distance = assumed_distance
         self._inclination = None if inclination is None \
             else float(inclination)
         # (slopes have no values where the galaxy has no density)
         super().__init__(
-            keys, galaxies, dataset, noise, name,
+            keys, galaxies, noise, name,
             model_can_have_missing_values=any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys))
 
@@ -307,10 +301,19 @@ class ObservationProfile(Observation):
         """Return the floating type of its model: float64."""
         return np.dtype(np.float64)
 
-    def with_dataset(self, dataset: Dataset) -> Self:
-        return type(self)(
+    def _pair(self, dataset: Dataset) -> None:
+        # (its data in the units of its functions, see _checked_data)
+        super()._pair(_checked_data(
+            dataset, self.keys(), self._radii, self._assumed_distance))
+
+    def _constructor_options(self) -> dict[str, Any]:
+        distance = self._assumed_distance
+        return dict(
+            functions=self.keys(), radii=self._radii,
+            assumed_distance=None if distance is None
+            else float(distance.to_value(u.Mpc)),
             inclination=self._inclination, galaxies=self._galaxies,
-            dataset=dataset, noise=self._noise, name=self._name)
+            noise=self._noise, name=self._name)
 
     def same_plan(self, other: Observation, seen: SeenGalaxies) -> bool:
         """
@@ -445,6 +448,25 @@ def _same_radii(a: np.ndarray | None, b: np.ndarray | None) -> bool:
     if a is None or b is None:
         return a is b
     return np.array_equal(a, b)
+
+
+def _profile_options(
+        functions: Sequence[str],
+        radii: u.Quantity,
+        distance: u.Quantity | None
+) -> dict[str, Any]:
+    """
+    Return the configuration of the functions, the radii and the assumed
+    distance of a profile (see ObservationProfile).
+    """
+    info = dict(
+        functions=list(functions),
+        radii=dict(
+            value=radii.value.tolist(),
+            unit=gbkfit.units.format_unit(radii.unit)))
+    if distance is not None:
+        info['assumed_distance'] = float(distance.to_value(u.Mpc))
+    return info
 
 
 def _checked_data(

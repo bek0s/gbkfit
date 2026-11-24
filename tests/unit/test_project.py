@@ -17,7 +17,7 @@ from gbkfit.params import merge_layers
 yaml = ruamel.yaml.YAML(typ='safe')
 
 GALAXY = dict(components=[dict(type='thin_disk', name='disk')])
-OBSERVATION = dict(dataset=dict(data='data/ngc1313/hi.fits'))
+OBSERVATION = dict(type='pixel_spectra', name='hi')
 DATASET = dict(type='pixel_spectra', data='data/ngc1313/hi.fits')
 PSF = dict(type='gauss', sigma=1.5)
 LSF = dict(type='gauss', sigma=15)
@@ -50,14 +50,17 @@ def study(tmp_path):
 
 
 def test_a_setup_has_its_pieces_in_place(study):
+    write(Path(study.path, 'datasets/ngc1313/hi.yaml'), DATASET)
     setup = dict(
         galaxies=['arctan', GALAXY], observations='ngc1313/hi',
+        datasets='ngc1313/hi',
         params=['bounds', 'ngc1313', dict(properties=dict(disk_incl=60))],
         fitter='nautilus', driver=dict(type='host'))
     filename = os.path.join(study.path, 'setups/ngc1313/arctan.yaml')
     config, sources = project.resolve(setup, filename, study)
     assert config == dict(
         galaxies=[GALAXY, GALAXY], observations=[OBSERVATION],
+        datasets=[DATASET],
         params=dict(
             properties=dict(
                 disk_vsys=dict(value=470, min=400, max=540), disk_incl=60),
@@ -67,7 +70,7 @@ def test_a_setup_has_its_pieces_in_place(study):
         file='setups/ngc1313/arctan.yaml',
         galaxies=['galaxies/arctan.yaml', 'setups/ngc1313/arctan.yaml'],
         observations=['observations/ngc1313/hi.yaml'],
-        dataset=['observations/ngc1313/hi.yaml'],
+        datasets=['datasets/ngc1313/hi.yaml'],
         params=[
             'params/bounds.yaml', 'params/ngc1313.yaml',
             'setups/ngc1313/arctan.yaml'],
@@ -80,32 +83,34 @@ def test_a_setup_has_its_pieces_in_place(study):
 
 
 def test_observations_name_their_parts(study):
-    # (their dataset, noise, PSF and LSF; the noise of mock data was in
-    # the section mock, one for all or by observation name)
+    # (their noise, PSF and LSF; the noise of mock data was in the
+    # section mock, one for all or by observation name); the datasets of a
+    # setup, one for each observation (null for one without data), name
+    # pieces too
     path = Path(study.path)
     write(path / 'datasets/ngc1313/hi.yaml', DATASET)
     write(path / 'psfs/beam.yaml', PSF)
     write(path / 'noise/radio.yaml', NOISE)
     write(path / 'observations/named.yaml', dict(
-        dataset='ngc1313/hi', noise='radio',
-        instrument=dict(psf='beam', lsf=LSF)))
+        noise='radio', instrument=dict(psf='beam', lsf=LSF)))
     in_place = dict(type='gauss', rms=0.5)
     setup = dict(
         observations=[
             'named', 'ngc1313/hi', dict(OBSERVATION, noise=in_place)],
+        datasets=['ngc1313/hi', None, DATASET],
         mock=dict(seed=1))
     filename = os.path.join(study.path, 'setups/mock.yaml')
     config, sources = project.resolve(setup, filename, study)
     assert config == dict(
         observations=[
-            dict(dataset=DATASET, noise=NOISE,
-                 instrument=dict(psf=PSF, lsf=LSF)),
+            dict(noise=NOISE, instrument=dict(psf=PSF, lsf=LSF)),
             OBSERVATION, dict(OBSERVATION, noise=in_place)],
+        datasets=[DATASET, None, DATASET],
         mock=dict(seed=1))
-    # (the parts in place are from the files of their observations)
-    assert sources['dataset'] == [
-        'datasets/ngc1313/hi.yaml', 'observations/ngc1313/hi.yaml',
-        'setups/mock.yaml']
+    # (the parts in place are from the files of their observations, and
+    # the datasets in place from the setup)
+    assert sources['datasets'] == [
+        'datasets/ngc1313/hi.yaml', None, 'setups/mock.yaml']
     assert sources['noise'] == ['noise/radio.yaml', None, 'setups/mock.yaml']
     assert sources['psf'] == ['psfs/beam.yaml', None, None]
     assert sources['lsf'] == ['observations/named.yaml', None, None]
@@ -144,11 +149,13 @@ def test_pieces_need_a_project(tmp_path):
     with pytest.raises(ConfigError, match="not in one"):
         project.resolve(
             dict(galaxies=['arctan']), str(tmp_path / 'fit.yaml'), None)
-    # (in place, and in layers, they do not)
+    # (in place, and in layers, they do not; one item in place is a list of
+    # it, as one named)
     config, _ = project.resolve(
         dict(galaxies=GALAXY, params=[dict(properties=dict(a=1))]),
         str(tmp_path / 'fit.yaml'), None)
-    assert config == dict(galaxies=GALAXY, params=dict(properties=dict(a=1)))
+    assert config == dict(
+        galaxies=[GALAXY], params=dict(properties=dict(a=1)))
 
 
 def test_a_project_is_found_above_its_files(study, tmp_path):
@@ -192,7 +199,7 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
     write(path / 'psfs/beam.yaml', PSF)
     (path / 'observations/ngc1313/hi.yaml').write_text(
         "# The HI of NGC 1313\n"
-        "dataset: ngc1313/hi\n"
+        "name: hi\n"
         "# its instrument\n"
         "instrument: {psf: beam, lsf: {type: gauss, sigma: 15}}\n")
     (path / 'setups').mkdir(exist_ok=True)
@@ -200,48 +207,44 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
         "galaxies: [arctan]\n"
         "observations:\n"
         "- ngc1313/hi\n"
-        "- {dataset: ngc1313/hi, noise: radio, instrument: {psf: beam}}\n"
+        "- {name: b, noise: radio, instrument: {psf: beam}}\n"
         "- {noise: {type: gauss, rms: 1}}\n"
+        "# the data of each\n"
+        "datasets: [ngc1313/hi, ngc1313/hi, null]\n"
         "params: [bounds, ngc1313]\n"
         "fitter: nautilus\n")
-    assert study.references('datasets', 'ngc1313/hi') == [
-        ('observations', 'ngc1313/hi'), ('setups', 'fit')]
+    assert study.references('datasets', 'ngc1313/hi') == [('setups', 'fit')]
     assert study.references('psfs', 'beam') == [
         ('observations', 'ngc1313/hi'), ('setups', 'fit')]
     assert study.references('galaxies', 'arctan') == [('setups', 'fit')]
     assert study.references('datasets', 'other') == []
     # (all of them at once, each once: the setup names the dataset twice)
     assert study.links() == [
-        (('observations', 'ngc1313/hi'), ('datasets', 'ngc1313/hi')),
         (('observations', 'ngc1313/hi'), ('psfs', 'beam')),
         (('setups', 'fit'), ('galaxies', 'arctan')),
         (('setups', 'fit'), ('observations', 'ngc1313/hi')),
         (('setups', 'fit'), ('params', 'bounds')),
         (('setups', 'fit'), ('params', 'ngc1313')),
-        (('setups', 'fit'), ('datasets', 'ngc1313/hi')),
         (('setups', 'fit'), ('noise', 'radio')),
         (('setups', 'fit'), ('psfs', 'beam')),
+        (('setups', 'fit'), ('datasets', 'ngc1313/hi')),
         (('setups', 'fit'), ('fitters', 'nautilus'))]
     # (renamed, the names of it follow; comments and layout stay)
     target = study.rename_piece('datasets', 'ngc1313/hi', 'hi')
     assert target == str(path / 'datasets/hi.yaml')
     assert not (path / 'datasets/ngc1313').exists()
-    assert (path / 'observations/ngc1313/hi.yaml').read_text() == (
-        "# The HI of NGC 1313\n"
-        "dataset: hi\n"
-        "# its instrument\n"
-        "instrument: {psf: beam, lsf: {type: gauss, sigma: 15}}\n")
-    assert yaml.load(path / 'setups/fit.yaml')['observations'] == [
-        'ngc1313/hi',
-        dict(dataset='hi', noise='radio', instrument=dict(psf='beam')),
-        dict(noise=dict(type='gauss', rms=1))]
+    assert (path / 'setups/fit.yaml').read_text().endswith(
+        "# the data of each\n"
+        "datasets: [hi, hi, null]\n"
+        "params: [bounds, ngc1313]\n"
+        "fitter: nautilus\n")
     study.rename_piece('observations', 'ngc1313/hi', 'hi')
     assert yaml.load(path / 'setups/fit.yaml')['observations'][0] == 'hi'
     # (and of the noises of observations, where they are names)
     write(path / 'noise/radio.yaml', NOISE)
     study.rename_piece('noise', 'radio', 'beam_noise')
     assert yaml.load(path / 'setups/fit.yaml')['observations'][1:] == [
-        dict(dataset='hi', noise='beam_noise', instrument=dict(psf='beam')),
+        dict(name='b', noise='beam_noise', instrument=dict(psf='beam')),
         dict(noise=dict(type='gauss', rms=1))]
     with pytest.raises(FileExistsError):
         study.rename_piece('galaxies', 'arctan', 'arctan')

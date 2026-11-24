@@ -46,10 +46,10 @@ class ObservationRegionSpectra(ObservationRegions):
 
     The spatial axes of the cube are those of the regions if they are on a
     grid (bins), or given (apertures). Its options are those below, then
-    those of every observation on the sky (see ObservationSky). Its data
-    give its regions and its spectral axis, and regions on a grid give the
-    spatial grid (given too, they serve only without data); without data,
-    regions and spectral are required.
+    those of every observation on the sky (see ObservationSky). Data paired
+    with it give its regions and its spectral axis, and regions on a grid
+    give the spatial grid (given too, they serve only without data);
+    without data, regions and spectral are required.
 
     Parameters
     ----------
@@ -90,14 +90,14 @@ class ObservationRegionSpectra(ObservationRegions):
         return 'Region spectra (bins, fibres)'
 
     @classmethod
-    def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
+    def sampling_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
         # The regions and the spectral axis, and the spatial grid of
         # regions on a grid
         return (
             ('regions', 'spectral')
             + spatial_options_from_regions(dataset.regions()))
 
-    config_required_without = dict(dataset=('regions', 'spectral'))
+    required_without_data = ('regions', 'spectral')
 
     @classmethod
     def _options_from_data(
@@ -138,7 +138,6 @@ class ObservationRegionSpectra(ObservationRegions):
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
-            dataset: Dataset | None = None,
             noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
@@ -148,7 +147,7 @@ class ObservationRegionSpectra(ObservationRegions):
             unit: str | None = None
     ):
         check_options(ObservationRegionSpectra.__init__, locals())
-        options = self._options(dataset, dict(
+        options = self._options(dict(
             regions=regions, spectral=spectral, size=size, step=step,
             rpix=rpix, rval=rval, rota=rota))
         grid = self._regions_grid(**options)
@@ -160,8 +159,8 @@ class ObservationRegionSpectra(ObservationRegions):
                 f"{grid.spectral().size[0]}")
         super().__init__(
             grid, source_grid, instrument, galaxies, components, lines,
-            continuum, band, pixel_weights, flux_scale, offsets, dataset,
-            noise, oversampling, depth, dtype, fft_dtype, name, unit)
+            continuum, band, pixel_weights, flux_scale, offsets, noise,
+            oversampling, depth, dtype, fft_dtype, name, unit)
 
     def spectral_grid(self) -> Grid:
         """Return the grid of the spectral axis (one axis)."""

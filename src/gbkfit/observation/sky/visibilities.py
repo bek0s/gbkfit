@@ -97,9 +97,9 @@ class ObservationVisibilities(ObservationSky):
     smoothing), and its primary beam attenuates the cube.
 
     Its options are those below, then those of every observation on the
-    sky (see ObservationSky). Its data give its coverage (given too, it
-    serves only without data); without data, the coverage is required, a
-    file of its arrays (see UVCoverage.from_file).
+    sky (see ObservationSky). Data paired with it give its coverage (given
+    too, it serves only without data); without data, the coverage is
+    required, a file of its arrays (see UVCoverage.from_file).
 
     The spatial weights of data do not apply (the data are not pixels);
     a mosaic is one observation for each pointing, fitted jointly. Not
@@ -164,10 +164,10 @@ class ObservationVisibilities(ObservationSky):
         return 'Visibilities (interferometer)'
 
     @classmethod
-    def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
+    def sampling_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
         return ('coverage',)
 
-    config_required_without = dict(dataset=('coverage',))
+    required_without_data = ('coverage',)
     defaults_without_data = {}
 
     @classmethod
@@ -223,7 +223,6 @@ class ObservationVisibilities(ObservationSky):
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
-            dataset: Dataset | None = None,
             noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
@@ -233,7 +232,7 @@ class ObservationVisibilities(ObservationSky):
             unit: str | None = None
     ):
         check_options(ObservationVisibilities.__init__, locals())
-        coverage = self._options(dataset, dict(coverage=coverage))[
+        coverage = self._options(dict(coverage=coverage))[
             'coverage']
         fov = (fov,) * 2 if np.ndim(fov) == 0 else tuple(fov)
         if len(fov) != 2 or not all(value > 0 for value in fov):
@@ -268,8 +267,8 @@ class ObservationVisibilities(ObservationSky):
         self._eps = eps
         super().__init__(
             grid, source_grid, instrument, galaxies, components, lines,
-            continuum, band, pixel_weights, flux_scale, offsets, dataset,
-            noise, oversampling, depth, dtype, fft_dtype, name, unit)
+            continuum, band, pixel_weights, flux_scale, offsets, noise,
+            oversampling, depth, dtype, fft_dtype, name, unit)
 
     def fov(self) -> tuple[float, float]:
         """Return the field of the cube on the sky (arcsec)."""

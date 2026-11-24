@@ -1,6 +1,6 @@
 # offsets_two_observations: One galaxy in a cube and in moment maps whose reference pixels are 1.4 arcsec apart on the sky (aligned), the maps with fitted offsets of position and velocity.
 # (written by make_golden.py; do not edit)
-version: 20
+version: 21
 driver: {type: host}
 galaxies:
 - components:
@@ -15,49 +15,50 @@ galaxies:
 observations:
 - type: pixel_spectra
   name: kmos
-  dataset:
-    type: pixel_spectra
-    step: [0.5, 0.5]
-    rpix: [9.5, 9.5]
-    rval: [150, -30]
-    rota: 0
-    spectral: {step: 20.0, rpix: 19.5, rval: 0.0}
-    data: kmos_spectra_d.fits
-    error: 0.0005
+  smooth_weights: false
+  median_size: null
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
+  source_grid: {step: auto, extent: auto}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20.0 km s-1}
-  smooth_weights: false
-  median_size: null
   oversampling: [1, 1, 1]
   fft_dtype: float64
 - type: pixel_moments
   name: sinfoni
-  offsets: {position: true, velocity: true}
-  dataset:
-    type: pixel_moments
-    step: [1, 1]
-    rpix: [11.5, 11.5]
-    rval: [150.0004, -29.9998]
-    rota: 0
-    moment0: {data: sinfoni_moment0_d.fits, error: sinfoni_moment0_e.fits}
-    moment1: {data: sinfoni_moment1_d.fits, mask: sinfoni_moment1_m.fits, error: sinfoni_moment1_e.fits}
-    moment2: {data: sinfoni_moment2_d.fits, mask: sinfoni_moment2_m.fits, error: sinfoni_moment2_e.fits}
-  dtype: float64
-  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  instrument:
-    primary_beam: null
-    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20.0 km s-1}
   spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
   flux_floor: 1.0e-06
   method: moments
   median_size: null
+  offsets: {position: true, velocity: true}
+  dtype: float64
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
+  source_grid: {step: auto, extent: auto}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20.0 km s-1}
   oversampling: [1, 1]
   fft_dtype: float64
+datasets:
+- type: pixel_spectra
+  step: [0.5, 0.5]
+  rpix: [9.5, 9.5]
+  rval: [150, -30]
+  rota: 0
+  spectral: {step: 20.0, rpix: 19.5, rval: 0.0}
+  data: kmos_spectra_d.fits
+  error: 0.0005
+- type: pixel_moments
+  step: [1, 1]
+  rpix: [11.5, 11.5]
+  rval: [150.0004, -29.9998]
+  rota: 0
+  moment0: {data: sinfoni_moment0_d.fits, error: sinfoni_moment0_e.fits}
+  moment1: {data: sinfoni_moment1_d.fits, mask: sinfoni_moment1_m.fits, error: sinfoni_moment1_e.fits}
+  moment2: {data: sinfoni_moment2_d.fits, mask: sinfoni_moment2_m.fits, error: sinfoni_moment2_e.fits}
 likelihoods:
   kmos: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
   sinfoni: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}

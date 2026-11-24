@@ -307,8 +307,8 @@ def test_workers_evaluate_lensed_models_as_the_objective_does(driver):
     [image] = evaluate(ObservationGroup(source, ObservationPixelBrightness(
         size=(SIZE, SIZE), step=STEP, dtype='float64'), [sis()]),
         truth, driver)
-    observation = ObservationPixelBrightness(
-        dataset=DatasetPixelBrightness(
+    observation = ObservationPixelBrightness.paired(
+        DatasetPixelBrightness(
             Data(image, error=np.full(image.shape, 0.01)), step=STEP),
         dtype='float64')
     group = ObservationGroup(source, observation, [sis()])

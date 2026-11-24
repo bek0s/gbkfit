@@ -37,9 +37,9 @@ class ObservationPixelSpectra(ObservationSky):
     through the instrument.
 
     Its options are those below, then those of every observation on the
-    sky (see ObservationSky). Its data give those of its grid (given too,
-    they serve only without data); without data, size and spectral are
-    required.
+    sky (see ObservationSky). Data paired with it give those of its grid
+    (given too, they serve only without data); without data, size and
+    spectral are required.
 
     Parameters
     ----------
@@ -79,7 +79,7 @@ class ObservationPixelSpectra(ObservationSky):
     # The axes of a spectral cube: x, y and the spectral axis
     spectral_axis = 2
 
-    config_required_without = dict(dataset=('size', 'spectral'))
+    required_without_data = ('size', 'spectral')
 
     @staticmethod
     def type() -> str:
@@ -128,7 +128,6 @@ class ObservationPixelSpectra(ObservationSky):
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
-            dataset: Dataset | None = None,
             noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
@@ -138,7 +137,7 @@ class ObservationPixelSpectra(ObservationSky):
             unit: str | None = None
     ):
         check_options(ObservationPixelSpectra.__init__, locals())
-        grid = self._options(dataset, dict(
+        grid = self._options(dict(
             size=size, spectral=spectral, step=step, rpix=rpix, rval=rval,
             rota=rota))
         check_median_size(median_size)
@@ -147,8 +146,8 @@ class ObservationPixelSpectra(ObservationSky):
         super().__init__(
             self._make_grid(**grid), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
-            offsets, dataset, noise, oversampling, depth, dtype, fft_dtype,
-            name, unit)
+            offsets, noise, oversampling, depth, dtype, fft_dtype, name,
+            unit)
 
     def _measured_pixels(self) -> np.ndarray:
         return unmasked_pixels(self._dataset, self._grid.size[1::-1])

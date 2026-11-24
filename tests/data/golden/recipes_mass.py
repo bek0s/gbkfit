@@ -280,9 +280,9 @@ _PROFILE_TABLE_MASS = dict(
             | _rotmod(velocity=dict(column='col5')),
             _NFW],
         distance=_DISTANCE)],
-    observations=[dict(
-        type='profile', name='rc', inclination=60,
-        dataset=_rotmod(vcirc=dict(column='col2', error='col3')))],
+    observations=[dict(type='profile', name='rc', inclination=60)],
+    datasets=[dict(type='profile') | _rotmod(
+        vcirc=dict(column='col2', error='col3'))],
     truth=dict(
         distance=10, mass_gas_upsilon=1, mass_disk_upsilon=0.5,
         mass_halo_log_m=11.5, mass_halo_c=10, rc_incl=60),

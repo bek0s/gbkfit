@@ -53,10 +53,10 @@ class ObservationRegionMoments(ObservationRegions):
     The spatial axes of the cube are those of the regions if they are on a
     grid (bins), or given (apertures); its spectral axis is as that of
     ObservationPixelMoments. Its options are those below, then those of
-    every observation on the sky (see ObservationSky). Its data give its
-    regions and its orders, and regions on a grid give the spatial grid
-    (given too, they serve only without data); without data, regions are
-    required.
+    every observation on the sky (see ObservationSky). Data paired with it
+    give its regions and its orders, and regions on a grid give the
+    spatial grid (given too, they serve only without data); without data,
+    regions are required.
 
     E.g. the kinematics of the stars of a spheroid (the continuum of its
     observation: continuum: true, lines: []) in the Voronoi bins of pPXF.
@@ -116,7 +116,7 @@ class ObservationRegionMoments(ObservationRegions):
         return 'Region moments (bins, fibres)'
 
     @classmethod
-    def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
+    def sampling_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
         # The regions and the orders, and the spatial grid of regions on a
         # grid
         return (
@@ -132,12 +132,8 @@ class ObservationRegionMoments(ObservationRegions):
         # (the regions, which give the spatial grid of regions on a grid,
         # the orders, and the spectral axis of the cube, as that of
         # ObservationPixelMoments)
-        spectral = options['spectral']
-        covered = {} if spectral.size() is not None \
-            and spectral.rval() is not None else dict(
-                spectral=_moments.spectral_axis(spectral, dataset))
         return dict(regions=dataset.regions(), orders=dataset.orders()) \
-            | covered
+            | _moments.covered(options.get('spectral'), dataset)
 
     def _dump_options(
             self, prefix: str, dump_path: bool, overwrite: bool
@@ -175,7 +171,6 @@ class ObservationRegionMoments(ObservationRegions):
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
-            dataset: Dataset | None = None,
             noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
@@ -185,7 +180,7 @@ class ObservationRegionMoments(ObservationRegions):
             unit: str | None = None
     ):
         check_options(ObservationRegionMoments.__init__, locals())
-        options = self._options(dataset, dict(
+        options = self._options(dict(
             spectral=spectral, regions=regions, size=size, step=step,
             rpix=rpix, rval=rval, rota=rota, orders=orders))
         self._orders = check_moment_orders(options.pop('orders'), method)
@@ -200,8 +195,8 @@ class ObservationRegionMoments(ObservationRegions):
                 "of regions)")
         super().__init__(
             grid, source_grid, instrument, galaxies, components, lines,
-            continuum, band, pixel_weights, flux_scale, offsets, dataset,
-            noise, oversampling, depth, dtype, fft_dtype, name, unit)
+            continuum, band, pixel_weights, flux_scale, offsets, noise,
+            oversampling, depth, dtype, fft_dtype, name, unit)
 
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments, sorted."""

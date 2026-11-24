@@ -129,9 +129,9 @@ def test_spectral_axis_from_the_data(dispersion, size):
     maps = {0: Data(np.ones((32, 32))), 1: Data(velocity)}
     if dispersion is not None:
         maps[2] = Data(np.full((32, 32), dispersion))
-    spectral = ObservationPixelMoments(
-        SpectralAxis(step=2, convention='relativistic'),
-        dataset=DatasetPixelMoments(maps)).spectral()
+    spectral = ObservationPixelMoments.paired(
+        DatasetPixelMoments(maps),
+        spectral=SpectralAxis(step=2, convention='relativistic')).spectral()
     assert (spectral.rval(), spectral.step(), spectral.size()) == (
         1500, 2, size)
 
@@ -148,8 +148,8 @@ def test_spectral_axis_leaves_out_bad_moments(caplog):
     velocity[5, 5], dispersion[0, 1] = 90000, 3000
     dataset = DatasetPixelMoments(
         {0: Data(np.ones((32, 32))), 1: Data(velocity), 2: Data(dispersion)})
-    spectral = ObservationPixelMoments(
-        SpectralAxis(convention='relativistic'), dataset=dataset).spectral()
+    spectral = ObservationPixelMoments.paired(
+        dataset, spectral=SpectralAxis(convention='relativistic')).spectral()
     assert (spectral.rval(), spectral.size()) == (1500, 801)
     assert "1 values of moment1 are beyond" in caplog.text
 
@@ -172,9 +172,9 @@ def test_spectral_axis_partly_from_the_data(given, size, rval):
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
     dataset = DatasetPixelMoments(
         {0: Data(np.ones((32, 32))), 1: Data(velocity)})
-    spectral = ObservationPixelMoments(
-        SpectralAxis(step=2, convention='relativistic', **given),
-        dataset=dataset).spectral()
+    spectral = ObservationPixelMoments.paired(
+        dataset, spectral=SpectralAxis(
+            step=2, convention='relativistic', **given)).spectral()
     assert (spectral.size(), spectral.rval()) == (size, rval)
 
 def test_at_least_one_moment_order():

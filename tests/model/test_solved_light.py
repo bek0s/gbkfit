@@ -48,7 +48,7 @@ def observation(size, data=None):
     """An image of size pixels of 0.5 arcsec of the given data, if any."""
     if data is None:
         return ObservationPixelBrightness(size=size, step=(0.5, 0.5))
-    return ObservationPixelBrightness(dataset=DatasetPixelBrightness(
+    return ObservationPixelBrightness.paired(DatasetPixelBrightness(
         Data(data, error=np.full_like(data, ERROR)), step=(0.5, 0.5)))
 
 
@@ -130,9 +130,9 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
         core |= dict(vptraits=dict(type='uniform', direction='tan'),
                      dptraits=dict(type='uniform'))
         moments = DatasetPixelMoments({1: Data(data, error=data + 1)})
-        obs = ObservationPixelMoments(
-            SpectralAxis(convention='relativistic'), depth=Depth(step=0.5),
-            dataset=moments, lines=[], continuum=True)
+        obs = ObservationPixelMoments.paired(
+            moments, spectral=SpectralAxis(convention='relativistic'),
+            depth=Depth(step=0.5), lines=[], continuum=True)
     else:
         obs = observation(None, data)
     group = ObservationGroup([galaxy_parser.load(galaxy)], [obs])
@@ -153,9 +153,8 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
     # (the model is the scale times the amplitudes: not linear in both)
     data = np.zeros((16, 16))
     dataset = DatasetPixelBrightness(Data(data, error=data + 1))
-    obs = ObservationPixelBrightness(
-        dataset=dataset,
-        flux_scale='one', name='obs')
+    obs = ObservationPixelBrightness.paired(
+        dataset, flux_scale='one', name='obs')
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=[copy.deepcopy(CORE)]))], [obs])
     params = ParamSpace.from_properties(group.pdescs(), dict(

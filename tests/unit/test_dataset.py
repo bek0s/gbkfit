@@ -383,9 +383,8 @@ def test_observations_have_their_own_dtype(tmp_path):
     # (the data are converted to it when they are sent to the device)
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20), np.float64))
-    observation = observation_parser.load(dict(
-        type='pixel_brightness',
-        dataset=dict(
+    observation = observation_parser.load(
+        dict(type='pixel_brightness'), dataset=dataset_parser.load(dict(
             type='pixel_brightness', data=str(tmp_path / 'image.fits'))))
     assert observation.dtype() == np.float32
     assert observation.dataset().dtype() == np.float64
@@ -491,42 +490,46 @@ def test_relabelled_velocities_keep_the_line_of_their_rest(
 
 
 def test_observation_grid_comes_from_the_data(tmp_path):
-    # The grid comes from the data, and a dump of the observation does not
-    # repeat it; the observation can give it too, for the observation
-    # without data: with data, it is that of the data
+    # The grid comes from the data paired with it, and a dump of the
+    # observation does not repeat it (nor the data); the observation can
+    # give it too, for the observation without data: with data, it is
+    # that of the data
     from gbkfit.observation import observation_parser
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
-    info = dict(
-        type='pixel_brightness',
-        dataset=dict(
-            type='pixel_brightness', data=str(tmp_path / 'image.fits')))
-    observation = observation_parser.load(info)
+    info = dict(type='pixel_brightness')
+    data = dataset_parser.load(dict(
+        type='pixel_brightness', data=str(tmp_path / 'image.fits')))
+    observation = observation_parser.load(info, dataset=data)
     assert observation.size() == (20, 8)
     dumped = observation_parser.dump(
         observation, prefix=str(tmp_path / 'dump_'))
-    assert not {'size', 'step', 'rpix', 'rval', 'rota'} & set(dumped)
+    assert not {'size', 'step', 'rpix', 'rval', 'rota', 'dataset'} \
+        & set(dumped)
     assert dumped['median_size'] is None
     given = observation_parser.load(
-        info | dict(size=[20, 8], step=1, median_size=3))
+        info | dict(size=[20, 8], step=1, median_size=3), dataset=data)
     assert given.grid() == observation.grid()
     assert given.dump()['median_size'] == 3
     for other in (dict(size=[28, 28], step=0.5), dict(step=1)):
-        assert observation_parser.load(info | other).grid() \
-            == observation.grid()
+        assert observation_parser.load(
+            info | other, dataset=data).grid() == observation.grid()
 
 
-def test_other_data_of_an_observation_must_be_on_its_grid():
-    # (a copy with other data, e.g. mock data, is the same observation)
+def test_other_data_of_an_observation_give_it_their_grid():
+    # (a copy with other data, e.g. mock data, is the same observation;
+    # the data win: data of another grid give it theirs)
     from gbkfit.observation import ObservationPixelBrightness
     data = DatasetPixelBrightness(Data(np.ones((8, 20))), rota=30)
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
-    with pytest.raises(ValueError, match="the data are on the grid"):
-        ObservationPixelBrightness(size=(20, 8)).with_dataset(data)
+    observation = ObservationPixelBrightness(size=(10, 10), median_size=3)
+    copy = observation.with_dataset(data)
+    assert copy.dataset() is data and observation.dataset() is None
+    assert copy.grid() == data.grid()
+    assert copy.dump()['median_size'] == 3
     with pytest.raises(ValueError, match="data of pixel moments"):
-        ObservationPixelBrightness(size=(20, 8), dataset=moments)
-    copy = ObservationPixelBrightness(size=(20, 8), rota=30).with_dataset(
-        data)
-    assert copy.dataset() is data
+        observation.with_dataset(moments)
+    with pytest.raises(ValueError, match="data of pixel moments"):
+        ObservationPixelBrightness.paired(moments, size=(20, 8))
 
 
 def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
@@ -540,15 +543,13 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     data_info.pop('type')
     loaded = dataset_parser.load(dict(type='pixel_spectra') | dict(data_info))
     assert loaded.grid().coords.rest == dataset.grid().coords.rest
-    info = dict(
-        type='pixel_spectra',
-        dataset=dict(type='pixel_spectra') | dict(data_info))
-    observation = observation_parser.load(info)
+    observation = observation_parser.load(
+        dict(type='pixel_spectra'), dataset=loaded)
     assert observation.spectral().rest() \
         == dataset.grid().coords.rest
     assert observation_parser.load(
-        info | dict(spectral=dict(rest='5006.8 Angstrom'))).spectral().rest() \
-        == dataset.grid().coords.rest
+        dict(type='pixel_spectra', spectral=dict(rest='5006.8 Angstrom')),
+        dataset=loaded).spectral().rest() == dataset.grid().coords.rest
 
 
 def test_pixel_brightness_has_no_rest(tmp_path):

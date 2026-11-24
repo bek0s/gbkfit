@@ -163,8 +163,8 @@ def blob_objective():
 
     def group(dataset):
         return ObservationGroup(
-            galaxy_parser.load(GALAXY), ObservationPixelBrightness(
-                instrument=Instrument(psf=PSFGauss(1.5)), dataset=dataset)
+            galaxy_parser.load(GALAXY), ObservationPixelBrightness.paired(
+                dataset, instrument=Instrument(psf=PSFGauss(1.5)))
         ).plan(DriverHost())
     shape = (16, 16)
     image = group(DatasetPixelBrightness(Data(np.zeros(shape))))

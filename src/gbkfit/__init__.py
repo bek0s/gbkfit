@@ -37,7 +37,8 @@ The model
                  galaxies and lenses by redshift, the rays through them,
                  and the drawing of the planes behind lenses
 Observation and fitting
-    observation  how the model gives the data of a dataset; mock data
+    observation  how the model gives data (paired with a dataset, or
+                 alone); mock data
     objective    the comparison of models with data (likelihoods)
     parallel     copies of an objective evaluated at the same time
     fitting      the fitters, the result of a fit, its bootstrap

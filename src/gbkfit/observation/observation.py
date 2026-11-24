@@ -1,20 +1,22 @@
 """
-The base of the observations: data of galaxies, and how the model of
-the galaxies gives them (see Observation), the galaxies an observation
-sees (see SeenGalaxies), and the frame of an observation on the sky (see
-SkyFrame).
+The base of the observations: how the model of galaxies gives data of
+one kind, alone or paired with a dataset (see Observation), the galaxies
+an observation sees (see SeenGalaxies), and the frame of an observation
+on the sky (see SkyFrame).
 """
 
 import abc
+import logging
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, NamedTuple, Self
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, Self
 
 import astropy.units
 import numpy as np
 from astropy.table import Table
 
 from gbkfit.config import (
-    TypedParser, TypedSerializable, check_name)
+    InputError, TypedParser, TypedSerializable, check_name, constructor_of,
+    make_typed_desc, parse_options_for_callable)
 from gbkfit.cosmology import Cosmology
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
@@ -37,6 +39,9 @@ __all__ = [
     'SkyFrame',
     'observation_parser'
 ]
+
+
+_log = logging.getLogger(__name__)
 
 
 class SeenPlane(NamedTuple):
@@ -117,16 +122,24 @@ class SkyFrame(NamedTuple):
 
 class Observation(TypedSerializable, abc.ABC):
     """
-    Data of galaxies, and how the model of the galaxies gives them: what
-    the plan of an observation group evaluates (see ObservationGroup.plan),
-    and an objective compares with the data under the likelihood its
-    setup gives it (see Likelihoods and Objective). Its kind says where
-    the data are measured and how the model gives them (e.g. on the sky,
-    through an instrument; see ObservationSky). Without data, its model is
-    evaluated alone (e.g. to draw mock data of it, see draw_mocks).
+    How the model of galaxies gives data of one kind (the data model): what
+    the plan of an observation group evaluates (see ObservationGroup.plan).
+    Its kind says where the data are measured and how the model gives them
+    (e.g. on the sky, through an instrument; see ObservationSky). Its
+    configuration has no data: an observation alone renders its model (e.g.
+    to draw mock data of it, see draw_mocks).
 
-    Its data are named items of one shape (see keys), of a dataset of its
-    kind, which the kind checks before it makes it. Its kind can have
+    Paired with a dataset of its kind (see paired, with_dataset and load;
+    in configurations, the section 'datasets' of a setup, by observation
+    name), it is fitted to those data: an objective compares its model
+    with them under the likelihood its setup gives it (see Likelihoods and
+    Objective). The data win at the pairing: the options that they give
+    (see options_from_data; e.g. the grid of the model) are theirs, and
+    those given are used only without data (they are left out, with a
+    line in the log); the data are checked against the others (e.g. the
+    data items, and the correlation of their noise).
+
+    Its data are named items of one shape (see keys). Its kind can have
     parameters of its own, named after it (see pdescs), e.g. a flux scale
     of its model (see flux_scale).
 
@@ -137,18 +150,18 @@ class Observation(TypedSerializable, abc.ABC):
     galaxies : Sequence of str, optional
         The names of the galaxies it sees (see ObservationGroup); by
         default, all of them.
-    dataset : Dataset, optional
-        The data, of its kind.
     noise : Noise, optional
         The noise of its mock data (see draw_mocks), added to what its
         instrument records (e.g. a cube, of which moments are measured).
-        By default, Gaussian noise of the errors of its data, if they are
-        what it records (e.g. spectra, an image) and have errors.
+        By default, Gaussian noise of the errors of its data, if it is
+        paired with data, whose errors are of what it records (e.g.
+        spectra, an image).
     name : str, optional
         Its name, which is the id of its extra outputs instead of its
         position (see ObservationGroup.observation_label), starts the
         names of its parameters, and keys the options of setups given by
-        observation (e.g. its likelihood, see Likelihoods).
+        observation (e.g. its dataset and its likelihood, see
+        Likelihoods).
     model_can_have_missing_values : bool, optional
         Whether its model can have missing values (NaN) where the data
         have some (e.g. the velocity of a spectrum below its flux_floor):
@@ -158,19 +171,54 @@ class Observation(TypedSerializable, abc.ABC):
     Raises
     ------
     ValueError
-        If a name is invalid, there are no galaxies or they repeat, or the
-        noise of an item is correlated where its kind of data cannot have
-        it (see Dataset.noise_correlation).
+        If a name is invalid, or there are no galaxies or they repeat.
     """
 
-    config_titles = dict(
-        galaxies='Galaxies', dataset='Dataset', noise='Noise', name='Name')
+    # The class of the datasets of its kind, which it is paired with
+    dataset_class: ClassVar[type[Dataset]]
+
+    config_titles = dict(galaxies='Galaxies', noise='Noise', name='Name')
+
+    @classmethod
+    def load(
+            cls, info: dict[str, Any], dataset: Dataset | None = None
+    ) -> Self:
+        """
+        Load an observation from its configuration, paired with a dataset
+        if given (see the class): the options that the data give are then
+        theirs, and those its configuration needs without data (e.g. the
+        grid of its model) can be left out.
+
+        Parameters
+        ----------
+        info : dict
+            The configuration.
+        dataset : Dataset, optional
+            The data it is fitted to (in configurations, those of the
+            section 'datasets' of its setup).
+
+        Returns
+        -------
+        Observation
+            The observation.
+
+        Raises
+        ------
+        ConfigError
+            If the configuration has an error.
+        ValueError, TypeError
+            If an object it makes refuses its options, or the data are not
+            of it (see paired).
+        """
+        if dataset is None:
+            return super().load(info)
+        func, _ = constructor_of(cls, info)
+        return cls.paired(dataset, **parse_options_for_callable(info, func))
 
     def __init__(
             self,
             keys: Sequence[str],
             galaxies: Sequence[str] | None = None,
-            dataset: Dataset | None = None,
             noise: Noise | None = None,
             name: str | None = None,
             model_can_have_missing_values: bool = False
@@ -185,17 +233,196 @@ class Observation(TypedSerializable, abc.ABC):
                 raise ValueError(f"the galaxies repeat: {list(galaxies)}")
             for galaxy in galaxies:
                 check_name(galaxy)
-        if dataset is not None:
-            for key in keys:
-                # (the correlation of its noise must be one its kind of data
-                # can have)
-                dataset.noise_correlation(key)
         self._keys = keys
         self._galaxies = galaxies
-        self._dataset = dataset
+        # (its data, once it is paired with them: see _pair)
+        self._dataset: Dataset | None = None
         self._noise = noise
         self._name = name
         self._model_can_have_missing_values = model_can_have_missing_values
+
+    @classmethod
+    @abc.abstractmethod
+    def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
+        """
+        Return the options of an observation of its kind that a dataset
+        gives (e.g. the grid of its model): those of the data, when it is
+        paired with them (see the class).
+
+        Parameters
+        ----------
+        dataset : Dataset
+            The data.
+
+        Returns
+        -------
+        tuple of str
+            The names of the options.
+        """
+
+    @classmethod
+    @abc.abstractmethod
+    def _options_from_data(
+            cls, dataset: Dataset, options: dict[str, Any]
+    ) -> dict[str, Any]:
+        """
+        Return the values of the options of an observation of its kind
+        that a dataset gives (see options_from_data), and of those of its
+        options that the data complete (e.g. the spectral axis of moment
+        maps, which covers the velocities of the data), as arguments of
+        its constructor.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            The data, of the dataset class of its kind.
+        options : dict
+            Its other options, as given (those of its constructor).
+
+        Returns
+        -------
+        dict
+            The options.
+        """
+
+    @classmethod
+    @abc.abstractmethod
+    def data_options(
+            cls,
+            dataset: Dataset,
+            prefix: str | None = None,
+            dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        """
+        Return the options of an observation of its kind that a dataset
+        gives (see options_from_data) as a configuration, as far as the
+        data alone give them (not those they complete): e.g. to copy the
+        sampling of data into an observation that renders without them, as
+        those data were measured.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            The data.
+        prefix : str, optional
+            The start of the names of the files of the options that are in
+            files (e.g. regions in bins; see dump), which are written; by
+            default, those options are left out (nothing is written).
+        dump_path : bool, optional
+            Whether the configuration has the paths of the files, or only
+            their names.
+        overwrite : bool, optional
+            Whether to overwrite existing files.
+
+        Returns
+        -------
+        dict
+            The options.
+
+        Raises
+        ------
+        ValueError
+            If the data are not of the dataset class of its kind.
+        """
+
+    @classmethod
+    def check_dataset_class(cls, dataset: Dataset) -> None:
+        """
+        Check that a dataset is of the dataset class of its kind (see
+        dataset_class), which an observation of its kind can be paired with
+        (see paired).
+
+        Parameters
+        ----------
+        dataset : Dataset
+            The data.
+
+        Raises
+        ------
+        InputError
+            If it is not.
+        """
+        if not isinstance(dataset, cls.dataset_class):
+            raise InputError(
+                f"data of {dataset.type_title().lower()} · needs "
+                f"{cls.dataset_class.type_title().lower()}")
+
+    @classmethod
+    def paired(cls, dataset: Dataset, /, **options: Any) -> Self:
+        """
+        Make an observation of its kind of the given options paired with a
+        dataset (see the class; in configurations, see load): the options
+        that the data give are theirs, and those given are left out, with
+        a line in the log; those needed without data (e.g. the grid of its
+        model) can be left out. E.g. one observation fitted to the data of
+        many galaxies, each with its own grid, is made of its options for
+        each dataset.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            The data, of the dataset class of its kind.
+        **options
+            The options of its constructor.
+
+        Returns
+        -------
+        Observation
+            The observation.
+
+        Raises
+        ------
+        InputError
+            If the data are not of the dataset class of its kind.
+        ValueError, TypeError
+            If the observation refuses its options, or the data are not of
+            it (see _pair).
+
+        Examples
+        --------
+        >>> observation = ObservationPixelSpectra.paired(
+        ...     DatasetPixelSpectra.from_files('cube.fits'),
+        ...     instrument=Instrument(psf=PSFGauss(1.5)))
+        """
+        cls.check_dataset_class(dataset)
+        from_data = cls.options_from_data(dataset)
+        if given := [key for key in from_data if options.get(key) is not None]:
+            _log.info(
+                "%s: its data give the options %s; those given are used "
+                "only without data", make_typed_desc(cls, 'observation'),
+                given)
+        own = {
+            key: value for key, value in options.items()
+            if key not in from_data}
+        observation = cls(**own | cls._options_from_data(dataset, own))
+        observation._pair(dataset)
+        return observation
+
+    def _pair(self, dataset: Dataset) -> None:
+        """
+        Pair it with a dataset, which gave it the options that data give
+        (see paired): check the data against its other options, and take
+        them. Here, the noise of each data item must be correlated as its
+        kind of data can have it (see Dataset.noise_correlation); kinds
+        check more (e.g. ObservationSky, and the beams of the data against
+        its PSF).
+
+        Raises
+        ------
+        ValueError
+            If the data are not of it.
+        """
+        for key in self._keys:
+            dataset.noise_correlation(key)
+        self._dataset = dataset
+
+    @abc.abstractmethod
+    def _constructor_options(self) -> dict[str, Any]:
+        """
+        Return the options of its constructor that make it again, as it
+        has them (with those its data gave, if any; see with_dataset).
+        """
 
     def name(self) -> str | None:
         """Return its name, if any."""
@@ -206,7 +433,7 @@ class Observation(TypedSerializable, abc.ABC):
         return self._galaxies
 
     def dataset(self) -> Dataset | None:
-        """Return its data, if any."""
+        """Return the data it is paired with, if any (see with_dataset)."""
         return self._dataset
 
     def noise(self) -> Noise | None:
@@ -313,16 +540,22 @@ class Observation(TypedSerializable, abc.ABC):
     def dtype(self) -> np.dtype:
         """Return the floating type of its model."""
 
-    @abc.abstractmethod
     def with_dataset(self, dataset: Dataset) -> Self:
         """
-        Return a copy of it with other data (e.g. mock data; see
-        draw_mocks).
+        Return a copy of it paired with a dataset (see the class): the
+        options that the data give are theirs (e.g. the grid of its model),
+        and the others are those it has. With data of its own options (e.g.
+        mock data drawn on its grid, see draw_mocks, or those of a
+        bootstrap), the copy is the same observation with other data. Of
+        its other options, those that took values from its data (e.g. the
+        channels of the cube of moment maps, which cover the velocities of
+        the data) keep them; its options paired with other data (see
+        paired and load) take theirs.
 
         Parameters
         ----------
         dataset : Dataset
-            The data, of the observation.
+            The data, of the dataset class of its kind.
 
         Returns
         -------
@@ -331,9 +564,15 @@ class Observation(TypedSerializable, abc.ABC):
 
         Raises
         ------
+        InputError
+            If the data are not of the dataset class of its kind.
         ValueError
-            If the data are not of the observation (see __init__).
+            If the data are not of it (see _pair).
         """
+        from_data = self.options_from_data(dataset)
+        return self.paired(dataset, **{
+            key: value for key, value in self._constructor_options().items()
+            if key not in from_data})
 
     def same_plan(self, other: 'Observation', seen: SeenGalaxies) -> bool:
         """
@@ -345,7 +584,7 @@ class Observation(TypedSerializable, abc.ABC):
         Here, the unit of their light (see data_unit) and the floating
         type of their models, which the data can choose (see dtype);
         kinds whose plans take more from their data compare that too (see
-        ObservationProfile, and ObservationSky with planes behind lenses).
+        ObservationProfile, and ObservationSky).
 
         Parameters
         ----------

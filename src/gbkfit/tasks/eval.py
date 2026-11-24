@@ -12,6 +12,7 @@ from typing import Any, Literal
 import numpy as np
 
 from gbkfit.config import ConfigError, config_path
+from gbkfit.dataset import dataset_parser
 import gbkfit.outputs
 import gbkfit.setup
 from gbkfit.objective import Objective
@@ -56,7 +57,8 @@ def eval_(
     observation (in mocks/<k>/observations/<observation>/, kind
     'mock_data') and a configuration that fits them (mocks/<k>/
     config.yaml, 'mock_config'): the configuration with each observation
-    of its mock data, which its section 'likelihoods' compares with the
+    paired with its mock data (its section 'datasets', in the order of the
+    observations), which its section 'likelihoods' compares with the
     models (see Likelihoods; it can be given without data). The section
     'mock' of the configuration has the options
 
@@ -273,9 +275,11 @@ def _write_mocks(
     group = setup.group()
     with config_path('mock'):
         mocks = setup.mock(values)
-    sections = {k: v for k, v in cfg.items() if k != 'mock'}
+    sections = {
+        k: v for k, v in cfg.items() if k not in ('mock', 'datasets')}
     for k, mocked_observations in enumerate(mocks):
         observations = []
+        datasets = []
         for i, (mocked, info) in enumerate(zip(
                 mocked_observations, cfg['observations'])):
             name = group.observation_label(i)
@@ -287,10 +291,13 @@ def _write_mocks(
             # of this run, whose earlier files a run into the same
             # directory replaces)
             prefix = directory + os.sep
-            mocked_info = _rebased(
+            new_prefix = os.path.relpath(directory, root) + os.sep
+            observation = _rebased(
                 observation_parser.dump(mocked, prefix, overwrite=True),
-                prefix,
-                os.path.relpath(directory, root) + os.sep)
+                prefix, new_prefix)
+            datasets.append(_rebased(
+                dataset_parser.dump(mocked.dataset(), prefix, overwrite=True),
+                prefix, new_prefix))
             for filename in sorted(os.listdir(directory)):
                 run.record(
                     f'{folder}/{filename}', 'mock_data',
@@ -300,10 +307,17 @@ def _write_mocks(
             # of the configuration)
             driver = {} if info.get('driver') is None \
                 else dict(driver=info['driver'])
-            observations.append(driver | mocked_info)
+            observations.append(driver | observation)
+        # (its datasets after its observations)
+        config = {}
+        for key, value in sections.items():
+            if key == 'observations':
+                config |= dict(observations=observations, datasets=datasets)
+            else:
+                config[key] = value
         _detail.write_config(
-            run, f'mocks/{k}/config.yaml', 'mock_config',
-            sections | dict(observations=observations), root, mock=str(k))
+            run, f'mocks/{k}/config.yaml', 'mock_config', config, root,
+            mock=str(k))
 
 
 def _rebased(info: Any, prefix: str, new_prefix: str) -> Any:

@@ -345,14 +345,7 @@ class SchemaWriter:
                 if key in (
                     'title', 'references', 'description', 'default', 'unit')}
             properties[name] = self.option(type_) | kept
-        schema = _object(properties, required, others)
-        # (the options required only without another, see
-        # Serializable.config_required_without)
-        if needed := getattr(owner, 'config_required_without', {}):
-            schema['allOf'] = [
-                {'anyOf': [{'required': [option]}, {'required': list(keys)}]}
-                for option, keys in needed.items()]
-        return schema
+        return _object(properties, required, others)
 
     def _ref(self, name: str, write: Callable[[], dict]) -> dict[str, Any]:
         """

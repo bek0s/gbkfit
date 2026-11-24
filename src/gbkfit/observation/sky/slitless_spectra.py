@@ -376,8 +376,9 @@ class ObservationSlitlessSpectra(ObservationSky):
     its own.
 
     Its options are those below, then those of every observation on the
-    sky (see ObservationSky). Its data give those of its grid (given too,
-    they serve only without data); without data, size is required.
+    sky (see ObservationSky). Data paired with it give those of its grid
+    (given too, they serve only without data); without data, size is
+    required.
 
     Parameters
     ----------
@@ -486,7 +487,6 @@ class ObservationSlitlessSpectra(ObservationSky):
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
-            dataset: Dataset | None = None,
             noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
@@ -496,7 +496,7 @@ class ObservationSlitlessSpectra(ObservationSky):
             unit: str | None = None
     ):
         check_options(ObservationSlitlessSpectra.__init__, locals())
-        grid = self._options(dataset, dict(
+        grid = self._options(dict(
             size=size, step=step, rpix=rpix, rval=rval, rota=rota))
         rest = spectral.rest()
         if spectral.step() is None or rest is None \
@@ -519,8 +519,8 @@ class ObservationSlitlessSpectra(ObservationSky):
         super().__init__(
             self._make_grid(**grid), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
-            offsets, dataset, noise, oversampling, depth, dtype, fft_dtype,
-            name, unit)
+            offsets, noise, oversampling, depth, dtype, fft_dtype, name,
+            unit)
 
     def spectral(self) -> SpectralAxis:
         """Return the spectral axis of the model."""

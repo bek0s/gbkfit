@@ -5,7 +5,7 @@ measurement, are those of gbkfit.moments).
 """
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -121,6 +121,22 @@ def spectral_axis(
         rval = centre + (rpix - middle) * step
     return spectral.replaced(SpectralAxis(
         size=size, step=step, rpix=rpix, rval=rval))
+
+
+def covered(
+        spectral: SpectralAxis | None, dataset: Dataset
+) -> dict[str, Any]:
+    """
+    Return the spectral axis of the cube that the moments of an
+    observation paired with data are measured from, as its option
+    spectral: the given one, that covers the velocities of the data
+    unless its size and rval are given (see spectral_axis); none if it is
+    not given, or they are.
+    """
+    if spectral is None or (
+            spectral.size() is not None and spectral.rval() is not None):
+        return {}
+    return dict(spectral=spectral_axis(spectral, dataset))
 
 
 def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:

@@ -338,9 +338,10 @@ class GroupPlan:
 
         The plans of the observations take little from their data (their
         unit and the floating type of their models, which the data can
-        choose, or e.g. the radii of a profile; see Observation.same_plan):
-        the copy shares the plans that are also those of its observations
-        (e.g. all of them, in a bootstrap), and with them
+        choose, the options of their kinds that the data give, e.g. a grid,
+        or the radii of a profile; see Observation.same_plan): the copy
+        shares the plans that are also those of its observations (e.g. all
+        of them, in a bootstrap), and with them
         the memory of their models, on their devices, and its lock (see
         lock): evaluated at the same time (e.g. in two threads), they wait
         for each other (plans on other drivers do not, see

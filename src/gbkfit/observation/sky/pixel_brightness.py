@@ -44,8 +44,9 @@ class ObservationPixelBrightness(ObservationSky):
     the instrument (which has no LSF).
 
     Its options are those below, then those of every observation on the
-    sky (see ObservationSky). Its data give those of its grid (given too,
-    they serve only without data); without data, size is required.
+    sky (see ObservationSky). Data paired with it give those of its grid
+    (given too, they serve only without data); without data, size is
+    required.
 
     Parameters
     ----------
@@ -118,7 +119,6 @@ class ObservationPixelBrightness(ObservationSky):
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
-            dataset: Dataset | None = None,
             noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
@@ -128,15 +128,15 @@ class ObservationPixelBrightness(ObservationSky):
             unit: str | None = None
     ):
         check_options(ObservationPixelBrightness.__init__, locals())
-        grid = self._options(dataset, dict(
+        grid = self._options(dict(
             size=size, step=step, rpix=rpix, rval=rval, rota=rota))
         check_median_size(median_size)
         self._median_size = median_size
         super().__init__(
             self._make_grid(**grid), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
-            offsets, dataset, noise, oversampling, depth, dtype, fft_dtype,
-            name, unit)
+            offsets, noise, oversampling, depth, dtype, fft_dtype, name,
+            unit)
 
     def _measured_pixels(self) -> np.ndarray:
         return unmasked_pixels(self._dataset, self._grid.size[1::-1])

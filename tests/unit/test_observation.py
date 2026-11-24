@@ -27,9 +27,8 @@ def test_options_from_data():
     data = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))},
         step=2, rota=30)
-    observation = ObservationPixelMoments(
-        spectral=SpectralAxis(step=5, convention='relativistic'),
-        dataset=data)
+    observation = ObservationPixelMoments.paired(
+        data, spectral=SpectralAxis(step=5, convention='relativistic'))
     assert observation.grid() == data.grid()
     assert observation.orders() == (0, 1)
     assert observation.spectral().rval() == 1500
@@ -44,12 +43,12 @@ def test_options_given_with_data_serve_only_without_data(caplog):
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))},
         step=2)
     spectral = SpectralAxis(step=5, convention='relativistic')
-    of_data = ObservationPixelMoments(spectral, dataset=data)
-    with caplog.at_level(logging.INFO, 'gbkfit.observation.sky.base'):
+    of_data = ObservationPixelMoments.paired(data, spectral=spectral)
+    with caplog.at_level(logging.INFO, 'gbkfit.observation.observation'):
         for given in (dict(size=(28, 28), step=1, orders=(0, 1, 2)),
                       dict(step=0.5)):
-            observation = ObservationPixelMoments(
-                spectral, **given, dataset=data)
+            observation = ObservationPixelMoments.paired(
+                data, spectral=spectral, **given)
             assert observation.grid() == of_data.grid()
             assert observation.keys() == of_data.keys()
     assert caplog.text.count("those given are used only without data") == 2
@@ -69,8 +68,8 @@ def test_spectra_keep_the_convention_of_their_data(
     data = getattr(gbkfit.dataset, dataset_class)(
         Data(np.zeros(shape)),
         spectral=SpectralAxis(convention='log', rest='6564.61 Angstrom'))
-    observation = getattr(gbkfit.observation, observation_class)(
-        dataset=data)
+    observation = getattr(gbkfit.observation, observation_class).paired(
+        data)
     assert observation.grid() == data.grid()
     assert observation.grid().coords.convention == 'log'
 
@@ -87,14 +86,17 @@ def moments_group(names=('maps',), data=True):
         dptraits=dict(type='uniform'), emission=dict(type='lines'))]))
     dataset = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
-    maps = ObservationPixelMoments(
-        SpectralAxis(step=5, convention='relativistic'), dataset=dataset)
+    maps = ObservationPixelMoments.paired(
+        dataset, spectral=SpectralAxis(step=5, convention='relativistic'))
     # (without data, of the options the data gave)
-    return ObservationGroup(galaxy, [
+    observations = [
         ObservationPixelMoments(
             maps.spectral(), size=maps.size(), orders=maps.orders(),
-            name=name, dataset=dataset if data else None)
-        for name in names])
+            name=name)
+        for name in names]
+    return ObservationGroup(galaxy, [
+        observation.with_dataset(dataset) if data else observation
+        for observation in observations])
 
 
 def test_a_model_that_can_have_missing_values_needs_their_residual():
@@ -167,8 +169,8 @@ def test_dtypes_without_kernels_are_errors(dtype):
     dataset = Data(np.ones((8, 8)))
     from gbkfit.dataset import DatasetPixelBrightness
     with pytest.raises(ValueError, match="'dtype' must be one of 'float32', 'float64'"):
-        ObservationPixelBrightness(
-            dataset=DatasetPixelBrightness(dataset), dtype=dtype)
+        ObservationPixelBrightness.paired(
+            DatasetPixelBrightness(dataset), dtype=dtype)
 
 
 def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
@@ -212,10 +214,11 @@ def image_group(*names, data=(True,)):
         emission=dict(type='band'))]))
     dataset = brightness('Jy')
     names = names or (None,) * len(data)
+    observations = [
+        ObservationPixelBrightness(size=(8, 8), name=name) for name in names]
     return ObservationGroup([galaxy], [
-        ObservationPixelBrightness(
-            size=(8, 8), name=name, dataset=dataset if with_data else None)
-        for name, with_data in zip(names, data, strict=True)])
+        observation.with_dataset(dataset) if with_data else observation
+        for observation, with_data in zip(observations, data, strict=True)])
 
 
 def test_the_parameters_of_likelihoods_have_the_units_of_their_data():
@@ -315,9 +318,8 @@ def test_likelihoods_have_parameters_of_names_of_their_own():
         type='thin_disk', name='disk', rnodes=[0, 1, 2],
         rptraits=dict(type='exponential'), emission=dict(type='band'))]))
     dataset = brightness()
-    group = ObservationGroup(galaxy, ObservationPixelBrightness(
-        dataset=dataset,
-        name='disk'))
+    group = ObservationGroup(galaxy, ObservationPixelBrightness.paired(
+        dataset, name='disk'))
     clash = LikelihoodUser(lambda *args: 0.0, 'log_likelihood', ['rpt_a'])
     with pytest.raises(ValueError, match=r"names of parameters of the group:"
                                          r" \['disk_rpt_a'\]"):
@@ -360,8 +362,7 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
     data = DatasetPixelSpectra(
         Data(np.ones((10, 4, 4))),
         spectral=SpectralAxis(convention='relativistic'))
-    observation = ObservationPixelSpectra(
-        dataset=data)
+    observation = ObservationPixelSpectra.paired(data)
     comparison_ = comparison_of(observation, LikelihoodGauss(
         upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))),
         DriverHost())
@@ -385,9 +386,9 @@ def test_the_psf_must_be_the_beam_of_data_of_a_beam(caplog):
         data = DatasetPixelSpectra(
             Data(np.zeros((3, 4, 4)), unit='Jy/beam', beam=beam),
             spectral=SpectralAxis(step=10, rval=0, rest=hi))
-        ObservationPixelSpectra(
-            size=(4, 4), spectral=spectral,
-            instrument=Instrument(psf=psf), dataset=data)
+        ObservationPixelSpectra.paired(
+            data, size=(4, 4), spectral=spectral,
+            instrument=Instrument(psf=psf))
         return caplog.text
     beam = Beam(6.0, 3.0, 30.0)
     assert warnings(PSFGauss.from_beam(6.0, 3.0, 30.0), beam) == ""
@@ -410,3 +411,102 @@ def test_the_psf_must_be_the_beam_of_data_of_a_beam(caplog):
     assert "another at 2 of their 3 channels: e.g. at 1420.36 MHz" in text
     assert "have one beam, 6 x 3 arcsec at 30 deg, but the PSF of the " \
         "instrument varies" in warnings(varying, beam)
+
+
+def test_an_observation_is_paired_with_data_where_the_data_win(caplog):
+    # (its options that data give are theirs: the grid and the unit, with
+    # a line in the log for those given; its dump has neither them nor the
+    # data, and the observation alone stays as it was)
+    observation = ObservationPixelBrightness(
+        size=(4, 4), step=2, unit='Jy', name='image')
+    data = brightness('mJy')
+    with caplog.at_level(logging.INFO, 'gbkfit.observation.observation'):
+        paired = ObservationPixelBrightness.paired(
+            data, size=(4, 4), step=2, unit='Jy', name='image')
+    assert "data give the options ['size', 'step', 'unit']" in caplog.text
+    assert paired.grid() == data.grid() and paired.dataset() is data
+    assert paired.model_unit('brightness')[0] == u.mJy
+    dumped = paired.dump()
+    assert not {'size', 'step', 'unit', 'dataset'} & set(dumped)
+    assert dumped['name'] == 'image'
+    assert observation.dataset() is None and observation.size() == (4, 4)
+    # (paired again, the copy of other data; of the observation alone, the
+    # same; neither logs, of options it has, not given)
+    caplog.clear()
+    with caplog.at_level(logging.INFO, 'gbkfit.observation.observation'):
+        again = paired.with_dataset(brightness('Jy'))
+        alone = observation.with_dataset(data)
+    assert caplog.text == ""
+    assert again.model_unit('brightness')[0] == u.Jy
+    assert alone.dump() == dumped and alone.grid() == data.grid()
+
+
+def test_an_observation_without_its_grid_needs_data():
+    # (its configuration can leave out what data give, for a setup that
+    # pairs it with data; alone, it needs them)
+    with pytest.raises(ValueError, match=r"without data needs the options "
+                                         r"\['size'\]"):
+        observation_parser.load(dict(type='pixel_brightness'))
+    paired = observation_parser.load(
+        dict(type='pixel_brightness'), dataset=brightness())
+    assert paired.size() == (8, 8)
+
+
+def test_the_sampling_of_data_is_copied_as_options(tmp_path):
+    # (the options of an observation of its kind that data give, as a
+    # configuration: of moment maps, the grid and the orders, but not the
+    # channels of the cube, which the data complete; of regions in bins,
+    # the bins, in a file of the prefix, if given)
+    from gbkfit.dataset import DatasetRegionSpectra, RegionsBins
+    from gbkfit.observation import ObservationRegionSpectra
+    maps = DatasetPixelMoments(
+        {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))},
+        step=2)
+    options = ObservationPixelMoments.data_options(maps)
+    assert options == dict(
+        size=[20, 8], step=[2, 2], rpix=[9.5, 3.5], rval=[0, 0], rota=0,
+        orders=[0, 1])
+    observation = observation_parser.load(dict(
+        type='pixel_moments',
+        spectral=dict(step=5, convention='relativistic')) | options)
+    assert observation.grid() == maps.grid()
+    regions = DatasetRegionSpectra(
+        Data(np.ones((5, 3))), RegionsBins(np.array([[0, 1], [2, 2]])),
+        SpectralAxis(size=5, step=10, convention='relativistic'))
+    # (without a prefix, the bins, which need a file, are left out)
+    assert set(ObservationRegionSpectra.data_options(regions)) == {
+        'spectral'}
+    options = ObservationRegionSpectra.data_options(
+        regions, prefix=str(tmp_path / 'copy_'))
+    assert options['regions']['file'] == str(tmp_path / 'copy_bins.fits')
+    assert options['spectral'] == dict(
+        size=5, step=10.0, rpix=2.0, rval=0.0, convention='relativistic')
+    observation = observation_parser.load(
+        dict(type='region_spectra') | options)
+    assert observation.regions() == regions.regions()
+    with pytest.raises(ValueError, match="data of pixel moments"):
+        ObservationPixelBrightness.data_options(maps)
+
+
+def test_a_copy_of_data_of_another_grid_does_not_share_its_plan():
+    # (the data win: a copy of other data of another grid has a plan of
+    # its own; of the same grid, it shares it)
+    from gbkfit.dataset import DatasetPixelBrightness
+    group = image_group('image')
+    observation = group.observations()[0]
+    other = DatasetPixelBrightness(Data(np.ones((6, 8))))
+    seen = group.seen_by(0)
+    assert observation.same_plan(
+        observation.with_dataset(brightness('Jy')), seen)
+    assert not observation.same_plan(observation.with_dataset(other), seen)
+
+
+def test_a_group_takes_no_data_that_change_its_frames():
+    # (a copy of a group shares its parameters and frames: data that move
+    # the origin of the grid of an observation need a group of their own)
+    from gbkfit.dataset import DatasetPixelBrightness
+    group = image_group('image')
+    moved = DatasetPixelBrightness(Data(np.ones((8, 8))), rval=(10, 20))
+    with pytest.raises(ValueError, match="change its parameters or its "
+                                         "frame"):
+        group.with_datasets({0: moved})

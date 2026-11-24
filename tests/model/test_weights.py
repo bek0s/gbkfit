@@ -154,8 +154,8 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
             Data(data, error=np.ones_like(data), mask=mask), step=step[:2],
             spectral=SpectralAxis(step=step[2], convention='relativistic'))
         return ObservationGroup(
-            galaxy_parser.load(gas), [ObservationPixelSpectra(
-                dataset=dataset,
+            galaxy_parser.load(gas), [ObservationPixelSpectra.paired(
+                dataset,
                 pixel_weights=Weights('gas', WeightAzimuthPower(2)))]
         ).plan(driver)
     blank = plan(np.zeros(size[::-1]), None)

@@ -90,8 +90,8 @@ class Case:
     galaxies : list of dict
         The section 'galaxies' of its configuration.
     observations : list of dict
-        The section 'observations', without data: those of the observables
-        give their grids.
+        The section 'observations', without data: they give the grids of
+        their mock data, but those given data (see datasets).
     truth : dict
         The parameter properties of its mock data (all fixed), of its
         galaxies (or those of mock_galaxies).
@@ -106,6 +106,11 @@ class Case:
         The likelihood of each observation (none: the default), which its
         configuration gives in its section 'likelihoods' (see
         likelihoods_section).
+    datasets : list of dict or None, optional
+        The dataset that each observation is paired with to make its mock
+        data (none: none), which give it the options that data give (e.g.
+        the radii of a profile); its configuration pairs it with its mock
+        data instead.
     data_options : list of dict, optional
         Options added to the data of each observation in its
         configuration (e.g. the correlation of its noise).
@@ -140,6 +145,7 @@ class Case:
     trial: dict[str, Any]
     noises: list[dict[str, Any]]
     likelihoods: list[dict[str, Any] | None] | None = None
+    datasets: list[dict[str, Any] | None] | None = None
     data_options: list[dict[str, Any]] | None = None
     params: dict[str, Any] = dataclasses.field(default_factory=dict)
     sections: dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -268,6 +274,7 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     noise of each observation (see Case.noises), and its parameters at
     its trial values.
     """
+    from gbkfit.dataset import dataset_parser
     from gbkfit.objective import LikelihoodGauss, likelihood_parser
     from gbkfit.observation import MockOptions, draw_mocks
     from gbkfit.observation import observation_parser
@@ -284,6 +291,7 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     labels = [
         observation.get('name', f'observation{i}')
         for i, observation in enumerate(case.observations)]
+    given = case.datasets or [None] * len(case.observations)
     # (the observations of the mock data have their noise; those of the
     # configuration, which fits them, do not)
     setup = _load(
@@ -292,13 +300,16 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
             observations=[
                 dict(observation, noise=noise) for observation, noise
                 in zip(case.observations, case.noises, strict=True)],
+            datasets=given,
             params=dict(properties=case.truth)), folder, 'host')
     group_plan, params = setup.group_plan(), setup.params()
     likelihoods = case.likelihoods or [None] * len(case.observations)
     # (their files, e.g. regions or the modules of user likelihoods, are
     # in the folder of the case)
     with paths_relative_to(str(folder)):
-        fitted = observation_parser.load(case.observations)
+        fitted = observation_parser.load(case.observations, dataset=[
+            None if info is None else dataset_parser.load(info)
+            for info in given])
         likelihoods = [
             likelihood_parser.dump(
                 LikelihoodGauss() if info is None
@@ -309,16 +320,18 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     data_options = case.data_options or [{}] * len(case.observations)
     prefix = str(folder) + os.sep
     observations = []
+    data = []
     for i, observation in enumerate(fitted):
         mocked = observation.with_dataset(datasets[i])
-        info = _rebased(observation_parser.dump(
-            mocked, f'{prefix}{labels[i]}_', overwrite=True), prefix)
-        info['dataset'] = _compacted(info['dataset'], folder) \
-            | data_options[i]
-        observations.append(info)
+        observations.append(_rebased(observation_parser.dump(
+            mocked, f'{prefix}{labels[i]}_', overwrite=True), prefix))
+        data.append(_compacted(_rebased(dataset_parser.dump(
+            mocked.dataset(), f'{prefix}{labels[i]}_', overwrite=True),
+            prefix), folder) | data_options[i])
     config = dict(version=FORMAT_VERSION, driver=dict(type='host')) \
         | sections | dict(
         observations=observations,
+        datasets=data,
         likelihoods=likelihoods_section(
             _rebased(likelihoods, prefix), observations, labels),
         params=dict(properties=case.trial) | case.params)
@@ -329,10 +342,11 @@ def make_config(case: Case, folder: pathlib.Path) -> None:
     """
     Write the configuration of a case into its folder from its recipe,
     with the data of the case as they are: that of new data (made in a
-    temporary folder), with the options of the data of each observation
-    of the case (migrated to the current format).
+    temporary folder), with the datasets of the case (migrated to the
+    current format).
     """
     from gbkfit import migration
+    from gbkfit.config import plain_values
     with tempfile.TemporaryDirectory() as temporary:
         make_data(case, pathlib.Path(temporary))
         with open(pathlib.Path(temporary, 'config.yaml')) as f:
@@ -340,9 +354,7 @@ def make_config(case: Case, folder: pathlib.Path) -> None:
     with open(folder / 'config.yaml') as f:
         current = yaml.safe_load(f)
     migration.migrate(current)
-    for observation, data in zip(
-            config['observations'], current['observations'], strict=True):
-        observation['dataset'] = data['dataset']
+    config['datasets'] = plain_values(current['datasets'])
     _write_config(case, folder, config)
 
 

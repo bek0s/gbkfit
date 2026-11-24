@@ -1,6 +1,6 @@
 # spiral_bar_flows: A gas disk rotating in its mass (a stellar disk and an NFW halo), with the flows of a spiral density wave of 3 arms (which the galaxy stage tabulates from the rotation), along a bar, and in two wedges; moment maps.
 # (written by make_golden.py; do not edit)
-version: 20
+version: 21
 driver: {type: host}
 galaxies:
 - components:
@@ -28,27 +28,30 @@ galaxies:
   distance: {type: parameter}
 observations:
 - type: pixel_moments
-  dataset:
-    type: pixel_moments
-    step: [1, 1]
-    rpix: [11.5, 11.5]
-    rval: [0, 0]
-    rota: 0
-    moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
-  dtype: float64
-  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
-  instrument:
-    primary_beam: null
-    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20.0 km s-1}
   spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
   flux_floor: 1.0e-06
   method: moments
   median_size: null
+  dtype: float64
+  depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
+  source_grid: {step: auto, extent: auto}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20.0 km s-1}
   oversampling: [1, 1]
   fft_dtype: float64
+datasets:
+- type: pixel_moments
+  step: [1, 1]
+  rpix: [11.5, 11.5]
+  rval: [0, 0]
+  rota: 0
+  moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
+  moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
+    error: observation0_moment1_e.fits}
+  moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
+    error: observation0_moment2_e.fits}
 likelihoods: {type: gauss, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
 params:
   properties:

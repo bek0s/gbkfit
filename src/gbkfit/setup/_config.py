@@ -21,6 +21,7 @@ from gbkfit.config import (
     strict_mode, type_problem, warn)
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.cosmology import Cosmology, cosmology_parser
+from gbkfit.dataset import Dataset, dataset_parser
 import gbkfit.lensing
 import gbkfit.model
 import gbkfit.observation
@@ -95,6 +96,12 @@ _SECTIONS = dict(
     observations=_Section(
         gbkfit.observation.Observation, "The observations of the galaxies.",
         True, True, dict(driver=str)),
+    datasets=_Section(
+        Dataset | None,
+        "The data of the observations, one for each, in their order (null "
+        "for one without data); without it, no observation has data. The "
+        "data win: they give the options of their observation that data "
+        "give (e.g. its grid).", False, True),
     likelihoods=_Section(
         _LIKELIHOODS,
         "How the models of the observations with data are compared with "
@@ -162,8 +169,8 @@ def setup_leaves(config: Mapping[str, Any]) -> Iterator[ConfigLeaf]:
     Yield the leaves of a configuration (as plain values) that name files
     or other parts of it (see gbkfit.config.config_leaves), by the types
     of its sections, each with its path from the configuration (its
-    section first; e.g. ('observations', 0, 'dataset', 'data')). Unknown
-    sections have none.
+    section first; e.g. ('datasets', 0, 'data')). Unknown sections have
+    none.
     """
     for name, value in config.items():
         if (section := _SECTIONS.get(name)) is None:
@@ -470,16 +477,12 @@ def describe_observation(
         config: Mapping[str, Any], root: str | None = None
 ) -> ObservationDescription:
     """
-    Describe the configuration of an observation alone, without devices or
-    galaxies: load it, with its dataset, PSF, LSF and noise given in place,
-    with every rule of the observation and of its data checked (those of
-    what it sees of galaxies are of the setups that have them), and
-    collect its problems, past its unknown names (see collect_problems).
-
-    The data are opened from the headers of their files and small files
-    alone (see Data): their values are not read, but for the maps of the
-    velocities of moments whose spectral axis is not given, which it is
-    made of.
+    Describe the configuration of an observation alone, without devices,
+    galaxies or data: load it, with its PSF, LSF and noise given in place,
+    with every rule of the observation without data checked (those of
+    what it sees of galaxies, and of the data it is paired with, are of
+    the setups that have them), and collect its problems, past its
+    unknown names (see collect_problems).
 
     Parameters
     ----------
@@ -856,23 +859,26 @@ def _driver_path(name: str | None) -> tuple[str, ...]:
 
 def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
-    Return the galaxies, lenses and observations (with their data, if
-    any) of a configuration, as an ObservationGroup, with the order of the
-    galaxies along the line of sight of its section 'depth_order' and the
-    cosmology of its section 'cosmology'. The galaxies
-    and observations name lines and bands of the catalogue of GBKFIT and
-    of the sections 'lines' and 'bands' of the configuration (see
+    Return the galaxies, lenses and observations of a configuration, as an
+    ObservationGroup, the observations paired with their data (its section
+    'datasets', see _load_datasets; Observation.load), with the order of
+    the galaxies along the line of sight of its section 'depth_order' and
+    the cosmology of its section 'cosmology'. The galaxies and
+    observations name lines and bands of the catalogue of GBKFIT and of
+    the sections 'lines' and 'bands' of the configuration (see
     LineCatalogue and lines_from). Their option driver places them on a
     driver of the configuration (see _load_placement).
     """
     catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'), cfg.get('bands'))
+    infos = _without_driver(cfg['observations'])
     with gbkfit.model.lines_from(catalogue):
         with config_path('galaxies'):
             galaxies = gbkfit.model.galaxy_parser.load(
                 _without_driver(cfg['galaxies']))
+        datasets = _load_datasets(cfg, infos)
         with config_path('observations'):
             observations = gbkfit.observation.observation_parser.load(
-                _without_driver(cfg['observations']))
+                infos, dataset=datasets)
     lenses = []
     if 'lenses' in cfg:
         with config_path('lenses'):
@@ -885,6 +891,52 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
             cosmology = cosmology_parser.load(cfg['cosmology'])
     return gbkfit.observation.ObservationGroup(
         galaxies, observations, lenses, depth_order, cosmology)
+
+
+def _load_datasets(
+        cfg: dict[str, Any], observations: Sequence[Any]
+) -> list[Dataset | None]:
+    """
+    Return the datasets of the section 'datasets' of a configuration: the
+    data of each of its observations (see _load_observation_group), in
+    their order, each of the kind of its observation (see
+    Observation.check_dataset_class), or None for one without data; all
+    None without the section.
+
+    Raises
+    ------
+    ConfigError
+        If the section has not one item for each observation, or a dataset
+        has an error.
+    InputError
+        If a dataset is not of the kind of its observation.
+    """
+    if 'datasets' not in cfg:
+        return [None] * len(observations)
+    infos = cfg['datasets']
+    datasets = []
+    with config_path('datasets'):
+        if len(infos) != len(observations):
+            raise ConfigError(
+                f"the section has {len(infos)} datasets for "
+                f"{len(observations)} observations: give one for each "
+                f"observation, in their order (null for one without data)")
+        kinds = gbkfit.observation.observation_parser.registered_classes()
+        for i, (observation, info) in enumerate(zip(observations, infos)):
+            if info is None:
+                datasets.append(None)
+                continue
+            with config_path(i):
+                dataset = dataset_parser.load(info)
+                # (of an observation of a known type; the others have the
+                # errors of their types)
+                type_ = observation.get('type') \
+                    if isinstance(observation, dict) else None
+                if isinstance(type_, str) \
+                        and (kind := kinds.get(type_)) is not None:
+                    kind.check_dataset_class(dataset)
+            datasets.append(dataset)
+    return datasets
 
 
 def _load_likelihoods(

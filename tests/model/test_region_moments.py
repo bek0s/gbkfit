@@ -154,9 +154,9 @@ def test_region_moments_observation_from_data(tmp_path):
     np.testing.assert_array_equal(loaded['moment1'].data(), [1400, 1500, 1600])
     info = dict(
         type='region_moments',
-        dataset=dict(type='region_moments') | data_info,
         spectral=dict(step=2, convention='relativistic'))
-    observation = observation_parser.load(copy.deepcopy(info))
+    observation = observation_parser.load(
+        copy.deepcopy(info), dataset=loaded)
     assert observation.size() == (3, 2)
     assert observation.spectral().rval() == 1500
     # A dump of the observation does not repeat what the data give
@@ -165,7 +165,8 @@ def test_region_moments_observation_from_data(tmp_path):
     assert 'regions' not in dumped
     assert 'size' not in dumped
     # (given too, they serve only without data)
-    assert observation_parser.load(info | dict(size=[5, 5])).size() == (3, 2)
+    assert observation_parser.load(
+        info | dict(size=[5, 5]), dataset=loaded).size() == (3, 2)
 
 
 def test_region_moments_observation_dumps_its_bins_with_the_prefix(tmp_path):
@@ -210,7 +211,7 @@ def test_region_moments_objective_residual(driver):
         for key, value in model.items()}, regions)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
-        [ObservationRegionMoments(**moments, dataset=dataset)])
+        [ObservationRegionMoments.paired(dataset, **moments)])
     residual = Objective(group.plan(driver), Likelihoods(
         group, LikelihoodGauss(missing_residual=3))).residual_nddata_h(
         params.evaluate())

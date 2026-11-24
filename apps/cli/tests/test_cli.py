@@ -192,8 +192,8 @@ def test_a_bad_header_of_a_configuration_is_reported_at_its_options(
             type='thin_disk', loose=False, tilted=False, rnodes=list(range(8)),
             rptraits=dict(type='exponential'),
             emission=dict(type='band'))])],
-        observations=[dict(type='pixel_brightness', dataset=dict(
-            type='pixel_brightness', data='image.fits'))],
+        observations=[dict(type='pixel_brightness')],
+        datasets=[dict(type='pixel_brightness', data='image.fits')],
         params=dict(properties=dict(
             xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=3)))
     (tmp_path / 'config.json').write_text(json.dumps(config))
@@ -201,6 +201,5 @@ def test_a_bad_header_of_a_configuration_is_reported_at_its_options(
     assert result.returncode == 1 and 'Traceback' not in result.stderr
     image = str(tmp_path / 'image.fits')
     assert errors(result) == [
-        f"error: observations[0].dataset.rpix: {image}: CRPIX1 missing",
-        f"error: observations[0].dataset.unit: {image}: BUNIT 'JY/BEAM' "
-        f"invalid"]
+        f"error: datasets[0].rpix: {image}: CRPIX1 missing",
+        f"error: datasets[0].unit: {image}: BUNIT 'JY/BEAM' invalid"]

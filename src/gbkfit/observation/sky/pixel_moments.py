@@ -48,9 +48,9 @@ class ObservationPixelMoments(ObservationSky):
     for its defaults).
 
     Its options are those below, then those of every observation on the
-    sky (see ObservationSky). Its data give those of its grid and its
-    orders (given too, they serve only without data); without data, size
-    is required.
+    sky (see ObservationSky). Data paired with it give those of its grid
+    and its orders (given too, they serve only without data); without
+    data, size is required.
 
     Parameters
     ----------
@@ -129,23 +129,20 @@ class ObservationPixelMoments(ObservationSky):
         orders=(0, 1, 2))
 
     @classmethod
-    def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
+    def sampling_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
         # The grid and the orders
-        return super().options_from_data(dataset) + ('orders',)
+        return super().sampling_from_data(dataset) + ('orders',)
 
     @classmethod
     def _options_from_data(
             cls, dataset: DatasetPixelMoments, options: dict[str, Any]
     ) -> dict[str, Any]:
         # (the grid and the orders of the maps, and the spectral axis of
-        # the cube, which covers the velocities of the data unless its
-        # size and rval are given, see _moments.spectral_axis)
-        spectral = options['spectral']
-        covered = {} if spectral.size() is not None \
-            and spectral.rval() is not None else dict(
-                spectral=_moments.spectral_axis(spectral, dataset))
+        # the cube, if given, which covers the velocities of the data
+        # unless its size and rval are given, see _moments.spectral_axis)
         return grid_options(dataset.grid()) \
-            | dict(orders=dataset.orders()) | covered
+            | dict(orders=dataset.orders()) \
+            | _moments.covered(options.get('spectral'), dataset)
 
     def _dump_options(
             self, prefix: str, dump_path: bool, overwrite: bool
@@ -185,7 +182,6 @@ class ObservationPixelMoments(ObservationSky):
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
-            dataset: Dataset | None = None,
             noise: Noise | None = None,
             oversampling: Sequence[int] | None = None,
             depth: Depth | None = None,
@@ -195,7 +191,7 @@ class ObservationPixelMoments(ObservationSky):
             unit: str | None = None
     ):
         check_options(ObservationPixelMoments.__init__, locals())
-        options = self._options(dataset, dict(
+        options = self._options(dict(
             size=size, step=step, rpix=rpix, rval=rval, rota=rota,
             spectral=spectral, orders=orders))
         check_median_size(median_size)
@@ -207,8 +203,8 @@ class ObservationPixelMoments(ObservationSky):
         super().__init__(
             self._make_grid(**options), source_grid, instrument, galaxies,
             components, lines, continuum, band, pixel_weights, flux_scale,
-            offsets, dataset, noise, oversampling, depth, dtype, fft_dtype,
-            name, unit)
+            offsets, noise, oversampling, depth, dtype, fft_dtype, name,
+            unit)
 
     def _measured_pixels(self) -> np.ndarray:
         return unmasked_pixels(self._dataset, self._grid.size[1::-1])

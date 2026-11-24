@@ -179,7 +179,7 @@ def test_region_spectra_objective_residual(driver):
         observation_of(case).regions(),
         spectral=SpectralAxis(step=10, convention='relativistic'))
     observation = observation_of(
-        case, instrument=Instrument(), dataset=dataset)
+        case, instrument=Instrument()).with_dataset(dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace.from_properties(
@@ -189,8 +189,8 @@ def test_region_spectra_objective_residual(driver):
     # Without the instrument, the model differs from the data
     assert not np.allclose(residual[0]['spectra'], -0.5)
     observation = observation_of(
-        case, instrument=instrument_parser.load(copy.deepcopy(INSTRUMENT)),
-        dataset=dataset)
+        case, instrument=instrument_parser.load(copy.deepcopy(INSTRUMENT))
+    ).with_dataset(dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     residual = Objective(group.plan(driver)).residual_nddata_h(
@@ -287,11 +287,10 @@ def test_region_spectra_observation_from_data(tmp_path):
         Data(np.ones((51, 3))), regions,
         spectral=SpectralAxis(step=10, rval=1500, convention='relativistic'))
     data_info = dataset.dump(prefix=str(tmp_path / ''))
-    info = dict(
-        type='region_spectra',
-        dataset=data_info,
-        size=[32, 41])
-    observation = observation_parser.load(copy.deepcopy(info))
+    loaded = gbkfit.dataset.dataset_parser.load(data_info)
+    info = dict(type='region_spectra', size=[32, 41])
+    observation = observation_parser.load(
+        copy.deepcopy(info), dataset=loaded)
     assert observation.size() == (32, 41, 51)
     assert observation.spectral_grid() == dataset.spectral_grid()
     assert observation.regions() == regions
@@ -302,18 +301,19 @@ def test_region_spectra_observation_from_data(tmp_path):
     assert not {'regions', 'spectral'} & set(dumped)
     # (given too, they serve only without data)
     assert observation_parser.load(
-        info | dict(spectral=dict(step=10))).spectral_grid() \
-        == dataset.spectral_grid()
+        info | dict(spectral=dict(step=10)), dataset=loaded
+    ).spectral_grid() == dataset.spectral_grid()
 
 
-def test_other_region_spectra_with_another_spectral_axis_are_an_error():
-    # (a copy with other data, e.g. mock data, is the same observation)
+def test_other_region_spectra_give_their_spectral_axis():
+    # (a copy with other data, e.g. mock data, is the same observation;
+    # the data win: their spectral axis is that of the copy)
     case = aspec_of_apertures(APERTURES)
     dataset = DatasetRegionSpectra(
         Data(np.ones((51, 3))), observation_of(case).regions(),
         spectral=SpectralAxis(step=5, convention='relativistic'))
-    with pytest.raises(ValueError, match="spectral axis"):
-        observation_of(case).with_dataset(dataset)
+    copied = observation_of(case).with_dataset(dataset)
+    assert copied.spectral_grid() == dataset.spectral_grid()
 
 
 
@@ -333,8 +333,8 @@ def test_region_spectra_observation_of_data_on_a_rotated_grid(kind):
     dataset = DatasetRegionSpectra(
         Data(np.ones((5, 1))), regions,
         spectral=SpectralAxis(step=10, convention='relativistic'))
-    ObservationRegionSpectra(
-        regions=regions, spectral=spectral, dataset=dataset, **grid)
+    ObservationRegionSpectra.paired(
+        dataset, regions=regions, spectral=spectral, **grid)
 
 def test_region_spectra_spatial_grid_options():
     from gbkfit.observation import ObservationRegionSpectra

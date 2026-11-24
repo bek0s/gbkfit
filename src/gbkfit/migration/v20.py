@@ -74,10 +74,10 @@ def _datasets(
 ) -> Iterator[tuple[list[str | int], MutableMapping[str, Any]]]:
     """
     Yield the datasets of a configuration with their paths: the dataset
-    pieces of a project (section 'dataset'), and those that observations
-    give in place.
+    pieces of a project (its section 'datasets', see PiecesView), and
+    those that observations give in place.
     """
-    yield from items(config, 'dataset')
+    yield from items(config, 'datasets')
     for path, observation in items(config, 'observations'):
         dataset = observation.get('dataset')
         if isinstance(dataset, MutableMapping):

@@ -227,7 +227,8 @@ def test_spectral_axes_are_migrated_to_one_option():
         dict(type='sky', observable=cube),
         dict(type='sky', observable=dict(type='pixel_spectra'), data=dict(
             data='cube.fits', step=[1, 1, 10], rest='1420 MHz'))]
-    migration.migrate(dict(observations=observations), 2)
+    config = dict(observations=observations)
+    migration.migrate(config, 2)
     assert moments == dict(
         type='pixel_moments', size=[8, 8], spectral=dict(
             step=10, convention='log', rest='5000 Angstrom'))
@@ -235,7 +236,7 @@ def test_spectral_axes_are_migrated_to_one_option():
     assert cube == dict(
         type='pixel_spectra', size=[8, 8], step=[1, 1],
         spectral=dict(size=20, step=10, convention='relativistic'))
-    assert observations[2]['dataset'] == dict(
+    assert config['datasets'][2] == dict(
         type='pixel_spectra', data='cube.fits', step=[1, 1],
         spectral=dict(step=10, rest='1420 MHz'))
 
@@ -413,10 +414,11 @@ def test_gauss_hermite_moments_are_migrated_to_h3_and_h4():
                                    method='gauss_hermite'), data=data)
     central = dict(observable=dict(type='pixel_moments'),
                    data=dict(moment3='m3.fits'))
-    migration.migrate(dict(observations=[hermite, central]), 2)
+    config = dict(observations=[hermite, central])
+    migration.migrate(config, 2)
     assert data == dict(type='pixel_moments', moment1='v.fits',
                         h3='h3.fits', h4='h4.fits')
-    assert central['dataset'] == dict(moment3='m3.fits')
+    assert config['datasets'][1] == dict(moment3='m3.fits')
 
 
 # Two disks and a point of version 3 that share the geometry of their
@@ -1251,12 +1253,12 @@ def test_the_distances_of_tables_and_profiles_are_assumed_distances():
     migration.migrate(config, 7)
     assert 'distance' not in table and table['assumed_distance'] == 10
     assert profile['assumed_distance'] == 10
-    assert profile['dataset']['assumed_distance'] == 10
-    pieces = migration.rules.PiecesView(dataset=[
+    assert config['datasets'][0]['assumed_distance'] == 10
+    pieces = migration.rules.PiecesView(datasets=[
         dict(type='profile', file='rc.ecsv', distance=10),
         dict(type='pixel_spectra', data='cube.fits')])
     migration.v8.AssumedDistances().rewrite(pieces)
-    assert pieces['dataset'] == [
+    assert pieces['datasets'] == [
         dict(type='profile', file='rc.ecsv', assumed_distance=10),
         dict(type='pixel_spectra', data='cube.fits')]
 
@@ -1375,17 +1377,17 @@ def test_slits_are_oriented_by_their_position_angle():
     observations = config['observations']
     assert observations[0] == dict(
         type='slit_spectra', size=[40], slit_pa=-60, slit_width=1.5)
-    assert observations[1]['dataset']['slit_pa'] == 30.5
-    assert observations[2]['dataset'] == dict(
+    assert config['datasets'][1]['slit_pa'] == 30.5
+    assert config['datasets'][2] == dict(
         type='slit_spectra', data='slit.fits', slit_pa=None)
     assert observations[3] == dict(type='slit_spectra', size=[40])
     assert observations[4]['rota'] == 30
     assert not any(c.message.startswith('by hand') for c in changes)
-    pieces = migration.rules.PiecesView(dataset=[
+    pieces = migration.rules.PiecesView(datasets=[
         dict(type='slit_spectra', data='slit.fits', rota=0),
         dict(type='pixel_spectra', data='cube.fits', rota=0)])
     migration.v9.SlitPositionAngles().rewrite(pieces)
-    assert pieces['dataset'] == [
+    assert pieces['datasets'] == [
         dict(type='slit_spectra', data='slit.fits', slit_pa=-90),
         dict(type='pixel_spectra', data='cube.fits', rota=0)]
     # (an angle that is not a number is changed by hand)
@@ -1526,11 +1528,15 @@ def with_data(name=None, **options):
 def migrated(observation):
     """
     The configuration of an observation of version 9 or 10 (see with_data)
-    as it is in the current version: its dataset is its option dataset.
+    as it is in the current version: without its data, which the section
+    datasets of its setup pairs it with (see DATA).
     """
-    observation = dict(observation)
-    observation['dataset'] = observation.pop('data')
-    return observation
+    return {k: v for k, v in observation.items() if k != 'data'}
+
+
+# The data of an observation of with_data, as the section datasets of its
+# setup has them
+DATA = dict(type='pixel_brightness', data='image.fits')
 
 
 def without_data(name=None, **options):
@@ -1551,7 +1557,8 @@ def test_the_likelihoods_leave_the_observations_for_their_setup():
         without_data()])
     changes = migration.migrate(config, 9)
     assert config['likelihoods'] == MOMENTS
-    assert list(config) == ['version', 'observations', 'likelihoods']
+    assert list(config) == [
+        'version', 'observations', 'datasets', 'likelihoods']
     assert all('likelihood' not in o for o in config['observations'])
     assert migration.Change(
         ['observations', 1, 'likelihood'], "-> section likelihoods") \
@@ -1718,7 +1725,8 @@ def test_a_migrated_file_has_its_likelihoods_after_its_observations(
         "observations:\n"
         "- type: sky\n"
         "  name: hi\n"
-        "  dataset: {type: pixel_brightness, data: hi.fits}\n"
+        "datasets:\n"
+        "- {type: pixel_brightness, data: hi.fits}\n"
         "likelihoods: {type: gauss, missing_residual: 3}\n"
         "params: {properties: {a: 1}}  # the parameters\n")
 
@@ -1743,17 +1751,24 @@ def test_the_likelihoods_of_observation_pieces_move_into_their_setups(
         setups / 'by_hand.yaml')
     changes = migration.migrate_project(study.path)
     assert study.piece('observations', 'hi') == migrated(with_data('hi'))
-    assert changes['observations/hi.yaml'] == [
+    assert changes['observations/hi.yaml'][:3] == [
         migration.Change(['likelihood'], (
             "-> the section likelihoods of the setups that name the "
             "piece")),
-        migration.Change(['data'], "-> dataset")]
+        migration.Change(['data'], "-> dataset"),
+        migration.Change(['dataset'], (
+            "removed (was in place): -> the section datasets of the "
+            "setups that name the piece"))]
+    # (its data, image.fits, are not in the project: its grid is to be
+    # given by hand)
+    assert changes['observations/hi.yaml'][3].message.startswith(
+        "by hand: give the piece the options its data gave it")
     joint = yaml.load(setups / 'joint.yaml')
     assert joint == dict(
         observations=['hi', migrated(with_data('ha'))],
-        likelihoods=dict(hi=MOMENTS))
+        datasets=[DATA, DATA], likelihoods=dict(hi=MOMENTS))
     assert yaml.load(setups / 'alone.yaml') == dict(
-        observations=['hi'], likelihoods=MOMENTS)
+        observations=['hi'], datasets=[DATA], likelihoods=MOMENTS)
     by_hand = yaml.load(setups / 'by_hand.yaml')
     assert by_hand['observations'][1]['name'] == 'observation1'
     assert by_hand['likelihoods'] == dict(observation1=dict(type='gauss'))
@@ -1761,6 +1776,9 @@ def test_the_likelihoods_of_observation_pieces_move_into_their_setups(
         "by hand: name the observation piece 'unnamed' (e.g. "
         "'observation0'), and give its likelihood by that name")) \
         in changes['setups/by_hand.yaml']
+    # (the datasets of version 21, by position)
+    assert by_hand['observations'][0] == 'unnamed'
+    assert by_hand['datasets'] == [DATA, DATA]
 
 
 @pytest.mark.parametrize('line_of_sight, depth', [
@@ -1827,7 +1845,7 @@ def test_the_data_of_an_observation_are_its_dataset():
         dict(type='profile', name='rc', data='rotation_curve'),
         dict(type='sky', name='mock', observable=dict(
             type='pixel_brightness', size=[8, 8]))])
-    changes = migration.migrate(config, 10)
+    changes = rewritten(config, 10, 12)
     hi, rc, mock = config['observations']
     assert list(hi) == ['type', 'name', 'dataset']
     assert hi['dataset'] == dict(type='pixel_brightness', data='image.fits')
@@ -1835,6 +1853,13 @@ def test_the_data_of_an_observation_are_its_dataset():
     assert 'dataset' not in mock and 'data' not in mock
     assert migration.Change(['observations', 0, 'data'], "-> dataset") \
         in changes
+    # (version 21: the datasets of the observations are those of the
+    # section datasets, in their order, null for one without data)
+    rewritten(config, 12, VERSION)
+    assert config['datasets'] == [
+        dict(type='pixel_brightness', data='image.fits'), 'rotation_curve',
+        None]
+    assert all('dataset' not in o for o in config['observations'])
 
 
 def test_the_observable_of_an_observation_is_merged_into_it(tmp_path):
@@ -1847,7 +1872,7 @@ def test_the_observable_of_an_observation_is_merged_into_it(tmp_path):
             dataset='cube', instrument=dict(psf='kmos')),
         dict(type='profile', name='rc', dataset='rotation_curve'),
         'named'])
-    changes = migration.migrate(config, 11)
+    changes = rewritten(config, 11, 12)
     hi, rc, named = config['observations']
     assert list(hi) == [
         'type', 'name', 'size', 'spectral', 'dataset', 'instrument']
@@ -2241,18 +2266,155 @@ def test_the_footprint_of_moment_maps_is_one_of_their_dataset():
         moment1=dict(data='m1.fits', footprint='field.fits'))
     regions = dict(
         type='region_moments', moment1=dict(data='m1.fits', footprint='f'))
-    config = dict(
+    pieces = migration.rules.PiecesView(
         observations=[dict(type='pixel_moments', dataset=copy.deepcopy(maps))],
-        dataset=[regions])
-    changes = rewritten(config, 19, 20)
-    assert config['observations'][0]['dataset'] == dict(
+        datasets=[regions])
+    changes = rewritten(pieces, 19, 20)
+    assert pieces['observations'][0]['dataset'] == dict(
         type='pixel_moments', moment0=dict(data='m0.fits'),
         moment1=dict(data='m1.fits'), footprint='field.fits')
-    assert config['dataset'] == [
+    assert pieces['datasets'] == [
         dict(type='region_moments', moment1=dict(data='m1.fits'))]
     assert [change.path for change in changes] == [
-        ['dataset', 0, 'moment1', 'footprint'],
+        ['datasets', 0, 'moment1', 'footprint'],
         ['observations', 0, 'dataset', 'footprint']]
     maps['moment1']['footprint'] = 'other.fits'
     with pytest.raises(ValueError, match="different footprints"):
-        rewritten(dict(dataset=[maps]), 19, 20)
+        rewritten(migration.rules.PiecesView(datasets=[maps]), 19, 20)
+
+
+def test_the_dataset_of_an_observation_pairs_it_in_its_setup():
+    # Version 21: the dataset of an observation is in the section datasets,
+    # at its place (null for an observation without data); the dataset of
+    # a profile takes its type; the pixel weights stay
+    weights = dict(
+        component='disk', traits=[dict(type='azimuth_power', power=2)])
+    config = dict(
+        observations=[
+            dict(type='pixel_spectra', smooth_weights=True,
+                 dataset=dict(type='pixel_spectra', data='cube.fits'),
+                 pixel_weights=weights),
+            dict(type='pixel_moments', size=[8, 8]),
+            dict(type='profile', dataset=dict(
+                file='rc.ecsv', radius=dict(column='r')))],
+        likelihoods=dict(type='gauss', missing_residual=3))
+    changes = rewritten(config, 20, 21)
+    assert list(config) == ['observations', 'datasets', 'likelihoods']
+    assert config['observations'] == [
+        dict(type='pixel_spectra', smooth_weights=True,
+             pixel_weights=weights),
+        dict(type='pixel_moments', size=[8, 8]),
+        dict(type='profile')]
+    assert config['datasets'] == [
+        dict(type='pixel_spectra', data='cube.fits'), None,
+        dict(type='profile', file='rc.ecsv', radius=dict(column='r'))]
+    assert config['likelihoods'] == dict(type='gauss', missing_residual=3)
+    assert changes == [migration.Change(['datasets'], (
+        "the datasets of the observations, in their order, from them"))]
+    # (an observation without data is paired with none)
+    config = dict(observations=[dict(type='pixel_brightness', size=8)])
+    assert rewritten(config, 20, 21) == []
+    assert config == dict(observations=[
+        dict(type='pixel_brightness', size=8)])
+
+
+def test_a_migrated_file_has_its_datasets_after_its_observations(tmp_path):
+    path = tmp_path / 'fit.yaml'
+    path.write_text(
+        "version: 20\n"
+        "# the observations\n"
+        "observations:\n"
+        "- type: pixel_brightness  # an image\n"
+        "  name: hi\n"
+        "  dataset: {type: pixel_brightness, data: hi.fits}\n"
+        "params: {properties: {a: 1}}  # the parameters\n")
+    migration.migrate_file(str(path))
+    assert path.read_text() == (
+        f"version: {VERSION}\n"
+        "# the observations\n"
+        "observations:\n"
+        "- type: pixel_brightness  # an image\n"
+        "  name: hi\n"
+        "datasets:\n"
+        "- {type: pixel_brightness, data: hi.fits}\n"
+        "params: {properties: {a: 1}}  # the parameters\n")
+
+
+def test_the_datasets_of_observation_pieces_pair_them_in_their_setups(
+        tmp_path, caplog):
+    # Of a project: the observation pieces lose their datasets, into each
+    # setup that names them, at their places (the setups stay as they
+    # were written); a named dataset piece stays named, and an untyped one
+    # (of a profile) takes its type. A
+    # piece takes the sampling (and the unit) its data gave it, but what
+    # it gives itself, so that it stands alone; one whose data cannot be
+    # read is left without them, with a warning
+    import logging
+    from astropy.io import fits
+    import numpy as np
+    study = project.create(str(tmp_path / 'study'))
+    folder = tmp_path / 'study'
+    yaml.dump(dict(format=project.FORMAT, version=20),
+              folder / project.MARKER)
+    fits.writeto(folder / 'data' / 'hi.fits', np.ones((6, 8)),
+                 fits.Header(dict(BUNIT='Jy')))
+    yaml.dump(dict(type='pixel_brightness', dataset='hi', median_size=3),
+              folder / 'observations' / 'hi.yaml')
+    yaml.dump(dict(type='pixel_brightness', name='ha', rval=[1, 2],
+                   dataset=dict(type='pixel_brightness', data='data/hi.fits')),
+              folder / 'observations' / 'ha.yaml')
+    yaml.dump(dict(type='profile', name='rc', dataset='rc'),
+              folder / 'observations' / 'rc.yaml')
+    hi = dict(type='pixel_brightness', data='data/hi.fits')
+    yaml.dump(hi, folder / 'datasets' / 'hi.yaml')
+    yaml.dump(dict(file='rc.ecsv', radius=dict(column='r')),
+              folder / 'datasets' / 'rc.yaml')
+    setups = folder / 'setups'
+    yaml.dump(dict(observations='hi'), setups / 'alone.yaml')
+    yaml.dump(dict(observations=['hi', 'ha']), setups / 'joint.yaml')
+    yaml.dump(dict(observations=[dict(name='other', use='hi'), 'rc']),
+              setups / 'renamed.yaml')
+    with caplog.at_level(logging.WARNING, 'gbkfit.migration'):
+        changes = migration.migrate_project(study.path)
+    sampling = dict(size=[8, 6], step=[1.0, 1.0], rpix=[3.5, 2.5], rota=0.0)
+    assert study.piece('observations', 'hi') == dict(
+        type='pixel_brightness', **sampling, rval=[0.0, 0.0], unit='Jy',
+        median_size=3)
+    assert study.piece('observations', 'ha') == dict(
+        type='pixel_brightness', name='ha', **sampling, unit='Jy',
+        rval=[1, 2])
+    assert observation_parser.load(
+        study.piece('observations', 'hi')).size() == (8, 6)
+    assert migration.Change(['size'], "from its data") \
+        in changes['observations/hi.yaml']
+    # (the data of the profile are missing: the piece is as it was, but
+    # its dataset, and the change is to make by hand)
+    assert study.piece('observations', 'rc') == dict(
+        type='profile', name='rc')
+    [by_hand] = [
+        c for c in changes['observations/rc.yaml'] if c.path == []]
+    assert by_hand.message.startswith(
+        "by hand: give the piece the options its data gave it")
+    assert "observation piece 'rc'" in caplog.text
+    assert study.piece('datasets', 'hi') == hi
+    assert study.piece('datasets', 'rc') == dict(
+        type='profile', file='rc.ecsv', radius=dict(column='r'))
+    assert changes['observations/hi.yaml'][0] == migration.Change(
+        ['dataset'], (
+            "removed (was 'hi'): -> the section datasets of the setups "
+            "that name the piece"))
+    assert yaml.load(setups / 'alone.yaml') == dict(
+        observations='hi', datasets=['hi'])
+    assert yaml.load(setups / 'joint.yaml') == dict(
+        observations=['hi', 'ha'],
+        datasets=['hi', dict(type='pixel_brightness', data='data/hi.fits')])
+    assert yaml.load(setups / 'renamed.yaml') == dict(
+        observations=[dict(name='other', use='hi'), 'rc'],
+        datasets=['hi', 'rc'])
+    assert project.open(study.path).version() == VERSION
+    # (whose pieces the setups then have in place, in their order)
+    config, sources = project.resolve(
+        yaml.load(setups / 'renamed.yaml'), str(setups / 'renamed.yaml'),
+        study)
+    assert config['datasets'] == [hi, study.piece('datasets', 'rc')]
+    assert sources['datasets'] == ['datasets/hi.yaml', 'datasets/rc.yaml']

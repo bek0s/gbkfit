@@ -6,8 +6,8 @@ setups, one piece per file:
     galaxies/<name>.yaml      a galaxy (an item of the section 'galaxies')
     lenses/<name>.yaml        a lens (of 'lenses')
     observations/<name>.yaml  an observation (of 'observations')
-    datasets/<name>.yaml      a dataset (the option 'dataset' of an
-                              observation)
+    datasets/<name>.yaml      a dataset (an item of the section 'datasets',
+                              the data of the observation at its place)
     psfs/<name>.yaml          a PSF (the option 'psf' of an instrument)
     lsfs/<name>.yaml          an LSF (the option 'lsf' of an instrument)
     noise/<name>.yaml         a noise (the option 'noise' of an observation)
@@ -20,11 +20,12 @@ setups, one piece per file:
 
 The name of a piece is the path of its file in the folder of its kind,
 without .yaml, and can have folders (e.g. 'ngc1313/hi'). In the sections
-galaxies, lenses, observations, params and fitter of a configuration in
-a project, and in the options dataset, noise, instrument.psf and
+galaxies, lenses, observations, datasets, params and fitter of a
+configuration in a project, and in the options noise, instrument.psf and
 instrument.lsf of its observations, a string names a piece, and a
-dictionary is one in place. Of the pieces, only observations name others
-(their dataset, noise, PSF and LSF). The section 'params' can also be a
+dictionary is one in place. Of the pieces, only
+observations name others (their noise, PSF and LSF). The section
+'params' can also be a
 list of pieces, merged in order (see gbkfit.params.merge_layers); see
 resolve for the pieces that items of a setup use under its names, and
 the parameters of an item. The relative paths of
@@ -68,7 +69,7 @@ MARKER = 'gbkfit-project.yaml'
 # configurations that name them (see the module)
 _FOLDERS = dict(
     galaxies='galaxies', lenses='lenses', observations='observations',
-    dataset='datasets', psf='psfs', lsf='lsfs', noise='noise',
+    datasets='datasets', psf='psfs', lsf='lsfs', noise='noise',
     params='params', fitter='fitters')
 
 
@@ -173,10 +174,10 @@ pieces:
     'observations': """\
 # An observation: here a cube of 48 x 48 spaxels of 1 arcsec and 40
 # channels of 10 km/s of radio velocities (as of HI; optical for lines of
-# ionised gas), with Gaussian PSF and LSF. To fit data, name a dataset of
-# the project (dataset: <name>), whose grid the grid here must then be
-# (or leave the grid out); the PSF and the LSF can be named too (psf:
-# <name>, lsf: <name>).
+# ionised gas), with Gaussian PSF and LSF. To fit data, a setup pairs it
+# with a dataset of the project (its section datasets, at the place of
+# the observation), whose grid then replaces the grid here; the PSF and
+# the LSF can be named too (psf: <name>, lsf: <name>).
 type: pixel_spectra
 size: [48, 48]
 step: [1, 1]
@@ -187,8 +188,8 @@ instrument:
 """,
     'datasets': """\
 # A dataset: here a cube and its errors (FITS files; paths relative to the
-# project), of the type of the observations that name it (dataset:
-# <name>).
+# project), of the type of the observations that setups pair with it
+# (their section datasets, at the places of the observations).
 type: pixel_spectra
 data: data/cube.fits
 error: data/error.fits
@@ -237,15 +238,18 @@ type: scipy.least_squares
 # A setup: the pieces of the project it is made of, by name (their paths
 # in their folders, without .yaml), or written in place. Preview it, or
 # evaluate or fit it (a fit needs a fitter, and fits the observations
-# with data under their likelihoods: Gaussian by default, or one for all
-# as below, or likelihoods by observation name). With several galaxies,
-# name each in the setup and give each its own parameters, e.g.
+# paired with data under their likelihoods: Gaussian by default, or one
+# for all as below, or likelihoods by observation name). The datasets are
+# the data of the observations, one for each, in their order (null for
+# one without data). With several galaxies, name each in the setup and
+# give each its own parameters, e.g.
 #   galaxies: [{{name: source, use: ngc1}}, {{name: deflector, use: ngc2}}]
 #   params: [{{of: source, use: ngc1}}, {{of: deflector, use: ngc2}}]
 driver: {{type: host}}
 galaxies: [{galaxies}]
 # lenses: [{lenses}]
 observations: [{observations}]
+# datasets: [{datasets}]
 params: [{params}]
 # likelihoods:
 #   type: gauss
@@ -293,7 +297,7 @@ class Project:
         ----------
         section : str
             The section, or the option, that names it (see the module):
-            'galaxies', 'lenses', 'observations', 'dataset', 'psf', 'lsf',
+            'galaxies', 'lenses', 'observations', 'datasets', 'psf', 'lsf',
             'noise', 'params' or 'fitter'.
         name : str
             The name of the piece.
@@ -693,11 +697,13 @@ class Resolved(NamedTuple):
     sources, relative to its project: its file ('file'), the file of each
     item of its sections galaxies, lenses, observations and params (a
     list, of the layers; of a layer of an item from a list of pieces,
-    their files), and of its fitter; the file of the dataset, the
-    noise, the PSF and the LSF of each observation ('dataset', 'noise',
-    'psf' and 'lsf': lists, None for an observation without one), if any
-    has one; and the file of the layer that gives the
-    properties of each parameter ('parameters', by name).
+    their files), of each dataset of its section datasets ('datasets', a
+    list in the order of the observations, None for an observation
+    without data), and of its fitter; the file of the noise, the PSF
+    and the LSF of each observation ('noise', 'psf' and 'lsf': lists,
+    None for an observation without one), if any has one; and the file of
+    the layer that gives the properties of each parameter ('parameters',
+    by name).
     """
     config: dict[str, Any]
     sources: dict[str, Any]
@@ -715,7 +721,9 @@ def resolve(
     An item of the sections galaxies, lenses and observations is the
     piece it names, or {name: <name>, use: <piece>}: the piece under a
     name of the configuration (e.g. a galaxy that is the deflector of a
-    lens in one setup, and alone in another). A layer of params is the
+    lens in one setup, and alone in another). An item of the section
+    datasets is the piece it names, one in place, or null (an observation
+    without data). A layer of params is the
     piece it names or one in place, in the names of the configuration,
     or the parameters of an item of it: {of: <item>, use: <piece or
     list of pieces>}, or {of: <item>, ...} with the options of params in
@@ -758,7 +766,10 @@ def resolve(
 
     for section in _LISTED:
         items = config.get(section)
-        if isinstance(items, str):
+        # (one item: a name, or a dictionary but of params, whose one
+        # dictionary is the section itself)
+        if isinstance(items, str) or (
+                section != 'params' and isinstance(items, Mapping)):
             items = [items]
         if not isinstance(items, list):
             continue
@@ -777,10 +788,20 @@ def resolve(
                 _parts(project, item, i, sources[section][i], base)
                 for i, item in enumerate(loaded)]
             loaded = [observation for observation, _ in parts]
-            for key in ('dataset', 'noise', 'psf', 'lsf'):
+            for key in ('noise', 'psf', 'lsf'):
                 if any(key in found for _, found in parts):
                     sources[key] = [found.get(key) for _, found in parts]
         config[section] = loaded
+    if (datasets := config.get('datasets')) is not None:
+        # (one, or one for each observation, None for one without data)
+        if not isinstance(datasets, list):
+            datasets = [datasets]
+        config['datasets'] = [
+            None if item is None else _piece(project, item, 'datasets', i)
+            for i, item in enumerate(datasets)]
+        sources['datasets'] = [
+            None if item is None else source('datasets', item)
+            for item in datasets]
     if 'fitter' in config:
         item = config['fitter']
         config['fitter'] = _piece(project, item, 'fitter')
@@ -797,8 +818,8 @@ def _parts(
 ) -> tuple[Any, dict[str, str]]:
     """
     Return an observation (the item of the section observations at an
-    index) with the pieces that its options dataset, noise, instrument.psf
-    and instrument.lsf name in place, and the source of each of those options
+    index) with the pieces that its options noise, instrument.psf and
+    instrument.lsf name in place, and the source of each of those options
     that it has, by name: the file of its piece, or that of the
     observation (source) if it is in place.
     """
@@ -813,9 +834,8 @@ def _parts(
             else os.path.relpath(project.piece_file(key, value), base)
 
     with config_path('observations', index):
-        for key in ('dataset', 'noise'):
-            if key in observation:
-                part(observation, key)
+        if 'noise' in observation:
+            part(observation, 'noise')
         if isinstance(observation.get('instrument'), Mapping):
             instrument = observation['instrument'] = dict(
                 observation['instrument'])
@@ -1011,7 +1031,6 @@ def _named(folder: str, content: Any) -> Iterator[tuple[Any, Any, str]]:
     def observation(options: Any) -> Iterator[Any]:
         if not isinstance(options, Mapping):
             return
-        yield from names(options, 'dataset', 'datasets')
         yield from names(options, 'noise', 'noise')
         for key, target in (('psf', 'psfs'), ('lsf', 'lsfs')):
             yield from names(options.get('instrument'), key, target)
@@ -1025,6 +1044,7 @@ def _named(folder: str, content: Any) -> Iterator[tuple[Any, Any, str]]:
         for item in observations if isinstance(observations, list) \
                 else [observations]:
             yield from observation(item)
+        yield from names(content, 'datasets', 'datasets')
         yield from names(content, 'fitter', 'fitters')
 
 

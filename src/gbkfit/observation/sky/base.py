@@ -6,20 +6,16 @@ front of them.
 """
 
 import abc
-import logging
 from collections.abc import Mapping, Sequence
 from typing import (
-    TYPE_CHECKING, Annotated, Any, ClassVar, Literal, NamedTuple, Self,
-    TypeAlias)
+    TYPE_CHECKING, Annotated, Any, ClassVar, Literal, NamedTuple, TypeAlias)
 
 import astropy.units
 import numpy as np
 
 import gbkfit.units
-from gbkfit.config import (
-    Choices, InputError, check_name, config_path,
-    load_option_and_update_info, make_typed_desc)
-from gbkfit.dataset import Dataset, DatasetGrid, dataset_parser
+from gbkfit.config import Choices, check_name, config_path, make_typed_desc
+from gbkfit.dataset import Dataset, DatasetGrid
 from gbkfit.driver import Driver
 from gbkfit.grid import (
     Grid, GridData, SpectraData, SpectralAxis, check_convention,
@@ -42,10 +38,10 @@ from ._checks import (
     light_unit)
 from ._cube_plan import SkyDrawing
 from ._flux_scale import FluxScaledPlan
-from ._options import GRID_OPTIONS, dump_grid, without_options_from_data
+from ._options import (
+    GRID_OPTIONS, config_value, dump_grid, in_files,
+    without_options_from_data)
 
-
-_log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from gbkfit.dataset import Data
@@ -128,10 +124,10 @@ class ObservationSky(Observation, abc.ABC):
     """
     An observation on the sky: galaxies seen through an instrument as one
     kind of data (its type: e.g. an image, moment maps or a spectral
-    cube), optionally with its data. They are seen along a line of sight,
-    through the lenses in front of them (see ObservationGroup) and the
-    instrument, and an objective compares the model of the galaxies with
-    the data under the likelihood of its setup (see Observation).
+    cube). They are seen along a line of sight, through the lenses in
+    front of them (see ObservationGroup) and the instrument; paired with
+    data, an objective compares the model of the galaxies with them under
+    the likelihood of its setup (see Observation).
 
     Each kind of data is a subclass, which gives the form of the data
     (their items, see keys) and where they are measured (e.g. their grid),
@@ -140,22 +136,23 @@ class ObservationSky(Observation, abc.ABC):
     options are those of its kind, then those of every observation on the
     sky (below).
 
-    Its data (the option dataset), of the dataset class of its kind, give
-    the options of its kind of options_from_data (e.g. its grid; see
-    _options_from_data). The configuration can give those too, for the
-    observation without data (e.g. one that renders galaxies on its own
-    grid, and is fitted to data of any grid): with data, they are left
-    out, with a line in the log. Without data, those of
-    config_required_without (by 'dataset') are required, and the others
-    take their values of defaults_without_data.
-    The files of its options (e.g. regions without data) are named with
-    the prefix of the dump, as those of the datasets.
+    Paired with data (see Observation.with_dataset), of the dataset class
+    of its kind, the data give the options of its kind of
+    sampling_from_data (its sampling: e.g. its grid; see
+    _options_from_data), and the unit of its light (see unit): the data
+    win, and those given, for the observation without data (e.g. one that
+    renders galaxies on its own grid, and is fitted to data of any grid),
+    are left out, with a line in the log. Without data, those of
+    required_without_data are required, and the others take their values
+    of defaults_without_data. The files of its options (e.g. regions
+    without data) are named with the prefix of the dump, as those of the
+    datasets.
 
-    Its model is in the unit of its data (see data_unit): the light of
-    the components whose emission has a unit is turned into it (see
-    Component.plan), and that of the others is in it. Without data, the
-    model is in the unit of the components it sees, which must then have
-    one (or none).
+    Its model is in the unit of its data, if it is paired with data (see
+    data_unit): the light of the components whose emission has a unit is
+    turned into it (see Component.plan), and that of the others is in it.
+    Without data, the model is in its unit, if given, or else in the unit
+    of the components it sees, which must then have one (or none).
 
     Its model can have a flux scale: its items of light (see light_items)
     are times the values of the parameter '{name}_flux_scale', one value
@@ -241,8 +238,8 @@ class ObservationSky(Observation, abc.ABC):
         it sees, and the lenses in front of them (see TracePlan). None by
         default; a galaxy needs an observation without them (see
         ObservationGroup).
-    dataset : Dataset, optional
-        The data, of the dataset class of its kind.
+    noise : Noise, optional
+        The noise of its mock data (see Observation).
     oversampling : Sequence of int, optional
         How many times the model is oversampled along each axis of the
         data (an accuracy setting); 1 by default. The smooth components
@@ -267,8 +264,8 @@ class ObservationSky(Observation, abc.ABC):
         Data): the whitening of its residuals (see LikelihoodGauss)
         magnifies the rounding of a float32 model enough to stop least
         squares up to about 1 sigma short of the best fit; float32
-        otherwise. A copy with other data (see with_dataset, e.g. mock
-        data) then chooses again, by them.
+        otherwise (and without data). Paired with other data (see
+        with_dataset, e.g. mock data), it chooses again, by them.
     fft_dtype : str, optional
         The floating type of the FFT convolutions of the model by the PSF
         and the LSF: 'float64' (by default) or 'float32' (faster, for a
@@ -296,19 +293,15 @@ class ObservationSky(Observation, abc.ABC):
         offsets but no name, its flux scale is not one of its kind, the
         offsets are not position and velocity, true or false, the
         oversampling is not one integer of at least 1 for each axis, an
-        option of its kind needed without data is missing, the data are
-        not of it (see check_dataset), the noise of an item is correlated
-        where its kind of data cannot have it, its kind cannot be seen
-        through the instrument (see _check_options), the dtype or the
-        fft_dtype is not one of the native modules (see Driver.dtypes), or
-        the fft_dtype is less precise than the dtype, or the unit is given
-        with data, is not a unit, or is per beam without a beam (see
+        option of its kind needed without data is missing, its kind
+        cannot be seen through the instrument (see _check_options), the
+        dtype or the fft_dtype is not one of the native modules (see
+        Driver.dtypes), or the fft_dtype is less precise than the dtype,
+        or the unit is not a unit, or is per beam without a beam (see
         light_unit).
     """
 
     spectral_axis: ClassVar[int | None]
-
-    dataset_class: ClassVar[type[Dataset]]
 
     # Whether it sees a spectral axis (a spectral cube and what is made of
     # one), or a band (an image); see view
@@ -334,43 +327,12 @@ class ObservationSky(Observation, abc.ABC):
         oversampling='Oversampling', depth='Depth', dtype='Precision',
         fft_dtype='FFT precision', unit='Unit')
 
-    # The options of its kind that its data give (see options_from_data):
-    # those required without data (see Serializable), and the values of
-    # the others without data, when not given
-    config_required_without = dict(dataset=('size',))
+    # The options of its kind that data give (see sampling_from_data):
+    # those required without data, and the values of the others without
+    # data, when not given
+    required_without_data: ClassVar[tuple[str, ...]] = ('size',)
     defaults_without_data: ClassVar[Mapping[str, Any]] = dict(
         step=(1, 1), rval=(0, 0), rota=0)
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        """
-        Load an observation from its configuration.
-
-        Its data are a dataset of the dataset class of its kind (see e.g.
-        DatasetPixelSpectra.from_files, whose options outliers and
-        mask_whole_spectra clean them), which gives it some of the options
-        of its kind (see options_from_data).
-
-        Parameters
-        ----------
-        info : dict
-            The configuration.
-
-        Returns
-        -------
-        ObservationSky
-            The observation.
-
-        Raises
-        ------
-        ConfigError
-            If the configuration has an error.
-        ValueError, TypeError
-            If an object it makes refuses its options.
-        """
-        info = dict(info)
-        load_option_and_update_info(dataset_parser, info, 'dataset')
-        return super().load(info)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -378,15 +340,16 @@ class ObservationSky(Observation, abc.ABC):
     ) -> dict[str, Any]:
         """
         Dump the observation to its configuration: its type, the options
-        of its kind but those its data give, if any (see
-        options_from_data), and those of every observation on the sky.
+        of its kind but those its data give, if it is paired with data
+        (see options_from_data), and those of every observation on the
+        sky. It has no data (a setup pairs it with its dataset).
 
         Parameters
         ----------
         prefix : str, optional
-            The start of the names of the files of its data and of the
-            data of its parts (e.g. images; see Dataset.dump), and of its
-            options (e.g. the table of a trace).
+            The start of the names of the files of its parts (e.g. images;
+            see Dataset.dump), and of its options (e.g. the table of a
+            trace).
         dump_path : bool, optional
             Whether the configuration has the paths of the files, or only
             their names.
@@ -417,8 +380,6 @@ class ObservationSky(Observation, abc.ABC):
             self._offsets))
         unit = {} if self._light is None else dict(
             unit=gbkfit.units.format_unit(self._light.unit))
-        dataset = {} if self._dataset is None else dict(
-            dataset=dataset_parser.dump(self._dataset, **kwargs))
         noise = {} if self._noise is None else dict(
             noise=noise_parser.dump(self._noise, **kwargs))
         # (only a given dtype: one the data chose is chosen again by the
@@ -428,8 +389,7 @@ class ObservationSky(Observation, abc.ABC):
         return dict(type=self.type()) | name \
             | self._dump_kind(prefix, dump_path, overwrite) | galaxies \
             | components | lines | continuum | band | pixel_weights \
-            | flux_scale \
-            | offsets | unit | dataset | noise | dtype | dict(
+            | flux_scale | offsets | unit | noise | dtype | dict(
                 depth=options.depth.dump(),
                 source_grid=options.source_grid.dump(),
                 instrument=instrument_parser.dump(
@@ -474,7 +434,18 @@ class ObservationSky(Observation, abc.ABC):
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
         """
-        Return the options of its kind that a dataset gives.
+        Return the options of an observation of its kind that a dataset
+        gives (see Observation.options_from_data): those of its kind (its
+        sampling, see sampling_from_data), and the unit of its light.
+        """
+        return (*cls.sampling_from_data(dataset), 'unit')
+
+    @classmethod
+    def sampling_from_data(cls, dataset: Dataset) -> tuple[str, ...]:
+        """
+        Return the options of its kind that a dataset gives: where and
+        what the data were measured (e.g. the grid, the regions, the orders
+        of moments).
 
         Here, the grid (and its spectral axis, if any); kinds of other
         data override this.
@@ -492,24 +463,37 @@ class ObservationSky(Observation, abc.ABC):
         return GRID_OPTIONS + (
             ('spectral',) if cls.spectral_axis is not None else ())
 
-    def _options(
-            self, dataset: Dataset | None, options: dict[str, Any]
+    @classmethod
+    def data_options(
+            cls,
+            dataset: Dataset,
+            prefix: str | None = None,
+            dump_path: bool = True,
+            overwrite: bool = False
     ) -> dict[str, Any]:
         """
-        Return the options of its kind (see the class), as given (None
-        where not given), completed, before it is made.
+        Return the options of its kind that a dataset gives (see
+        sampling_from_data) as a configuration, as far as the data alone
+        give them (see Observation.data_options).
+        """
+        cls.check_dataset_class(dataset)
+        values = cls._options_from_data(dataset, {})
+        return {
+            key: config_value(values[key], prefix, dump_path, overwrite)
+            for key in cls.sampling_from_data(dataset)
+            if key in values and (prefix is not None or not in_files(
+                values[key]))}
 
-        With data, those that the data give (see options_from_data) are
-        theirs (see _options_from_data): those of them given are for the
-        observation without data, and are left out (with a line in the
-        log). Without data, those of config_required_without are
-        required, and those not given take their values of
-        defaults_without_data.
+    def _options(self, options: dict[str, Any]) -> dict[str, Any]:
+        """
+        Return the options of its kind (see the class), as given (None
+        where not given), completed, before it is made: those of
+        required_without_data are required (paired with data, the data
+        give them; see Observation.with_dataset), and those not given take
+        their values of defaults_without_data.
 
         Parameters
         ----------
-        dataset : Dataset, optional
-            The data, if any.
         options : dict
             The options of its kind, as given.
 
@@ -521,54 +505,17 @@ class ObservationSky(Observation, abc.ABC):
         Raises
         ------
         ValueError
-            If one required without data (see config_required_without) is
-            not given without data, or the dataset is not of the dataset
-            class of its kind.
+            If one required without data is not given.
         """
-        desc = make_typed_desc(type(self), 'observation')
-        if dataset is None:
-            if missing := [
-                    key for key in self.config_required_without['dataset']
-                    if options.get(key) is None]:
-                raise ValueError(
-                    f"{desc} without data needs the options {missing}")
-            return options | {
-                key: value for key, value in self.defaults_without_data.items()
-                if options.get(key) is None}
-        self._check_dataset_class(dataset)
-        from_data = self.options_from_data(dataset)
-        if given := [key for key in from_data if options.get(key) is not None]:
-            _log.info(
-                "%s: its data give the options %s; those given are used "
-                "only without data", desc, given)
-        options = {
-            key: None if key in from_data else value
-            for key, value in options.items()}
-        return options | self._options_from_data(dataset, options)
-
-    @classmethod
-    @abc.abstractmethod
-    def _options_from_data(
-            cls, dataset: Dataset, options: dict[str, Any]
-    ) -> dict[str, Any]:
-        """
-        Return the options of its kind that a dataset gives (see
-        options_from_data), and those of its options that the data
-        complete (e.g. the spectral axis of moment maps, which covers the
-        velocities of the data).
-
-        Parameters
-        ----------
-        dataset : Dataset
-            The data, of the dataset class of its kind.
-        options : dict
-            The options of its kind, as given (see _options).
-
-        Returns
-        -------
-        dict
-            The options.
-        """
+        if missing := [
+                key for key in self.required_without_data
+                if options.get(key) is None]:
+            desc = make_typed_desc(type(self), 'observation')
+            raise ValueError(
+                f"{desc} without data needs the options {missing}")
+        return options | {
+            key: value for key, value in self.defaults_without_data.items()
+            if options.get(key) is None}
 
     @classmethod
     def _make_grid(
@@ -609,7 +556,6 @@ class ObservationSky(Observation, abc.ABC):
             pixel_weights: Weights | None,
             flux_scale: str | None,
             offsets: Mapping[str, bool] | None,
-            dataset: Dataset | None,
             noise: Noise | None,
             oversampling: Sequence[int] | None,
             depth: Depth | None,
@@ -655,8 +601,6 @@ class ObservationSky(Observation, abc.ABC):
             raise ValueError(
                 f"oversampling must have {ndim} values, each at least 1; it "
                 f"is {oversampling}")
-        if dataset is not None:
-            self.check_dataset(dataset)
         self._components = components
         self._lines = lines
         self._continuum = continuum
@@ -664,19 +608,14 @@ class ObservationSky(Observation, abc.ABC):
         self._flux_scale = flux_scale
         self._offsets = offsets
         super().__init__(
-            self.keys(), galaxies, dataset, noise, name,
+            self.keys(), galaxies, noise, name,
             self.model_can_have_missing_values())
         # (as given, for copies of other data and dumps: by default, the
-        # data choose it, see with_dataset)
+        # data choose it, see _pair)
         self._given_dtype = dtype
-        if dtype is None:
-            dtype = 'float64' if dataset is not None \
-                and has_correlated_noise(dataset) else 'float32'
-        dtype, fft_dtype = np.dtype(dtype), np.dtype(fft_dtype)
-        if fft_dtype.itemsize < dtype.itemsize:
-            raise ValueError(
-                f"the fft_dtype ({fft_dtype.name}) is less precise than the "
-                f"dtype ({dtype.name})")
+        dtype = np.dtype('float32' if dtype is None else dtype)
+        fft_dtype = np.dtype(fft_dtype)
+        _check_fft_dtype(dtype, fft_dtype)
         # (a flux scale of one value scales the flux of the model where it
         # records it; one of several values, its items of light, see plan)
         scale = self.flux_scale()
@@ -692,55 +631,52 @@ class ObservationSky(Observation, abc.ABC):
         # (the unit of the model without data, and its beam, of a unit per
         # beam: those of data of the model, e.g. mock data)
         self._light, self._light_beam = (None, None) if unit is None \
-            else light_unit(unit, dataset, self, instrument)
-        if dataset is not None:
-            check_beams(dataset, instrument, self)
+            else light_unit(unit, self, instrument)
 
-    def with_dataset(self, dataset: Dataset) -> Self:
+    def _pair(self, dataset: Dataset) -> None:
         """
-        Return a copy of it with other data (e.g. mock data; see
-        draw_mocks): its kind keeps its options (e.g. its grid; see
-        _kind_options), which the data must have (see check_dataset).
-
-        Parameters
-        ----------
-        dataset : Dataset
-            The data, of the observation.
-
-        Returns
-        -------
-        ObservationSky
-            The copy.
+        Pair it with a dataset (see Observation._pair): the data must be
+        of its data items and measured where it is modelled (see
+        check_dataset); they choose the floating type of its model, if not
+        given (see the class); and their beams are checked against its PSF
+        (see check_beams).
 
         Raises
         ------
         ValueError
-            If the data are not of the observation (see check_dataset).
+            If the data are not of it, or the fft_dtype is less precise
+            than the floating type the data choose.
         """
-        # (the same observation with other data, e.g. mock data drawn on
-        # its grid: the data must be of its options, and the copy takes
-        # those that they give from them)
         self.check_dataset(dataset)
-        from_data = self.options_from_data(dataset)
+        super()._pair(dataset)
+        if self._given_dtype is None and has_correlated_noise(dataset):
+            options = self._sky_options._replace(dtype=np.dtype(np.float64))
+            _check_fft_dtype(options.dtype, options.fft_dtype)
+            self._sky_options = options
+        check_beams(dataset, self._sky_options.instrument, self)
+
+    def _constructor_options(self) -> dict[str, Any]:
         options = self._sky_options
-        return type(self)(
-            **{key: value for key, value in self._kind_options().items()
-               if key not in from_data},
+        unit = None if self._light is None \
+            else gbkfit.units.format_unit(self._light.unit)
+        return self._kind_options() | dict(
             source_grid=options.source_grid, instrument=options.instrument,
             galaxies=self._galaxies, components=self._components,
             lines=self._lines, continuum=self._continuum, band=self._band,
-            pixel_weights=options.pixel_weights, flux_scale=self._flux_scale,
-            offsets=self._offsets, dataset=dataset, noise=self._noise,
-            oversampling=options.oversampling, depth=options.depth,
-            dtype=self._given_dtype, fft_dtype=options.fft_dtype.name,
-            name=self._name)
+            pixel_weights=options.pixel_weights,
+            flux_scale=self._flux_scale, offsets=self._offsets,
+            noise=self._noise, oversampling=options.oversampling,
+            depth=options.depth, dtype=self._given_dtype,
+            fft_dtype=options.fft_dtype.name, name=self._name, unit=unit)
 
     @abc.abstractmethod
     def _kind_options(self) -> dict[str, Any]:
         """
         Return the options of its kind (those of its __init__ but those of
-        every observation on the sky), all of them, which make it again
-        (see with_dataset): with data, those its data gave too.
+        every observation on the sky), all of them, as it has them (with
+        those its data gave, if any): they make it again (see
+        Observation.with_dataset), and its plan takes them (see
+        same_plan).
         """
 
     def grid(self) -> Grid:
@@ -924,24 +860,13 @@ class ObservationSky(Observation, abc.ABC):
         ValueError
             If the dataset does not hold the data of this observation.
         """
-        self._check_dataset_class(dataset)
+        self.check_dataset_class(dataset)
         if set(dataset.keys()) != set(self.keys()):
             desc = make_typed_desc(self.__class__, 'observation')
             raise ValueError(
                 f"{desc} has the data items {sorted(self.keys())}, but the "
                 f"data have {sorted(dataset.keys())}")
         self._check_dataset_coordinates(dataset)
-
-    @classmethod
-    def _check_dataset_class(cls, dataset: Dataset) -> None:
-        """
-        Raise InputError, at the option dataset, unless the dataset is of
-        the dataset class.
-        """
-        if not isinstance(dataset, cls.dataset_class):
-            raise InputError(
-                f"data of {dataset.type_title().lower()} · needs "
-                f"{cls.dataset_class.type_title().lower()}", ['dataset'])
 
     def _check_dataset_coordinates(self, dataset: Dataset) -> None:
         """
@@ -957,15 +882,16 @@ class ObservationSky(Observation, abc.ABC):
     def same_plan(self, other: Observation, seen: SeenGalaxies) -> bool:
         """
         Check whether its plan is also that of another observation (see
-        Observation.same_plan): with planes behind lenses, its plan takes
-        the pixels its data measure too, whose rays it traces (see
-        _measured_pixels).
+        Observation.same_plan): its plan takes the options of its kind,
+        which data give (e.g. its grid; see _kind_options); with planes
+        behind lenses, the pixels its data measure too, whose rays it
+        traces (see _measured_pixels).
         """
-        if not super().same_plan(other, seen):
+        if not super().same_plan(other, seen) or type(other) is not type(
+                self) or other._kind_options() != self._kind_options():
             return False
-        return not seen.lensed() or (
-            isinstance(other, ObservationSky) and np.array_equal(
-                self._measured_pixels(), other._measured_pixels()))
+        return not seen.lensed() or np.array_equal(
+            self._measured_pixels(), other._measured_pixels())
 
     def depth(self) -> Depth:
         """Return its depth axis, for what it sees that needs one."""
@@ -1305,3 +1231,14 @@ class ObservationSky(Observation, abc.ABC):
         ValueError
             If the scenes cannot be planned (see CubePlan).
         """
+
+
+def _check_fft_dtype(dtype: np.dtype, fft_dtype: np.dtype) -> None:
+    """
+    Raise ValueError if the floating type of the FFT convolutions of a
+    model is less precise than that of the model.
+    """
+    if fft_dtype.itemsize < dtype.itemsize:
+        raise ValueError(
+            f"the fft_dtype ({fft_dtype.name}) is less precise than the "
+            f"dtype ({dtype.name})")

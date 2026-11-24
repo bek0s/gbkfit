@@ -62,10 +62,10 @@ def model(
     galaxy = dict(components=components)
     if redshift is not None:
         galaxy.update(redshift=redshift)
-    group = ObservationGroup(
-        [galaxy_parser.load(galaxy)], [ObservationPixelSpectra(
-            **cube, instrument=Instrument(psf=psf), dataset=data,
-            unit=unit)])
+    options = cube | dict(instrument=Instrument(psf=psf), unit=unit)
+    observation = ObservationPixelSpectra(**options) if data is None \
+        else ObservationPixelSpectra.paired(data, **options)
+    group = ObservationGroup([galaxy_parser.load(galaxy)], [observation])
     plan = group.plan(driver)
     space = ParamSpace.from_properties(group.pdescs(), params)
     return plan.model_h(space.evaluate())[0]['spectra'].data.copy()
@@ -163,13 +163,16 @@ def test_light_in_bands_with_a_unit_needs_the_redshift():
 
 
 def test_a_model_without_data_is_in_its_unit(driver):
-    # Jy/beam of the beam of its PSF, as data of that unit and beam
+    # Jy/beam of the beam of its PSF, as data of that unit and beam; with
+    # data, theirs (the data win)
     components = [disk('K km/s')]
     psf = PSFGauss.from_beam(BEAM.bmaj, BEAM.bmin, BEAM.bpa)
+    in_data = model(driver, components, 'Jy/beam', psf=psf)
     np.testing.assert_allclose(
-        model(driver, components, psf=psf, unit='Jy/beam'),
-        model(driver, components, 'Jy/beam', psf=psf), rtol=1e-12)
-    with pytest.raises(ValueError, match="give the unit of its model"):
-        model(driver, components, 'Jy/beam', unit='Jy/beam')
+        model(driver, components, psf=psf, unit='Jy/beam'), in_data,
+        rtol=1e-12)
+    np.testing.assert_allclose(
+        model(driver, components, 'Jy/beam', psf=psf, unit='K'), in_data,
+        rtol=1e-12)
     with pytest.raises(ValueError, match="which has none"):
         model(driver, components, unit='Jy/beam')

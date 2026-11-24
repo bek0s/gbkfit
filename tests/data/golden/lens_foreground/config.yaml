@@ -1,6 +1,6 @@
 # lens_foreground: The image of a source disk behind a lens of two pieces: an elliptical power law with a multipole of order 4, and an external shear; the source drawn on a grid of a given step and extent.
 # (written by make_golden.py; do not edit)
-version: 20
+version: 21
 driver: {type: host}
 galaxies:
 - redshift: 1.5
@@ -24,14 +24,6 @@ observations:
 - type: pixel_brightness
   name: hst
   median_size: null
-  dataset:
-    type: pixel_brightness
-    step: [0.1, 0.1]
-    rpix: [19.5, 19.5]
-    rval: [0, 0]
-    rota: 0
-    data: hst_brightness_d.fits
-    error: 0.01
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   source_grid:
@@ -43,6 +35,14 @@ observations:
     lsf: null
   oversampling: [1, 1]
   fft_dtype: float64
+datasets:
+- type: pixel_brightness
+  step: [0.1, 0.1]
+  rpix: [19.5, 19.5]
+  rval: [0, 0]
+  rota: 0
+  data: hst_brightness_d.fits
+  error: 0.01
 likelihoods: {type: gauss, weights: 1.0, missing_residual: null, white_floor: 0.01}
 params:
   properties:

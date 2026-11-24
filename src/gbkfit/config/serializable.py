@@ -62,11 +62,6 @@ class Serializable(abc.ABC):
     # configurations name instead of giving the Drivers)
     config_options: ClassVar[Mapping[str, Any]] = {}
 
-    # The options of its configurations that are required only without
-    # another option, by that option (e.g. the size of the grid of an
-    # observation without its dataset, which gives it); its schema says so
-    config_required_without: ClassVar[Mapping[str, tuple[str, ...]]] = {}
-
     # The titles of its options for people, by option (e.g. 'Rings' for
     # rnodes): sentence case, ASCII, at most 40 characters. Those of its
     # bases are its own too (see option_titles); its schema gives them

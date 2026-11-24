@@ -34,11 +34,17 @@ def observation(**options):
 
 
 def image(path):
-    """Write an image of 8 x 8 zeros, and return its observation."""
+    """Write an image of 8 x 8 zeros, and return its dataset."""
     fits.writeto(path, np.zeros((8, 8)))
-    return dict(
-        type='pixel_brightness',
-        dataset=dict(type='pixel_brightness', data=path.name))
+    return dict(type='pixel_brightness', data=path.name)
+
+
+def imaged(name='image', **options):
+    """
+    The configuration of an observation of GALAXY of a name, without its
+    grid (that of the data it is paired with), with options.
+    """
+    return dict(type='pixel_brightness', name=name) | options
 
 
 def test_the_front_door_is_gbkfit_load():
@@ -50,7 +56,8 @@ def test_a_configuration_with_data_sets_up_its_objective(tmp_path):
     # (a dictionary: its paths are relative to its section 'root')
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
-        observations=[image(tmp_path / 'image.fits')], params=PARAMS)
+        observations=[imaged()],
+        datasets=[image(tmp_path / 'image.fits')], params=PARAMS)
     with gbkfit.load(config) as loaded:
         evaluation = loaded.evaluate()
         assert evaluation.objective.merits.chi2 > 0
@@ -63,17 +70,19 @@ def test_a_configuration_with_data_sets_up_its_objective(tmp_path):
 def test_a_setup_in_python_is_that_of_its_configuration(tmp_path):
     # (of the objects of the sections of the configuration: the group of
     # its galaxies and observations, and its parameters)
+    from gbkfit.dataset import dataset_parser
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     from gbkfit.params import ParamSpace
-    obs = image(tmp_path / 'image.fits') | dict(dataset=dict(
-        type='pixel_brightness', data=str(tmp_path / 'image.fits')))
+    data = image(tmp_path / 'image.fits') | dict(
+        data=str(tmp_path / 'image.fits'))
     with gbkfit.load(dict(
-            version=VERSION, galaxies=[GALAXY], observations=[obs],
-            params=PARAMS)) as loaded:
+            version=VERSION, galaxies=[GALAXY], observations=[imaged()],
+            datasets=[data], params=PARAMS)) as loaded:
         expected = loaded.evaluate().objective.merits
     group = ObservationGroup(
-        galaxy_parser.load(GALAXY), observation_parser.load(obs))
+        galaxy_parser.load(GALAXY), observation_parser.load(
+            imaged(), dataset=dataset_parser.load(data)))
     params = ParamSpace.from_properties(group.pdescs(), PARAMS['properties'])
     # (to rounding: the host kernels sum in no fixed order)
     with gbkfit.Setup(group, params) as built:
@@ -99,24 +108,23 @@ def test_a_setup_takes_the_parameters_of_its_group():
 def noisy_image(path, seed=1):
     """
     Write an image of 8 x 8 values of noise of errors 0.1, and return its
-    observation.
+    dataset.
     """
     rng = np.random.default_rng(seed)
     fits.writeto(path, rng.normal(0, 0.1, (8, 8)))
-    return dict(
-        type='pixel_brightness',
-        dataset=dict(type='pixel_brightness', data=path.name, error=0.1))
+    return dict(type='pixel_brightness', data=path.name, error=0.1)
 
 
 def test_the_likelihoods_are_one_for_all_or_by_observation_name(tmp_path):
     # (of the section likelihoods: Gaussian by default; one for all; or by
     # observation name, the Gaussian for the others)
-    observations = [
-        noisy_image(tmp_path / 'a.fits', 1) | dict(name='a'),
-        noisy_image(tmp_path / 'b.fits', 2) | dict(name='b')]
+    observations = [imaged('a'), imaged('b')]
+    datasets = [
+        noisy_image(tmp_path / 'a.fits', 1),
+        noisy_image(tmp_path / 'b.fits', 2)]
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
-        observations=observations, params=PARAMS)
+        observations=observations, datasets=datasets, params=PARAMS)
 
     def chi2(**sections):
         with gbkfit.load(config | sections) as loaded:
@@ -125,8 +133,9 @@ def test_the_likelihoods_are_one_for_all_or_by_observation_name(tmp_path):
     assert chi2(likelihoods=dict(type='gauss', weights=2)) == pytest.approx(
         4 * default)
     assert chi2(likelihoods=dict(b=dict(type='gauss', weights=2))) \
-        == pytest.approx(default + 3 * chi2(observations=[
-            observations[1]]), rel=1e-6)
+        == pytest.approx(default + 3 * chi2(
+            observations=[observations[1]], datasets=[datasets[1]]),
+            rel=1e-6)
     # (a fitted noise of one is a parameter, named after it, of the data's
     # unit)
     with gbkfit.load(config | dict(
@@ -150,30 +159,32 @@ def test_the_likelihoods_are_one_for_all_or_by_observation_name(tmp_path):
     ('gauss', [], "section 'likelihoods' must be a dictionary")])
 def test_the_likelihoods_have_the_paths_of_their_errors(
         tmp_path, likelihoods, path, message):
-    observations = [
-        noisy_image(tmp_path / 'a.fits', 1) | dict(name='a'),
-        noisy_image(tmp_path / 'b.fits', 2) | dict(name='b')]
+    datasets = [
+        noisy_image(tmp_path / 'a.fits', 1),
+        noisy_image(tmp_path / 'b.fits', 2)]
     with pytest.raises((ConfigError, ValueError), match=message) as error:
         gbkfit.load(dict(
             version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
-            observations=observations, params=PARAMS,
-            likelihoods=likelihoods))
+            observations=[imaged('a'), imaged('b')], datasets=datasets,
+            params=PARAMS, likelihoods=likelihoods))
     assert getattr(error.value, 'config_path', path)[:len(path)] == path
 
 
 def test_a_fit_fits_the_observations_with_data(tmp_path):
     # The others are evaluated alongside (e.g. a prediction of a band
     # without data), at the values of the fit
-    observations = [
-        observation(name='prediction'),
-        noisy_image(tmp_path / 'image.fits') | dict(name='image')]
+    observations = [observation(name='prediction'), imaged()]
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
-        observations=observations, params=PARAMS,
+        observations=observations,
+        datasets=[None, noisy_image(tmp_path / 'image.fits')],
+        params=PARAMS,
         fitter=dict(type='scipy.least_squares'),
         bootstrap=dict(nsamples=3, scheme=dict(image=dict(type='gauss'))))
     with gbkfit.load(config) as loaded, gbkfit.load(
-            config | dict(observations=observations[1:])) as alone:
+            config | dict(
+                observations=observations[1:],
+                datasets=config['datasets'][1:])) as alone:
         assert loaded.objective().observations() == (1,)
         assert loaded.evaluate().objective.merits.chi2 == pytest.approx(
             alone.evaluate().objective.merits.chi2, rel=1e-6)
@@ -209,21 +220,27 @@ def test_a_setup_without_data_states_the_likelihoods_of_its_fit():
             likelihoods=dict(type='gauss', weights=dict(spectra=2))))
 
 
-def test_an_observation_of_mocks_takes_data_in_one_line(tmp_path):
-    # (its grid serves without data, e.g. to draw mocks; with data, that
-    # of the data: one configuration of an observation draws mocks and
-    # fits data of any grid)
+def test_an_observation_of_mocks_is_paired_with_data_in_one_line(
+        tmp_path):
+    # (its grid serves without data, e.g. to draw mocks; paired with data,
+    # that of the data: one configuration of an observation draws mocks
+    # and fits data of any grid)
     fits.writeto(tmp_path / 'image.fits', np.zeros((8, 8)))
     data = dict(type='pixel_brightness', data='image.fits')
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         params=PARAMS)
     with gbkfit.load(config | dict(
-            observations=[observation(dataset=data)])) as loaded:
+            observations=[observation()], datasets=[data])) as loaded:
         assert loaded.objective().observations() == (0,)
-    with gbkfit.load(config | dict(observations=[observation(
-            dataset=data, size=[8, 6])])) as loaded:
+    with gbkfit.load(config | dict(
+            observations=observation(size=[8, 6]),
+            datasets=data)) as loaded:
         assert loaded.group().observations()[0].size() == (8, 8)
+    with gbkfit.load(config | dict(observations=[observation(
+            size=[8, 6])])) as loaded:
+        assert loaded.group().observations()[0].size() == (8, 6)
+        assert loaded.objective() is None
 
 
 def test_a_setup_takes_likelihoods_of_its_group():
@@ -476,8 +493,8 @@ def test_workers_are_on_drivers_of_the_configuration(tmp_path):
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         drivers=dict(cpu1=HOST, cpu2=HOST),
-        observations=[image(tmp_path / 'image.fits') | dict(driver='cpu1')],
-        params=PARAMS)
+        observations=[imaged(driver='cpu1')],
+        datasets=[image(tmp_path / 'image.fits')], params=PARAMS)
     workers = dict(type='threads', drivers=['cpu1', 'cpu2'])
     with gbkfit.load(config | dict(workers=workers)) as loaded:
         values = loaded.params().evaluate()
@@ -580,7 +597,8 @@ def test_a_setup_that_fails_closes_what_it_made(tmp_path, monkeypatch):
         raise RuntimeError("no device")
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
-        observations=[image(tmp_path / 'image.fits')], params=PARAMS)
+        observations=[imaged()],
+        datasets=[image(tmp_path / 'image.fits')], params=PARAMS)
     monkeypatch.setattr(WorkersThreads, 'start', fail)
     with pytest.raises(RuntimeError, match="no device"):
         gbkfit.load(config | dict(workers=dict(
@@ -627,12 +645,38 @@ def test_the_units_of_a_configuration_are_read_as_fits_reads_them(tmp_path):
     data = image(tmp_path / 'image.fits')
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
-        observations=[data], params=PARAMS)
-    data['dataset']['unit'] = 'erg/s/cm2/Angstrom'
+        observations=[imaged()], datasets=[data], params=PARAMS)
+    data['unit'] = 'erg/s/cm2/Angstrom'
     with gbkfit.load(config) as loaded:
         dataset = loaded.group().observations()[0].dataset()
         assert next(iter(dataset.values())).unit() == (
             u.erg / u.s / u.cm ** 2 / u.Angstrom)
-    data['dataset']['unit'] = 'ERG/S'
+    data['unit'] = 'ERG/S'
     with pytest.raises(ValueError, match="^unit 'ERG/S' invalid"):
         gbkfit.load(config)
+
+
+def test_the_datasets_of_a_setup_are_those_of_its_observations(tmp_path):
+    # (one for each observation, in their order, null for one without
+    # data; of the kind of its observation: errors at the dataset)
+    config = dict(
+        version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
+        observations=[observation(name='a'), imaged('b')], params=PARAMS)
+    data = image(tmp_path / 'image.fits')
+    with gbkfit.load(config | dict(datasets=[None, data])) as loaded:
+        assert loaded.group().observed() == (1,)
+    with pytest.raises(ConfigError, match=(
+            r"the section has 1 datasets for 2 observations: give one for "
+            r"each observation, in their order \(null for one without "
+            r"data\)")) as error:
+        gbkfit.load(config | dict(datasets=[data]))
+    assert error.value.config_path == ['datasets']
+    maps = dict(type='pixel_moments', moment0=dict(data=data['data']))
+    with pytest.raises(ValueError, match="data of pixel moments") as error:
+        gbkfit.load(config | dict(datasets=[maps, None]))
+    assert error.value.config_path == ['datasets', 0]
+    # (described: an observation without its grid has no data)
+    described = gbkfit.describe(config | dict(datasets=[None, None]))
+    assert [p.path for p in described.problems] == [['observations', 1]]
+    assert "without data needs the options ['size']" \
+        in described.problems[0].message

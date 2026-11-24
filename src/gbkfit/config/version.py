@@ -26,7 +26,9 @@ __all__ = [
 # and mass_incl if it has a plane), 18, of 2026-11-19 on (the noise of
 # mock data is an option of each observation, not of the section mock),
 # 19, of 2026-11-19 on (the parameters of a lens of one piece are named
-# after the piece too), and 20, of 2026-11-21 on (the footprint of a
-# dataset is one, not one for each map of moments); gbkfit.migration
-# rewrites the older ones
-FORMAT_VERSION = 20
+# after the piece too), 20, of 2026-11-21 on (the footprint of a dataset
+# is one, not one for each map of moments), and 21, of 2026-11-24 on (the
+# dataset leaves the observation: the section datasets of a setup pairs
+# observations with data by name); gbkfit.migration rewrites the older
+# ones
+FORMAT_VERSION = 21

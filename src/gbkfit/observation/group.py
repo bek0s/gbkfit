@@ -18,7 +18,7 @@ from gbkfit.driver import Driver
 from gbkfit.lensing import (
     PLANE_LINKING_VELOCITY, Lens, OfGalaxy, Plane, Tracer, plane_layout)
 from gbkfit.model import DepthUnit, Galaxy
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params import ParamDesc, ParamValues, dump_pdescs_dict
 from gbkfit.utils import iterutils
 from ._depth_order import DepthGroup, DepthOrder
 from ._frames import (
@@ -585,7 +585,11 @@ class ObservationGroup:
         Return a copy of the group with other data of some of its
         observations (e.g. those of a bootstrap, or mock data; see
         Observation.with_dataset): the others keep theirs, or have none. Its
-        parameters are those of this one (the data do not change them).
+        parameters and the frames of its observations are those of this
+        one: the data must not change them (data of another sampling can,
+        e.g. the size of a flux scale per spectrum, or the origin of the
+        frame of an observation on the sky; a group of the observations
+        paired with them is then a new one).
 
         Parameters
         ----------
@@ -601,18 +605,28 @@ class ObservationGroup:
         ------
         ValueError
             If an index is not that of an observation, a dataset does not
-            suit its observation, or an observation with its new data
+            suit its observation, the data change the parameters or the
+            frame of their observation, or an observation with its new data
             cannot see its galaxies (see Observation.check).
         """
         if unknown := sorted(set(datasets) - set(range(len(self._members)))):
             raise ValueError(
                 f"there are {len(self._members)} observations; there are no "
                 f"observations {unknown}")
+        members = list(self._members)
+        for i, dataset in datasets.items():
+            old = members[i].observation
+            new = old.with_dataset(dataset)
+            if dump_pdescs_dict(new.pdescs()) != dump_pdescs_dict(
+                    old.pdescs()) or new.sky_frame() != old.sky_frame():
+                raise ValueError(
+                    f"the data of observation {members[i].label} change its "
+                    f"parameters or its frame (e.g. the size of a flux scale "
+                    f"per spectrum, or the origin of its grid on the sky): "
+                    f"make a group of the observations paired with them")
+            members[i] = members[i]._replace(observation=new)
         group = copy.copy(self)
-        group._members = tuple(
-            member if i not in datasets else member._replace(
-                observation=member.observation.with_dataset(datasets[i]))
-            for i, member in enumerate(self._members))
+        group._members = tuple(members)
         # (what an observation can see may depend on its data: e.g. the
         # radii of a profile are those of its data, and radii in angles
         # need a galaxy with a distance)

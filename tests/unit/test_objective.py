@@ -41,9 +41,8 @@ def make_objective(
     and the given values).
     """
     dataset = DatasetPixelBrightness(data, footprint=footprint)
-    observation = ObservationPixelBrightness(
-        dataset=dataset,
-        name=name)
+    observation = ObservationPixelBrightness.paired(
+        dataset, name=name)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
     likelihoods = Likelihoods(group, likelihood)
     params = ParamSpace.from_properties(
@@ -348,7 +347,7 @@ def test_an_objective_compares_the_observations_with_data(driver):
     dataset = DatasetPixelBrightness(data)
     observations = [
         ObservationPixelBrightness(size=(32, 24), name='band'),
-        ObservationPixelBrightness(dataset=dataset, name='image')]
+        ObservationPixelBrightness.paired(dataset, name='image')]
     group = ObservationGroup(galaxy_parser.load(GALAXY), observations)
     alone, params = make_objective(driver, data, name='image')
     objective = Objective(group.plan(driver))
@@ -400,8 +399,8 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
         order: Data(model[f'moment{order}'].data, error=np.full(
             (24, 24), errors[f'moment{order}']))
         for order in (0, 1, 2)})
-    plan = group(ObservationPixelMoments(
-        SpectralAxis(convention='relativistic'), dataset=dataset))
+    plan = group(ObservationPixelMoments.paired(
+        dataset, spectral=SpectralAxis(convention='relativistic')))
     objective = Objective(plan, Likelihoods(
         plan.group(), LikelihoodGauss(missing_residual=3)))
     truth = ParamSpace.from_properties(objective.pdescs(), DISK).evaluate()
@@ -439,8 +438,8 @@ def test_missing_values_take_the_noise_of_their_error(driver):
     dataset = DatasetPixelMoments({
         order: Data(model[f'moment{order}'].data, error=np.full((24, 24), 5.0))
         for order in (0, 1)})
-    plan = group(ObservationPixelMoments(
-        SpectralAxis(convention='relativistic'), dataset=dataset,
+    plan = group(ObservationPixelMoments.paired(
+        dataset, spectral=SpectralAxis(convention='relativistic'),
         name='obs'))
     objective = Objective(plan, Likelihoods(plan.group(), LikelihoodGauss(
         missing_residual=3, fitted_noise=dict(
@@ -564,9 +563,8 @@ def test_the_residuals_of_the_fit_are_written_where_they_differ(driver):
     assert set(residual_products(objective, params, 'observation0')) == {
         'residual', 'wresidual'}
     dataset = DatasetPixelBrightness(data)
-    observation = ObservationPixelBrightness(
-        dataset=dataset,
-        pixel_weights=Weights('disk', WeightAzimuthPower(2)))
+    observation = ObservationPixelBrightness.paired(
+        dataset, pixel_weights=Weights('disk', WeightAzimuthPower(2)))
     group = ObservationGroup(galaxy_parser.load(dict(components=[
         GALAXY['components'][0] | dict(name='disk')])), observation)
     objective = Objective(group.plan(driver))
@@ -998,8 +996,8 @@ def test_an_objective_evaluates_only_the_observations_it_compares(driver):
     # prediction, is evaluated by the outputs, not at each step)
     rng = np.random.default_rng(13)
     dataset = DatasetPixelBrightness(Data(rng.normal(0, 1, (24, 32))))
-    observed = ObservationPixelBrightness(
-        dataset=dataset, name='data')
+    observed = ObservationPixelBrightness.paired(
+        dataset, name='data')
     predicted = ObservationPixelBrightness(size=(16, 16), name='model')
     group = ObservationGroup(
         galaxy_parser.load(GALAXY), [observed, predicted])

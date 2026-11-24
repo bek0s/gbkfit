@@ -6,10 +6,14 @@ place, with the comments and the styles of YAML.
 
 import abc
 import re
-from collections.abc import Callable, Iterator, Mapping, MutableMapping
-from typing import Any, NamedTuple
+from collections.abc import (
+    Callable, Iterator, Mapping, MutableMapping, Sequence)
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+if TYPE_CHECKING:
+    import gbkfit.project
 
 
 __all__ = [
@@ -48,10 +52,43 @@ class PiecesView(dict):
     """
     The pieces of a project, together, as rules rewrite them (see
     migrate_project): a configuration whose sections are lists of the
-    pieces. Not one setup: a rule that makes a choice for a whole setup
-    (e.g. its cosmology, from those of its galaxies) leaves it to the
-    setups, which it sees with their galaxies.
+    pieces (of some sections, followed by copies of the items in place in
+    its setups, whose changes are not kept). Not one setup: a rule that
+    makes a choice for a whole setup (e.g. its cosmology, from those of
+    its galaxies) leaves it to the setups, which it sees with their
+    galaxies.
+
+    Parameters
+    ----------
+    *args, **sections
+        The sections, as those of a dict.
+    project : Project, optional
+        The project, whose files rules can read (e.g. the data of
+        observation pieces); none by default.
+    names : Mapping of str to Sequence of str, optional
+        The names of the pieces of each section, in the order of the
+        section (the items after them are copies of items of setups).
     """
+
+    def __init__(
+            self,
+            *args: Any,
+            project: 'gbkfit.project.Project | None' = None,
+            names: Mapping[str, Sequence[str]] | None = None,
+            **sections: Any
+    ):
+        super().__init__(*args, **sections)
+        self.project = project
+        self.names = {
+            section: list(found) for section, found in (names or {}).items()}
+
+    def piece(self, section: str, name: str) -> Any:
+        """
+        Return the piece of a section by its name, as the rules rewrote it
+        so far; None if the section has no piece of the name.
+        """
+        found = self.names.get(section, [])
+        return self[section][found.index(name)] if name in found else None
 
 
 class ViewedPiece(dict):
