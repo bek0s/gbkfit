@@ -14,7 +14,7 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { useEffect, useMemo, useState } from 'react';
 import { useLensDescription, useLensView, type LensFrame } from '../../api/queries';
 import { membersOf, propertiesOf, titleOf, typeOf, type Defs, type Options } from '../../components/SchemaForm';
-import { fmt } from '../../components/format';
+import { fmt, significant } from '../../components/format';
 import { NeedsNote } from '../../components/ui/dock';
 import { AddMenu, FoldAll, PieceHead } from '../../components/ui/pieces';
 import { NumberInput, Row, useScrub } from '../../components/ui/rows';
@@ -503,7 +503,7 @@ function colourOf(i: number): string {
 
 // A redshift as written (to 6 digits)
 function zText(z: number): string {
-  return String(Number(z.toPrecision(6)));
+  return significant(z, 6);
 }
 
 // Whether a piece of a type can be quoted for a source: whether it has

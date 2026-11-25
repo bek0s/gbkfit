@@ -11,6 +11,7 @@ import { NumberInput, Slider } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useDescription } from '../api/queries';
 import { arrayRef } from './arrays';
+import { significant } from './format';
 import { ArrayButton, FileLine, SourceButton, sourceEntries } from './FileEditor';
 import { useFileSource } from './FileSources';
 import { Button, Close, TextField } from './ui/basics';
@@ -606,10 +607,11 @@ function NumberValue({
   onChange: (value: unknown) => void;
   slider?: SliderSpec | null;
 }) {
-  const [text, setText] = useState(value == null ? '' : String(value));
+  const shown = (v: number | undefined | null) => (v == null ? '' : significant(v, 6));
+  const [text, setText] = useState(shown(value));
   // (a value changed elsewhere, e.g. the type, is shown)
   useEffect(() => {
-    if ((value ?? null) !== (text.trim() === '' ? null : Number(text))) setText(value == null ? '' : String(value));
+    if ((value ?? null) !== (text.trim() === '' ? null : Number(text))) setText(shown(value));
   }, [value]);
   const at = typeof value === 'number' ? value : typeof node.default === 'number' ? node.default : null;
   const low = (node.exclusiveMinimum ?? node.minimum) as number | undefined;
@@ -676,9 +678,10 @@ function NumberValue({
 
 // Numbers, typed with commas between them (blank: none)
 function NumbersField({ value, onChange, placeholder }: { value: number[] | undefined | null; onChange: (value: unknown) => void; placeholder?: string }) {
-  const [text, setText] = useState(value ? value.join(', ') : '');
+  const shown = (v: number[] | undefined | null) => (v ? v.map((x) => significant(x, 6)).join(', ') : '');
+  const [text, setText] = useState(shown(value));
   useEffect(() => {
-    if ((value ?? []).join(',') !== parseNumbers(text)?.join(',')) setText(value ? value.join(', ') : '');
+    if ((value ?? []).join(',') !== parseNumbers(text)?.join(',')) setText(shown(value));
   }, [value]);
   return (
     <TextField

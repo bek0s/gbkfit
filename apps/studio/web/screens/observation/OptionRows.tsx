@@ -20,6 +20,7 @@ import { ChoiceBox, NumberInput, Row } from '../../components/ui/rows';
 import { unitText } from '../../components/units';
 import { firstSentence, retyped, typesOf } from '../galaxy/schema';
 import { formsOf, LINKED_PAIRS } from './model';
+import { significant } from '../../components/format';
 
 // What the rows of options share: the schema, the project (the files of a
 // form are its own), its blocks by folder and how one opens
@@ -450,7 +451,7 @@ function AxesInput({ value, fallback, count, label, linkable, valid, onChange }:
     if (!linked && x !== undefined && at(1) !== x) onChange([x, x]);
   };
   const axis = (k: number) => (count === 2 ? ['x', 'y'][k] : `axis ${k + 1}`);
-  const box = (k: number) => <NumberInput key={k} value={at(k)} label={`${label}: ${axis(k)}`} placeholder={byDefault(k) !== undefined ? String(byDefault(k)) : 'none'} valid={valid} onChange={(v) => set(k, v)} onClear={() => onChange(undefined)} />;
+  const box = (k: number) => <NumberInput key={k} value={at(k)} label={`${label}: ${axis(k)}`} placeholder={typeof byDefault(k) === 'number' ? significant(byDefault(k) as number, 6) : byDefault(k) !== undefined ? String(byDefault(k)) : 'none'} valid={valid} onChange={(v) => set(k, v)} onClear={() => onChange(undefined)} />;
   if (count !== 2) {
     return (
       <span className="sh-pair" data-count={count}>
@@ -682,7 +683,7 @@ function ListInput({ value, label, valid, onChange }: { value: unknown; label: s
 
 // A pair as written: one number, if both are the same (a list, of each)
 export function pairText(value: unknown): string {
-  const show = (v: unknown) => (typeof v === 'number' ? String(Number(v.toPrecision(6))) : '?');
+  const show = (v: unknown) => (typeof v === 'number' ? significant(v, 6) : '?');
   if (Array.isArray(value)) return value.length === 2 && value[0] === value[1] ? show(value[0]) : value.map(show).join(' × ');
   return value === undefined || value === null ? '' : show(value);
 }

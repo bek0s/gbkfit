@@ -5,6 +5,7 @@
 // free values at it.
 import { useMemo, useState } from 'react';
 import { useFileText } from '../../api/queries';
+import { significant } from '../../components/format';
 
 interface Report {
   stage: string;
@@ -74,7 +75,7 @@ export function LiveView({ path, version }: { path: string | null; version: stri
                 {Object.entries(last.best).map(([name, value]) => (
                   <tr key={name}>
                     <td className="fx-name">{name}</td>
-                    <td className="fx-num">{Number(value.toPrecision(6))}</td>
+                    <td className="fx-num">{significant(value, 6)}</td>
                   </tr>
                 ))}
               </tbody>

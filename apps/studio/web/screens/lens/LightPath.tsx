@@ -2,6 +2,8 @@
 // source its quoted strengths are of at its own, apart as their distances
 // are (comoving, of a flat LCDM of matter density 0.3: a sketch, not the
 // cosmology of a setup), with the rays bent at the lens.
+import { significant } from '../../components/format';
+
 const MATTER = 0.3;
 
 function distance(z: number): number {
@@ -16,7 +18,7 @@ function distance(z: number): number {
 
 // A redshift as written (to 6 digits; ? if none)
 function zOf(z: number | undefined): string {
-  return z === undefined ? '?' : String(Number(z.toPrecision(6)));
+  return z === undefined ? '?' : significant(z, 6);
 }
 
 export function LightPath({ lens, source }: { lens: number | undefined; source: number | undefined }) {

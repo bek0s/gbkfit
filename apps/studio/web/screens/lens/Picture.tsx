@@ -11,7 +11,7 @@
 // to the lens again.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { LensFrame, LensView } from '../../api/queries';
-import { fmt } from '../../components/format';
+import { fmt, significant } from '../../components/format';
 import { Track } from '../../components/ui/rows';
 import { snap } from '../../components/values';
 import type { Dots, Handles } from './LensScreen';
@@ -176,7 +176,7 @@ export function LensPicture({
 
 // A round length (e.g. of a field), as few digits as it has
 export function roundText(length: number): string {
-  return String(Number(length.toPrecision(3)));
+  return significant(length, 3);
 }
 
 // The fields of the deflection on its grid, for the maps of the lens: its

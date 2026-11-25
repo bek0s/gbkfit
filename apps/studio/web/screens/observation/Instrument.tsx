@@ -17,6 +17,7 @@ import { unitText } from '../../components/units';
 import { retyped, typesOf } from '../galaxy/schema';
 import { formsOf, isObject, objectAt, short, withKey, type Ellipse } from './model';
 import { optionTitle, OptionRow, pairText, type RowsContext } from './OptionRows';
+import { significant } from '../../components/format';
 
 // The parts of an instrument: the family of each in the schema, its
 // title, the folder of the project its shared ones are in (none: they
@@ -293,7 +294,7 @@ function optionsText(defs: RowsContext['defs'], family: PartKey, options: Option
 }
 
 function valueText(value: unknown): string {
-  if (typeof value === 'number') return String(Number(value.toPrecision(4)));
+  if (typeof value === 'number') return significant(value, 4);
   if (typeof value === 'string') return value;
   if (Array.isArray(value) && value.every((v) => typeof v === 'number')) return pairText(value);
   return '…';

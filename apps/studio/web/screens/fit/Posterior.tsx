@@ -7,6 +7,7 @@ import { useElementSize } from '@mantine/hooks';
 import { useMemo } from 'react';
 import { useFileText } from '../../api/queries';
 import { rampColour, rampStops, useColourMap, useScheme } from '../../components/colours';
+import { significant } from '../../components/format';
 
 export function PosteriorCard({ path, free }: { path: string; free: string[] }) {
   const text = useFileText(path);
@@ -97,7 +98,7 @@ function Corner({ names, units, samples }: { names: string[]; units: string[]; s
     }
   }
   const size = n * cell + (n - 1) * gap;
-  const short = (v: number) => String(Number(v.toPrecision(4)));
+  const short = (v: number) => significant(v, 4);
   return (
     <div className="fx-corner" ref={ref}>
       {cell > 0 && (

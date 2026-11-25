@@ -11,7 +11,7 @@
 // as the row opens and kept (a span that followed the value would run
 // away from a drag). A value is settled as it is set (see settled).
 import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode, type Ref } from 'react';
-import { fmt } from '../format';
+import { fmt, significant } from '../format';
 import { isValid, settled, snap, type Bounds } from '../values';
 import { DropMenu, type MenuEntry } from './overlays';
 
@@ -239,7 +239,7 @@ export function NumberInput({
       className="sh-num"
       aria-label={label}
       inputMode="decimal"
-      value={typing ?? (value === undefined ? '' : String(Number(value.toPrecision(6))))}
+      value={typing ?? (value === undefined ? '' : significant(value, 6))}
       placeholder={placeholder}
       onFocus={(event) => event.currentTarget.select()}
       onChange={(event) => {

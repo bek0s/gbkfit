@@ -13,6 +13,7 @@ import { keptAxes, keptAxisUnits } from '../../components/arrays';
 import { ProblemField } from '../../components/Problems';
 import { Choice, NumberField, Segments } from '../../components/ui/inputs';
 import { catalogueLineOf, catalogueRests, LINE_UNITS, mediumOf, restOf, SPECTRAL_TYPES, spectrumOf, type Resolved, type Spectral, type SpectralType } from './model';
+import { significant } from '../../components/format';
 
 // The problem of an array at an option (e.g. 'spectral.unit'), if any
 function problemAt(problems: ArrayProblem[], option: string): ArrayProblem | null {
@@ -190,5 +191,5 @@ function othersNear(rests: { name: string; rest: string }[], chosen: string | nu
 // A rest as said to the user: to 7 digits, in the symbols of its unit
 function restText(rest: string): string {
   const [value, unit] = rest.split(' ');
-  return `${Number(Number(value).toPrecision(7))} ${{ Angstrom: 'Å', micron: 'µm' }[unit] ?? unit}`;
+  return `${significant(Number(value), 7)} ${{ Angstrom: 'Å', micron: 'µm' }[unit] ?? unit}`;
 }
