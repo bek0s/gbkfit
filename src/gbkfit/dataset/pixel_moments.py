@@ -2,13 +2,14 @@
 The dataset of moments of the spectra on a grid of pixels: moment maps.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
 
 from gbkfit.config import (
     ConfigProblem, DataFile, check_options, config_path, split_data_file)
+from gbkfit.grid import Rota, Rpix, Rval, Step
 from gbkfit.io import coords_from_header, header_shape
 from gbkfit.moments import MOMENT_ITEMS, moment_orders, split_moments
 from . import _detail, _grids
@@ -83,10 +84,10 @@ class DatasetPixelMoments(DatasetGrid):
             moment7: DataFiles | None = None,
             h3: DataFiles | None = None,
             h4: DataFiles | None = None,
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             outliers: Mapping[str, Any] | None = None,
             footprint: DataFile | None = None
     ) -> 'DatasetPixelMoments':
@@ -177,10 +178,10 @@ class DatasetPixelMoments(DatasetGrid):
             self,
             moments: Mapping[int, Data],
             hermite: Mapping[int, Data] | None = None,
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             footprint: np.ndarray | Deferred | None = None
     ):
         check_options(DatasetPixelMoments.__init__, locals())

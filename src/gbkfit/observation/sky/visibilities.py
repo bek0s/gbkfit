@@ -14,7 +14,8 @@ from annotated_types import Gt
 from gbkfit.config import Choices, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
-from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
+from gbkfit.grid import (
+    Grid, GridData, Lengths, Rota, Rpix, Rval, SpectralAxis, make_grid)
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import (
@@ -27,7 +28,7 @@ from ..weights import Weights
 from . import _model_cube
 from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import flux_data_unit
-from ._options import Lengths, Oversampling3, Rota, Rpix, Rval
+from ._options import Oversampling3
 from ._uv_transforms import UVTransform, uv_transforms
 from .base import DType, ObservationSky, SkyOptions
 

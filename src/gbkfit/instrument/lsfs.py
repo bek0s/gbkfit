@@ -55,7 +55,6 @@ __all__ = [
     'LSFHanning',
     'LSFLorentz',
     'LSFMoffat',
-    'LSFPoint',
     'LSFProfile',
     'LSFProfiles',
     'LSFSum',
@@ -339,7 +338,11 @@ def _offsets(size: int, step: float, offset: int) -> np.ndarray:
 
 class LSFPoint(LSF):
     """
-    No spreading: the light stays in its channel.
+    No spreading: the light stays in its channel. Not a type of LSF of
+    configurations (an instrument without spreading has no LSF; a sharp
+    core of a sum is a narrow Gaussian of its real width, see LSFSum),
+    but the identity of the library where one is needed (e.g. the LSF
+    of the kernel of a cube without one, see _model_cube).
     """
 
     @staticmethod
@@ -779,7 +782,7 @@ class LSFSum(_detail.SpreadFunctionSum, LSF):
 
     config_titles = dict(lsfs='LSFs', weights='Weights')
 
-    def __init__(self, lsfs: Sequence[LSF], weights: Sequence[float]):
+    def __init__(self, lsfs: Sequence[LSF], weights: _detail.Weights):
         check_options(LSFSum.__init__, locals())
         super().__init__(lsfs, weights, "a sum of LSFs")
 
@@ -1069,7 +1072,6 @@ class LSFTables(_detail.SpreadFunctionTables, LSF):
 
 
 lsf_parser = TypedParser(LSF, [
-    LSFPoint,
     LSFGauss,
     LSFGGauss,
     LSFLorentz,

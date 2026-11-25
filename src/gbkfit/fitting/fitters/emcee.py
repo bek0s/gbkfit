@@ -6,10 +6,10 @@ import typing
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
-from annotated_types import Gt
+from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
 
-from gbkfit.config import Choices, check_options
+from gbkfit.config import Choices, Seed, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
@@ -112,18 +112,18 @@ class FitterEmcee(Fitter):
             self,
             nwalkers: Annotated[int, Gt(0)] | None = None,
             nsteps: Annotated[int, Gt(0)] = 5000,
-            burnin: int | None = None,
+            burnin: Annotated[int, Ge(0)] | None = None,
             thin: Annotated[int, Gt(0)] = 1,
             moves: _Moves = 'de',
             width: Annotated[FiniteFloat, Gt(0)] | None = None,
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterEmcee.__init__, locals())
         super().__init__(seed, uncertainty)
-        if burnin is not None and not 0 <= burnin < nsteps:
+        if burnin is not None and burnin >= nsteps:
             raise ValueError(
-                f"option 'burnin' must be in [0, nsteps); it is {burnin}")
+                f"option 'burnin' must be below nsteps; it is {burnin}")
         kept = nsteps - (nsteps // 2 if burnin is None else burnin)
         if thin > kept:
             raise ValueError(

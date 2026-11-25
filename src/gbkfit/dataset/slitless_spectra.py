@@ -3,17 +3,18 @@ The dataset of slitless spectra: an image of a grism (or prism)
 exposure.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
 
 from gbkfit.config import DataFile, check_options
+from gbkfit.grid import Rota, Rpix, Rval, Step
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids
 from .base import DatasetGrid, cleaned
 from .deferred import Deferred
-from .data import Data
+from .data import Data, Error
 
 
 __all__ = [
@@ -71,13 +72,13 @@ class DatasetSlitlessSpectra(DatasetGrid):
             cls,
             data: DataFile,
             mask: DataFile | None = None,
-            error: DataFile | float | None = None,
+            error: DataFile | Error | None = None,
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             outliers: Mapping[str, Any] | None = None,
             error_kind: ErrorKind = 'sigma',
             mask_kind: MaskKind = 'valid',
@@ -131,6 +132,7 @@ class DatasetSlitlessSpectra(DatasetGrid):
             data, mask, error, rpix, rval, unit=unit, beam=beam,
             error_kind=error_kind, mask_kind=mask_kind,
             stated=_grids.stated_options(step, rpix, rval))
+        _grids.check_axes(item.shape(), cls.ndim)
         dataset = cls(
             item, **_grids.grid_coords(coords, step, rota),
             footprint=_grids.read_footprint(footprint, data))
@@ -147,10 +149,10 @@ class DatasetSlitlessSpectra(DatasetGrid):
     def __init__(
             self,
             spectra: Data,
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             footprint: np.ndarray | Deferred | None = None
     ):
         check_options(DatasetSlitlessSpectra.__init__, locals())

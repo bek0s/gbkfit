@@ -60,8 +60,9 @@ def test_members_of_families_have_their_options():
 
 def test_lists_of_a_length_have_their_bounds():
     # (one value for both axes, or one for each: their range, and the
-    # length of the list; see gbkfit.observation.sky Size)
-    from gbkfit.observation.sky._options import Oversampling3, Size
+    # length of the list; see gbkfit.grid.Size)
+    from gbkfit.grid import Size
+    from gbkfit.observation.sky._options import Oversampling3
     writer = SchemaWriter()
     one, each = writer.option(Size)['anyOf']
     assert one == {'type': 'integer', 'minimum': 1}
@@ -236,3 +237,33 @@ def test_a_new_member_of_a_family_of_a_galaxy_starts_valid(name, member):
     with strict_mode():
         gbkfit.catalogue()[name].parser.load(
             start | dict.fromkeys(lacks, 'other'))
+
+
+@pytest.mark.parametrize('path, keyword, value', [
+    # (the grids on the sky share the types of those of observations)
+    (('dataset', 'pixel_brightness', 'step'), 'exclusiveMinimum', 0),
+    (('dataset', 'pixel_brightness', 'rval'), 'maxItems', 2),
+    (('regions', 'bins', 'step'), 'exclusiveMinimum', 0),
+    (('primary_beam', 'image', 'rpix'), 'maxItems', 2),
+    (('lens_piece', 'deflection_map', 'step'), 'maxItems', 2),
+    (('psf', 'image', 'step'), 'exclusiveMinimum', 0),
+    (('dataset', 'pixel_brightness', 'error'), 'exclusiveMinimum', 0),
+    (('fitter', 'emcee', 'seed'), 'maximum', 2**32 - 1),
+    (('fitter', 'emcee', 'burnin'), 'minimum', 0),
+    (('psf', 'sum', 'weights'), 'exclusiveMinimum', 0),
+    (('joint_prior', 'smooth2d', 'size'), 'maxItems', 2),
+    (('cosmology', 'flat_lambda_cdm', 'omega_matter'), 'maximum', 1),
+    (('slit_mask', 'shutters', 'size'), 'minItems', 2),
+    (('bootstrap_scheme', 'blocks', 'size'), 'minItems', 1),
+    (('component', 'thin_disk', 'rstep'), 'exclusiveMinimum', 0),
+    (('component', 'thin_disk', 'rnodes'), 'minItems', 2)])
+def test_ranges_and_lengths_reach_the_schema(path, keyword, value):
+    # (somewhere in the schema of the option: of its numbers, or of its
+    # items)
+    family, member, option = path
+    schema = gbkfit.schema()
+    node = next(
+        m for m in schema['$defs'][family]['oneOf']
+        if m.get('properties', {}).get('type', {}).get('const') == member)
+    found = json.dumps(node['properties'][option])
+    assert f'"{keyword}": {json.dumps(value)}' in found

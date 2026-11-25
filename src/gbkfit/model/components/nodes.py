@@ -5,9 +5,10 @@ radii of Nodes.
 """
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
+from annotated_types import Ge
 
 from gbkfit.config import Serializable, check_options
 from gbkfit.utils import iterutils
@@ -61,10 +62,8 @@ class Nodes(Serializable):
             Unless 0 < sep <= max.
         """
         check_options(Nodes.every, locals())
-        if not 0 < sep <= max:
-            raise ValueError(
-                f"sep must be greater than 0 and at most max ({max}); it is "
-                f"{sep}")
+        if sep > max:
+            raise ValueError(f"sep must be at most max ({max}); it is {sep}")
         # The count tolerates the rounding of max / sep, which made
         # np.arange to max + sep add a node (e.g. 2.4 for 2.2 in 0.2s)
         count = int(np.ceil(max / sep - 1e-9)) + 1
@@ -73,7 +72,7 @@ class Nodes(Serializable):
         return nodes
 
     @classmethod
-    def count(cls, max: RnMax, len: int) -> 'Nodes':
+    def count(cls, max: RnMax, len: Annotated[int, Ge(2)]) -> 'Nodes':
         """
         Make len nodes from 0 to max.
 
@@ -83,10 +82,6 @@ class Nodes(Serializable):
             Unless 0 < max and 2 <= len.
         """
         check_options(Nodes.count, locals())
-        if not 0 < max:
-            raise ValueError(f"max must be greater than 0; it is {max}")
-        if not 2 <= len:
-            raise ValueError(f"len must be at least 2; it is {len}")
         nodes = cls(np.linspace(0, max, len).tolist())
         nodes._form = dict(max=max, len=len)
         return nodes
@@ -99,8 +94,6 @@ class Nodes(Serializable):
     def __init__(self, radii: RNodes):
         check_options(Nodes.__init__, locals())
         radii = tuple(radii)
-        if len(radii) < 2:
-            raise ValueError("at least two rnodes must be provided")
         # From the centre: a component has no hole of nothing at all, which
         # was a sharp inner edge; one of little density has 0 at its nodes
         if radii[0] != 0:

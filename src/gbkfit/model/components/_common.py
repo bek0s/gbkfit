@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
+from annotated_types import Ge, Gt, Len
 
 from gbkfit.config import Choices, Unit
 from gbkfit.params import ParamValues
@@ -22,10 +23,11 @@ INTERPOLATIONS = ('linear', 'akima', 'pchip')
 # shells; see nodes.Nodes), of its subnodes (rstep), and of the
 # interpolation between them, as the components take them: one definition
 # of each
-RnMax: TypeAlias = Annotated[float, Unit('arcsec')]
-RnSep: TypeAlias = Annotated[float, Unit('arcsec')]
-RNodes: TypeAlias = Annotated[Sequence[float], Unit('arcsec')]
-RStep: TypeAlias = Annotated[float, Unit('arcsec')]
+RnMax: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
+RnSep: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
+RNodes: TypeAlias = Annotated[
+    Sequence[Annotated[float, Ge(0)]], Len(2), Unit('arcsec')]
+RStep: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
 Interp: TypeAlias = Annotated[Literal[INTERPOLATIONS], Choices(
     linear='Linear', akima='Akima spline', pchip='Monotone cubic (PCHIP)')]
 

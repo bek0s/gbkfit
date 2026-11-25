@@ -1,6 +1,6 @@
 # thick_disk_transfer: A thick disk of gas whose lines absorb themselves and one of dust that dims the light behind it, seen in a cube through radiative transfer (the march along each line of sight), which line opacity needs.
 # (written by make_golden.py; do not edit)
-version: 22
+version: 23
 driver: {type: host}
 galaxies:
 - components:

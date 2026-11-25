@@ -12,7 +12,7 @@ from typing import Annotated, Any
 import numpy as np
 from annotated_types import Ge, Gt
 
-from gbkfit.config import check_options
+from gbkfit.config import Seed, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
@@ -152,7 +152,7 @@ class FitterDNest4(Fitter):
             max_saves: Annotated[int, Gt(0)] = 4000,
             min_rows: Mapping[str, int] | None = None,
             verbose: bool = False,
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterDNest4.__init__, locals())

@@ -284,7 +284,15 @@ _PER_AXIS = _COUNT | Annotated[Sequence[_COUNT], Len(2, 2)]
     (2, Annotated[Sequence[_COUNT], Len(3, 3)],
      "must be a list of 3 values of type int at least 1; it is 2"),
     ([], Annotated[Sequence[int], Len(1)],
-     "must be a list of at least 1 value; it is []")])
+     "must be a list of at least 1 value; it is []"),
+    # (of a union in an Annotated with a unit, e.g. lengths in arcsec, as
+    # of one without)
+    ([1, 2, 3], Annotated[_PER_AXIS, Unit('arcsec')],
+     "must be a list of 2 values; it is [1, 2, 3]"),
+    ([1, 0], Annotated[_PER_AXIS, Unit('arcsec')],
+     "item [1] must be at least 1; it is 0"),
+    ([1, -1], Annotated[Sequence[_COUNT], Len(2), Unit('kpc')],
+     "item [1] must be at least 1; it is -1")])
 def test_problems_of_lists_of_a_length(value, type_, message):
     assert type_problem(value, type_) == message
 
@@ -354,11 +362,11 @@ def test_options_of_classes_are_loaded_by_their_annotation():
     # 2026-10-31 #41)
     from gbkfit.instrument import Instrument, PSFSum
     info = dict(psf=dict(type='sum', weights=[1, 1], psfs=[
-        dict(type='gauss', sigma=1), dict(type='point')]))
+        dict(type='gauss', sigma=1), dict(type='gauss', sigma=2)]))
     original = copy.deepcopy(info)
     psf = Instrument.load(info).psf()
     assert isinstance(psf, PSFSum)
-    assert [x['type'] for x in psf.dump()['psfs']] == ['gauss', 'point']
+    assert [x['sigma'] for x in psf.dump()['psfs']] == [1, 2]
     assert info == original
     with pytest.raises(ConfigError) as error:
         Instrument.load(dict(psf=dict(type='sum', weights=[1], psfs=[

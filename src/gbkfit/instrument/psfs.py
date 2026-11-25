@@ -22,6 +22,7 @@ from astropy.stats import gaussian_fwhm_to_sigma, gaussian_sigma_to_fwhm
 
 from gbkfit.config import (
     DataFile, TypedParser, Unit, Varying, check_options, split_data_file)
+from gbkfit.grid import Step
 from gbkfit.io import (
     Beam, beam_area, header_beam, model_header, parse_wcs, read_header,
     read_image, spectral_points)
@@ -38,7 +39,6 @@ __all__ = [
     'PSFImage',
     'PSFImages',
     'PSFMoffat',
-    'PSFPoint',
     'PSFSum',
     'PSFTables',
     'psf_parser'
@@ -286,7 +286,11 @@ class _AnalyticPSF(_detail.AnalyticSpreadFunction, PSF):
 
 class PSFPoint(PSF):
     """
-    No blurring: the light stays in its pixel.
+    No blurring: the light stays in its pixel. Not a type of PSF of
+    configurations (an instrument without blurring has no PSF; a sharp
+    core of a sum is a narrow Gaussian of its real width, see PSFSum),
+    but the identity of the library where one is needed (e.g. the PSF
+    of the kernel of a cube without one, see _model_cube).
     """
 
     @staticmethod
@@ -686,9 +690,9 @@ class PSFMoffat(_AnalyticPSF):
 
 def _read_images(
         file: DataFile,
-        step: _detail.Step | None,
+        step: Step | None,
         spectral_axis: int | None = None
-) -> tuple[str, np.ndarray, astropy.wcs.WCS, _detail.Step]:
+) -> tuple[str, np.ndarray, astropy.wcs.WCS, Step]:
     """
     The PSF image or images of a file in the orientation of the model, as
     data are read (see model_header), with the filename, their world
@@ -716,19 +720,10 @@ def _read_images(
     return filename, data, wcs, step
 
 
-def _as_step(step: _detail.Step) -> tuple[float, float]:
-    """
-    The size of the pixels of PSF images along x and y (see Step).
-
-    Raise ValueError unless it is one positive number, or two.
-    """
-    pair = ((float(step),) * 2 if np.isscalar(step)
-            else tuple(float(x) for x in step))
-    if len(pair) != 2 or not all(x > 0 for x in pair):
-        raise ValueError(
-            f"the size of the pixels of PSF images (step) is a positive "
-            f"number, or two (along x and y); it is {step}")
-    return pair
+def _as_step(step: Step) -> tuple[float, float]:
+    """The size of the pixels of PSF images along x and y (see Step)."""
+    return (float(step),) * 2 if np.isscalar(step) \
+        else tuple(float(x) for x in step)
 
 
 class PSFImage(PSF):
@@ -766,7 +761,7 @@ class PSFImage(PSF):
 
     @classmethod
     def from_file(
-            cls, file: DataFile, step: _detail.Step | None = None
+            cls, file: DataFile, step: Step | None = None
     ) -> 'PSFImage':
         """
         Read a PSF image from a file, in the orientation of the model, as
@@ -809,7 +804,7 @@ class PSFImage(PSF):
             self, self._data, 'psf', prefix, dump_path, overwrite) | dict(
             step=list(self._step))
 
-    def __init__(self, data: np.ndarray, step: _detail.Step):
+    def __init__(self, data: np.ndarray, step: Step):
         check_options(PSFImage.__init__, locals())
         data = np.squeeze(np.asarray(data, dtype=float))
         if data.ndim != 2:
@@ -886,7 +881,7 @@ class PSFImages(_detail.SpreadFunctionImages, PSF):
             cls,
             file: DataFile,
             points: u.Quantity | None = None,
-            step: _detail.Step | None = None
+            step: Step | None = None
     ) -> 'PSFImages':
         """
         Read PSF images from a cube (nz, ny, nx), in the orientation of
@@ -940,7 +935,7 @@ class PSFImages(_detail.SpreadFunctionImages, PSF):
         ) | dict(points=self._dump_points(), step=list(self._step))
 
     def __init__(
-            self, data: np.ndarray, points: u.Quantity, step: _detail.Step
+            self, data: np.ndarray, points: u.Quantity, step: Step
     ):
         check_options(PSFImages.__init__, locals())
         data = np.asarray(data, dtype=float)
@@ -973,7 +968,7 @@ class PSFSum(_detail.SpreadFunctionSum, PSF):
     config_start = dict(
         psfs=[dict(type='gauss', fwhm=1)], weights=[1])
 
-    def __init__(self, psfs: Sequence[PSF], weights: Sequence[float]):
+    def __init__(self, psfs: Sequence[PSF], weights: _detail.Weights):
         check_options(PSFSum.__init__, locals())
         super().__init__(psfs, weights, "a sum of PSFs")
 
@@ -1048,7 +1043,6 @@ class PSFTables(_detail.SpreadFunctionTables, PSF):
 
 
 psf_parser = TypedParser(PSF, [
-    PSFPoint,
     PSFGauss,
     PSFGGauss,
     PSFMoffat,

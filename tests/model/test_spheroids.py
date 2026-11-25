@@ -294,7 +294,8 @@ def test_a_spheroid_round_trips():
     (dict(emission=dict(type='lines')), "emits in bands"),
     (dict(profile=dict(type='mge', ngauss=2),
           shape=dict(type='flattened')), "takes no shape"),
-    (dict(profile=dict(type='mge', ngauss=0)), "ngauss must be"),
+    (dict(profile=dict(type='mge', ngauss=0)),
+     "option 'ngauss' must be at least 1"),
     # (stars do not flow out)
     (dict(vptraits=dict(type='uniform', direction='out'),
           dptraits=dict(type='uniform')), "takes velocity traits along"),

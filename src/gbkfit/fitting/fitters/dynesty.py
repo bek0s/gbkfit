@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.config import Choices, check_options
+from gbkfit.config import Choices, Seed, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import corrected_evidence
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
@@ -152,7 +152,7 @@ class FitterDynestyStatic(Fitter):
             dlogz: Annotated[float, Gt(0)] | None = None,
             maxcall: Annotated[int, Gt(0)] | None = None,
             verbose: bool = False,
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterDynestyStatic.__init__, locals())
@@ -276,7 +276,7 @@ class FitterDynestyDynamic(Fitter):
             n_effective: Annotated[int, Gt(0)] | None = None,
             maxcall: Annotated[int, Gt(0)] | None = None,
             verbose: bool = False,
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterDynestyDynamic.__init__, locals())

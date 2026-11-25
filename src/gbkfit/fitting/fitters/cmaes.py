@@ -11,7 +11,7 @@ import numpy as np
 from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
 
-from gbkfit.config import check_options
+from gbkfit.config import Seed, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, MeritChoice
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
@@ -187,7 +187,7 @@ class FitterCMAES(Fitter):
             sigma: Annotated[FiniteFloat, Gt(0)] | None = None,
             verbose: bool = False,
             merit: MeritChoice = 'chi2',
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterCMAES.__init__, locals())

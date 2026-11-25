@@ -5,8 +5,7 @@ where it points (e.g. the primary beam of a radio interferometer).
 
 import abc
 import os.path
-from collections.abc import Sequence
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, Any
 
 import astropy.units as u
 import numpy as np
@@ -17,8 +16,8 @@ from annotated_types import Gt
 from gbkfit.config import (
     DataFile, TypedParser, Unit, check_options, split_data_file)
 from gbkfit.grid import (
-    Grid, VelocityConvention, check_overlap, make_grid, pixels_on,
-    sky_positions)
+    Grid, Rota, Rpix, Rval, Step, VelocityConvention, check_overlap,
+    make_grid, pixels_on, sky_positions)
 from gbkfit.io import header_shape, read_data, read_header, write_data
 from . import _detail, varying
 
@@ -34,12 +33,6 @@ __all__ = [
 
 # The argument of the Airy pattern (2 J1(u) / u)^2 at its half maximum
 _AIRY_HALF_MAXIMUM_ARG = 1.616339948310703
-
-# The world coordinates of an image (see make_grid): its reference pixel,
-# the RA and Dec there (degrees), and its rotation on the sky (degrees)
-_Rpix: TypeAlias = float | Sequence[float]
-_Rval: TypeAlias = Annotated[float | Sequence[float], Unit('deg')]
-_Rota: TypeAlias = Annotated[float, Unit('deg')]
 
 
 class PrimaryBeam(_detail.Response):
@@ -224,10 +217,10 @@ class PrimaryBeamImage(PrimaryBeam):
     def from_file(
             cls,
             file: DataFile,
-            step: _detail.Step | None = None,
-            rpix: _Rpix | None = None,
-            rval: _Rval | None = None,
-            rota: _Rota | None = None
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None
     ) -> 'PrimaryBeamImage':
         """
         Read a primary beam image, and its world coordinates, from a file.
@@ -285,10 +278,10 @@ class PrimaryBeamImage(PrimaryBeam):
     def __init__(
             self,
             data: np.ndarray,
-            step: _detail.Step | None = None,
-            rpix: _Rpix | None = None,
-            rval: _Rval | None = None,
-            rota: _Rota | None = None
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None
     ):
         check_options(PrimaryBeamImage.__init__, locals())
         data = np.asarray(data, dtype=float)

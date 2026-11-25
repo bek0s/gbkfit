@@ -30,7 +30,6 @@ def kms(value):
 
 @pytest.mark.parametrize(
     "psf_type, psf_class, psf_params", [
-        ('point', PSFPoint, dict()),
         ('gauss', PSFGauss, dict(
             sigma=5.0, ratio=1.0, posa=0.0)),
         ('ggauss', PSFGGauss, dict(
@@ -65,7 +64,6 @@ def test_psf_analytic(psf_type, psf_class, psf_params):
 
 @pytest.mark.parametrize(
     "lsf_type, lsf_class, lsf_params", [
-        ('point', LSFPoint, dict()),
         ('gauss', LSFGauss, dict(
             sigma=kms(5.0))),
         ('ggauss', LSFGGauss, dict(
@@ -245,7 +243,7 @@ def test_images_without_their_pixel_size_need_it(tmp_path):
     np.testing.assert_allclose(psf._step, (0.025, 0.025))
     with pytest.raises(ValueError, match="give the width of their channels"):
         LSFProfile.from_file(str(tmp_path / 'lsf.fits'))
-    with pytest.raises(ValueError, match="a positive number, or two"):
+    with pytest.raises(ValueError, match="must be greater than 0"):
         PSFImage(np.ones((9, 9)), step=(-0.1, 0.1))
 
 
@@ -435,10 +433,13 @@ def test_lsf_sum():
         double.on(AT).asarray(5.0), rtol=1e-12)
 
 
-@pytest.mark.parametrize('weights', [[1], [1, 0], [1, -1]])
-def test_sum_weights_are_checked(weights):
+@pytest.mark.parametrize('weights, message', [
+    ([1], "needs a weight for each of its 2 terms"),
+    ([1, 0], r"item \[1\] must be greater than 0"),
+    ([1, -1], r"item \[1\] must be greater than 0")])
+def test_sum_weights_are_checked(weights, message):
     from gbkfit.instrument import PSFGauss, PSFSum
-    with pytest.raises(ValueError, match="positive weight"):
+    with pytest.raises(ValueError, match=message):
         PSFSum([PSFGauss(1.0), PSFGauss(2.0)], weights)
 
 
@@ -581,10 +582,11 @@ def test_psf_beam_options_are_checked(info, message):
 
 
 @pytest.mark.parametrize('parser', [psf_parser, lsf_parser])
-def test_unknown_options_of_points_are_reported(parser):
-    # (they used to be ignored silently)
-    with pytest.raises(ConfigError, match="'sigma'"):
-        parser.load(dict(type='point', sigma=2))
+def test_a_point_is_not_a_type_of_psf_or_lsf(parser):
+    # (alone, it was no PSF or LSF; in a sum, a sharp core is a narrow
+    # Gaussian of its real width)
+    with pytest.raises(ConfigError, match="unknown type 'point'"):
+        parser.load(dict(type='point'))
 
 
 def test_psfs_from_files_in_python(tmp_path):
@@ -778,7 +780,7 @@ def test_measured_psfs_and_lsfs_are_checked_as_they_are_made(tmp_path):
         LSFProfile(np.zeros(5), kms(1))
     with pytest.raises(TypeError, match="wavelengths, frequencies or"):
         PSFImages(np.ones((2, 5, 5)), [1, 2] * u.arcsec, 0.1)
-    with pytest.raises(ValueError, match="a positive number, or two"):
+    with pytest.raises(ValueError, match="must be a list of 2 values"):
         PSFImages(np.ones((2, 5, 5)), [6000, 7000] * u.AA, (0.2,))
     nan = np.ones((2, 5))
     nan[0, 0] = np.nan

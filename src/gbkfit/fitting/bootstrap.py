@@ -5,15 +5,14 @@ of a fit plus its residuals, redrawn (see run_bootstrap).
 
 import abc
 import logging
-import numbers
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 import numpy as np
-from annotated_types import Ge
+from annotated_types import Ge, Gt, Len
 
 from gbkfit.config import (
-    Serializable, TypedParser, TypedSerializable, check_options,
+    Seed, Serializable, TypedParser, TypedSerializable, check_options,
     config_path)
 from gbkfit.dataset import Dataset
 from gbkfit.fitting._subfits import Outcome, run_subfits
@@ -129,16 +128,11 @@ class BootstrapBlocks(BootstrapScheme):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), size=list(self._size))
 
-    def __init__(self, size: Sequence[float]):
+    def __init__(
+            self, size: Annotated[Sequence[Annotated[float, Gt(0)]], Len(1)]
+    ):
         check_options(BootstrapBlocks.__init__, locals())
-        size = tuple(size)
-        if not size or not all(
-                isinstance(n, numbers.Real) and not isinstance(n, bool)
-                and n > 0 for n in size):
-            raise ValueError(
-                f"the size of the blocks is of positive numbers; it is "
-                f"{list(size)}")
-        self._size = size
+        self._size = tuple(size)
 
     def size(self) -> tuple[float, ...]:
         """Return the size of the blocks."""
@@ -286,7 +280,7 @@ class BootstrapOptions(Serializable):
             nsamples: Annotated[int, Ge(2)],
             scheme: BootstrapScheme | Mapping[str, BootstrapScheme],
             fitter: Fitter | None = None,
-            seed: int | None = None
+            seed: Seed | None = None
     ):
         check_options(BootstrapOptions.__init__, locals())
         self._nsamples = nsamples

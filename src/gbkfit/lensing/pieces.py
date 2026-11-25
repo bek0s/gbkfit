@@ -45,7 +45,8 @@ from gbkfit.config import (
     Choices, DataFile, TypedSerializable, Unit, check_name,
     check_options, split_data_file)
 from gbkfit.grid import (
-    Coords, Grid, frame_to_pixels, make_grid, sky_to_pixel)
+    Coords, Grid, Rota, Rpix, Rval, Step, frame_to_pixels, make_grid,
+    sky_to_pixel)
 from gbkfit.io import (
     Orientation, coords_from_header, model_header, read_image, write_data)
 from gbkfit.model.mass import LogTable
@@ -75,9 +76,6 @@ __all__ = [
     'SkyPoints'
 ]
 
-
-# The rotation of a grid on the sky
-_Angle: TypeAlias = Annotated[float, Unit('deg')]
 
 # The units of the values of the files of deflection maps
 _MapUnit: TypeAlias = Annotated[
@@ -774,10 +772,10 @@ class LensDeflectionMap(LensPiece):
             alpha_x: DataFile,
             alpha_y: DataFile,
             unit: _MapUnit = 'arcsec',
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: _Angle | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             shifted: bool = False,
             quoted: bool = False,
             name: str | None = None,
@@ -873,10 +871,10 @@ class LensDeflectionMap(LensPiece):
             self,
             alpha_x: Annotated[npt.ArrayLike, Unit('arcsec')],
             alpha_y: Annotated[npt.ArrayLike, Unit('arcsec')],
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: _Angle | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             shifted: bool = False,
             quoted: bool = False,
             name: str | None = None,

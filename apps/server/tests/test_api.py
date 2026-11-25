@@ -422,10 +422,6 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
         project='study', options=dict(type='gauss', sigma=1.0),
         step=[0.5, 0.5])).json()
     assert psf['step'] == [0.5, 0.5] and len(psf['values']) < 100
-    point = client.post('/api/v1/views/psf', json=dict(
-        project='study', options=dict(type='point'))).json()
-    assert point['values'] == [[1.0]] and point['fwhm'] is None
-    assert point['axes'] is None
     kms = '10 km/s'
     lsf = client.post('/api/v1/views/lsf', json=dict(
         project='study', options=dict(type='gauss', sigma=kms))).json()

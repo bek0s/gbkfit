@@ -18,7 +18,8 @@ import numpy as np
 import numpy.typing as npt
 import scipy.interpolate
 import scipy.special
-from annotated_types import Gt
+from annotated_types import Ge, Gt, Len
+from pydantic import FiniteFloat
 from astropy.stats import gaussian_fwhm_to_sigma
 
 from gbkfit.config import (
@@ -583,15 +584,17 @@ class SurfaceNodewise(DiskSurface):
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(nodes=self._nodes.tolist())
 
-    def __init__(self, nodes: Annotated[Sequence[float], Unit('kpc')]):
+    def __init__(
+            self,
+            nodes: Annotated[
+                Sequence[Annotated[FiniteFloat, Ge(0)]], Len(2), Unit('kpc')]
+    ):
         check_options(SurfaceNodewise.__init__, locals())
         nodes = np.asarray(nodes, dtype=float)
-        if (nodes.ndim != 1 or len(nodes) < 2 or not np.all(np.isfinite(nodes))
-                or nodes[0] < 0 or np.any(np.diff(nodes) <= 0)):
+        if np.any(np.diff(nodes) <= 0):
             raise ValueError(
-                f"the nodes of a nodewise surface density must be at least "
-                f"two radii, from 0 up, increasing; they are "
-                f"{nodes.tolist()}")
+                f"the nodes of a nodewise surface density must be "
+                f"increasing; they are {nodes.tolist()}")
         self._nodes = nodes
 
     def nodes(self) -> np.ndarray:

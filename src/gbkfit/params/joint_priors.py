@@ -5,13 +5,12 @@ free element (see Prior).
 """
 
 import abc
-import numbers
 from collections.abc import Callable, Sequence
 from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 import scipy.linalg
-from annotated_types import Gt
+from annotated_types import Ge, Gt, Len
 from pydantic import FiniteFloat
 
 from ._errors import ParamEvaluationError
@@ -41,12 +40,8 @@ _Order: TypeAlias = Annotated[Literal[1, 2], Choices(
     {1: 'First differences', 2: 'Second differences'})]
 
 
-def _check_std(std: float | Sequence[float]) -> None:
-    """Check that standard deviations are finite and positive."""
-    values = np.asarray(std, dtype=float)
-    if not (np.all(np.isfinite(values)) and np.all(values > 0)):
-        raise ValueError(
-            f"std must be finite and positive; it is {std}")
+# A standard deviation: finite, above 0
+_Std: TypeAlias = Annotated[FiniteFloat, Gt(0)]
 
 
 class JointPrior(TypedSerializable, abc.ABC):
@@ -122,10 +117,9 @@ class JointPriorGauss(JointPrior):
             self,
             expr: str,
             mean: float | Sequence[float],
-            std: float | Sequence[float]
+            std: _Std | Sequence[_Std]
     ):
         check_options(JointPriorGauss.__init__, locals())
-        _check_std(std)
         self._expr = expr
         self._mean = mean
         self._std = std
@@ -194,7 +188,7 @@ class JointPriorSmooth(JointPrior):
             self,
             expr: str,
             order: _Order,
-            std: Annotated[FiniteFloat, Gt(0)],
+            std: _Std,
             positions: str | None = None
     ):
         check_options(JointPriorSmooth.__init__, locals())
@@ -315,17 +309,11 @@ class JointPriorSmooth2D(JointPrior):
     def __init__(
             self,
             expr: str,
-            size: Sequence[int],
+            size: Annotated[Sequence[Annotated[int, Ge(1)]], Len(2, 2)],
             order: _Order,
-            std: Annotated[FiniteFloat, Gt(0)]
+            std: _Std
     ):
         check_options(JointPriorSmooth2D.__init__, locals())
-        if not (isinstance(size, Sequence) and len(size) == 2 and all(
-                isinstance(n, numbers.Integral) and not isinstance(n, bool)
-                and n >= 1 for n in size)):
-            raise ValueError(
-                f"size must be the numbers of cells along x and y, [nx, "
-                f"ny], each at least 1; it is {size!r}")
         self._expr = expr
         self._size = (int(size[0]), int(size[1]))
         self._order = order
@@ -400,7 +388,7 @@ class JointPriorBound(JointPrior):
     def __init__(
             self,
             expr: str,
-            std: Annotated[FiniteFloat, Gt(0)],
+            std: _Std,
             lower: float | None = None,
             upper: float | None = None
     ):

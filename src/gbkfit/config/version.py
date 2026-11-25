@@ -31,5 +31,6 @@ __all__ = [
 # dataset leaves the observation: the section datasets of a setup pairs
 # observations with data by name), and 22, of 2026-11-25 on (what an
 # observation sees of the galaxies leaves it: the section seen of a
-# setup); gbkfit.migration rewrites the older ones
-FORMAT_VERSION = 22
+# setup), and 23, of 2026-11-25 on (a point is not a type of PSF or LSF);
+# gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 23

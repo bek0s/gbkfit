@@ -9,7 +9,7 @@ import numpy as np
 import scipy.optimize
 from annotated_types import Gt
 
-from gbkfit.config import Choices, check_options
+from gbkfit.config import Choices, Seed, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import (
     LeastSquaresFunctions, inside_bounds, relative_step)
@@ -161,7 +161,7 @@ class FitterScipyLeastSquares(Fitter):
             xtol: Annotated[float, Gt(0)] = 1e-8,
             gtol: Annotated[float, Gt(0)] = 1e-8,
             step: Annotated[float, Gt(0)] | None = None,
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterScipyLeastSquares.__init__, locals())

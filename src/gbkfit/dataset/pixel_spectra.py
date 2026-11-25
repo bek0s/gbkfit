@@ -2,19 +2,19 @@
 The dataset of spectra on a grid of pixels: a spectral cube.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
 
 from gbkfit.config import ConfigProblem, DataFile, check_options
-from gbkfit.grid import SpectralAxis
+from gbkfit.grid import Rota, Rpix, Rval, SpectralAxis, Step
 from gbkfit.instrument import LSF, PSF
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids, _outliers
 from .base import DatasetGrid, NoiseCorrelation, cleaned
 from .deferred import Deferred
-from .data import Data, DataFiles
+from .data import Data, DataFiles, Error
 
 
 __all__ = [
@@ -70,13 +70,13 @@ class DatasetPixelSpectra(DatasetGrid):
             cls,
             data: DataFile,
             mask: DataFile | None = None,
-            error: DataFile | float | None = None,
+            error: DataFile | Error | None = None,
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             spectral: SpectralAxis | None = None,
             spatial_correlation: PSF | None = None,
             spectral_correlation: LSF | None = None,
@@ -192,10 +192,10 @@ class DatasetPixelSpectra(DatasetGrid):
     def __init__(
             self,
             spectra: Data,
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             spectral: SpectralAxis | None = None,
             footprint: np.ndarray | Deferred | None = None
     ):

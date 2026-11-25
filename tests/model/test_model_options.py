@@ -347,8 +347,9 @@ def test_radial_nodes_start_at_the_centre():
     (dict(max=4), "it has none of them"),
     # (one form only: the other would be ignored silently)
     (dict(max=4, sep=1, len=3), "it has those of several"),
-    (dict(max=4, sep=5), "sep must be greater than 0 and at most max"),
-    (dict(max=4, len=1), "len must be at least 2")])
+    (dict(max=4, sep=5), "sep must be at most max"),
+    (dict(max=4, sep=0), "option 'sep' must be greater than 0"),
+    (dict(max=4, len=1), "option 'len' must be at least 2")])
 def test_invalid_radial_nodes(rnodes, message):
     disk = {k: v for k, v in LINES_THIN.items() if k != 'rnodes'}
     if rnodes is not None:

@@ -3,7 +3,9 @@ Galaxies: their components and their mass, at one distance.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any
+from typing import Annotated, Any
+
+from annotated_types import Gt
 
 from gbkfit.config import (
     BasicParser, Serializable, TypedParser, check_name,
@@ -138,15 +140,12 @@ class Galaxy(Serializable):
             components: Component | Sequence[Component] = (),
             mass: MassComponent | Sequence[MassComponent] | None = None,
             distance: Distance | None = None,
-            redshift: float | None = None,
+            redshift: Annotated[float, Gt(-1)] | None = None,
             name: str | None = None,
             gravity: Gravity | None = None
     ):
         check_options(Galaxy.__init__, locals())
         check_name(name)
-        if redshift is not None and not redshift > -1:
-            raise ValueError(
-                f"the redshift must be above -1; it is {redshift}")
         self._redshift = redshift
         mass = iterutils.tuplify(mass)
         self._components = components = iterutils.tuplify(components)

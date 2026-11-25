@@ -19,7 +19,7 @@ import numpy.typing as npt
 import scipy.special
 
 from gbkfit.config import (
-    TypedParser, TypedSerializable, Unit, check_options)
+    Seed, TypedParser, TypedSerializable, Unit, check_options)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import (
     ModelEvaluationError, ParamDesc, ParamScalarDesc, ParamValues,
@@ -351,12 +351,8 @@ class LightMGE(LightProfile):
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(ngauss=self._ngauss)
 
-    def __init__(self, ngauss: int):
+    def __init__(self, ngauss: Annotated[int, Ge(1)]):
         check_options(LightMGE.__init__, locals())
-        if isinstance(ngauss, bool) or not isinstance(ngauss, int) \
-                or ngauss < 1:
-            raise ValueError(
-                f"ngauss must be a positive integer; it is {ngauss!r}")
         self._ngauss = ngauss
 
     def ngauss(self) -> int:
@@ -1007,7 +1003,7 @@ class OrbitSpheroid(Spheroid):
             shape: SpheroidShape | None = None,
             norbits: Annotated[int, Gt(0)] = 3000,
             turns: Annotated[FiniteFloat, Gt(0)] = 100,
-            seed: Annotated[int, Ge(0)] = 0,
+            seed: Seed = 0,
             name: str | None = None
     ):
         check_options(OrbitSpheroid.__init__, locals())

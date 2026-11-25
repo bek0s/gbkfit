@@ -12,7 +12,7 @@ import numpy as np
 import scipy.stats
 from annotated_types import Gt
 
-from gbkfit.config import check_options
+from gbkfit.config import Seed, check_options
 from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, fitter_parser
 from gbkfit.control import StopControl
@@ -110,7 +110,7 @@ class FitterMultiStart(Fitter):
             nstarts: Annotated[int, Gt(0)] = 16,
             nsolutions: Annotated[int, Gt(0)] = 5,
             tolerance: Annotated[float, Gt(0)] = 1e-3,
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterMultiStart.__init__, locals())

@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from typing import Annotated, Any
 
 import numpy as np
-from annotated_types import Ge, Gt
+from annotated_types import Ge, Gt, Len
 
 from gbkfit.config import (
     TypedParser, TypedSerializable, Unit, check_options)
@@ -132,17 +132,15 @@ class SlitMaskShutters(SlitMask):
 
     def __init__(
             self,
-            size: Annotated[Sequence[float], Unit('arcsec')],
+            size: Annotated[
+                Sequence[Annotated[float, Gt(0)]], Len(2, 2), Unit('arcsec')],
             pitch: Annotated[float, Gt(0), Unit('arcsec')] | None = None,
             count: Annotated[int, Ge(1)] = 1,
-            centre: Annotated[Sequence[float], Unit('arcsec')] = (0, 0)
+            centre: Annotated[
+                Sequence[float], Len(2, 2), Unit('arcsec')] = (0, 0)
     ):
         check_options(SlitMaskShutters.__init__, locals())
         size = tuple(float(value) for value in size)
-        if len(size) != 2 or not min(size) > 0:
-            raise ValueError(
-                f"the size of the shutters must be two positive widths; it "
-                f"is {size}")
         if count > 1 and (pitch is None or pitch < size[1]):
             raise ValueError(
                 f"several shutters need a pitch of at least their length "

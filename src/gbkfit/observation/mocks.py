@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 import numpy as np
 from annotated_types import Ge
 
-from gbkfit.config import Serializable, check_options, config_path
+from gbkfit.config import Seed, Serializable, check_options, config_path
 from gbkfit.dataset import Data, Dataset
 from gbkfit.model import GalaxyState
 from gbkfit.params import ParamValues
@@ -75,7 +75,7 @@ class MockOptions(Serializable):
             self,
             nmocks: Annotated[int, Ge(1)] = 1,
             nsamples: Annotated[int, Ge(2)] = 100,
-            seed: int | None = None
+            seed: Seed | None = None
     ):
         check_options(MockOptions.__init__, locals())
         self._nmocks = nmocks

@@ -8,13 +8,14 @@ import abc
 import os.path
 import re
 from collections.abc import Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeAlias
 
 import astropy.io.fits as fits
 import numpy as np
 import numpy.polynomial.polynomial as npp
 import numpy.typing as npt
 import scipy.interpolate
+from annotated_types import Len
 
 import gbkfit.units
 from gbkfit.config import (
@@ -30,6 +31,12 @@ __all__ = [
     'TraceTable',
     'trace_parser'
 ]
+
+
+# The coefficients of a polynomial (at least one), and the place on the
+# detector of the first pixel of an image (x0, y0; pixels)
+_Coefficients: TypeAlias = Annotated[Sequence[float], Len(1), Unit('pixel')]
+_Origin: TypeAlias = Annotated[Sequence[float], Len(2, 2), Unit('pixel')]
 
 
 # The Newton iterations of the parameter t of a wavelength of a GRISMCONF
@@ -117,16 +124,14 @@ class TracePolynomial(Trace):
             self,
             wave: Annotated[QuantityOrText, UnitKinds(
                 wavelength=('Angstrom', 'nm', 'um', 'm'))],
-            dx: Annotated[Sequence[float], Unit('pixel')],
-            dy: Annotated[Sequence[float], Unit('pixel')] = (0.0,)
+            dx: _Coefficients,
+            dy: _Coefficients = (0.0,)
     ):
         check_options(TracePolynomial.__init__, locals())
         quantity = make_rest(wave)
         if quantity.unit.physical_type != 'length':
             raise ValueError(
                 f"the wave of a trace must be a wavelength; it is {wave!r}")
-        if not len(dx) or not len(dy):
-            raise ValueError("the dx and dy of a trace need coefficients")
         self._wave = quantity.to('m')
         self._dx = tuple(float(c) for c in dx)
         self._dy = tuple(float(c) for c in dy)
@@ -199,7 +204,7 @@ class TraceGrismConf(Trace):
             cls,
             file: FilePath,
             order: str | int = '+1',
-            origin: Annotated[Sequence[float], Unit('pixel')] = (0, 0)
+            origin: _Origin = (0, 0)
     ) -> 'TraceGrismConf':
         """
         Read the trace of an order of a GRISMCONF file (e.g. those of the
@@ -279,7 +284,7 @@ class TraceGrismConf(Trace):
             displ: Sequence[Sequence[float]],
             dispx: Sequence[Sequence[float]],
             dispy: Sequence[Sequence[float]],
-            origin: Annotated[Sequence[float], Unit('pixel')] = (0.0, 0.0)
+            origin: _Origin = (0.0, 0.0)
     ):
         check_options(TraceGrismConf.__init__, locals())
         polynomials = dict(displ=displ, dispx=dispx, dispy=dispy)
@@ -288,8 +293,6 @@ class TraceGrismConf(Trace):
                 raise ValueError(f"{name} needs coefficients")
             for coefficients in terms:
                 _field_degree(len(coefficients), name)
-        if len(origin) != 2:
-            raise ValueError("origin must be (x0, y0)")
         self._displ, self._dispx, self._dispy = (
             tuple(tuple(float(c) for c in coefficients)
                   for coefficients in terms)

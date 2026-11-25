@@ -35,6 +35,7 @@ __all__ = [
     'FilePath',
     'QuantityOrText',
     'ScalarQuantity',
+    'Seed',
     'Unit',
     'UnitKinds',
     'Varying',
@@ -221,6 +222,11 @@ QuantityOrText: TypeAlias = Annotated[
 # HDU (hdu) or the path (path)
 DataFile: TypeAlias = Annotated[
     str | tuple[str, int | str], _ConfigForm('data_file')]
+
+# The seed of random numbers: of NumPy, whose legacy generator (which the
+# seeds of some fitters go to) takes those below 2^32
+Seed: TypeAlias = Annotated[
+    int, annotated_types.Ge(0), annotated_types.Le(2**32 - 1)]
 
 
 class Column(NamedTuple):
@@ -501,7 +507,7 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
         # A union of one value and a list of them (e.g. one value for
         # every axis, or one for each): the error of the member of the
         # form of the value
-        members = union_members(type_)
+        members = union_members(_unmarked(type_))
         if len(members) > 1 \
                 and (member := _member_of_form(value, members)) is not None:
             return type_error(value, member)
@@ -514,7 +520,7 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
         if (literal := _literal(type_)) is not None:
             choices = ', '.join(repr(x) for x in typing.get_args(literal))
             return ValueError(f"must be one of {choices}; it is {value!r}")
-        if (item := _item_error(value, type_)) is not None:
+        if (item := _item_error(value, _unmarked(type_))) is not None:
             return item
         # (a list of a given length, as such)
         if any(isinstance(x, annotated_types.Len) for x in bounds):
@@ -532,6 +538,16 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
         return ValueError(
             f"must be in a unit of {kinds.names()}; it is {_shown(value)}")
     return None
+
+
+def _unmarked(type_: Any) -> Any:
+    """
+    Return an annotation without the markers of an Annotated of markers
+    that are not bounds (e.g. a Unit, which type_error checks first), for
+    the errors of its members or its items.
+    """
+    return typing.get_args(type_)[0] \
+        if typing.get_origin(type_) is Annotated else type_
 
 
 def _member_of_form(value: Any, members: tuple[Any, ...]) -> Any:

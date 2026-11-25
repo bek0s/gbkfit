@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.config import check_options
+from gbkfit.config import Seed, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import corrected_evidence
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
@@ -111,7 +111,7 @@ class FitterNautilus(Fitter):
             discard_exploration: bool = False,
             timeout: Annotated[float, Gt(0)] | None = None,
             verbose: bool = False,
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterNautilus.__init__, locals())

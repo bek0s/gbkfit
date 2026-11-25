@@ -42,9 +42,9 @@ FILE_TYPES = ('image', 'images', 'profile', 'profiles', 'array')
 SAMPLE_OPTIONS = dict(
     nblobs=2, order=1, origin=0, alpha=1.5, beta=2, sigma=1, gamma=1,
     axis=0, angle=10, weight=2,
-    psfs=[dict(type='gauss', sigma=1), dict(type='point')],
+    psfs=[dict(type='gauss', sigma=1), dict(type='gauss', sigma=2)],
     lsfs=[dict(type='gauss', sigma='1 km/s'),
-          dict(type='point')],
+          dict(type='gauss', sigma='2 km/s')],
     weights=[1, 2], bmaj=3, bmin=2,
     fwhm=10, x=1, y=2, radius=3, a=2, b=1, length=4, width=1,
     vertices=[[0, 0], [1, 0], [0, 1]], coefficients=dict(type='uniform'),

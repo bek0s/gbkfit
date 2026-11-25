@@ -6,10 +6,11 @@ import copy
 import math
 import os.path
 from collections.abc import Callable, Collection, Mapping, Sequence
-from typing import Any, NamedTuple
+from typing import Annotated, Any, NamedTuple, TypeAlias
 
 import astropy.units
 import numpy as np
+from annotated_types import Gt
 
 import gbkfit.units
 from gbkfit.config import DataFile, parse_options, split_data_file, warn
@@ -24,8 +25,14 @@ __all__ = [
     'Data',
     'DataColumns',
     'DataFiles',
+    'Error',
     'dump_data'
 ]
+
+
+# One error for all the values of a data item, in place of a file or a
+# column of them: a standard deviation, above 0
+Error: TypeAlias = Annotated[float, Gt(0)]
 
 
 class DataFiles(NamedTuple):
@@ -68,7 +75,7 @@ class DataFiles(NamedTuple):
 
     data: DataFile
     mask: DataFile | None = None
-    error: DataFile | float | None = None
+    error: DataFile | Error | None = None
     unit: str | None = None
     beam: Mapping[str, Any] | None = None
     spatial_correlation: PSF | None = None
@@ -98,7 +105,7 @@ class DataColumns(NamedTuple):
         column='Column', error='Errors', mask='Mask', unit='Unit')
 
     column: str
-    error: str | float | None = None
+    error: str | Error | None = None
     mask: str | None = None
     unit: str | None = None
 
@@ -329,7 +336,7 @@ class Data:
             cls,
             data: DataFile,
             mask: DataFile | None = None,
-            error: DataFile | float | None = None,
+            error: DataFile | Error | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rest: Rest = None,

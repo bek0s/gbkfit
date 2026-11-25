@@ -3,12 +3,13 @@ The disks made of clouds (see Clouds).
 """
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import astropy.units
 import numpy as np
+from annotated_types import Gt
 
-from gbkfit.config import Serializable, check_options
+from gbkfit.config import Seed, Serializable, check_options
 from gbkfit.driver import Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ModelEvaluationError, ParamValues
@@ -54,7 +55,7 @@ class Clouds(Serializable):
     Raises
     ------
     ValueError
-        If cflux is not positive, or the seed is not in its range.
+        If cflux is not above 0, or the seed is not from 0 to 2^32 - 1.
     """
 
     config_titles = dict(cflux='Flux of a cloud', seed='Seed')
@@ -63,15 +64,11 @@ class Clouds(Serializable):
     def dump(self) -> dict[str, Any]:
         return dict(cflux=self._cflux, seed=self._seed)
 
-    def __init__(self, cflux: float, seed: int = 0):
+    def __init__(self, cflux: Annotated[float, Gt(0)], seed: Seed = 0):
+        # (the kernels take an unsigned 32-bit seed, as Seed is: a larger
+        # one failed at the first evaluation, with a TypeError that ends a
+        # fit)
         check_options(Clouds.__init__, locals())
-        if not cflux > 0:
-            raise ValueError(f"cflux must be greater than 0; it is {cflux}")
-        # (the kernels take an unsigned 32-bit seed: a larger one failed
-        # at the first evaluation, with a TypeError that ends a fit)
-        if not 0 <= seed < 2 ** 32:
-            raise ValueError(
-                f"seed must be from 0 to {2 ** 32 - 1}; it is {seed}")
         self._cflux = float(cflux)
         self._seed = seed
 

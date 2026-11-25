@@ -2,19 +2,20 @@
 The dataset of spectra along a long slit.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
 
 from gbkfit.config import DataFile, check_options
-from gbkfit.grid import SpectralAxis, x_axis_pa, x_axis_rota
+from gbkfit.grid import (
+    SlitRpix, SlitRval, SlitStep, SpectralAxis, x_axis_pa, x_axis_rota)
 from gbkfit.instrument import LSF
 from gbkfit.io import ErrorKind, MaskKind
 from . import _grids
 from .base import DatasetGrid, NoiseCorrelation, cleaned
 from .deferred import Deferred
-from .data import Data
+from .data import Data, Error
 
 
 __all__ = [
@@ -85,12 +86,12 @@ class DatasetSlitSpectra(DatasetGrid):
             cls,
             data: DataFile,
             mask: DataFile | None = None,
-            error: DataFile | float | None = None,
+            error: DataFile | Error | None = None,
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
+            step: SlitStep | None = None,
+            rpix: SlitRpix | None = None,
+            rval: SlitRval | None = None,
             slit_pa: float | None = None,
             spectral: SpectralAxis | None = None,
             spectral_correlation: LSF | None = None,
@@ -170,6 +171,7 @@ class DatasetSlitSpectra(DatasetGrid):
             spectral_type=references['spectral_type'],
             spectral_unit=references['spectral_unit'],
             stated=_grids.stated_options(step, rpix, rval, spectral))
+        _grids.check_axes(item.shape(), cls.ndim)
         options = _grids.cube_coords(coords, step, None, spectral)
         # (the slit along the x axis of the files, unless its angle is given)
         rota = options.pop('rota')
@@ -195,9 +197,9 @@ class DatasetSlitSpectra(DatasetGrid):
     def __init__(
             self,
             spectra: Data,
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
+            step: SlitStep | None = None,
+            rpix: SlitRpix | None = None,
+            rval: SlitRval | None = None,
             slit_pa: float | None = None,
             spectral: SpectralAxis | None = None,
             footprint: np.ndarray | Deferred | None = None

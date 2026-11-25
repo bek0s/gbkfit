@@ -10,11 +10,12 @@ import scipy.sparse
 
 from gbkfit.dataset import Dataset, Regions, regions_parser
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.grid import Grid, SpectralAxis, grid_options, make_grid, per_axis
+from gbkfit.grid import (
+    Grid, Rota, Rpix, Rval, Size, SpectralAxis, Step, grid_options,
+    make_grid, per_axis)
 from ._cube_plan import CubePlan, SkyDrawing
 from ._model_cube import ModelCube
-from ._options import (
-    GRID_OPTIONS, Rota, Rpix, Rval, Size, Step, without_options_from_data)
+from ._options import GRID_OPTIONS, without_options_from_data
 from ._sparse_sums import SparseSumsPlan
 from .base import ObservationSky, SkyOptions
 

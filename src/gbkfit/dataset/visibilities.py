@@ -351,7 +351,7 @@ class DatasetVisibilities(Dataset):
     def from_ms(
             cls,
             ms: FilePath,
-            field: int | str | None = None,
+            field: Annotated[int, Ge(0)] | str | None = None,
             spw: Annotated[int, Ge(0)] = 0,
             column: str = 'DATA',
             rest: str | astropy.units.Quantity | None = None,

@@ -12,7 +12,8 @@ from gbkfit.config import Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import (
-    Grid, GridData, SpectralAxis, grid_options, x_axis_rota)
+    Grid, GridData, Rota, SkyPosition, SlitRpix, SlitRval, SlitSize,
+    SlitStep, SpectralAxis, grid_options, x_axis_rota)
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
@@ -23,9 +24,7 @@ from ..weights import Weights
 from . import _model_cube
 from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
-from ._options import (
-    Oversampling2, Rota, SkyPosition, SlitRpix, SlitRval, SlitSize,
-    SlitStep, warn_unsmoothed_weights)
+from ._options import Oversampling2, warn_unsmoothed_weights
 from .base import DType, ObservationSky, SkyOptions, unmasked_pixels
 
 __all__ = [

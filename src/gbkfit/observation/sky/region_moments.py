@@ -12,7 +12,7 @@ import numpy as np
 from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetRegionMoments, Regions
 from gbkfit.driver import Driver
-from gbkfit.grid import GridData, SpectralAxis
+from gbkfit.grid import GridData, Rota, Rpix, Rval, Size, SpectralAxis, Step
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
@@ -27,7 +27,7 @@ from ..weights import Weights
 from . import _model_cube, _moments
 from ._cube_plan import SkyDrawing
 from ._data_units import flux_data_unit
-from ._options import Oversampling2, Rota, Rpix, Rval, Size, Step
+from ._options import Oversampling2
 from ._orbit_moments import OrbitMomentsPlan, check_orbits
 from ._regions import (
     ObservationRegions, RegionsPlan, spatial_options_from_regions)

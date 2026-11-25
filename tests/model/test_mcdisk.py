@@ -236,7 +236,7 @@ def test_mcdisk_does_not_depend_on_thread_count(tmp_path):
 
 
 def test_mcdisk_cflux_must_be_positive():
-    with pytest.raises(Exception, match="cflux must be greater than 0"):
+    with pytest.raises(Exception, match="option 'cflux' must be greater than 0"):
         evaluate_disk('mcdisk', 'host', clouds(-0.01))
 
 

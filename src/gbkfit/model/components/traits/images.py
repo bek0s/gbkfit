@@ -3,13 +3,13 @@ The density polar traits of grids of cells in the plane of a disk: a free
 map (RPTraitMap), and the light of an observed image (RPTraitImage).
 """
 
-import numbers
 from collections.abc import Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeAlias
 
 import numpy as np
 import scipy.ndimage
 import scipy.special
+from annotated_types import Ge, Gt, Len
 
 from gbkfit.config import (
     DataFile, Unit, check_options, dump_data_file, warn)
@@ -32,24 +32,19 @@ __all__ = [
 RPT_UID_MAP = 202
 
 
-def _check_map_grid(
-        size: Sequence[int], step: float
+# The grid of a map trait (see RPTraitMap): its numbers of cells along x
+# and y, and the side of its cells (arcsec)
+_MapSize: TypeAlias = Annotated[Sequence[Annotated[int, Ge(1)]], Len(2, 2)]
+_MapStep: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
+
+
+def _map_grid(
+        size: _MapSize, step: _MapStep
 ) -> tuple[tuple[int, int], float]:
     """
     Return the numbers of cells (nx, ny) and the side (arcsec) of the grid
-    of a map trait (see RPTraitMap), or raise ValueError if they are not
-    valid.
+    of a map trait (see RPTraitMap), as numbers of their own.
     """
-    if not (isinstance(size, Sequence) and len(size) == 2 and all(
-            isinstance(n, numbers.Integral) and not isinstance(n, bool)
-            and n >= 1 for n in size)):
-        raise ValueError(
-            f"size must be the numbers of cells along x and y, [nx, "
-            f"ny], each at least 1; it is {size!r}")
-    if isinstance(step, bool) or not (
-            isinstance(step, numbers.Real) and 0 < step < np.inf):
-        raise ValueError(
-            f"step must be a positive length; it is {step!r}")
     return (int(size[0]), int(size[1])), float(step)
 
 
@@ -141,13 +136,13 @@ class RPTraitMap(RPTrait):
 
     def __init__(
             self,
-            size: Sequence[int],
-            step: float,
+            size: _MapSize,
+            step: _MapStep,
             name: str | None = None
     ):
         check_options(RPTraitMap.__init__, locals())
         super().__init__(name=name)
-        self._size, self._step = _check_map_grid(size, step)
+        self._size, self._step = _map_grid(size, step)
 
     def size(self) -> tuple[int, int]:
         """Return the numbers of cells along x and y, (nx, ny)."""
@@ -297,8 +292,8 @@ class RPTraitImage(RPTrait):
     def from_file(
             cls,
             file: DataFile,
-            size: Sequence[int],
-            step: Annotated[float, Unit('arcsec')],
+            size: _MapSize,
+            step: _MapStep,
             psf: PSF | None = None,
             offsets: bool = False,
             name: str | None = None
@@ -333,15 +328,15 @@ class RPTraitImage(RPTrait):
             self,
             data: np.ndarray,
             coords: Coords,
-            size: Sequence[int],
-            step: Annotated[float, Unit('arcsec')],
+            size: _MapSize,
+            step: _MapStep,
             psf: PSF | None = None,
             offsets: bool = False,
             name: str | None = None
     ):
         check_options(RPTraitImage.__init__, locals())
         super().__init__(name=name)
-        self._size, self._step = _check_map_grid(size, step)
+        self._size, self._step = _map_grid(size, step)
         if data.ndim != 2:
             raise ValueError(
                 f"the data of an image trait must be an image; they have "

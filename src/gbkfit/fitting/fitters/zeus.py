@@ -9,10 +9,10 @@ from collections.abc import Generator
 from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
-from annotated_types import Gt
+from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
 
-from gbkfit.config import Choices, check_options
+from gbkfit.config import Choices, Seed, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
@@ -139,12 +139,12 @@ class FitterZeus(Fitter):
             self,
             nwalkers: Annotated[int, Gt(0)] | None = None,
             nsteps: Annotated[int, Gt(0)] = 2000,
-            burnin: int | None = None,
+            burnin: Annotated[int, Ge(0)] | None = None,
             thin: Annotated[int, Gt(0)] = 1,
             moves: _Moves = 'differential',
             light_mode: bool = False,
             width: Annotated[FiniteFloat, Gt(0)] | None = None,
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterZeus.__init__, locals())
@@ -153,9 +153,9 @@ class FitterZeus(Fitter):
             raise ValueError(
                 f"option 'nwalkers' must be even (zeus moves two halves of "
                 f"the walkers in turn); it is {nwalkers}")
-        if burnin is not None and not 0 <= burnin < nsteps:
+        if burnin is not None and burnin >= nsteps:
             raise ValueError(
-                f"option 'burnin' must be in [0, nsteps); it is {burnin}")
+                f"option 'burnin' must be below nsteps; it is {burnin}")
         burnin = nsteps // 2 if burnin is None else burnin
         if thin > nsteps - burnin:
             raise ValueError(

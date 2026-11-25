@@ -11,8 +11,9 @@ from astropy.stats import gaussian_fwhm_to_sigma
 from gbkfit.grid import Grid, GridData, VelocityConvention
 import gbkfit.units
 from gbkfit.driver import DeviceArray, Driver, DriverFFT
-from gbkfit.instrument import (
-    LSF, Channel, ChannelLSF, LSFPoint, PSF, PSFPoint, PrimaryBeam)
+from gbkfit.instrument import LSF, PSF, Channel, ChannelLSF, PrimaryBeam
+from gbkfit.instrument.lsfs import LSFPoint
+from gbkfit.instrument.psfs import PSFPoint
 from gbkfit.model import Extras
 from gbkfit.utils import numutils
 
@@ -476,8 +477,7 @@ class ModelCubePlan:
         grid_high_res = Grid(
             tuple(size_high_res), grid_lo.coords._replace(
                 step=step_high_res, rpix=rpix_high_res), 2)
-        if psf is not None and not isinstance(psf, PSFPoint) \
-                and not psf.varies():
+        if psf is not None and not psf.varies():
             _warn_narrow_psf(
                 psf.asarray(step_high_res[:2], rota=grid_lo.coords.rota),
                 oversampling)

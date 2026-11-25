@@ -5,14 +5,14 @@ trace of the disperser (see pixel_footprints).
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeAlias
 
 import astropy.constants
 import astropy.units
 import numpy as np
 import numpy.typing as npt
 import scipy.sparse
-from annotated_types import Ge
+from annotated_types import Ge, Len
 from pydantic import FiniteFloat
 
 from gbkfit.config import (
@@ -20,8 +20,8 @@ from gbkfit.config import (
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import (
-    Grid, SpectralAxis, grid_options, make_convention, make_cube_grid,
-    vacuum_wavelength)
+    Grid, Rota, Rpix, Rval, Size, SpectralAxis, Step, grid_options,
+    make_convention, make_cube_grid, vacuum_wavelength)
 from gbkfit.instrument import (
     Instrument, SlitMask, Trace, slit_mask_parser, trace_parser)
 from gbkfit.lensing import SourceGrid
@@ -34,7 +34,7 @@ from ..weights import Weights
 from . import _model_cube, _moments
 from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
-from ._options import Oversampling2, Rota, Rpix, Rval, Size, Step
+from ._options import Oversampling2
 from ._sparse_sums import SparseSumsPlan
 from .base import DType, ObservationSky, SkyOptions
 
@@ -254,6 +254,10 @@ def _unique_rows(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return ordered[new], inverse
 
 
+# An offset on the sky or on the detector (x, y; arcsec)
+_Offset: TypeAlias = Annotated[Sequence[float], Len(2, 2), Unit('arcsec')]
+
+
 class Exposure(Serializable):
     """
     An exposure combined into the image of slitless spectra (see
@@ -291,16 +295,11 @@ class Exposure(Serializable):
 
     def __init__(
             self,
-            sky_offset: Annotated[Sequence[float], Unit('arcsec')] = (0, 0),
-            image_offset: Annotated[Sequence[float], Unit('arcsec')] = (0, 0),
+            sky_offset: _Offset = (0, 0),
+            image_offset: _Offset = (0, 0),
             weight: FiniteFloat = 1
     ):
         check_options(Exposure.__init__, locals())
-        for name, offset in (
-                ('sky_offset', sky_offset), ('image_offset', image_offset)):
-            if len(offset) != 2:
-                raise ValueError(
-                    f"{name} must be two offsets (x, y); it is {offset}")
         self._sky_offset = tuple(float(value) for value in sky_offset)
         self._image_offset = tuple(float(value) for value in image_offset)
         self._weight = float(weight)

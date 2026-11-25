@@ -44,6 +44,10 @@ __all__ = [
 ]
 
 
+# The weight of the data of an item in the chi-square, at least 0
+_Weight: TypeAlias = Annotated[float, Ge(0)]
+
+
 # The most pixels of the sky over which the noise of a data item can be
 # correlated (see LikelihoodGauss): its dense correlation matrix takes
 # 8 n^2 bytes (3.2 GB)
@@ -342,7 +346,7 @@ class LikelihoodGauss(Likelihood):
 
     def __init__(
             self,
-            weights: float | Mapping[str, float] = 1.0,
+            weights: _Weight | Mapping[str, _Weight] = 1.0,
             missing_residual: Annotated[FiniteFloat, Ge(0)] | None = None,
             upper_limits: Mapping[str, UpperLimit] | None = None,
             fitted_noise: Mapping[str, FittedNoise] | None = None,

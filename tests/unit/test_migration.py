@@ -2482,3 +2482,47 @@ def test_what_observation_pieces_see_moves_into_their_setups(tmp_path):
     assert yaml.load(setups / 'joint.yaml') == dict(
         galaxies=['a', 'b'], observations=['image', 'all'],
         seen=[['a'], None])
+
+
+def test_a_point_psf_or_lsf_is_none():
+    # Version 23: a PSF or LSF of the type point (alone: none) is left out,
+    # of instruments and of the correlations of noise; a point term of a
+    # convolution too (it did nothing); one of a sum is replaced by hand
+    config = dict(
+        observations=[
+            dict(type='pixel_spectra', instrument=dict(
+                psf=dict(type='point'), lsf=dict(type='gauss', sigma=1))),
+            dict(type='pixel_brightness', instrument=dict(psf=dict(
+                type='convolution',
+                psfs=[dict(type='point'), dict(type='gauss', sigma=1)]))),
+            dict(type='pixel_brightness', instrument=dict(psf=dict(
+                type='sum', weights=[0.3, 0.7],
+                psfs=[dict(type='point'), dict(type='gauss', sigma=1)])))],
+        datasets=[dict(
+            type='pixel_spectra', data='cube.fits',
+            spectral_correlation=dict(type='point')), None, None],
+        galaxies=[dict(components=[dict(type='point', name='bh')])])
+    changes = rewritten(config, 22, 23)
+    assert config['observations'][0]['instrument'] == dict(
+        lsf=dict(type='gauss', sigma=1))
+    assert config['observations'][1]['instrument']['psf']['psfs'] == [
+        dict(type='gauss', sigma=1)]
+    assert config['datasets'][0] == dict(
+        type='pixel_spectra', data='cube.fits')
+    # (point components are not PSFs)
+    assert config['galaxies'] == [
+        dict(components=[dict(type='point', name='bh')])]
+    [by_hand] = [c for c in changes if c.message.startswith('by hand')]
+    assert by_hand.path == [
+        'observations', 2, 'instrument', 'psf', 'psfs', 0]
+
+
+def test_a_point_lsf_piece_is_taken_out_by_hand(tmp_path):
+    study = project.create(str(tmp_path / 'study'))
+    folder = tmp_path / 'study'
+    yaml.dump(dict(format=project.FORMAT, version=22),
+              folder / project.MARKER)
+    yaml.dump(dict(type='point'), folder / 'lsfs' / 'point.yaml')
+    changes = migration.migrate_project(study.path)
+    [change] = changes['lsfs/point.yaml']
+    assert change.message.startswith("by hand: a point is no LSF")

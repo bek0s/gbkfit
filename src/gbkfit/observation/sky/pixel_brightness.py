@@ -10,7 +10,8 @@ import numpy as np
 from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
-from gbkfit.grid import Grid, GridData, grid_options
+from gbkfit.grid import (
+    Grid, GridData, Rota, Rpix, Rval, Size, Step, grid_options)
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import Band, DataUnit, LightUnit
@@ -21,9 +22,7 @@ from ..weights import Weights
 from . import _model_cube
 from ._cube_plan import CubePlan, SkyDrawing
 from ._data_units import data_unit
-from ._options import (
-    MedianSize, Oversampling2, Rota, Rpix, Rval, Size, Step,
-    check_median_size)
+from ._options import MedianSize, Oversampling2, check_median_size
 from .base import DType, ObservationSky, SkyOptions, unmasked_pixels
 
 __all__ = [

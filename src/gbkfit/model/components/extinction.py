@@ -10,7 +10,7 @@ from typing import Annotated, Any
 
 import numpy as np
 import numpy.typing as npt
-from annotated_types import Gt
+from annotated_types import Ge, Gt, Len
 
 from gbkfit.config import (
     TypedParser, TypedSerializable, Unit, check_options)
@@ -232,16 +232,17 @@ class ExtinctionTable(ExtinctionLaw):
 
     def __init__(
             self,
-            wavelengths: Annotated[Sequence[float], Unit('um')],
-            ratios: Sequence[float]
+            wavelengths: Annotated[
+                Sequence[Annotated[float, Gt(0)]], Len(2), Unit('um')],
+            ratios: Sequence[Annotated[float, Ge(0)]]
     ):
         check_options(ExtinctionTable.__init__, locals())
         wavelengths = tuple(float(w) for w in wavelengths)
         ratios = tuple(float(r) for r in ratios)
-        if len(wavelengths) < 2 or len(ratios) != len(wavelengths):
+        if len(ratios) != len(wavelengths):
             raise ValueError(
-                "an extinction table needs at least two wavelengths and a "
-                "ratio for each")
+                f"an extinction table needs a ratio for each of its "
+                f"{len(wavelengths)} wavelengths; it has {len(ratios)}")
         if not all(a < b for a, b in zip(wavelengths, wavelengths[1:])):
             raise ValueError(
                 f"the wavelengths of an extinction table must increase; "

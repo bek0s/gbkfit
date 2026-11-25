@@ -10,7 +10,7 @@ from typing import Annotated, Any, Self
 import numpy as np
 from annotated_types import Ge, Gt
 
-from gbkfit.config import check_options
+from gbkfit.config import Seed, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, MeritChoice
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
@@ -169,7 +169,7 @@ class FitterGrid(Fitter):
             max_points: Annotated[int, Gt(0)] = 1_000_000,
             n: Annotated[int, Ge(2)] | None = None,
             merit: MeritChoice = 'chi2',
-            seed: int = 0,
+            seed: Seed = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
         check_options(FitterGrid.__init__, locals())

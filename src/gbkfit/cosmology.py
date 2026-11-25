@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal, TypeAlias
 import astropy.constants
 import astropy.cosmology
 import numpy as np
-from annotated_types import Gt, Interval
+from annotated_types import Gt, Le
 
 from gbkfit.config import (
     Choices, TypedParser, TypedSerializable, Unit, check_options)
@@ -224,7 +224,7 @@ class CosmologyFlatLambdaCDM(Cosmology):
     def __init__(
             self,
             hubble_constant: Annotated[float, Gt(0), Unit('km / (s Mpc)')],
-            omega_matter: Annotated[float, Interval(gt=0, le=1)],
+            omega_matter: Annotated[float, Gt(0), Le(1)],
             omega_baryon: Annotated[float, Gt(0)] | None = None
     ):
         check_options(CosmologyFlatLambdaCDM.__init__, locals())

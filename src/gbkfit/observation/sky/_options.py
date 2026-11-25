@@ -7,12 +7,12 @@ their data give, and checks of options.
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 
-from annotated_types import Ge, Gt, Len
+from annotated_types import Ge, Len
 
-from gbkfit.config import Unit, warn
+from gbkfit.config import warn
 from gbkfit.dataset import (
     Dataset, Regions, RegionsBins, UVCoverage, regions_parser)
-from gbkfit.grid import Grid, SpectralAxis, grid_options
+from gbkfit.grid import Count, Grid, SpectralAxis, grid_options
 from gbkfit.instrument import Instrument
 
 if TYPE_CHECKING:
@@ -23,41 +23,14 @@ if TYPE_CHECKING:
 # grid_options)
 GRID_OPTIONS = ('size', 'step', 'rpix', 'rval', 'rota')
 
-# A number of pixels, and a length on the sky (arcsec)
-_Count: TypeAlias = Annotated[int, Ge(1)]
-_Length: TypeAlias = Annotated[float, Gt(0)]
-
-# The types of the options of the grid of an observation on the sky (see
-# Coords; size and rpix are in pixels): one value for both its axes (x,
-# y), or one for each (see per_axis); a length on the sky (e.g. the size
-# of its pixels, its field of view) likewise
-Size: TypeAlias = _Count | Annotated[Sequence[_Count], Len(2, 2)]
-Lengths: TypeAlias = Annotated[
-    _Length | Annotated[Sequence[_Length], Len(2, 2)], Unit('arcsec')]
-Step: TypeAlias = Lengths
-Rpix: TypeAlias = float | Annotated[Sequence[float], Len(2, 2)]
-Rval: TypeAlias = Annotated[
-    float | Annotated[Sequence[float], Len(2, 2)], Unit('deg')]
-Rota: TypeAlias = Annotated[float, Unit('deg')]
-
-# Those of a grid of one axis on the sky (along a slit): one value, or a
-# list of one
-SlitSize: TypeAlias = _Count | Annotated[Sequence[_Count], Len(1, 1)]
-SlitStep: TypeAlias = Annotated[
-    _Length | Annotated[Sequence[_Length], Len(1, 1)], Unit('arcsec')]
-SlitRpix: TypeAlias = float | Annotated[Sequence[float], Len(1, 1)]
-SlitRval: TypeAlias = Annotated[
-    float | Annotated[Sequence[float], Len(1, 1)], Unit('deg')]
-
-# A position on the sky: its RA and Dec (degrees)
-SkyPosition: TypeAlias = Annotated[
-    Annotated[Sequence[float], Len(2, 2)], Unit('deg')]
+# (the types of the options of the grids of observations on the sky are
+# those of every grid on the sky: see gbkfit.grid.options)
 
 # How many times the model is oversampled along each axis of the data
 # (see ObservationSky), of data of two axes (an image, moment maps,
 # spectra along a slit, a dispersed image) or of three (a cube)
-Oversampling2: TypeAlias = Annotated[Sequence[_Count], Len(2, 2)]
-Oversampling3: TypeAlias = Annotated[Sequence[_Count], Len(3, 3)]
+Oversampling2: TypeAlias = Annotated[Sequence[Count], Len(2, 2)]
+Oversampling3: TypeAlias = Annotated[Sequence[Count], Len(3, 3)]
 
 # The size of a median filter (see check_median_size)
 MedianSize: TypeAlias = Annotated[int, Ge(3)]

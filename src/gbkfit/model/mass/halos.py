@@ -12,6 +12,8 @@ from collections.abc import Sequence
 from typing import Annotated, Any
 
 import numpy as np
+from annotated_types import Gt, Len
+from pydantic import FiniteFloat
 import numpy.typing as npt
 import scipy.special
 
@@ -783,14 +785,17 @@ class ProfileNodewiseHalo(HaloProfile):
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(nodes=self._nodes.tolist())
 
-    def __init__(self, nodes: Annotated[Sequence[float], Unit('kpc')]):
+    def __init__(
+            self,
+            nodes: Annotated[
+                Sequence[Annotated[FiniteFloat, Gt(0)]], Len(2), Unit('kpc')]
+    ):
         check_options(ProfileNodewiseHalo.__init__, locals())
         nodes = np.asarray(nodes, dtype=float)
-        if (nodes.ndim != 1 or len(nodes) < 2 or not np.all(np.isfinite(nodes))
-                or nodes[0] <= 0 or np.any(np.diff(nodes) <= 0)):
+        if np.any(np.diff(nodes) <= 0):
             raise ValueError(
-                f"the nodes of a nodewise halo must be at least two radii, "
-                f"positive, increasing; they are {nodes.tolist()}")
+                f"the nodes of a nodewise halo must be increasing; they are "
+                f"{nodes.tolist()}")
         self._nodes = nodes
 
     def nodes(self) -> np.ndarray:

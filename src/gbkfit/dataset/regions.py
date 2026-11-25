@@ -6,15 +6,16 @@ of pixels, or apertures.
 import abc
 import os.path
 from collections.abc import Sequence
-from typing import Annotated, Any, TypeAlias
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import scipy.sparse
 
 from gbkfit.config import (
-    DataFile, TypedParser, TypedSerializable, Unit, check_options)
-from gbkfit.grid import Grid, make_grid, sky_positions
+    DataFile, TypedParser, TypedSerializable, check_options)
+from gbkfit.grid import (
+    Grid, Rota, Rpix, Rval, Step, make_grid, sky_positions)
 from gbkfit.io import open_data, read_data, write_data, write_image
 from .deferred import Deferred
 from .apertures import Aperture, aperture_parser
@@ -26,12 +27,6 @@ __all__ = [
     'RegionsBins',
     'regions_parser'
 ]
-
-
-# The world coordinates of a grid with one value per axis, x and y, or one
-# for both (see Coords), and its rotation
-_PerAxis: TypeAlias = float | Sequence[float] | None
-_Angle: TypeAlias = Annotated[float, Unit('deg')]
 
 
 class Regions(TypedSerializable, abc.ABC):
@@ -151,10 +146,10 @@ class RegionsBins(Regions):
     def from_file(
             cls,
             file: DataFile,
-            step: _PerAxis = None,
-            rpix: _PerAxis = None,
-            rval: _PerAxis = None,
-            rota: _Angle | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             valid: DataFile | None = None
     ) -> 'RegionsBins':
         """
@@ -221,10 +216,10 @@ class RegionsBins(Regions):
     def __init__(
             self,
             index: npt.ArrayLike,
-            step: _PerAxis = None,
-            rpix: _PerAxis = None,
-            rval: _PerAxis = None,
-            rota: _Angle | None = None,
+            step: Step | None = None,
+            rpix: Rpix | None = None,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
             valid: npt.ArrayLike | Deferred | None = None
     ):
         check_options(RegionsBins.__init__, locals())

@@ -134,7 +134,7 @@ def test_profile_of_a_table_file(tmp_path):
     assert alone.keys() == observation.keys()
     assert alone.assumed_distance() == observation.assumed_distance()
     # (one error for all the values must be positive, not a bool)
-    for error, message in ((0, "must be positive"), (True, "is True")):
+    for error, message in ((0, "greater than 0; it is 0"), (True, "is True")):
         info['vcirc']['error'] = error
         with pytest.raises((ConfigError, ValueError), match=message):
             dataset_parser.load(copy.deepcopy(info))

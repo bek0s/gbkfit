@@ -1272,7 +1272,6 @@ def test_a_bootstrap_refits_fits_of_solved_values():
     (None, dict(type='blocks', size=[4, 4, 2]), 'for each of x and y'),
     ('mock', dict(mock=dict(type='blocks', size=[4, 4, 2])),
      'for each of x and y'),
-    (None, dict(type='blocks', size=[4, 0]), 'of positive numbers'),
 ])
 def test_bootstrap_options_that_do_not_suit_the_fit_refused(
         name, scheme, message):
@@ -1285,6 +1284,14 @@ def test_bootstrap_options_that_do_not_suit_the_fit_refused(
     with pytest.raises(ValueError, match=message):
         run_bootstrap(objective, params, TRUE, fitter, BootstrapOptions.load(
             dict(nsamples=5, scheme=scheme)))
+
+
+def test_bootstrap_blocks_have_sizes_above_0():
+    from gbkfit.fitting import BootstrapOptions
+    with pytest.raises(
+            ConfigError, match=r"'size' item \[1\] must be greater than 0"):
+        BootstrapOptions.load(
+            dict(nsamples=5, scheme=dict(type='blocks', size=[4, 0])))
 
 
 def test_bootstrap_schemes_by_name_are_of_the_observations_with_data():

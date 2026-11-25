@@ -392,7 +392,7 @@ def test_observations_have_their_own_dtype(tmp_path):
 
 
 def test_dataset_steps_must_be_positive():
-    with pytest.raises(ValueError, match="step must be positive"):
+    with pytest.raises(ValueError, match="must be greater than 0"):
         DatasetPixelBrightness(Data(np.ones((8, 20))), step=(1, -1))
 
 

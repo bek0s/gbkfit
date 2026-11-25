@@ -14,7 +14,7 @@ from gbkfit.instrument import LSF
 from gbkfit.io import ErrorKind, MaskKind, write_spectra
 from . import _grids, _outliers
 from .base import Dataset, NoiseCorrelation, cleaned
-from .data import Data, dump_data, item_filenames
+from .data import Data, Error, dump_data, item_filenames
 from .regions import Regions, regions_parser
 
 
@@ -83,7 +83,7 @@ class DatasetRegionSpectra(Dataset):
             data: DataFile,
             regions: Regions,
             mask: DataFile | None = None,
-            error: DataFile | float | None = None,
+            error: DataFile | Error | None = None,
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
             spectral: SpectralAxis | None = None,

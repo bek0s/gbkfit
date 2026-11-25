@@ -393,10 +393,13 @@ def test_unresolved_heights_are_errors():
         disk.vcirc2([0.5, 1], dict(log_sigma=[2, 2], hz=1e-12), CONTEXT)
 
 
-@pytest.mark.parametrize('nodes', [[1], [0, 2, 1], [-1, 1], [0, np.inf]])
-def test_nodes_of_nodewise_disks_are_checked(nodes):
-    with pytest.raises(
-            ValueError, match="the nodes of a nodewise surface density"):
+@pytest.mark.parametrize('nodes, message', [
+    ([1], "a list of at least 2 values"),
+    ([0, 2, 1], "the nodes of a nodewise surface density must be increasing"),
+    ([-1, 1], r"item \[0\] must be finite and at least 0"),
+    ([0, np.inf], r"item \[1\] must be finite and at least 0")])
+def test_nodes_of_nodewise_disks_are_checked(nodes, message):
+    with pytest.raises(ValueError, match=message):
         SurfaceNodewise(nodes)
 
 
@@ -753,8 +756,11 @@ def test_nodewise_halos_are_power_laws_between_their_nodes():
     loaded = mass_component_parser.load(copy.deepcopy(info))
     assert mass_component_parser.dump(loaded)['profile'] == info['profile']
     assert loaded.pdescs()['log_rho'].size() == 4
-    for nodes in ([0, 1], [2, 1], [1]):
-        with pytest.raises(ValueError, match="the nodes of a nodewise halo"):
+    for nodes, message in (
+            ([0, 1], r"item \[0\] must be finite and greater than 0"),
+            ([2, 1], "the nodes of a nodewise halo must be increasing"),
+            ([1], "a list of at least 2 values")):
+        with pytest.raises(ValueError, match=message):
             ProfileNodewiseHalo(nodes)
     # (a density that falls as r^-3 or steeper has no finite mass)
     with pytest.raises(ModelEvaluationError, match="infinite mass"):
@@ -842,9 +848,11 @@ def test_nodewise_spheroids_load_and_check_their_nodes():
     spheroid = mass_component_parser.load(copy.deepcopy(info))
     assert mass_component_parser.dump(spheroid)['profile'] == info['profile']
     assert spheroid.pdescs()['log_sigma'].size() == 4
-    for nodes in ([0.5, 1], [0, 2, 1], [0]):
-        with pytest.raises(
-                ValueError, match="the nodes of a nodewise profile"):
+    for nodes, message in (
+            ([0.5, 1], "the nodes of a nodewise profile must be from 0"),
+            ([0, 2, 1], "the nodes of a nodewise profile must be from 0"),
+            ([0], "a list of at least 2 values")):
+        with pytest.raises(ValueError, match=message):
             ProfileNodewise(nodes)
 
 

@@ -15,10 +15,11 @@ from typing import Annotated, Any, Self, TypeAlias
 import astropy.units as u
 import numpy as np
 import scipy.ndimage
+from annotated_types import Gt
 
 import gbkfit.units
 from gbkfit.config import (
-    TypedSerializable, Unit, config_path, constructor_of, dump_quantity,
+    TypedSerializable, config_path, constructor_of, dump_quantity,
     is_quantity, option_types, parse_options_for_callable, unit_of,
     varying_options)
 from gbkfit.grid import VelocityConvention
@@ -35,9 +36,8 @@ MIN_EXTENT = 8
 WING_FLUX = 0.01
 
 
-# The size of the pixels of an image on the sky along x and y (arcsec);
-# of one number, square pixels
-Step: TypeAlias = Annotated[float | Sequence[float], Unit('arcsec')]
+# The weights of the terms of a sum (see SpreadFunctionSum), positive
+Weights: TypeAlias = Sequence[Annotated[float, Gt(0)]]
 
 # Why a response that varies along the spectral axis is not drawn
 NOT_DRAWN = (
@@ -545,11 +545,10 @@ class SpreadFunctionSum(SpreadFunctionTerms):
     ):
         super().__init__(terms, desc)
         weights = np.asarray(weights, dtype=float)
-        n = len(self._terms)
-        if weights.shape != (n,) or not np.all(weights > 0):
+        if len(weights) != len(self._terms):
             raise ValueError(
-                f"{desc} needs a positive weight for each of its {n} terms; "
-                f"its weights are {weights.tolist()}")
+                f"{desc} needs a weight for each of its {len(self._terms)} "
+                f"terms; its weights are {weights.tolist()}")
         self._weights = weights / weights.sum()
 
 
