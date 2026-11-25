@@ -12,7 +12,7 @@ from gbkfit.grid import Grid
 from gbkfit.utils import iterutils
 from .. import traits
 from .._common import dump_name
-from .._native import NativeComponentPlan, emission_setup
+from .._native import NativeComponentPlan, light_setup
 from .._nodal import (
     MAX_TRAITS, TraitTable, parse_component_rnode_args,
     with_default_height_traits)
@@ -22,8 +22,8 @@ from ..base import Component
 from ..nodes import Nodes
 from ..parts import KinematicTraits
 from ..roles import (
-    DustOpacity, Emission, Opacity, View, emission_parser,
-    opacity_parser)
+    DustOpacity, Light, Opacity, light_parser, opacity_parser)
+from ..tracers import View
 from . import _nodal
 
 
@@ -90,8 +90,8 @@ def dump_cone_component(
             list(cone.traits('rht')[:1 if cone.shared('rht') else None])))
     if kinematics is not None:
         info.update(kinematics.dump())
-    if component.emission() is not None:
-        info.update(emission=emission_parser.dump(component.emission()))
+    if component.light() is not None:
+        info.update(light=light_parser.dump(component.light()))
     if component.opacity() is not None:
         info.update(opacity=opacity_parser.dump(component.opacity()))
     if cone.traits('spt'):
@@ -104,7 +104,7 @@ def make_cone(
         rptraits: tuple[traits.RPTrait, ...],
         rhtraits: tuple[traits.RHTrait, ...],
         kinematics: KinematicTraits | None,
-        emission: Emission | None,
+        light: Light | None,
         opacity: Opacity | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
         sides: str,
@@ -124,7 +124,7 @@ def make_cone(
         traits (see CONE_TRAITS), or the parts and roles do not go
         together (e.g. lines without kinematics).
     """
-    if emission is not None and emission.needs_velocities() \
+    if light is not None and light.needs_velocities() \
             and kinematics is None:
         raise ValueError(
             "a cone that emits lines needs kinematics: give it vptraits and "
@@ -148,12 +148,12 @@ def make_cone(
     node_args = parse_component_rnode_args(rnodes, rstep, interp)
     return cone_class(
         sides=sides, **node_args, traits_=traits_, prefixes={},
-        density_units=dict(rpt=_units.density_unit(emission)))
+        density_units=dict(rpt=_units.density_unit(light)))
 
 
 def cone_plan(
         cone: _nodal.NodalCone,
-        emission: Emission | None,
+        light: Light | None,
         driver: Driver,
         spectral: Grid,
         dtype: np.dtype,
@@ -168,8 +168,8 @@ def cone_plan(
     disks._build.disk_plan for the arguments); a cone has no line
     opacity.
     """
-    setup = emission_setup(
-        emission, view, spectral, emits, data_unit, redshift)
+    setup = light_setup(
+        light, view, spectral, emits, data_unit, redshift)
     return NativeComponentPlan(
         driver, cone.plan(driver, setup.nlines, dtype), setup,
         opacity_ratios)

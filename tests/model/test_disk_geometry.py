@@ -7,7 +7,7 @@ import pytest
 
 
 EXPONENTIAL = dict(type='exponential')
-BAND = dict(type='band')
+BAND = dict(type='continuum')
 LINES = dict(type='lines')
 
 
@@ -17,7 +17,7 @@ def image_case(driver, observable, **component):
     with the given options (an exponential density by default).
     """
     disk = dict(
-        type='thin_disk', rptraits=EXPONENTIAL, emission=BAND)
+        type='thin_disk', rptraits=EXPONENTIAL, light=BAND)
     return dict(
         driver=dict(type=driver.type()),
         observation=observable,
@@ -37,7 +37,7 @@ def spectral_cube_case(driver, **component):
             rptraits=EXPONENTIAL,
             vptraits=dict(type='uniform', direction='tan'),
             dptraits=dict(type='uniform'),
-            emission=LINES,
+            light=LINES,
             **component)]))
 
 
@@ -67,7 +67,7 @@ def thick_spectral_cube_case(driver, disk, rota, psf=None):
         rptraits=EXPONENTIAL, rhtraits=dict(type='sech2', zmax=8),
         vptraits=dict(type='arctan',
                       direction='tan'), dptraits=dict(type='uniform'),
-        emission=LINES)
+        light=LINES)
     if disk == 'clouds':
         component['clouds'] = dict(cflux=2e-5)
     return dict(

@@ -127,7 +127,7 @@ _SECTIONS = dict(
         "Emission lines, by name: their rest wavelength or frequency."),
     bands=_Section(
         Mapping[str, str | astropy.units.Quantity],
-        "Bands, by name: their wavelength."),
+        "Bands, by name: their effective wavelength."),
     depth_order=_Section(
         Sequence[str | Mapping[str, Sequence[str]]],
         "The order of the galaxies along the line of sight: names, and "
@@ -872,10 +872,9 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     the galaxies along the line of sight of its section 'depth_order', the
     cosmology of its section 'cosmology', and what each observation sees
     of the galaxies of its section 'seen' (see _load_seen). The galaxies
-    and
-    observations name lines and bands of the catalogue of GBKFIT and of
-    the sections 'lines' and 'bands' of the configuration (see
-    LineCatalogue and lines_from). Their option driver places them on a
+    and observations name lines of the catalogue of GBKFIT and of the
+    section 'lines' of the configuration, and bands of its section 'bands'
+    (see LineCatalogue and lines_from). Their option driver places them on a
     driver of the configuration (see _load_placement).
     """
     catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'), cfg.get('bands'))

@@ -22,7 +22,7 @@ GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False, rnodes=[0, 5, 10],
     rptraits=[
         dict(type='exponential'), dict(type='mixture_gauss', nblobs=3)],
-    emission=dict(type='band'))])
+    light=dict(type='continuum'))])
 
 PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, rpt_a=dict(min=0, max=2), rpt_s=2,

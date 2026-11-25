@@ -23,7 +23,7 @@ GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     rptraits=dict(type='exponential'),
-    emission=dict(type='band'))])
+    light=dict(type='continuum'))])
 
 PROPERTIES = dict(xpos=0.3, ypos=-0.6, posa=50, incl=60, rpt_a=1, rpt_s=4)
 
@@ -35,7 +35,7 @@ LINE_GALAXY = dict(components=[dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))])
+    light=dict(type='lines'))])
 
 LINE_PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60, rpt_a=1, rpt_s=12,

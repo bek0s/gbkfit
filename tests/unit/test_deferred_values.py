@@ -87,7 +87,7 @@ def test_describing_a_setup_reads_no_values(tmp_path, monkeypatch):
             type='thin_disk', rnodes=[0, 1, 2],
             rptraits=dict(type='exponential'),
             vptraits=dict(type='arctan', direction='tan'),
-            dptraits=dict(type='uniform'), emission=dict(type='lines'))])],
+            dptraits=dict(type='uniform'), light=dict(type='lines'))])],
         observations=[dict(type='pixel_spectra')],
         datasets=[config], params=dict(properties=dict(
             xpos=0, ypos=0, vsys=0, posa=0, incl=45, rpt_a=1, rpt_s=1,

@@ -1,4 +1,4 @@
-version: 23
+version: 24
 driver: {type: host}
 galaxies:
 - components:
@@ -11,7 +11,7 @@ galaxies:
     rhtraits: {type: sech2, zmax: 3}
     vptraits: {type: arctan, direction: tan}
     dptraits: {type: uniform}
-    emission: {type: lines}
+    light: {type: lines}
   - type: cone
     name: outflow
     rnodes: [0, 2, 4, 6]
@@ -19,7 +19,7 @@ galaxies:
     rhtraits: {type: uniform, zmax: 1.5, nodewise: true}
     vptraits: {type: uniform, direction: out}
     dptraits: {type: uniform}
-    emission: {type: lines}
+    light: {type: lines}
 observations:
 - type: pixel_spectra
   size: [32, 32]

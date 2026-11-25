@@ -16,7 +16,8 @@ import numpy as np
 import pytest
 from modelutils import split_case
 from gbkfit.grid import Coords, Grid, GridData
-from gbkfit.model import SceneTarget, View, galaxy_parser
+from gbkfit.model import (
+    ContinuumTracer, SceneTarget, View, galaxy_parser)
 from gbkfit.model._opacity import opacity_cubes
 from gbkfit.model.scenes import IMAGE_SPECTRAL_AXIS
 from gbkfit.observation import Depth
@@ -25,7 +26,7 @@ from gbkfit.params import ParamModeOffsets
 
 RNODES = list(range(0, 10, 2))
 
-BAND = dict(type='band')
+BAND = dict(type='continuum')
 LINES = dict(type='lines')
 DUST = dict(type='dust')
 
@@ -53,7 +54,7 @@ CASES = dict(
                     rptraits=[
                         dict(type='exponential'), dict(type='nw_uniform')],
                     sptraits=dict(type='azrange'),
-                    emission=BAND)])),
+                    light=BAND)])),
         dict(
             xpos=[0.5, 0.1, 0.2, 0.3, 0.4], ypos=[-1, -1, -1.2, -1.4, -1.6],
             posa=[30, 32, 34, 36, 38], incl=[50, 52, 54, 56, 58],
@@ -72,14 +73,14 @@ CASES = dict(
                         dict(type='arctan', direction='tan'),
                         dict(type='nw_uniform', direction='rad')],
                     dptraits=dict(type='uniform'),
-                    emission=LINES),
+                    light=LINES),
                 smdisk(
                     name='disk2', loose=False, tilted=True,
                     rptraits=dict(type='exponential'),
                     vptraits=dict(type='tanh', direction='tan'),
                     dptraits=dict(type='nw_uniform'),
                     sptraits=dict(type='nw_azrange'),
-                    emission=LINES)])),
+                    light=LINES)])),
         dict(
             disk1_vsys=[10, 5, 5, 5, 5], disk1_xpos=[0, 0.2, 0.4, 0.6, 0.8],
             disk1_ypos=[0] * 5, disk1_posa=30, disk1_incl=60,
@@ -100,12 +101,12 @@ CASES = dict(
                     rptraits=dict(type='exponential'),
                     rhtraits=dict(type='sech2', zmax=8),
                     zptraits=dict(type='nw_uniform', zmax=1),
-                    emission=BAND),
+                    light=BAND),
                 mcdisk(
                     name='clouds', loose=False, tilted=False, seed=3,
                     rptraits=dict(type='gauss'),
                     rhtraits=dict(type='exponential', zmax=8),
-                    emission=BAND),
+                    light=BAND),
                 smdisk(
                     name='dust', loose=False, tilted=False,
                     rptraits=dict(type='exponential'),
@@ -142,7 +143,7 @@ CASES = dict(
                     vhtraits=dict(type='one'),
                     dptraits=dict(type='uniform'),
                     zptraits=dict(type='nw_harmonic', order=1, zmax=1),
-                    emission=LINES),
+                    light=LINES),
                 mcdisk(
                     name='clouds', loose=False, tilted=False,
                     rptraits=dict(type='exponential'),
@@ -150,7 +151,7 @@ CASES = dict(
                     vptraits=dict(type='tanh', direction='tan'),
                     dptraits=dict(type='gauss'),
                     sptraits=dict(type='azrange'),
-                    emission=LINES),
+                    light=LINES),
                 smdisk(
                     name='dust', loose=False, tilted=False,
                     rptraits=dict(type='exponential'),
@@ -227,7 +228,7 @@ THICK_DISK = dict(components=smdisk(
     loose=False, tilted=False,
     rptraits=dict(type='exponential'),
     rhtraits=dict(type='sech2', zmax=8),
-    emission=BAND))
+    light=BAND))
 
 
 def image_plan(driver, galaxy, size):
@@ -240,8 +241,10 @@ def image_plan(driver, galaxy, size):
     grid = Grid(size, Coords((1, 1), rpix, (0, 0), 0), None)
     return galaxy.plan(
         SceneTarget(
-            driver, grid, IMAGE_SPECTRAL_AXIS, np.float32, View(spectral=False), None, None), (0,),
-        opacity_cubes([galaxy], [(0,)], View(spectral=False), np.float32)[0],
+            driver, grid, IMAGE_SPECTRAL_AXIS, np.float32,
+            View(False, ContinuumTracer()), None, None), (0,),
+        opacity_cubes(
+            [galaxy], [(0,)], View(False, ContinuumTracer()), np.float32)[0],
         Depth(extent='legacy').axis(grid, 0))
 
 

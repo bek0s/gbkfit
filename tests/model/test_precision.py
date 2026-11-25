@@ -15,7 +15,7 @@ KINEMATICS = dict(
 THIN_DISK = dict(
     type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
     rptraits=dict(type='exponential'), **KINEMATICS,
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 THICK_DISK = THIN_DISK | dict(type='thick_disk',
                               rptraits=dict(type='exponential'),
                               rhtraits=dict(type='sech2', zmax=8))

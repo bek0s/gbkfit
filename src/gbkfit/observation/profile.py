@@ -212,6 +212,11 @@ class ObservationProfile(Observation):
                     f"{key!r} is not a function of radii of galaxies (e.g. "
                     f"vcirc, vcirc_halo, mass, slope, rotation_gas, "
                     f"dispersion_gas; see GalaxyFunctions)")
+            if (second := GalaxyFunctions.second_argument(key)) is not None:
+                raise ValueError(
+                    f"{key!r} takes its {second} besides the radii: a "
+                    f"profile is of functions of the radii only (e.g. "
+                    f"rotation, dispersion)")
         radii, assumed_distance = check_profile_radii(
             radii, assumed_distance)
         if any(radii == 0) and any(

@@ -47,7 +47,7 @@ def _disk(**options):
         rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines')) | options
+        light=dict(type='lines')) | options
 
 
 def _cube(driver, galaxy, observable, properties, depth=None):
@@ -226,7 +226,7 @@ def test_a_galaxy_at_redshift_1_5(driver):
     centre = rest * (1 + z)
     disk = _disk(
         rnodes=list(np.arange(0, 21, 0.5)),
-        emission=dict(type='lines', lines=['halpha']))
+        light=dict(type='lines', lines=['halpha']))
     observable = dict(
         type='pixel_spectra', size=[31, 31], step=[0.2, 0.2],
         psf=dict(type='gauss', sigma=0.25),

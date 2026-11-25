@@ -62,7 +62,7 @@ class NodalDisk(NodalComponent):
         traits_, prefixes (e.g. 'op_halpha_' of 'opt') and density_units
         are as those of NodalComponent. opacity_lines has
         the line of each trait of line opacity ('opt'): its index among
-        the lines of the emission. equilibrium is its vertical
+        the lines of the light. equilibrium is its vertical
         equilibrium, if any (see traits.DispersionEquilibrium; not in
         traits_, as the kernels do not evaluate it), height the vertical
         equilibrium of its thickness, if any (see
@@ -125,7 +125,7 @@ class NodalDisk(NodalComponent):
     def opacity_lines(self) -> tuple[int, ...]:
         """
         Return the line of each trait of line opacity ('opt'): its index
-        among the lines of the emission.
+        among the lines of the light.
         """
         return self._opacity_lines
 

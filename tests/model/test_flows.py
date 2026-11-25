@@ -31,7 +31,7 @@ def disk_config(vptraits, ptraits=None):
         type='thin_disk', loose=False, tilted=False, rnodes=RNODES,
         rptraits=ptraits or dict(type='exponential'),
         vptraits=vptraits, dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
 
 
 def disk(vptraits, ptraits=None):
@@ -112,7 +112,7 @@ def test_cones_take_no_flows_of_the_plane_of_a_disk():
                 rptraits=dict(type='uniform'),
                 rhtraits=dict(type='gauss', zmax=1.5),
                 vptraits=trait, dptraits=dict(type='uniform'),
-                emission=dict(type='lines')))
+                light=dict(type='lines')))
 
 
 def davies(r, v, m, c, e, o, sense):
@@ -252,7 +252,7 @@ def test_the_arms_of_an_image_by_a_given_wavenumber(driver):
         rptraits=[
             dict(type='exponential'),
             dict(type='spiral', order=2, wavenumber='given')],
-        emission=dict(type='band'))
+        light=dict(type='continuum'))
     image_disk = component_parser.load(component).density_disk()
     subrnodes = np.asarray(image_disk.subrnodes())
     k = -2 / (np.where(subrnodes > 0, subrnodes, np.inf)

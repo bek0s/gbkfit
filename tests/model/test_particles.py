@@ -21,7 +21,7 @@ DISK = dict(components=[dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))])
+    light=dict(type='lines'))])
 DISK_PROPERTIES = GEOMETRY | dict(
     rpt_a=1, rpt_s=H, vpt_rt=RT, vpt_vt=VT, dpt_a=DISP)
 CUBE = dict(
@@ -79,7 +79,7 @@ def test_particles_of_a_disk_are_seen_as_the_disk(
     # moments
     particles = dict(components=[dict(
         type='particles', file=disk_particles(tmp_path / 'disk.npz'),
-        emission=dict(type='lines'))])
+        light=dict(type='lines'))])
     force_evaluation(evaluation)
     disk_image, disk_velocity = moments(evaluate(
         driver, DISK, DISK_PROPERTIES))
@@ -100,7 +100,7 @@ def test_particles_go_to_their_planes_in_slabs(
     particles = dict(components=[dict(
         type='particles',
         file=disk_particles(tmp_path / 'disk.npz', n=20_000),
-        emission=dict(type='lines'))])
+        light=dict(type='lines'))])
     # (by radiative transfer, which alone marches in slabs)
     force_evaluation('transfer')
     whole = evaluate(driver, particles, GEOMETRY)
@@ -122,7 +122,7 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
         MockOptions, NoiseGauss, ObservationGroup, draw_mocks)
     particles = dict(components=[dict(
         type='particles', file=disk_particles(tmp_path / 'disk.npz'),
-        emission=dict(type='lines'))])
+        light=dict(type='lines'))])
     plan = group_plan([dict(
         driver=dict(type='host'), galaxy=particles, observation=CUBE)])
     values = gbkfit.params.ParamSpace.from_properties(
@@ -163,13 +163,13 @@ def test_particles_in_an_image(driver, tmp_path):
         vz=zeros, flux=np.array([2.0, 3.0, 4.0]))
     galaxy = dict(components=[dict(
         type='particles', file=str(tmp_path / 'three.npz'),
-        emission=dict(type='band'))])
+        light=dict(type='continuum'))])
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy, observation=dict(
             type='pixel_brightness', size=[10, 8], step=[0.5, 0.5]))])
     params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), dict(
-            xpos=0, ypos=0, posa=0, incl=0))
+            xpos=0, ypos=0, posa=0, incl=0, vsys=0))
     image = plan.model_h(params.evaluate())[0]['brightness'].data
     assert image.sum() * 0.25 == pytest.approx(5)
     assert np.count_nonzero(image) == 2
@@ -185,4 +185,4 @@ def test_particles_need_their_columns(tmp_path, columns, message):
     with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(components=[dict(
             type='particles', file=str(tmp_path / 'some.npz'),
-            emission=dict(type='band'))]))
+            light=dict(type='continuum'))]))

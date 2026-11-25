@@ -774,7 +774,7 @@ class TracedSpheroid(MassComponent):
 
     upsilon is the mass per unit of its light, as of the mass disks that
     follow disks (see surfaces.SurfaceComponent): without a unit of its
-    emission, in Msun/kpc^2 per unit of its surface brightness; with one,
+    light, in Msun/kpc^2 per unit of its surface brightness; with one,
     in Msun/pc^2 per unit (a mass-to-light ratio, in its first band).
 
     On the sky, for lenses (see sky.SkyProjected): each term about the

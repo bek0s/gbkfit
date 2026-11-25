@@ -122,7 +122,7 @@ def _with_mass(
     Return the parameters of the components of a galaxy, and those of its
     distance, its mass and its gravity (if any; Newtonian by default), with
     the mass per unit of the density of a component (see
-    MassModel.mass_ratios) in the unit that the emission of the component
+    MassModel.mass_ratios) in the unit that the light of the component
     gives it (see _units.mass_ratio_unit); and the links of its components
     and its mass (see MassLinks). The errors of a component or a mass
     component are of its path in the configuration.
@@ -173,9 +173,9 @@ def _with_mass(
         ) - {None},
         thick=tuple(thick), mass=True)
     _check_needs(components, links, mass_model, gravity)
-    emissions = {cmp.name(): cmp.emission() for cmp in components}
+    lights = {cmp.name(): cmp.light() for cmp in components}
     mass = pdescs_with_units(mass_model.pdescs(), {
-        name: _units.mass_ratio_unit(emissions[followed])
+        name: _units.mass_ratio_unit(lights[followed])
         for name, followed in mass_model.mass_ratios().items()})
     own = {} if distance is None else distance.pdescs()
     return _with_params(params, own | mass | gravity.pdescs()), links

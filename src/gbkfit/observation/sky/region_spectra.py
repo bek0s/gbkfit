@@ -3,7 +3,7 @@ The observation of spectra in regions of the sky (e.g. fibres,
 apertures, bins, or the whole field for an integrated spectrum).
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -15,7 +15,7 @@ from gbkfit.grid import (
     Grid, Rota, Rpix, Rval, Size, SpectraData, SpectralAxis, Step)
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
-from gbkfit.model import Band, DataUnit, LightUnit
+from gbkfit.model import DataUnit, LightUnit, LinesTracer, LosvdTracer, Tracer
 from ..depth import Depth
 from ..noise import Noise
 from ..plan import FluxScale, ModelData, ModelItem
@@ -77,6 +77,7 @@ class ObservationRegionSpectra(ObservationRegions):
     dataset_class = DatasetRegionSpectra
 
     spectral_view = True
+    tracer_types = (LinesTracer, LosvdTracer)
     orbit_stars = None
 
     # The axes of the cube of the model: x, y and the spectral axis
@@ -131,9 +132,7 @@ class ObservationRegionSpectra(ObservationRegions):
             rota: Rota | None = None,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            lines: Sequence[str] | None = None,
-            continuum: bool = False,
-            band: str | Band | None = None,
+            tracer: Tracer | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
@@ -157,9 +156,8 @@ class ObservationRegionSpectra(ObservationRegions):
                 f"channels; the spectral axis has "
                 f"{grid.spectral().size[0]}")
         super().__init__(
-            grid, source_grid, instrument, lines, continuum, band,
-            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
-            dtype, fft_dtype, name, unit)
+            grid, source_grid, instrument, tracer, pixel_weights, flux_scale,
+            offsets, noise, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def spectral_grid(self) -> Grid:
         """Return the grid of the spectral axis (one axis)."""

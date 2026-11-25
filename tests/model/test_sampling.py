@@ -35,7 +35,7 @@ def disk(type_, rnodes, vptraits, thick=False, **options):
         loose=False, tilted=False, rnodes=rnodes,
         **density,
         vptraits=vptraits, dptraits=dict(type='uniform'),
-        emission=dict(type='lines'), **mcdisk_options, **options)
+        light=dict(type='lines'), **mcdisk_options, **options)
 
 
 def case(component):
@@ -95,11 +95,11 @@ def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
     # Node-wise values given at the nodes are interpolated to the subnodes
     # with the interpolation of the disk, and linearly between them, up to
     # its last node; beyond, the density traits go on as their tails
-    from gbkfit.model import BandEmission, ThinDisk
+    from gbkfit.model import ContinuumLight, ThinDisk
     from gbkfit.model.components import traits
     rnodes, curve = (0.0, 4.0, 10.0, 20.0), [1.0, 3.0, 2.0, 0.5]
     component = ThinDisk(
-        traits.RPTraitNWUniform(), emission=BandEmission(),
+        traits.RPTraitNWUniform(), light=ContinuumLight(),
         loose=False, tilted=False, rnodes=rnodes, rstep=1.0,
         interp='akima')
     density_disk = component.density_disk()
@@ -128,7 +128,7 @@ def test_flaring_at_the_subnodes():
         rptraits=dict(type='exponential'),
         rhtraits=dict(
             type='sech2', zmax=8, nodewise=True, sampling='subrings'),
-        emission=dict(type='band'))]))
+        light=dict(type='continuum'))]))
     assert galaxy.pdescs()['rht_s'].size() == 42
 
 

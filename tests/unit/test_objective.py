@@ -27,7 +27,7 @@ GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     rptraits=dict(type='exponential'),
-    emission=dict(type='band'))])
+    light=dict(type='continuum'))])
 
 PROPERTIES = dict(xpos=0.0, ypos=0.0, posa=50, incl=60, rpt_a=1, rpt_s=2)
 
@@ -375,7 +375,7 @@ KINEMATICS = dict(components=[dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))])
+    light=dict(type='lines'))])
 
 DISK = dict(
     vsys=0, xpos=0, ypos=0, posa=40, incl=60, rpt_a=1, rpt_s=4, vpt_rt=2,

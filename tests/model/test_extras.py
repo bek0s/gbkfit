@@ -14,11 +14,11 @@ from gbkfit.model import Extras
 DISK = dict(
     type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 8)),
     rptraits=dict(type='exponential'),
-    emission=dict(type='band'))
+    light=dict(type='continuum'))
 LINE_DISK = DISK | dict(
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=3, vsys=0,
     vpt_rt=2, vpt_vt=100, dpt_a=20)

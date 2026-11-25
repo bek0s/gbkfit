@@ -15,7 +15,7 @@ GALAXY = dict(
         type='thin_disk', name='gas', rnodes=dict(max=10, sep=2),
         rptraits=dict(type='exponential'),
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-        emission=dict(type='lines', lines=['hi21']))],
+        light=dict(type='lines', lines=['hi21']))],
     mass=[dict(
         type='traced_disk', name='gas_mass', component='gas',
         vertical=dict(type='sech2'))],

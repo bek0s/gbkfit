@@ -40,7 +40,7 @@ GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 30)),
     rptraits=dict(type='exponential'),
-    emission=dict(type='band'))])
+    light=dict(type='continuum'))])
 
 TRUE = dict(xpos=0.7, ypos=-0.4, posa=40.0, incl=55.0, rpt_a=1.0, rpt_s=4.0)
 

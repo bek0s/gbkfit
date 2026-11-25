@@ -27,7 +27,7 @@ DISK = dict(
     rptraits=dict(type='exponential'),
     rhtraits=dict(type='gauss', zmax=10),
     vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 MASS = [dict(
     type='disk', name='stars', surface=dict(type='exponential'),
     vertical=dict(type='thin'))]

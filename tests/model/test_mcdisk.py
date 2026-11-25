@@ -491,7 +491,7 @@ def test_the_clouds_of_a_pool_stay_when_another_changes(driver):
             rnodes=list(range(0, 10)),
             rptraits=dict(type='nw_uniform'),
             rhtraits=dict(type='gauss', zmax=1),
-            emission=dict(type='band'))]))
+            light=dict(type='continuum'))]))
     plan = group_plan([case])
     params = dict(
         xpos=0, ypos=0, posa=0, incl=0, rpt_a=np.ones(10), rht_s=0.2)

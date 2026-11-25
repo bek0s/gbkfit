@@ -1,6 +1,6 @@
 """
-The physical units of the light of components (see LineEmission and
-BandEmission): which units each kind of emission takes, and the factors
+The physical units of the light of components (see LineLight and
+ContinuumLight): which units each kind of light takes, and the factors
 that turn them into the units of the data of an observation (see
 DataUnit, LineFactors and BandFactors). The light of a component with a
 unit is that of the galaxy as it emits it, in its rest frame; each
@@ -23,7 +23,7 @@ from .lines import Band, LinePlacement
 
 if TYPE_CHECKING:
     from .base import Component
-    from .roles import Emission
+    from .roles import Light
 
 
 __all__ = [
@@ -48,7 +48,7 @@ __all__ = [
 
 
 # Note (2026-10-15; the user asked for it, to revise later): there is no
-# option for the light of a component as we observe it (e.g. an emission
+# option for the light of a component as we observe it (e.g. a light
 # option 'brightness: observed', its parameters the observed brightness).
 # A component without a unit already fits the observed brightness, in
 # the units of the data. Such an option would skip the dimming here (in
@@ -141,18 +141,18 @@ def check_line_units_agree(components: Sequence['Component']) -> None:
     """
     Raise ValueError if components of a galaxy give one named line
     different units (e.g. a typo: hi21 beside halpha in a component of
-    another unit). The lines of a component have the unit of its emission
+    another unit). The lines of a component have the unit of its light
     (its further lines are ratios); unnamed lines can be different lines,
     and are not compared.
     """
     seen = {}
     for i, component in enumerate(components):
-        emission = component.emission()
-        if emission is None or emission.unit() is None:
+        light = component.light()
+        if light is None or light.unit() is None:
             continue
-        unit = emission.unit()
+        unit = light.unit()
         label = component.name() or f'component{i}'
-        for line in emission.line_names():
+        for line in light.line_names():
             if line in seen and seen[line][0] != unit:
                 first, other = (
                     gbkfit.units.format_unit(x) for x in (seen[line][0], unit))
@@ -164,10 +164,10 @@ def check_line_units_agree(components: Sequence['Component']) -> None:
             seen.setdefault(line, (unit, label))
 
 
-def mass_per_unit(emission: 'Emission | None') -> float | None:
+def mass_per_unit(light: 'Light | None') -> float | None:
     """
     Return the mass surface density (Msun/kpc^2) of one unit of the
-    density of a component (see mass.SurfaceComponent), if its emission has
+    density of a component (see mass.SurfaceComponent), if its light has
     a unit: for HI (its first line hi21), that of the HI of one unit, by
     N_HI = 1.823e18 cm^-2 per K km/s (at the rest frequency of the line,
     for units of flux density or energy), so that upsilon is the mass of
@@ -177,13 +177,13 @@ def mass_per_unit(emission: 'Emission | None') -> float | None:
     light). The light is that of the galaxy as it emits it (see
     line_factor), so this holds at any redshift. None without a unit.
     """
-    unit = None if emission is None else emission.unit()
+    unit = None if light is None else light.unit()
     if unit is None:
         return None
     per_kpc2 = u.Msun / u.kpc ** 2
-    if not _emits_hi(emission):
+    if not _emits_hi(light):
         return (1 * u.Msun / u.pc ** 2).to_value(per_kpc2)
-    frequency = emission.lines().lines()[0].rest().to(u.Hz, u.spectral())
+    frequency = light.lines().lines()[0].rest().to(u.Hz, u.spectral())
     frame = _frame(VelocityConvention(frequency), 0.0, frequency)
     intensity = _axis_integral(1 * unit, frame) / (u.km / u.s)
     temperature = intensity.to(u.K, u.brightness_temperature(frequency))
@@ -191,51 +191,51 @@ def mass_per_unit(emission: 'Emission | None') -> float | None:
     return (column * _H_MASS).to_value(per_kpc2)
 
 
-def density_unit(emission: 'Emission | None') -> u.UnitBase | None:
+def density_unit(light: 'Light | None') -> u.UnitBase | None:
     """
-    Return the unit of the density of a component of the given emission
+    Return the unit of the density of a component of the given light
     (see parts.Density), if known: that of its light, if it emits (none
-    if its emission has none: its light is in the units of the data of
-    each observation of it); without emission, its density is the optical
+    if its light has none: its light is in the units of the data of
+    each observation of it); without light, its density is the optical
     depth of its dust, dimensionless.
     """
-    return u.dimensionless_unscaled if emission is None else emission.unit()
+    return u.dimensionless_unscaled if light is None else light.unit()
 
 
-def mass_ratio_unit(emission: 'Emission | None') -> u.UnitBase | None:
+def mass_ratio_unit(light: 'Light | None') -> u.UnitBase | None:
     """
     Return the unit of upsilon, the mass per unit of the density of a
-    component of the given emission that a mass component follows (see
-    mass_per_unit), if known: without emission, Msun/kpc^2 (per unit of
-    the optical depth of its dust); with a unit of its emission, none for
+    component of the given light that a mass component follows (see
+    mass_per_unit), if known: without light, Msun/kpc^2 (per unit of
+    the optical depth of its dust); with a unit of its light, none for
     HI (a ratio of masses), else Msun/pc^2 per unit; without one, none is
     known (Msun/kpc^2 per unit of the data).
     """
-    if emission is None:
+    if light is None:
         return u.Msun / u.kpc ** 2
-    unit = emission.unit()
+    unit = light.unit()
     if unit is None:
         return None
-    if _emits_hi(emission):
+    if _emits_hi(light):
         return u.dimensionless_unscaled
     return u.Msun / u.pc ** 2 / unit
 
 
-def line_opacity_unit(emission: 'Emission | None') -> u.UnitBase | None:
+def line_opacity_unit(light: 'Light | None') -> u.UnitBase | None:
     """
     Return the unit of the coefficients of the line opacity of a component
-    of the given emission (1/S, see disks.LineOpacity and OpacityScales),
-    if known: 1/K with a unit of its emission (S in K); none without one
+    of the given light (1/S, see disks.LineOpacity and OpacityScales),
+    if known: 1/K with a unit of its light (S in K); none without one
     (S in the units of the data).
     """
-    if emission is None or emission.unit() is None:
+    if light is None or light.unit() is None:
         return None
     return 1 / u.K
 
 
-def _emits_hi(emission: 'Emission') -> bool:
-    """Check whether an emission is of HI: its first line is hi21."""
-    return emission.line_names()[:1] == (HI_LINE,)
+def _emits_hi(light: 'Light') -> bool:
+    """Check whether a light is of HI: its first line is hi21."""
+    return light.line_names()[:1] == (HI_LINE,)
 
 
 class DataUnit(NamedTuple):
@@ -412,7 +412,7 @@ def line_factors(
 class LineFactors:
     """
     The factors that turn the light of the lines of a component, in the
-    unit of its emission (source), into the unit of the data of an
+    unit of its light (source), into the unit of the data of an
     observation (target), as the model holds them (see line_factor): one
     for each line, of the given redshifts (the 1 + z of each on the
     spectral axis, see Lines.factors), which the galaxy emits at the given
@@ -586,7 +586,7 @@ def band_factors(
 class BandFactors:
     """
     The factor that turns the light of a component in a band, in the unit
-    of its emission (source, see check_band_unit), into the unit of the
+    of its light (source, see check_band_unit), into the unit of the
     data of an image (target), at the band of the image (its effective
     wavelength; without a band, the factor must not depend on it), with
     the component at a systemic velocity (see __call__).

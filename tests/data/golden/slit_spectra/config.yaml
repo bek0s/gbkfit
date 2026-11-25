@@ -1,6 +1,6 @@
 # slit_spectra: The spectra of a long slit rotated on the sky, wider than its step.
 # (written by make_golden.py; do not edit)
-version: 23
+version: 24
 driver: {type: host}
 galaxies:
 - components:
@@ -11,7 +11,7 @@ galaxies:
     rptraits: {type: exponential}
     vptraits: {type: arctan, direction: tan}
     dptraits: {type: uniform}
-    emission: {type: lines}
+    light: {type: lines}
 observations:
 - type: slit_spectra
   slit_width: 1.5

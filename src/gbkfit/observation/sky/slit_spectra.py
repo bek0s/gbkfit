@@ -2,7 +2,7 @@
 The observation of spectra along a long slit.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Annotated, Any, TypeAlias
 
 import numpy as np
@@ -16,7 +16,7 @@ from gbkfit.grid import (
     SlitStep, SpectralAxis, grid_options, x_axis_rota)
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
-from gbkfit.model import Band, DataUnit, LightUnit
+from gbkfit.model import DataUnit, LightUnit, LinesTracer, LosvdTracer, Tracer
 from ..depth import Depth
 from ..noise import Noise
 from ..plan import FluxScale, ModelData, ModelItem
@@ -100,6 +100,7 @@ class ObservationSlitSpectra(ObservationSky):
     dataset_class = DatasetSlitSpectra
 
     spectral_view = True
+    tracer_types = (LinesTracer, LosvdTracer)
     orbit_stars = None
 
     # The axes of a long-slit spectrum: the position along the slit
@@ -170,9 +171,7 @@ class ObservationSlitSpectra(ObservationSky):
             smooth_weights: bool = False,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            lines: Sequence[str] | None = None,
-            continuum: bool = False,
-            band: str | Band | None = None,
+            tracer: Tracer | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
@@ -204,9 +203,8 @@ class ObservationSlitSpectra(ObservationSky):
         self._slit_width = slit_width
         self._smooth_weights = smooth_weights
         super().__init__(
-            grid, source_grid, instrument, lines, continuum, band,
-            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
-            dtype, fft_dtype, name, unit)
+            grid, source_grid, instrument, tracer, pixel_weights, flux_scale,
+            offsets, noise, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def slit_pa(self) -> float:
         """Return the position angle of the slit (see the class)."""

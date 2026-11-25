@@ -25,7 +25,7 @@ from gbkfit.grid import (
 from gbkfit.instrument import (
     Instrument, SlitMask, Trace, slit_mask_parser, trace_parser)
 from gbkfit.lensing import SourceGrid
-from gbkfit.model import Band, DataUnit, LightUnit
+from gbkfit.model import DataUnit, LightUnit, LinesTracer, Tracer
 from gbkfit.utils import iterutils
 from ..depth import Depth
 from ..noise import Noise
@@ -419,6 +419,7 @@ class ObservationSlitlessSpectra(ObservationSky):
     dataset_class = DatasetSlitlessSpectra
 
     spectral_view = True
+    tracer_types = (LinesTracer,)
     orbit_stars = None
 
     # The image has no spectral axis: wavelength and position share the
@@ -478,9 +479,7 @@ class ObservationSlitlessSpectra(ObservationSky):
             resampled: bool = False,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            lines: Sequence[str] | None = None,
-            continuum: bool = False,
-            band: str | Band | None = None,
+            tracer: Tracer | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
@@ -514,9 +513,9 @@ class ObservationSlitlessSpectra(ObservationSky):
         self._sky_sampling = sky_sampling
         self._resampled = resampled
         super().__init__(
-            self._make_grid(**grid), source_grid, instrument, lines, continuum,
-            band, pixel_weights, flux_scale, offsets, noise, oversampling,
-            depth, dtype, fft_dtype, name, unit)
+            self._make_grid(**grid), source_grid, instrument, tracer,
+            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
+            dtype, fft_dtype, name, unit)
 
     def spectral(self) -> SpectralAxis:
         """Return the spectral axis of the model."""

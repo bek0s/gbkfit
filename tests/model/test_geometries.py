@@ -18,7 +18,7 @@ PARTS = dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=LINES)
+    light=LINES)
 
 OBSERVABLE = dict(
     type='pixel_spectra', size=[24, 24], step=[1, 1],
@@ -66,8 +66,9 @@ OUTFLOW = dict(
     rhtraits=dict(type='gauss', zmax=1),
     vptraits=dict(type='uniform', direction='out'),
     dptraits=dict(type='uniform'),
-    emission=LINES)
-NUCLEUS = dict(type='point', name='nucleus', emission=LINES)
+    light=LINES)
+NUCLEUS = dict(
+    type='point', name='nucleus', light=LINES, kinematics=dict(type='gauss'))
 
 
 def test_each_component_has_its_own_geometric_parameters():

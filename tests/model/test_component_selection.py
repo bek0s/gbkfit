@@ -27,7 +27,7 @@ def disk(name, density=THIN):
         **density,
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
 
 
 GALAXY = dict(components=[disk('ha'), disk('co')])

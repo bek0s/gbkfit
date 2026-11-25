@@ -22,7 +22,7 @@ COMPONENT = dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 
 PROPERTIES = dict(
     vsys=100, xpos=0.3, ypos=-0.6, posa=50, incl=60,
@@ -60,7 +60,7 @@ def galaxy_of(component):
 
 def with_lines(component, lines):
     """The component, emitting the given lines."""
-    return component | dict(emission=dict(type='lines', lines=lines))
+    return component | dict(light=dict(type='lines', lines=lines))
 
 
 def placed(properties, convention, offset):
@@ -173,13 +173,13 @@ def test_line_parameters_and_options():
     assert 'ha_ratio' not in galaxy.pdescs()
     # The lines survive a round trip through the configuration
     info = galaxy_parser.dump(galaxy)
-    emission = info['components'][0]['emission']
+    emission = info['components'][0]['light']
     assert [line['name'] for line in emission['lines']] == [
         'ha', 'nii6583', 'nii6548']
     assert galaxy_parser.dump(galaxy_parser.load(info)) == info
     # Without lines, there are no lines in the configuration
     info = galaxy_parser.dump(galaxy_parser.load(galaxy_of(COMPONENT)))
-    assert 'lines' not in info['components'][0]['emission']
+    assert 'lines' not in info['components'][0]['light']
 
 
 @pytest.mark.parametrize('lines, message', [
@@ -203,7 +203,7 @@ def test_invalid_lines(lines, message):
 def evaluate_observation(
         driver, galaxy, observable, properties, seen=None, **options):
     """
-    The model of an observation with options (e.g. its lines), which sees
+    The model of an observation with options (e.g. its tracer), which sees
     what seen says (see ObservationGroup; everything by default).
     """
     from gbkfit.model import galaxy_parser
@@ -237,9 +237,11 @@ def test_observations_see_their_lines(driver):
     both = evaluate_observation(
         driver, galaxy, observable, properties)['spectra']
     ha = evaluate_observation(
-        driver, galaxy, observable, properties, lines=['ha'])['spectra']
+        driver, galaxy, observable, properties,
+        tracer=dict(type='lines', lines=['ha']))['spectra']
     nii = evaluate_observation(
-        driver, galaxy, observable, properties, lines=['nii6583'])['spectra']
+        driver, galaxy, observable, properties,
+        tracer=dict(type='lines', lines=['nii6583']))['spectra']
     single = evaluate_observation(
         driver, galaxy_of(COMPONENT), observable, PROPERTIES)['spectra']
     np.testing.assert_allclose(ha, single, rtol=1e-6, atol=1e-9)
@@ -257,7 +259,8 @@ def test_moment_maps_of_one_line(driver):
         flux_floor=1e-4)
     properties = PROPERTIES | dict(nii6583_ratio=0.4)
     ha = evaluate_observation(
-        driver, galaxy, observable, properties, lines=['ha'])
+        driver, galaxy, observable, properties,
+        tracer=dict(type='lines', lines=['ha']))
     single = evaluate_observation(
         driver, galaxy_of(COMPONENT), observable, PROPERTIES)
     np.testing.assert_allclose(
@@ -293,32 +296,38 @@ def test_unknown_lines_are_errors(driver, lines, message):
     with pytest.raises(Exception, match=message):
         evaluate_observation(
             driver, galaxy, scube('6562.8 Angstrom'), PROPERTIES,
-            lines=lines)
+            tracer=dict(type='lines', lines=lines))
 
 
-def test_a_component_must_have_a_selected_line(driver):
+def test_a_component_without_the_named_lines_is_not_seen(driver):
+    # (its light is not in the data: e.g. a disk of CO beside the gas of
+    # an Halpha cube)
     co_lines = [dict(name='co32', rest='345.79599 GHz')]
     galaxy = dict(components=[
         with_lines(COMPONENT, LINES) | dict(name='gas'),
         with_lines(COMPONENT, co_lines) | dict(name='co')])
     properties = {f'{name}_{key}': value for name in ('gas', 'co')
-                  for key, value in PROPERTIES.items()}
-    with pytest.raises(Exception, match="has none of the selected lines"):
+                  for key, value in PROPERTIES.items()} \
+        | dict(gas_nii6583_ratio=0.3)
+    tracer = dict(type='lines', lines=['ha'])
+    both = evaluate_observation(
+        driver, galaxy, scube('6562.8 Angstrom'), properties, tracer=tracer)
+    gas = evaluate_observation(
+        driver, galaxy, scube('6562.8 Angstrom'), properties,
+        seen=['gas'], tracer=tracer)
+    np.testing.assert_array_equal(both['spectra'], gas['spectra'])
+    # (choosing it for the observation is an error)
+    with pytest.raises(Exception, match="does not see it"):
         evaluate_observation(
             driver, galaxy, scube('6562.8 Angstrom'), properties,
-            lines=['ha'])
-    # Leaving the component out works
-    evaluate_observation(
-        driver, galaxy, scube('6562.8 Angstrom'),
-        properties | dict(gas_nii6583_ratio=0.3),
-        seen=['gas'], lines=['ha'])
+            seen=['co'], tracer=tracer)
 
 
 def test_line_selection_round_trip():
     from gbkfit.observation import observation_parser
     info = {key: value for key, value in scube(
         '6562.8 Angstrom').items() if key not in INSTRUMENT} | dict(
-            lines=['ha'])
+            tracer=dict(type='lines', lines=['ha']))
     dumped = observation_parser.dump(
         observation_parser.load(dict(info)))
-    assert dumped['lines'] == ['ha']
+    assert dumped['tracer'] == dict(type='lines', lines=['ha'])

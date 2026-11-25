@@ -24,7 +24,7 @@ GALAXY = dict(components=[dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))])
+    light=dict(type='lines'))])
 
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
@@ -150,7 +150,8 @@ def test_region_spectra_of_a_point_is_its_flux(driver, step):
     # The spectra of regions are fluxes: around a point, its flux,
     # whatever the size of the pixels of the model
     galaxy = dict(components=[
-        dict(type='point', emission=dict(type='lines'))])
+        dict(type='point', light=dict(type='lines'),
+             kinematics=dict(type='gauss'))])
     observable = dict(
         type='region_spectra', size=[int(16 / step)] * 2, step=[step, step],
         spectral=dict(size=51, step=10, convention='relativistic'),

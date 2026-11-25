@@ -23,7 +23,7 @@ DISK = dict(
     rhtraits=dict(type='sech2', zmax=8),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 # The disk, thin
 THIN_DISK = {key: value for key, value in DISK.items() if key != 'rhtraits'} \
     | dict(type='thin_disk')

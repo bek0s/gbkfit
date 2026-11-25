@@ -4,7 +4,7 @@ Voronoi bins, fibres); those of the stars on orbits whose weights are
 solved are in _orbit_moments.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -15,7 +15,7 @@ from gbkfit.driver import Driver
 from gbkfit.grid import GridData, Rota, Rpix, Rval, Size, SpectralAxis, Step
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
-from gbkfit.model import Band, DataUnit, LightUnit
+from gbkfit.model import DataUnit, LightUnit, LinesTracer, LosvdTracer, Tracer
 from gbkfit.moments import (
     FluxFloor, Method, MomentOrders, MomentsPlan, check_moment_items,
     check_moment_orders, moment_item, split_moments)
@@ -58,8 +58,8 @@ class ObservationRegionMoments(ObservationRegions):
     spatial grid (given too, they serve only without data); without data,
     regions are required.
 
-    E.g. the kinematics of the stars of a spheroid (the continuum of its
-    observation: continuum: true, lines: []) in the Voronoi bins of pPXF.
+    E.g. the kinematics of the stars of a spheroid (its tracer: losvd) in
+    the Voronoi bins of pPXF.
     Those are of the distribution of the velocities of the stars itself
     (the fit of the spectra took the LSF out), seen through the PSF: the
     instrument of their observation has a PSF and no LSF. The velocities
@@ -100,6 +100,7 @@ class ObservationRegionMoments(ObservationRegions):
     dataset_class = DatasetRegionMoments
 
     spectral_view = True
+    tracer_types = (LinesTracer, LosvdTracer)
     orbit_stars = 'moments'
 
     # The moments have no spectral axis
@@ -163,9 +164,7 @@ class ObservationRegionMoments(ObservationRegions):
             method: Method = 'moments',
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            lines: Sequence[str] | None = None,
-            continuum: bool = False,
-            band: str | Band | None = None,
+            tracer: Tracer | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
@@ -192,9 +191,8 @@ class ObservationRegionMoments(ObservationRegions):
                 "take no valid pixels of each channel (those of the spectra "
                 "of regions)")
         super().__init__(
-            grid, source_grid, instrument, lines, continuum, band,
-            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
-            dtype, fft_dtype, name, unit)
+            grid, source_grid, instrument, tracer, pixel_weights, flux_scale,
+            offsets, noise, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments, sorted."""

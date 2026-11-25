@@ -468,8 +468,8 @@ def _observed_wavelengths(grid: Grid, view: View) -> np.ndarray | None:
     (a band, or a spectral axis, without them).
     """
     if grid.spectral_axis is None:
-        return None if view.band is None else np.array(
-            [view.band.wavelength().to_value(astropy.units.um)])
+        return None if view.band() is None else np.array(
+            [view.band().wavelength().to_value(astropy.units.um)])
     axis = grid.spectral_axis
     convention = VelocityConvention.of(grid.coords)
     if convention.rest() is None:

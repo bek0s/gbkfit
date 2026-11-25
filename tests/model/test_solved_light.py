@@ -15,6 +15,7 @@ import scipy.optimize
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
+from gbkfit.model import LosvdTracer
 from gbkfit.objective import (
     LikelihoodGauss, Likelihoods, Objective, comparison_of)
 from gbkfit.observation import (
@@ -24,10 +25,10 @@ from gbkfit.params import ParamSpace
 
 # A core of two Gaussians (an MGE) and a Sersic envelope, in a band
 CORE = dict(
-    type='spheroid', name='core', rmax=20, emission=dict(type='band'),
+    type='spheroid', name='core', rmax=20, light=dict(type='continuum'),
     profile=dict(type='mge', ngauss=2))
 ENVELOPE = dict(
-    type='spheroid', name='envelope', rmax=20, emission=dict(type='band'),
+    type='spheroid', name='envelope', rmax=20, light=dict(type='continuum'),
     profile=dict(type='sersic'))
 # The centre of both; the envelope, a sphere, has no axis
 TRUTH = dict(
@@ -114,7 +115,7 @@ def test_solved_amplitudes_are_the_least_squares_of_their_parts(driver):
 ])
 def test_amplitudes_of_models_not_linear_in_them_are_refused(
         driver, change, message):
-    core = CORE | dict(emission=dict(type='band'))
+    core = CORE | dict(light=dict(type='continuum'))
     if 'type' in change:
         core |= dict(type=change['type'])
     galaxy = dict(components=[core])
@@ -132,7 +133,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
         moments = DatasetPixelMoments({1: Data(data, error=data + 1)})
         obs = ObservationPixelMoments.paired(
             moments, spectral=SpectralAxis(convention='relativistic'),
-            depth=Depth(step=0.5), lines=[], continuum=True)
+            depth=Depth(step=0.5), tracer=LosvdTracer())
     else:
         obs = observation(None, data)
     group = ObservationGroup([galaxy_parser.load(galaxy)], [obs])

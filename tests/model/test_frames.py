@@ -23,9 +23,9 @@ GALAXY = dict(components=[
          rptraits=dict(type='exponential'),
          vptraits=dict(type='arctan', direction='tan'),
          dptraits=dict(type='uniform'),
-         emission=dict(type='lines')),
+         light=dict(type='lines')),
     dict(type='point', name='core',
-         emission=dict(type='lines'))])
+         light=dict(type='lines'), kinematics=dict(type='gauss'))])
 
 PARAMS = dict(
     disk_vsys=0, disk_xpos=0, disk_ypos=0, disk_posa=30, disk_incl=60,

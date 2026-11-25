@@ -314,8 +314,8 @@ def test_an_invalid_unit_says_why():
 
 
 def emission(info):
-    from gbkfit.model.components.roles import emission_parser
-    return emission_parser.load(info)
+    from gbkfit.model.components.roles import light_parser
+    return light_parser.load(info)
 
 
 @pytest.mark.parametrize('info', [
@@ -323,8 +323,8 @@ def emission(info):
     dict(type='lines', lines=['halpha', 'nii6583'], unit='Jy km/s/arcsec2'),
     dict(type='lines', unit='K km/s'),
     dict(type='lines', lines=['hi21'], unit='Msun/pc2'),
-    dict(type='band', unit='MJy/sr'),
-    dict(type='band', unit='1e-20 erg/s/cm2/Angstrom/arcsec2')])
+    dict(type='continuum', unit='MJy/sr'),
+    dict(type='continuum', unit='1e-20 erg/s/cm2/Angstrom/arcsec2')])
 def test_emission_takes_the_units_of_its_kind(info):
     loaded = emission(dict(info))
     assert loaded.unit() == parse_unit(info['unit'])
@@ -336,7 +336,7 @@ def test_emission_takes_the_units_of_its_kind(info):
     (dict(type='lines', unit='km/s'), "is not"),
     (dict(type='lines', unit='Msun/pc2'), "one of HI only"),
     (dict(type='lines', lines=['halpha'], unit='cm-2'), "one of HI only"),
-    (dict(type='band', unit='K km/s'), "is not")])
+    (dict(type='continuum', unit='K km/s'), "is not")])
 def test_emission_refuses_units_of_other_kinds(info, message):
     with pytest.raises(ValueError, match=message):
         emission(info)
@@ -351,9 +351,9 @@ def test_a_line_has_one_unit_in_a_galaxy():
                 dptraits=dict(type='uniform'))
     with pytest.raises(ValueError, match="the line 'hi21' has the unit"):
         galaxy_parser.load(dict(components=[
-            disk | dict(name='hi', emission=dict(
+            disk | dict(name='hi', light=dict(
                 type='lines', lines=['hi21'], unit='Msun/pc2')),
-            disk | dict(name='ionised', emission=dict(
+            disk | dict(name='ionised', light=dict(
                 type='lines', lines=['halpha', 'hi21'], unit='K km/s'))]))
 
 
@@ -539,7 +539,7 @@ def test_regions_are_fluxes():
     (dict(type='lines', lines=['hi21'], unit='K km/s'),
      1.823e18 / 1.249e20 * 1e6),
     (dict(type='lines', lines=['co10'], unit='K km/s'), 1e6),
-    (dict(type='band', unit='Jy/arcsec2'), 1e6),
+    (dict(type='continuum', unit='Jy/arcsec2'), 1e6),
     (dict(type='lines'), None)])
 def test_the_mass_of_a_unit_of_light(info, expected):
     # Msun/kpc^2 per unit of the density, for the mass that follows it

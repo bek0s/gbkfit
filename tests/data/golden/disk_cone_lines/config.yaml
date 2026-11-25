@@ -1,6 +1,6 @@
 # disk_cone_lines: A disk and an outflow cone, each emitting Halpha and [NII] 6583 (a ratio each), in a cube of a spectral axis of velocities of Halpha, with a solved flux scale for each spectrum.
 # (written by make_golden.py; do not edit)
-version: 23
+version: 24
 driver: {type: host}
 galaxies:
 - components:
@@ -11,7 +11,7 @@ galaxies:
     rptraits: {type: exponential}
     vptraits: {type: arctan, direction: tan}
     dptraits: {type: uniform}
-    emission:
+    light:
       type: lines
       lines:
       - {name: ha, rest: 6562.8 Angstrom}
@@ -24,7 +24,7 @@ galaxies:
     rhtraits: {type: gauss, zmax: 1}
     vptraits: {type: uniform, direction: out}
     dptraits: {type: uniform}
-    emission:
+    light:
       type: lines
       lines:
       - {name: ha, rest: 6562.8 Angstrom}

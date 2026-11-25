@@ -15,7 +15,7 @@ from gbkfit.params import ParamValues
 from gbkfit.utils import iterutils
 from .. import traits
 from .._common import dump_name
-from .._native import EmissionSetup, NativeComponentPlan, emission_setup
+from .._native import LightSetup, NativeComponentPlan, light_setup
 from .._nodal import (
     MAX_TRAITS, TraitTable, parse_component_rnode_args, trait_prefixes,
     with_default_height_traits)
@@ -23,9 +23,8 @@ from .. import _units
 from .._units import DataUnit
 from ..base import Component
 from ..nodes import Nodes
-from ..roles import (
-    Emission, Opacity, View, emission_parser,
-    opacity_parser)
+from ..roles import Light, Opacity, light_parser, opacity_parser
+from ..tracers import View
 from . import _nodal
 from .clouds import CloudDisk, Clouds
 from .smooth import SmoothDisk
@@ -114,8 +113,8 @@ def dump_disk_component(
             pressure_support=traits.pressure_support_parser.dump(support))
     if fluid := disk.fluid():
         info.update(fluid=fluid[0] if len(fluid) == 1 else list(fluid))
-    if component.emission() is not None:
-        info.update(emission=emission_parser.dump(component.emission()))
+    if component.light() is not None:
+        info.update(light=light_parser.dump(component.light()))
     if component.opacity() is not None:
         info.update(opacity=opacity_parser.dump(component.opacity()))
     for key, kind, parser in (
@@ -133,7 +132,7 @@ def make_disk(
         kinematics: KinematicTraits | None,
         pressure_support: traits.PressureSupport | None,
         fluid: tuple[str, ...],
-        emission: Emission | None,
+        light: Light | None,
         opacity: Opacity | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
@@ -161,22 +160,22 @@ def make_disk(
     node_args = parse_component_rnode_args(
         rnodes=rnodes, rstep=rstep, interp=interp)
     traits_ = _disk_traits(
-        rptraits, rhtraits, kinematics, emission, zptraits, sptraits, thick)
+        rptraits, rhtraits, kinematics, light, zptraits, sptraits, thick)
     (THICK_DISK_TRAITS if thick else THIN_DISK_TRAITS).check(traits_)
     _check_waves(traits_)
     # (not the coefficients of line opacity: a uniform one is common, e.g.
     # one spin temperature)
     check_traits_common(sum(traits_.values(), ()))
     opacity_traits, opacity_prefixes, opacity_lines = line_opacity_traits(
-        opacity, emission)
+        opacity, light)
     if opacity_traits:
         traits_.update(opt=opacity_traits)
     options = dict(
         loose=loose, tilted=tilted, **node_args,
         traits_=traits_, prefixes=dict(opt=opacity_prefixes),
         density_units=dict(
-            rpt=_units.density_unit(emission),
-            opt=_units.line_opacity_unit(emission)),
+            rpt=_units.density_unit(light),
+            opt=_units.line_opacity_unit(light)),
         opacity_lines=opacity_lines,
         equilibrium=kinematics.equilibrium() if kinematics is not None
         else None,
@@ -205,14 +204,14 @@ def _check_waves(traits_: dict[str, tuple[traits.Trait, ...]]) -> None:
 
 def line_opacity_traits(
         opacity: Opacity | None,
-        emission: Emission | None
+        light: Light | None
 ) -> tuple[tuple[traits.RPTrait, ...], tuple[str, ...], tuple[int, ...]]:
     """
     Return the coefficient traits of the line opacity of a disk component,
     if any (see LineOpacity), the prefix of the parameters of each (e.g.
     'op_' for one line without a name, 'op2_halpha_' for the second trait
     of the line halpha), and its line (its index among the lines of the
-    emission).
+    light).
 
     Raises
     ------
@@ -224,23 +223,23 @@ def line_opacity_traits(
     """
     if not isinstance(opacity, LineOpacity):
         return (), (), ()
-    if emission is None or not emission.needs_velocities():
+    if light is None or not light.needs_velocities():
         raise ValueError(
             "line opacity is the opacity of the lines of a component: it "
-            "needs emission lines (emission: {type: lines})")
-    names = emission.line_names()
+            "needs emission lines (light: {type: lines})")
+    names = light.line_names()
     coefficients = opacity.coefficients()
     if not names:
         if isinstance(coefficients, dict):
             raise ValueError(
-                "the emission has one line without a name: the coefficients "
+                "the light has one line without a name: the coefficients "
                 "of its line opacity are the traits of that line, not a "
                 "mapping of lines")
         lines = [('', coefficients)]
     else:
         if not isinstance(coefficients, dict):
             raise ValueError(
-                f"the emission has the lines {list(names)}: the coefficients "
+                f"the light has the lines {list(names)}: the coefficients "
                 f"of its line opacity are a mapping of each line to its "
                 f"traits")
         if missing := [name for name in names if name not in coefficients]:
@@ -250,7 +249,7 @@ def line_opacity_traits(
         if unknown := [name for name in coefficients if name not in names]:
             raise ValueError(
                 f"the line opacity has coefficients of lines that the "
-                f"emission does not have: {unknown}; its lines: "
+                f"light does not have: {unknown}; its lines: "
                 f"{list(names)}")
         lines = [(f'{name}_', coefficients[name]) for name in names]
     result = ([], [], [])
@@ -275,7 +274,7 @@ def _disk_traits(
         rptraits: tuple[traits.RPTrait, ...],
         rhtraits: tuple[traits.RHTrait, ...],
         kinematics: KinematicTraits | None,
-        emission: Emission | None,
+        light: Light | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
         thick: bool
@@ -286,7 +285,7 @@ def _disk_traits(
     velocity and dispersion traits where it has none. Raise ValueError if
     the traits and roles do not go together.
     """
-    if emission is not None and emission.needs_velocities() \
+    if light is not None and light.needs_velocities() \
             and kinematics is None:
         raise ValueError(
             "a disk that emits lines needs kinematics: give it vptraits and "
@@ -327,7 +326,7 @@ def _disk_traits(
 
 def disk_plan(
         disk: _nodal.NodalDisk,
-        emission: Emission | None,
+        light: Light | None,
         driver: Driver,
         spectral: Grid,
         dtype: np.dtype,
@@ -344,10 +343,10 @@ def disk_plan(
     View: its lines, at the redshift of its galaxy, or its band, or the
     velocities of its continuum), dimmed by the opacity with the given
     ratios, in the unit of the data (see Component.plan and
-    emission_setup).
+    light_setup).
     """
-    setup = emission_setup(
-        emission, view, spectral, emits, data_unit, redshift,
+    setup = light_setup(
+        light, view, spectral, emits, data_unit, redshift,
         disk.opacity_lines())
     return DiskComponentPlan(
         driver, disk,
@@ -366,10 +365,10 @@ class DiskComponentPlan(NativeComponentPlan):
             driver: Driver,
             disk: _nodal.NodalDisk,
             disk_plan_: _nodal.DiskPlan,
-            emission: EmissionSetup,
+            light: LightSetup,
             opacity_ratios: np.ndarray | None = None
     ):
-        super().__init__(driver, disk_plan_, emission, opacity_ratios)
+        super().__init__(driver, disk_plan_, light, opacity_ratios)
         self._disk = disk
         self._disk_plan = disk_plan_
 

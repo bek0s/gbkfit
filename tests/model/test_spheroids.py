@@ -25,7 +25,7 @@ from gbkfit.model.mass import G, _numerics
 from gbkfit.params import ModelEvaluationError
 
 
-BAND = dict(type='band')
+BAND = dict(type='continuum')
 
 GEOMETRY = dict(xpos=1.5, ypos=-1, posa=30, incl=60)
 
@@ -87,7 +87,7 @@ def test_a_flattened_sersic_spheroid_projects_exactly(
     # their centres (about 0.1% for re of 6 pixels).
     spheroid = dict(
         type='spheroid', profile=dict(type='sersic'),
-        shape=dict(type='flattened'), rmax=21, emission=BAND)
+        shape=dict(type='flattened'), rmax=21, light=BAND)
     properties = GEOMETRY | dict(ie=2, re=3, n=1, q=0.6)
     force_evaluation('depth')
     data, _ = evaluate_cases(
@@ -114,7 +114,7 @@ def test_an_mge_spheroid_projects_exactly(
     # curvature of the profile times the square of the voxel (0.2% here).
     spheroid = dict(
         type='spheroid', profile=dict(type='mge', ngauss=2), rmax=14,
-        emission=BAND)
+        light=BAND)
     i0, sigma, q = [3, 1], [0.8, 2.5], [0.9, 0.4]
     properties = GEOMETRY | dict(i0=i0, sigma=sigma, q=q)
     force_evaluation('depth')
@@ -145,7 +145,7 @@ def test_without_a_depth_axis_a_spheroid_is_its_exact_projection(
     shape = dict(shape=dict(type='flattened')) \
         if profile['type'] == 'sersic' else {}
     spheroid = dict(
-        type='spheroid', profile=profile, rmax=1, emission=BAND) | shape
+        type='spheroid', profile=profile, rmax=1, light=BAND) | shape
     data, _ = evaluate_cases(
         [image(driver, spheroid, 'float64')],
         GEOMETRY | properties)
@@ -173,7 +173,7 @@ def test_with_and_without_a_depth_axis_a_spheroid_agrees(
     # of an image of it alone)
     spheroid = dict(
         type='spheroid', profile=dict(type='sersic'),
-        shape=dict(type='flattened'), rmax=21, emission=BAND)
+        shape=dict(type='flattened'), rmax=21, light=BAND)
     properties = GEOMETRY | dict(ie=2, re=3, n=1, q=0.6)
     force_evaluation('depth')
     (grid,), _ = evaluate_cases(
@@ -198,7 +198,7 @@ def test_the_cusp_of_a_sersic_sphere_keeps_its_light(
     # at the centre of the voxel is infinite).
     spheroid = dict(
         type='spheroid', profile=dict(type='sersic'), rmax=12,
-        emission=BAND)
+        light=BAND)
     properties = dict(xpos=0, ypos=0, ie=1, re=2, n=4)
     force_evaluation('depth')
     case = image(driver, spheroid, dtype)
@@ -219,7 +219,7 @@ def test_rmax_cuts_each_term_at_its_spheroidal_radius(
     # warning reports (see LightMGE.cut), up to the voxels along the edge
     spheroid = dict(
         type='spheroid', profile=dict(type='mge', ngauss=1), rmax=6,
-        emission=BAND)
+        light=BAND)
     properties = GEOMETRY | dict(i0=[1], sigma=[3], q=[q])
     force_evaluation('depth')
     data, _ = evaluate_cases([image(driver, spheroid)], properties)
@@ -236,7 +236,7 @@ def test_a_warning_says_when_rmax_cuts_the_light(
     # 2 arcsec), and 0.1% beyond 6 re (rmax 12)
     spheroid = dict(
         type='spheroid', profile=dict(type='sersic'), rmax=rmax,
-        emission=BAND)
+        light=BAND)
     force_evaluation('depth')
     evaluate_cases(
         [image(driver, spheroid)], dict(xpos=0, ypos=0, ie=1, re=2, n=1))
@@ -257,7 +257,7 @@ def test_a_scale_or_an_axis_ratio_of_zero_gives_no_model(
     shape = dict(shape=dict(type='flattened')) \
         if profile['type'] == 'sersic' else {}
     spheroid = dict(
-        type='spheroid', profile=profile, rmax=8, emission=BAND) | shape
+        type='spheroid', profile=profile, rmax=8, light=BAND) | shape
     force_evaluation('depth')
     with pytest.raises(ConfigError, match="invalid parameter properties"):
         evaluate_cases([image(driver, spheroid)], GEOMETRY | properties)
@@ -267,11 +267,11 @@ def test_a_scale_or_an_axis_ratio_of_zero_gives_no_model(
 
 def test_a_sphere_has_no_axis():
     spheroid = TraitSpheroid.load(dict(
-        profile=dict(type='sersic'), rmax=10, emission=BAND))
+        profile=dict(type='sersic'), rmax=10, light=BAND))
     assert set(spheroid.pdescs()) == {'xpos', 'ypos', 'ie', 're', 'n'}
     flattened = TraitSpheroid.load(dict(
         profile=dict(type='sersic'), shape=dict(type='flattened'),
-        rmax=10, emission=BAND))
+        rmax=10, light=BAND))
     assert set(flattened.pdescs()) == {
         'xpos', 'ypos', 'posa', 'incl', 'ie', 're', 'n', 'q'}
 
@@ -279,7 +279,8 @@ def test_a_sphere_has_no_axis():
 def test_a_spheroid_round_trips():
     info = dict(
         type='spheroid', name='bulge', profile=dict(type='mge', ngauss=3),
-        rmax=10, emission=BAND | dict(bands=['sdss_r']))
+        rmax=10, light=BAND | dict(bands=[dict(
+            name='r', wavelength='6166 Angstrom')]))
     galaxy = galaxy_parser.load(dict(components=[info]))
     dumped = galaxy.dump()['components'][0]
     assert dumped['profile'] == dict(type='mge', ngauss=3)
@@ -291,7 +292,7 @@ def test_a_spheroid_round_trips():
 @pytest.mark.parametrize('options, message', [
     (dict(rmax=0), "'rmax' must be finite and greater than 0"),
     (dict(rmax=float('inf')), "'rmax' must be finite and greater than 0"),
-    (dict(emission=dict(type='lines')), "emits in bands"),
+    (dict(light=dict(type='lines')), "needs kinematics"),
     (dict(profile=dict(type='mge', ngauss=2),
           shape=dict(type='flattened')), "takes no shape"),
     (dict(profile=dict(type='mge', ngauss=0)),
@@ -304,7 +305,7 @@ def test_a_spheroid_round_trips():
      "go to its rmax"),
 ])
 def test_invalid_spheroids_are_refused(options, message):
-    info = dict(profile=dict(type='sersic'), rmax=10, emission=BAND) \
+    info = dict(profile=dict(type='sersic'), rmax=10, light=BAND) \
         | options
     with pytest.raises((ConfigError, ValueError), match=message):
         TraitSpheroid.load(info)
@@ -313,7 +314,7 @@ def test_invalid_spheroids_are_refused(options, message):
 # A galaxy of a bulge (a spheroid) whose mass follows its light, at a
 # distance
 BULGE = dict(
-    type='spheroid', name='bulge', rmax=10, emission=BAND,
+    type='spheroid', name='bulge', rmax=10, light=BAND,
     profile=dict(type='sersic'), shape=dict(type='flattened'))
 STARS = dict(type='traced_spheroid', name='stars', component='bulge')
 DISTANCE = dict(type='parameter')
@@ -404,7 +405,7 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
         type='thin_disk', name='gas', rnodes=list(range(0, 13, 2)),
         rptraits=dict(type='exponential'),
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
     # In the plane of the bulge
     disk_properties = dict(gas_vsys=0, gas_rpt_a=1, gas_rpt_s=4, gas_dpt_a=15) \
         | {f'gas_{name}': f'bulge_{name}'
@@ -449,7 +450,7 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
 def test_a_mass_follows_components_of_its_kind(mass, message):
     disk = dict(
         type='thin_disk', name='gas', rnodes=[0, 2, 4],
-        rptraits=dict(type='exponential'), emission=BAND)
+        rptraits=dict(type='exponential'), light=BAND)
     with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(
             components=[BULGE, disk], mass=[mass], distance=DISTANCE))
@@ -461,9 +462,9 @@ def test_a_mass_follows_components_of_its_kind(mass, message):
 # sqrt(pi / 2) / s exp(r^2 / (2 s^2)) erfc(r / (sqrt(2) s))], s in kpc
 S = 10
 LOG_M = 10
-STARS_EMISSION = dict(type='band')
+STARS_EMISSION = dict(type='continuum')
 JEANS_SPHEROID = dict(
-    type='jeans_spheroid', name='stars', rmax=40, emission=STARS_EMISSION,
+    type='jeans_spheroid', name='stars', rmax=40, light=STARS_EMISSION,
     profile=dict(type='mge', ngauss=1))
 JEANS_PROPERTIES = dict(
     stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
@@ -618,7 +619,7 @@ def test_a_jeans_rotation_beyond_the_motion_of_the_stars_is_capped(kappa):
 
 def stars_cube(driver, spheroid):
     """
-    A case of a spectral cube of the stars of a spheroid (its continuum),
+    A case of a spectral cube of the stars of a spheroid (the tracer losvd),
     of 32 by 32 pixels of 2 arcsec and 181 channels of 10 km/s, with a
     depth axis of voxels of 1 arcsec.
     """
@@ -628,7 +629,7 @@ def stars_cube(driver, spheroid):
             type='pixel_spectra', size=[32, 32], step=[2, 2],
             spectral=dict(size=181, step=10, convention='relativistic'),
             dtype='float64'),
-        depth=dict(step=1), lines=[], continuum=True,
+        depth=dict(step=1), tracer=dict(type='losvd'),
         galaxy=dict(components=[spheroid], mass=[dict(
             type='point', name='bh')], distance=DISTANCE))
 
@@ -701,10 +702,11 @@ def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
 
 
 @pytest.mark.parametrize('change, message', [
-    # (a cube sees the stars only when it sees the continuum)
-    (dict(continuum=None), "it sees none"),
-    # (and only those that move: not a spheroid without traits)
-    (dict(kinematics=None), "it sees none"),
+    # (a cube sees the stars only when it traces their velocities)
+    (dict(tracer=None), "it sees none"),
+    # (all of them: a spheroid without traits is an error, as its light
+    # would be left out of their velocities)
+    (dict(kinematics=None), "has no kinematics"),
 ])
 def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
                                            change, message):
@@ -713,8 +715,8 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
         spheroid['type'] = 'spheroid'
 
     case = stars_cube(driver, spheroid)
-    if 'continuum' in change:
-        del case['continuum']
+    if 'tracer' in change:
+        del case['tracer']
     properties = {
         name: value for name, value in JEANS_PROPERTIES.items()
         if 'kinematics' not in change
@@ -724,14 +726,15 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
 
 
 @pytest.mark.parametrize('component, message', [
-    # (the continuum is seen of the components that move only: not of a
-    # disk without kinematics, or of a point in bands)
+    # (the velocities of the stars are those of all their light: a disk
+    # without kinematics, or a point without them, is an error)
     (dict(type='thin_disk', rnodes=[0, 5, 10],
           rptraits=dict(type='exponential'),
-          emission=STARS_EMISSION), "it sees none"),
-    (dict(type='point', emission=STARS_EMISSION), "it sees none"),
+          light=STARS_EMISSION), "has no kinematics"),
+    (dict(type='point', light=STARS_EMISSION), "has no kinematics"),
 ])
-def test_a_cube_sees_only_stars_that_move(driver, component, message):
+def test_a_cube_of_stars_refuses_stars_that_do_not_move(
+        driver, component, message):
     # (stars without velocities have none to place in its channels: a disk
     # without kinematics gave an all-zero model, a point a KeyError)
     from modelutils import group_plan
@@ -757,7 +760,7 @@ def test_an_image_sees_the_stars_of_a_spheroid(driver, evaluate_cases):
 # of the scale height 4 arcsec), and the dispersions 30, 50 and 70 km/s
 # along R, phi and z
 TRAITS_SPHEROID = dict(
-    type='spheroid', name='stars', rmax=30, emission=STARS_EMISSION,
+    type='spheroid', name='stars', rmax=30, light=STARS_EMISSION,
     profile=dict(type='mge', ngauss=1),
     vptraits=dict(type='uniform', direction='tan'),
     vhtraits=dict(type='exponential'),
@@ -923,7 +926,7 @@ def hernquist_galaxy():
     sigma, i0 = hernquist_mge(a)
     spheroid = dict(
         type='jeans_spheroid', name='stars', rmax=30 * a,
-        emission=STARS_EMISSION, profile=dict(type='mge', ngauss=len(i0)))
+        light=STARS_EMISSION, profile=dict(type='mge', ngauss=len(i0)))
     galaxy = dict(
         components=[spheroid],
         mass=[dict(type='halo', name='light', profile=dict(
@@ -987,3 +990,37 @@ def test_the_stars_of_a_cube_have_the_second_moments_of_the_exact_mock(
         expected = np.trapezoid(losvd * exact ** 2, exact) \
             / np.trapezoid(losvd, exact)
         assert np.sqrt(second) == pytest.approx(np.sqrt(expected), rel=6e-4)
+
+
+def test_a_spheroid_can_be_dust(driver):
+    # (its density the optical depth of its dust: e.g. a dusty halo, which
+    # dims the disk in it; not with light, which would share the density)
+    import gbkfit.params
+    from gbkfit.model import Extras
+    from gbkfit.observation import (
+        Depth, ObservationGroup, ObservationPixelBrightness)
+    disk = dict(
+        type='thin_disk', name='stars', loose=False, tilted=False,
+        rnodes=list(range(0, 9)), rptraits=dict(type='exponential'),
+        light=dict(type='continuum'))
+    halo = dict(
+        type='spheroid', name='halo', rmax=12,
+        profile=dict(type='sersic'), opacity=dict(type='dust'))
+    galaxy = galaxy_parser.load(dict(components=[disk, halo]))
+    assert galaxy.components()[1].dump()['opacity'] == dict(type='dust')
+    plan = ObservationGroup([galaxy], [ObservationPixelBrightness(
+        size=(24, 24), depth=Depth(step=0.5))]).plan(driver)
+
+    def light(tau):
+        params = gbkfit.params.ParamSpace.from_properties(
+            plan.group().pdescs(), dict(
+                stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=30,
+                stars_rpt_a=1, stars_rpt_s=2, halo_xpos=0, halo_ypos=0,
+                halo_re=3, halo_n=1, halo_ie=tau))
+        return float(plan.model_h(params.evaluate(), Extras())[0][
+            'brightness'].data.sum())
+    clear, dimmed = light(0), light(0.3)
+    assert 0 < dimmed < 0.9 * clear
+    with pytest.raises(ValueError, match="with light cannot be dust"):
+        galaxy_parser.load(dict(components=[
+            halo | dict(light=dict(type='continuum'))]))

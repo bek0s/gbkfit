@@ -278,6 +278,7 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     from gbkfit.objective import LikelihoodGauss, likelihood_parser
     from gbkfit.observation import MockOptions, draw_mocks
     from gbkfit.observation import observation_parser
+    from gbkfit.model import LineCatalogue, lines_from
     from gbkfit.config import FORMAT_VERSION
     from gbkfit.config import paths_relative_to
     from gbkfit.utils import numutils
@@ -306,7 +307,9 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     likelihoods = case.likelihoods or [None] * len(case.observations)
     # (their files, e.g. regions or the modules of user likelihoods, are
     # in the folder of the case)
-    with paths_relative_to(str(folder)):
+    # (in the lines and bands of the configuration)
+    catalogue = LineCatalogue(sections.get('lines'), sections.get('bands'))
+    with paths_relative_to(str(folder)), lines_from(catalogue):
         fitted = observation_parser.load(case.observations, dataset=[
             None if info is None else dataset_parser.load(info)
             for info in given])

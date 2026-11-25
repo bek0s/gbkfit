@@ -156,7 +156,7 @@ components:
   rptraits: {type: exponential}
   vptraits: {type: arctan, direction: tan}
   dptraits: {type: uniform}
-  emission: {type: lines}
+  light: {type: lines}
 """,
     'lenses': """\
 # A gravitational lens: here a singular isothermal ellipsoid and an

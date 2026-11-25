@@ -3,7 +3,7 @@ What the components evaluated by native kernels share (the disks, the
 cones and the spheroids): the plans of their evaluation (NativePlan),
 with their parameter values in one buffer (ParamBuffer) and the maps of
 their extra outputs (ExtraMaps, evaluate_native); what they evaluate of
-their light (light_pdescs, emission_setup); and the plan of a
+their light (light_pdescs, light_setup); and the plan of a
 component made of one (NativeComponentPlan).
 """
 
@@ -20,7 +20,8 @@ from gbkfit.params import ParamDesc, ParamValues
 from ._common import systemic_velocity
 from ._units import DataUnit
 from .base import ComponentPlan, ComponentState, FieldsLayout, NativeGrid
-from .roles import Emission, EmissionSetup, View
+from .roles import Light
+from .tracers import LightSetup, View
 
 
 _log = logging.getLogger(__name__)
@@ -225,40 +226,40 @@ class NativePlan(abc.ABC):
 
 
 def light_pdescs(
-        pdescs: dict[str, ParamDesc], emission: Emission | None
+        pdescs: dict[str, ParamDesc], light: Light | None
 ) -> dict[str, ParamDesc]:
     """
     Return the parameters of the light of a component (the flux ratios of
     its lines or bands, see Light), if it emits, which must have other
     names than its parameters (pdescs). Raise ValueError if they do not.
     """
-    if emission is None:
+    if light is None:
         return {}
-    light = emission.light()
-    if repeated := sorted(set(light.pdescs()) & set(pdescs)):
+    spectrum = light.spectrum()
+    if repeated := sorted(set(spectrum.pdescs()) & set(pdescs)):
         raise ValueError(
-            f"the parameters of the {light.option} have the names of other "
-            f"parameters: {repeated}; rename the {light.option}")
-    return light.pdescs()
+            f"the parameters of the {spectrum.option} have the names of "
+            f"other parameters: {repeated}; rename the {spectrum.option}")
+    return spectrum.pdescs()
 
 
-def emission_setup(
-        emission: Emission | None,
+def light_setup(
+        light: Light | None,
         view: View,
         spectral: Grid,
         emits: bool,
         data_unit: DataUnit | None,
         redshift: float,
         opacity_lines: Sequence[int] = ()
-) -> EmissionSetup:
+) -> LightSetup:
     """
     Return what the plan of a component evaluates of its light, seen in
-    the view (see Emission.setup): nothing if it does not emit (e.g. the
+    the view (see View.setup): nothing if it does not emit (e.g. the
     opacity of its dust alone).
     """
     if not emits:
-        return EmissionSetup()
-    return emission.setup(view, spectral, data_unit, redshift, opacity_lines)
+        return LightSetup()
+    return view.setup(light, spectral, data_unit, redshift, opacity_lines)
 
 
 class NativeComponentPlan(ComponentPlan):
@@ -268,7 +269,7 @@ class NativeComponentPlan(ComponentPlan):
     the opacity with the given ratios (see Component.plan), or its optical
     depth to a cube of opacity. Its light is that of its lines (where each
     is on the spectral axis at its systemic velocity), or in an image,
-    that of its band, of their fluxes (see EmissionSetup). With line
+    that of its band, of their fluxes (see LightSetup). With line
     opacity and a unit, the fields of the opacity of each line are times
     its scale to brightness temperature, as its coefficients are 1/S in
     1/K.
@@ -278,13 +279,13 @@ class NativeComponentPlan(ComponentPlan):
             self,
             driver: Driver,
             plan: NativePlan,
-            emission: EmissionSetup,
+            light: LightSetup,
             opacity_ratios: np.ndarray | None = None
     ):
         self._driver = driver
         self._plan = plan
-        self._fluxes = emission.fluxes
-        self._opacity_scales = emission.opacity_scales
+        self._fluxes = light.fluxes
+        self._opacity_scales = light.opacity_scales
         # (the ratios of its rows follow the systemic velocities: their host
         # array changes in place at each evaluation, see opacity_cubes)
         self._opacity_ratios_h = opacity_ratios
@@ -292,7 +293,7 @@ class NativeComponentPlan(ComponentPlan):
         if opacity_ratios is not None:
             self._opacity_ratios = driver.mem_copy_h2d(opacity_ratios)
         # The offset, scale and flux of each line (set at each evaluation)
-        self._lines = emission.lines
+        self._lines = light.lines
         self._rows = None if self._lines is None \
             else np.zeros((len(self._lines), 3))
 
@@ -368,9 +369,10 @@ class NativeComponentPlan(ComponentPlan):
 
     def _image_scale(self, params: ParamValues) -> float:
         """
-        Return the flux of the light in the band of an image (see Fluxes);
-        1 in a spectral cube, whose lines have theirs.
+        Return the flux of the light of an image: the sum of the fluxes of
+        its rows (see Fluxes; of its band, or of the lines of an image of
+        lines); 1 in a spectral cube, whose lines have theirs.
         """
         if self._lines is not None:
             return 1.0
-        return float(self._fluxes(params)[0])
+        return float(np.sum(self._fluxes(params)))

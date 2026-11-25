@@ -12,7 +12,7 @@ import pytest
 from gbkfit.dataset import Data, DatasetPixelBrightness, UVCoverage
 from gbkfit.fitting import FitProblem
 from gbkfit.lensing import Lens, LensSIE, SourceGrid
-from gbkfit.model import galaxy_parser
+from gbkfit.model import Band, ContinuumTracer, galaxy_parser
 from gbkfit.objective import Likelihoods, Objective
 from gbkfit.observation import (
     ObservationGroup, ObservationPixelBrightness, observation_parser)
@@ -37,7 +37,7 @@ def gauss_disk(name, **options):
     return dict(
         type='thin_disk', name=name, loose=False, tilted=False,
         rnodes=[0, 1, 2], rptraits=dict(type='gauss'),
-        emission=dict(type='band')) | options
+        light=dict(type='continuum')) | options
 
 
 def sis(source_redshift=SOURCE_REDSHIFT):
@@ -167,7 +167,8 @@ def test_the_dust_of_a_lens_galaxy_dims_the_light_behind_it(driver):
             components=[gauss_disk('disk')]))
         images = [
             ObservationPixelBrightness(
-                size=(SIZE, SIZE), step=STEP, dtype='float64', band='sdss_r',
+                size=(SIZE, SIZE), step=STEP, dtype='float64',
+                tracer=ContinuumTracer(Band('r', '6166 Angstrom')),
                 name=name)
             for name in ('dimmed', 'clear')]
         group = ObservationGroup(
@@ -215,7 +216,7 @@ def test_a_point_behind_a_lens_is_refused(driver):
     source = galaxy_parser.load(dict(
         name='arc', redshift=SOURCE_REDSHIFT, components=[
             gauss_disk('disk'),
-            dict(type='point', name='nucleus', emission=dict(type='band'))]))
+            dict(type='point', name='nucleus', light=dict(type='continuum'))]))
     group = ObservationGroup(
         source, ObservationPixelBrightness(
             size=(SIZE, SIZE), step=STEP, dtype='float64'), [sis()])
@@ -235,7 +236,7 @@ LINE_DISK = dict(
     type='thin_disk', loose=False, tilted=False, rnodes=list(range(13)),
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
-    dptraits=dict(type='uniform'), emission=dict(type='lines'))
+    dptraits=dict(type='uniform'), light=dict(type='lines'))
 LINE_DISK_PARAMS = dict(
     xpos=0.3, ypos=-0.4, posa=40, incl=55, vsys=10, rpt_a=1, rpt_s=3,
     vpt_rt=2, vpt_vt=150, dpt_a=25)

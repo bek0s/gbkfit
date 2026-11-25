@@ -20,7 +20,7 @@ from gbkfit.grid import doppler
 from gbkfit.params import ParamValues
 from .components.base import OpacityCubes
 from .components.extinction import ExtinctionLaw
-from .components.roles import View
+from .components.tracers import View
 
 if TYPE_CHECKING:
     from .galaxy import Galaxy
@@ -107,7 +107,7 @@ class _Dust(NamedTuple):
         if np.isnan(observed).any():
             raise ValueError(
                 "dust of an extinction law dims light at its rest "
-                "wavelength: the emission of the components it dims must "
+                "wavelength: the light of the components it dims must "
                 "name its lines (e.g. lines: [halpha]), an image needs its "
                 "band, and the light from behind a scene in a spectral cube "
                 "needs a spectral axis with a rest")
@@ -239,14 +239,13 @@ def opacity_cubes(
     # each emitter of each galaxy, then the light from behind
     dust = _scene_dust(galaxies, absorbers)
     # (the band of an image: its wavelength, as observed)
-    at_band = not view.spectral and view.band is not None
+    at_band = not view.spectral and view.band() is not None
     light = {}
     for g, (galaxy, galaxy_emitters) in enumerate(zip(galaxies, emitters)):
         for i in galaxy_emitters:
-            emission = galaxy.components()[i].emission()
             frame = _component_frame(galaxy, g, i, not at_band)
-            light[g, i] = _Light.of(emission.wavelengths(
-                view.lines, view.band, galaxy.redshift()), frame)
+            light[g, i] = _Light.of(view.wavelengths(
+                galaxy.components()[i].light(), galaxy.redshift()), frame)
     rows = list(light.values())
     if behind is not None:
         rows.append(_Light.of(behind, _OBSERVED))
@@ -284,8 +283,8 @@ def check_behind(galaxies: Sequence['Galaxy'], view: View) -> None:
         return
     dust = _scene_dust(galaxies, absorbers)
     if not view.spectral:
-        band = None if view.band is None \
-            else view.band.wavelength().to_value(astropy.units.um)
+        band = None if view.band() is None \
+            else view.band().wavelength().to_value(astropy.units.um)
         for kind in dust:
             kind.ratios(_Light.of([band], _OBSERVED), collections.defaultdict(
                 float))

@@ -25,7 +25,7 @@ def component(name, **emission):
         rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines', **emission))
+        light=dict(type='lines', **emission))
 
 
 LINES = [dict(name='ha', rest='6562.8 Angstrom'),
@@ -113,7 +113,7 @@ def test_feature_combinations(driver, name, lens):
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
         oversampling=OVERSAMPLING[name],
         # Moments are of one line (they would mix the lines of a spectrum)
-        lines=['ha'] if moments else None))
+        tracer=dict(type='lines', lines=['ha']) if moments else None))
     group = ObservationGroup(
         [galaxy_parser.load(galaxy)], [observation], lenses, seen=[['gas']])
     params = gbkfit.params.ParamSpace.from_properties(

@@ -23,7 +23,7 @@ def disk(emission):
     return galaxy_parser.load(dict(components=[dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
         rptraits=dict(type='exponential'),
-        emission=dict(type=emission))
+        light=dict(type=emission))
         | (dict(**kinematics) if emission == 'lines' else {})]))
 
 
@@ -51,9 +51,9 @@ def zero_padded_median(data, size):
 def test_images_and_cubes_are_filtered_on_the_sky(driver):
     image = model(
         driver, ObservationPixelBrightness(size=(24, 20), median_size=3),
-        disk('band'), 'brightness')
+        disk('continuum'), 'brightness')
     plain = model(
-        driver, ObservationPixelBrightness(size=(24, 20)), disk('band'),
+        driver, ObservationPixelBrightness(size=(24, 20)), disk('continuum'),
         'brightness')
     np.testing.assert_array_equal(image, zero_padded_median(plain, 3))
     cube = model(
@@ -98,7 +98,7 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
     assert not ObservationPixelSpectra(
         size=(8, 8), spectral=SpectralAxis(size=5, convention='relativistic'),
         median_size=3).linear_in_light()
-    group = ObservationGroup(disk('band'), ObservationPixelBrightness(
+    group = ObservationGroup(disk('continuum'), ObservationPixelBrightness(
         size=(24, 20), median_size=3, noise=NoiseGauss(rms=1.0)))
     params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()

@@ -11,7 +11,7 @@ from gbkfit.model import galaxy_parser
 
 
 UNIFORM = dict(type='uniform')
-BAND = dict(type='band')
+BAND = dict(type='continuum')
 LINES = dict(type='lines')
 
 # A hollow cone: its walls (smooth, within 1.5 arcsec of their mid-surface
@@ -82,7 +82,7 @@ def test_a_cone_has_the_light_of_its_walls_on_its_sides(
     # touch neither the axis nor the plane of the apex (up to the
     # sampling of the voxels). The positive side is along +z of the frame
     # of the cone.
-    cone = HOLLOW | dict(sides=sides, emission=BAND)
+    cone = HOLLOW | dict(sides=sides, light=BAND)
     data, extra = evaluate_cases(
         [image(driver, cone)], GEOMETRY | HOLLOW_PROPERTIES)
     flux = data[0]['brightness'].data.sum() * 0.5 ** 2
@@ -109,7 +109,7 @@ def test_the_velocity_of_each_voxel(
     cone = HOLLOW | dict(
         vptraits=dict(type='uniform', direction=direction),
         dptraits=UNIFORM,
-        emission=LINES)
+        light=LINES)
     observable = dict(
         type='pixel_spectra', size=[48, 48], step=[0.5, 0.5],
         spectral=dict(size=41, step=10, convention='relativistic'))
@@ -140,7 +140,7 @@ def test_a_uniform_wall_is_a_hard_cone(driver, evaluate_cases):
     # between them as the cone interpolates it (of the hollow cone, whose
     # density is 0 within 3.5: the half-width there is that at 3.5).
     cone = HOLLOW | dict(
-        emission=BAND, rhtraits=dict(type='uniform', zmax=2, nodewise=True))
+        light=BAND, rhtraits=dict(type='uniform', zmax=2, nodewise=True))
     _, extra = evaluate_cases([image(driver, cone)], GEOMETRY | dict(
         wall=30, rpt_a=HOLLOW_A, rht_s=list(np.multiply(
             np.maximum(HOLLOW_RNODES, 3.5), np.sin(np.radians(10))))))
@@ -175,7 +175,7 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
         dust_posa=0,
         dust_incl=0, dust_rpt_a=0.5, dust_rpt_s=4, dust_rht_s=0.2)
     for sides, fraction in (('positive', 1), ('negative', 0)):
-        cone = HOLLOW | dict(name='cone', sides=sides, emission=BAND)
+        cone = HOLLOW | dict(name='cone', sides=sides, light=BAND)
         force_evaluation(evaluation)
         group = [image(driver, cone, components=[dust])]
         clear, _ = evaluate_cases(group, properties | dict(dust_rpt_a=0))
@@ -209,6 +209,6 @@ KINEMATICS = dict(
     (dict(sides='up'), "'sides' must be one of")])
 def test_what_a_cone_does_not_take(options, message):
     # What disks take, but cones do not
-    cone = HOLLOW | dict(**KINEMATICS, emission=LINES) | options
+    cone = HOLLOW | dict(**KINEMATICS, light=LINES) | options
     with pytest.raises((ConfigError, ValueError), match=message):
         galaxy_parser.load(dict(components=[cone]))

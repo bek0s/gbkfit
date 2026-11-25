@@ -19,7 +19,7 @@ GALAXY = dict(components=[dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))])
+    light=dict(type='lines'))])
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, rpt_a=1, rpt_s=2.5,
     vpt_rt=2, vpt_vt=150, dpt_a=20)

@@ -36,7 +36,7 @@ GAS = dict(
     rnodes=list(range(0, 21, 2)),
     rptraits=dict(type='exponential'),
     vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 GAS_PARAMS = dict(
     gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60, gas_vsys=0,
     gas_rpt_a=1, gas_rpt_s=4, gas_dpt_a=10)
@@ -170,7 +170,7 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
         type='thin_disk', name='stars', loose=False, tilted=False,
         rnodes=list(range(0, 21, 2)),
         rptraits=dict(type='exponential'),
-        emission=dict(type='band'))
+        light=dict(type='continuum'))
     galaxy = galaxy_parser.load(dict(
         components=[light], distance=dict(type='parameter'),
         mass=[dict(type='traced_disk', name='stellar', component='stars',

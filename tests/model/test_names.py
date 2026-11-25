@@ -18,7 +18,7 @@ def disk(density=THICK, **options):
     return dict(
         type='thick_disk' if 'rhtraits' in density else 'thin_disk',
         loose=False, tilted=False, rnodes=[0, 1, 2],
-        **density, emission=dict(type='band'), **options)
+        **density, light=dict(type='continuum'), **options)
 
 
 def dust(**options):
@@ -192,9 +192,9 @@ def test_each_parameter_has_the_option_that_makes_it():
         vptraits=[dict(type='arctan', direction='tan', name='rotation'),
                   dict(type='uniform', direction='rad', name='inflow')],
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines', lines=['halpha', 'nii6583']))
+        light=dict(type='lines', lines=['halpha', 'nii6583']))
     bulge = dict(
-        type='spheroid', name='bulge', rmax=10, emission=dict(type='band'),
+        type='spheroid', name='bulge', rmax=10, light=dict(type='continuum'),
         profile=dict(type='sersic'), shape=dict(type='flattened'))
     galaxy = galaxy_parser.load(dict(
         components=[gas, bulge], distance=dict(type='parameter'),
@@ -211,7 +211,7 @@ def test_each_parameter_has_the_option_that_makes_it():
     assert owners['gas_vpt_inflow_vr'] == (
         'components', 0, 'vptraits', 1)
     assert owners['gas_nii6583_ratio'] == (
-        'components', 0, 'emission', 'lines', 1)
+        'components', 0, 'light', 'lines', 1)
     assert owners['bulge_re'] == ('components', 1, 'profile')
     assert owners['bulge_q'] == ('components', 1, 'shape')
     assert owners['mass_halo_c'] == ('mass', 0)

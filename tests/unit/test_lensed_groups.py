@@ -26,7 +26,7 @@ def disk(name='disk', **options):
     return dict(
         type='thin_disk', name=name, loose=False, tilted=False,
         rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
-        emission=dict(type='band')) | options
+        light=dict(type='continuum')) | options
 
 
 def galaxy(name, redshift=None, components=None):
@@ -186,7 +186,7 @@ def test_galaxies_behind_a_lens_whose_light_is_not_seen_are_refused():
     with pytest.raises(ValueError, match="sees none of the light of"):
         ObservationGroup(
             [galaxy('deflector', 0.3), galaxy('arc', 2.0, components=[disk(
-                emission=dict(type='lines'),
+                light=dict(type='lines'),
                 vptraits=dict(type='arctan', direction='tan'),
                 dptraits=dict(type='uniform'))])],
             [image(name='hst')], [lens()])
@@ -239,7 +239,7 @@ GAS = dict(
     type='thin_disk', name='gas', loose=False, tilted=False,
     rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
     vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 
 HALO = dict(type='halo', name='halo', profile=dict(type='nfw'))
 
@@ -377,7 +377,7 @@ def test_a_mass_in_its_plane_has_a_plane_of_its_own():
     # sphere here)
     spheroid = dict(
         type='spheroid', name='stars', profile=dict(type='sersic'),
-        rmax=5, emission=dict(type='band'))
+        rmax=5, light=dict(type='continuum'))
     traced = dict(type='traced_spheroid', name='stars', component='stars')
     galaxy = deflector(components=[spheroid], mass=[traced, dict(
         type='disk', name='disk', surface=dict(type='exponential'),
@@ -407,7 +407,7 @@ def test_rings_that_are_not_ellipses_place_no_mass_and_describe_says_so():
         rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
         rhtraits=dict(type='sech2', zmax=1),
         zptraits=dict(type='nw_harmonic', order=2, zmax=1),
-        emission=dict(type='band'))
+        light=dict(type='continuum'))
     config = lensed_config()
     config['galaxies'][0] |= dict(
         components=[bowl], distance=dict(type='cosmological'),
@@ -421,5 +421,5 @@ def test_rings_that_are_not_ellipses_place_no_mass_and_describe_says_so():
     assert "not ellipses on the sky" in error.message
     moved = bowl | dict(
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
     mass_group(deflector(components=[moved]))

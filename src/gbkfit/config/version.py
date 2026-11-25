@@ -31,6 +31,10 @@ __all__ = [
 # dataset leaves the observation: the section datasets of a setup pairs
 # observations with data by name), and 22, of 2026-11-25 on (what an
 # observation sees of the galaxies leaves it: the section seen of a
-# setup), and 23, of 2026-11-25 on (a point is not a type of PSF or LSF);
+# setup), and 23, of 2026-11-25 on (a point is not a type of PSF or LSF),
+# and 24, of 2026-11-26 on (an observation says what its data trace, its
+# tracer: lines, a continuum or the velocities of stars; the emission of
+# a component is its light, of lines or a continuum; GBKFIT knows no
+# bands; points move with kinematics, particles always);
 # gbkfit.migration rewrites the older ones
-FORMAT_VERSION = 23
+FORMAT_VERSION = 24

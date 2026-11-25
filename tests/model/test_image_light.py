@@ -27,7 +27,7 @@ def disk(ptraits, **options):
     """A galaxy of a thin disk of the given density polar traits."""
     return dict(components=[dict(
         type='thin_disk', loose=False, tilted=False, rnodes=[0, 6],
-        rptraits=ptraits, emission=dict(type='band'))
+        rptraits=ptraits, light=dict(type='continuum'))
         | options])
 
 

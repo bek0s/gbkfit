@@ -23,7 +23,7 @@ def disk(emission):
         rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type=emission))
+        light=dict(type=emission))
 
 
 PROPERTIES = dict(
@@ -45,7 +45,7 @@ RECORDED = dict(
 
 
 def plan_of(driver, observable):
-    emission = 'band' if observable['type'] == 'pixel_brightness' \
+    emission = 'continuum' if observable['type'] == 'pixel_brightness' \
         else 'lines'
     return group_plan([dict(
         driver=dict(type=driver.type()), galaxy=dict(
@@ -208,7 +208,7 @@ def test_mocks_without_data_have_the_unit_and_beam_of_their_model(
     # angle), and the observation of them has the model they were drawn
     # from (they had neither, and could not be fitted: audit 2026-11-11)
     from gbkfit.observation import ObservationGroup
-    hi = disk('lines') | dict(emission=dict(
+    hi = disk('lines') | dict(light=dict(
         type='lines', lines=['hi21'], unit='Msun/pc2'))
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=dict(components=[hi]),
@@ -345,7 +345,7 @@ def test_each_observation_has_its_own_noise(driver):
     from gbkfit.observation import ObservationGroup, observation_parser
     image = dict(type='pixel_brightness') | RECORDED['pixel_brightness']
     group = ObservationGroup(
-        galaxy_parser.load(dict(components=[disk('band')])),
+        galaxy_parser.load(dict(components=[disk('continuum')])),
         observation_parser.load([
             image | dict(noise=dict(type='gauss', rms=rms))
             for rms in (0.01, 0.02)]))
@@ -453,8 +453,8 @@ def test_data_without_a_unit_take_no_light_of_a_unit(driver):
     [dataset] = mock_data(plan, params)
     lit = group_plan([dict(
         driver=dict(type=driver.type()), observation=image,
-        galaxy=dict(components=[disk('band') | dict(
-            emission=dict(type='band', unit='MJy/sr'))]),
+        galaxy=dict(components=[disk('continuum') | dict(
+            light=dict(type='continuum', unit='MJy/sr'))]),
         unit='MJy/sr')])
     with pytest.raises(ValueError, match="the data have no unit"):
         lit.with_datasets({0: dataset})
@@ -465,7 +465,7 @@ def mock_setup_config(observable, likelihoods=None):
     A configuration of mock data of an observation 'img' of a disk, of
     noise of rms 0.01, with the given section likelihoods, if any.
     """
-    emission = 'band' if observable['type'] == 'pixel_brightness' \
+    emission = 'continuum' if observable['type'] == 'pixel_brightness' \
         else 'lines'
     return dict(
         version=FORMAT_VERSION, driver=dict(type='host'),

@@ -484,7 +484,8 @@ class Renders:
         tell('setting up')
         galaxy, _, step = self._load(project, options, view, size)
         try:
-            seen = _seen(galaxy, gbkfit.model.View(spectral=True))
+            seen = _seen(galaxy, gbkfit.model.View(
+                True, gbkfit.model.LinesTracer()))
             if not seen:
                 raise Invalid(
                     "the galaxy has no component that emits lines: a cube "
@@ -729,11 +730,11 @@ def _radius(galaxy: Galaxy) -> float:
 def _seen(galaxy: Galaxy, view: gbkfit.model.View) -> list[Component]:
     """
     Return the components of a galaxy whose light an observation of the
-    given view sees (see Emission.seen_in).
+    given view sees (see View.sees).
     """
     return [
-        c for c in galaxy.components() if c.emission() is not None
-        and c.emission().seen_in(view, c.moves())]
+        c for c in galaxy.components() if c.light() is not None
+        and view.sees(c.light(), c.moves())]
 
 
 def _observations(
@@ -753,11 +754,11 @@ def _observations(
     """
     infos = []
     for view, info in (
-            (gbkfit.model.View(spectral=True), dict(
+            (gbkfit.model.View(True, gbkfit.model.LinesTracer()), dict(
                 type='pixel_spectra',
                 spectral=(spectral or dict(size=2, step=100))
                 | dict(convention='relativistic'))),
-            (gbkfit.model.View(spectral=False),
+            (gbkfit.model.View(False, gbkfit.model.ContinuumTracer()),
              dict(type='pixel_brightness'))):
         seen = _seen(galaxy, view)
         if not seen:
@@ -780,7 +781,7 @@ def _rest(components: list[Any]) -> str | None:
     none.
     """
     for component in components:
-        if lines := component.emission().lines().lines():
+        if lines := component.light().lines().lines():
             rest = lines[0].rest()
             unit = gbkfit.units.format_unit(rest.unit)
             return f"{float(rest.value)!r} {unit}"
@@ -821,7 +822,7 @@ def _cube_axis(redshift: float, components: list[Any]) -> CubeAxis:
     """
     rests = [
         lines[0].rest() for component in components
-        if (lines := component.emission().lines().lines())]
+        if (lines := component.light().lines().lines())]
     if not rests:
         return CubeAxis('relativistic', 1.0)
     return CubeAxis(
@@ -857,7 +858,7 @@ def _line_offsets(components: list[Any]) -> list[float]:
     """
     rests = [
         line.rest() for component in components
-        for line in component.emission().lines().lines() or ()]
+        for line in component.light().lines().lines() or ()]
     if not rests:
         return [0.0]
     first = rests[0]
@@ -949,7 +950,7 @@ def _placement(
     x, y = (None, None) if frame is None else (first(frame.x), first(frame.y))
     centre = None if x is None or y is None else (x, y)
     vsys = None if frame is None else first(frame.vsys)
-    lines = _seen(galaxy, gbkfit.model.View(spectral=True))
+    lines = _seen(galaxy, gbkfit.model.View(True, gbkfit.model.LinesTracer()))
     velocity = None if vsys is None or not lines else _observed_velocities(
         (vsys, vsys), _cube_axis(galaxy.redshift(), lines))[0]
     in_field = None

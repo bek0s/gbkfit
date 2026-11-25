@@ -34,7 +34,7 @@ DISK = dict(
     rhtraits=dict(type='gauss', zmax=10),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'), equilibrium=dict(gravity='rotation'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 
 PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, rht_s=1,
@@ -331,7 +331,7 @@ THIN = dict(
     rptraits=dict(type='exponential'),
     rhtraits=dict(type='equilibrium', gravity='sheet'),
     vptraits=dict(type='mass'), dptraits=dict(type='nw_uniform'),
-    pressure_support=dict(type='jeans'), emission=dict(type='lines'))
+    pressure_support=dict(type='jeans'), light=dict(type='lines'))
 THIN_MASS = [
     dict(type='traced_disk', name='gas', component='gas',
          vertical=dict(type='thin')),

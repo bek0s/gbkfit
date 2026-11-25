@@ -1,6 +1,6 @@
 # thin_disk_moments: The moment maps of a thin disk, float32 (the default dtype), with weights of the items and a residual for missing values.
 # (written by make_golden.py; do not edit)
-version: 23
+version: 24
 driver: {type: host}
 galaxies:
 - components:
@@ -11,7 +11,7 @@ galaxies:
     rptraits: {type: exponential}
     vptraits: {type: arctan, direction: tan}
     dptraits: {type: uniform}
-    emission: {type: lines}
+    light: {type: lines}
 observations:
 - type: pixel_moments
   spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}

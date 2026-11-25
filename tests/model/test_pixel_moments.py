@@ -64,7 +64,7 @@ def evaluate_mmaps(driver, observation, **properties):
         rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))]))
+        light=dict(type='lines'))]))
     group = ObservationGroup([galaxy], [observation])
     params = ParamSpace.from_properties(group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,

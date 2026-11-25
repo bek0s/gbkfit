@@ -14,8 +14,10 @@ from modelutils import group_plan
 
 # A galaxy of a point that emits in a band (seen by images), and one of a
 # point that emits a line (seen by spectral cubes)
-BAND_POINT = dict(components=[dict(type='point', emission=dict(type='band'))])
-LINE_POINT = dict(components=[dict(type='point', emission=dict(type='lines'))])
+BAND_POINT = dict(components=[dict(
+    type='point', light=dict(type='continuum'))])
+LINE_POINT = dict(components=[dict(
+    type='point', light=dict(type='lines'), kinematics=dict(type='gauss'))])
 
 
 def evaluate(driver, galaxy, observable, properties):
@@ -139,7 +141,8 @@ def test_point_with_lines(driver):
     lines = [dict(name='ha', rest='6562.8 Angstrom'),
              dict(name='nii6583', rest='6583.45 Angstrom')]
     galaxy = dict(components=[dict(
-        type='point', emission=dict(type='lines', lines=lines))])
+        type='point', light=dict(type='lines', lines=lines),
+        kinematics=dict(type='gauss'))])
     scube = dict(
         type='pixel_spectra', size=[10, 8], step=[0.5, 0.5], rval=[0, 0],
         spectral=dict(size=301, step=10, rval=500, rest='6562.8 Angstrom'))
@@ -159,8 +162,9 @@ def test_point_with_lines(driver):
 def test_point_round_trip():
     from gbkfit.model import galaxy_parser
     info = dict(components=[dict(
-        type='point', name='agn', emission=dict(
-            type='lines', lines=[dict(name='ha', rest='6562.8 Angstrom')]))])
+        type='point', name='agn', light=dict(
+            type='lines', lines=[dict(name='ha', rest='6562.8 Angstrom')]),
+        kinematics=dict(type='gauss'))])
     galaxy = galaxy_parser.load(copy.deepcopy(info))
     # A named component prefixes its parameters with its name
     assert set(galaxy.pdescs()) == {
@@ -173,7 +177,7 @@ def test_point_plan_takes_a_dtype_or_its_type(driver):
     # The plans of the components take the dtype as np.dtype or its type
     from gbkfit.model import galaxy_parser
     from gbkfit.model._opacity import opacity_cubes
-    from gbkfit.model import SceneTarget, View
+    from gbkfit.model import ContinuumTracer, SceneTarget, View
     from gbkfit.model.scenes import IMAGE_SPECTRAL_AXIS
     from gbkfit.grid import make_grid
     galaxy = galaxy_parser.load(copy.deepcopy(BAND_POINT))
@@ -182,8 +186,11 @@ def test_point_plan_takes_a_dtype_or_its_type(driver):
     driver.mem_fill(image, 0)
     plan = galaxy.plan(
         SceneTarget(
-            driver, grid, IMAGE_SPECTRAL_AXIS, np.float32, View(spectral=False), None, None), (0,),
-        opacity_cubes([galaxy], [(0,)], View(spectral=False), np.float32)[0], None)
+            driver, grid, IMAGE_SPECTRAL_AXIS, np.float32,
+            View(False, ContinuumTracer()), None, None), (0,),
+        opacity_cubes(
+            [galaxy], [(0,)], View(False, ContinuumTracer()), np.float32)[0],
+        None)
     plan.evaluate(
         dict(xpos=0.5, ypos=0.5, flux=2), {}, dict(image=image), None)
     assert driver.mem_copy_d2h(image).sum() == 2

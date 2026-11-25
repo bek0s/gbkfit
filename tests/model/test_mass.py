@@ -19,7 +19,8 @@ import scipy.special
 import gbkfit.cosmology
 from gbkfit.config import ConfigError
 from gbkfit.grid import SpectralAxis
-from gbkfit.model import Extras, SceneTarget, View, galaxy_parser
+from gbkfit.model import (
+    Extras, LinesTracer, SceneTarget, View, galaxy_parser)
 from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceCosmological, DistanceParameter)
 from gbkfit.model.mass import (
@@ -1644,7 +1645,7 @@ DISK = dict(
     loose=False, tilted=False, rnodes=list(range(0, 21, 2)), rstep=0.5,
     rptraits=dict(type='exponential'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 
 DISK_PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, dpt_a=15)
@@ -1874,7 +1875,7 @@ def test_disk_densities_are_azimuthal_means(driver):
             dict(type='mixture_gauss', nblobs=1)],
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
         sptraits=dict(type='rrange'),
-        emission=dict(type='lines')))
+        light=dict(type='lines')))
     params = dict(
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
         rpt2_a=np.full(11, 0.5), rpt2_p=np.zeros(11), rpt3_r=15, rpt3_t=40,
@@ -1883,7 +1884,7 @@ def test_disk_densities_are_azimuthal_means(driver):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32),
-            View(spectral=True), None, None),
+            View(True, LinesTracer()), None, None),
         True, None, 0.0)
     density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
@@ -1912,7 +1913,7 @@ def test_disk_densities_are_exact_at_jumps(driver):
         vptraits=dict(type='uniform', direction='tan'),
         dptraits=dict(type='uniform'),
         sptraits=dict(type='azrange'),
-        emission=dict(type='lines')))
+        light=dict(type='lines')))
     cells = np.random.default_rng(3).normal(size=24)
     params = dict(
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
@@ -1920,7 +1921,7 @@ def test_disk_densities_are_exact_at_jumps(driver):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32),
-            View(spectral=True), None, None),
+            View(True, LinesTracer()), None, None),
         True, None, 0.0)
     density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
@@ -1960,7 +1961,7 @@ def test_disk_densities_see_small_blobs(driver):
             dict(type='nw_distortion')],
         vptraits=dict(type='uniform', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines')))
+        light=dict(type='lines')))
     params = dict(
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, vpt_vt=100, dpt_a=10,
         rpt_r=15, rpt_t=40, rpt_a=1, rpt_s=0.01, rpt_q=1, rpt_p=0,
@@ -1970,7 +1971,7 @@ def test_disk_densities_see_small_blobs(driver):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64),
-            View(spectral=True), None, None),
+            View(True, LinesTracer()), None, None),
         True, None, 0.0)
     density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
@@ -2134,14 +2135,14 @@ def test_pressure_support_is_the_jeans_equation(driver):
         rnodes=list(range(0, 21, 2)), rstep=0.5,
         rptraits=dict(type='exponential'),
         vptraits=dict(type='mass'), dptraits=dict(type='exponential'),
-        emission=dict(type='lines')))
+        light=dict(type='lines')))
     params = dict(
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
         dpt_a=30, dpt_s=10)
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32),
-            View(spectral=True), None, None),
+            View(True, LinesTracer()), None, None),
         True, None, 0.0)
     disk = component.density_disk()
     radius = np.array(disk.subrnodes())
@@ -2171,7 +2172,7 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
         rptraits=ptrait, rhtraits=SHEET['rhtraits'],
         vptraits=dict(type='mass'), dptraits=dict(type='exponential'),
         pressure_support=SHEET['pressure_support'],
-        emission=dict(type='lines')))
+        light=dict(type='lines')))
     params = dict(
         xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4,
         dpt_a=30, dpt_s=10) | (dict(rpt_b=1.5) if 'rpt_b' in component.pdescs()
@@ -2179,7 +2180,7 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64),
-            View(spectral=True), None, None),
+            View(True, LinesTracer()), None, None),
         True, None, 0.0)
     disk = component.density_disk()
     (name, support), = disk.pressure_supported_params().items()
@@ -2531,7 +2532,7 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
     plan = component.plan(
         SceneTarget(
             driver, None, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64),
-            View(spectral=True), None, None),
+            View(True, LinesTracer()), None, None),
         True, None, 0.0).disk_plan()
     values = {p: params[p] for p in component.pdescs()} | state.inputs()
     heights = [0.125, 4.125, 7.875, 9]

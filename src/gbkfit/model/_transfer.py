@@ -210,7 +210,6 @@ class TransferPlan:
     ):
         check_emitters(sum(len(member.emitters) for member in members))
         driver, dtype = target.driver, target.dtype
-        lines, band = target.view.lines, target.view.band
         data_unit = target.data_unit
         # The depth axis: that of the galaxy, or of several, as long as
         # theirs together and a margin of 2 voxels each (see _placement)
@@ -248,8 +247,9 @@ class TransferPlan:
         # device once per evaluation): one row for each of its wavelengths
         # (those of its lines, or its band, at the redshift of its galaxy)
         nrows = [
-            len(self._component(key).emission().wavelengths(
-                lines, band, members[key[0]].galaxy.redshift()))
+            len(target.view.wavelengths(
+                self._component(key).light(),
+                members[key[0]].galaxy.redshift()))
             for key in self._keys]
         ends = np.cumsum(nrows)
         self._rows = {

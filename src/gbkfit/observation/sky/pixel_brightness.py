@@ -2,7 +2,7 @@
 The observation of brightness on a grid of pixels: an image.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -14,7 +14,8 @@ from gbkfit.grid import (
     Grid, GridData, Rota, Rpix, Rval, Size, Step, grid_options)
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
-from gbkfit.model import Band, DataUnit, LightUnit
+from gbkfit.model import (
+    ContinuumTracer, DataUnit, LightUnit, LinesTracer, Tracer)
 from ..depth import Depth
 from ..noise import Noise
 from ..plan import ModelData, ModelItem
@@ -73,6 +74,7 @@ class ObservationPixelBrightness(ObservationSky):
     dataset_class = DatasetPixelBrightness
 
     spectral_view = False
+    tracer_types = (ContinuumTracer, LinesTracer)
     orbit_stars = 'light'
 
     # An image has no spectral axis
@@ -111,9 +113,7 @@ class ObservationPixelBrightness(ObservationSky):
             median_size: MedianSize | None = None,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            lines: Sequence[str] | None = None,
-            continuum: bool = False,
-            band: str | Band | None = None,
+            tracer: Tracer | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
@@ -131,9 +131,9 @@ class ObservationPixelBrightness(ObservationSky):
         check_median_size(median_size)
         self._median_size = median_size
         super().__init__(
-            self._make_grid(**grid), source_grid, instrument, lines, continuum,
-            band, pixel_weights, flux_scale, offsets, noise, oversampling,
-            depth, dtype, fft_dtype, name, unit)
+            self._make_grid(**grid), source_grid, instrument, tracer,
+            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
+            dtype, fft_dtype, name, unit)
 
     def _measured_pixels(self) -> np.ndarray:
         return unmasked_pixels(self._dataset, self._grid.size[1::-1])

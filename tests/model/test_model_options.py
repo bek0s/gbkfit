@@ -30,10 +30,10 @@ KINEMATICS = dict(vptraits=ARCTAN, dptraits=UNIFORM)
 
 # A component of each kind, with its required options
 BAND_THIN = dict(
-    DISK, type='thin_disk', **THIN, emission=dict(type='band'))
+    DISK, type='thin_disk', **THIN, light=dict(type='continuum'))
 BAND_THICK = BAND_THIN | dict(type='thick_disk', **THICK)
 LINES_THIN = BAND_THIN | dict(
-    **KINEMATICS, emission=dict(type='lines'))
+    **KINEMATICS, light=dict(type='lines'))
 LINES_THICK = LINES_THIN | dict(type='thick_disk', **THICK)
 DUST = dict(DISK, type='thick_disk', **THICK, opacity=dict(type='dust'))
 
@@ -188,11 +188,11 @@ def test_galaxies_that_dim_one_another_need_radiative_transfer(kind):
 
 
 IMAGE_SEES_NONE = (
-    "the observation is an image, which sees the components that emit in "
-    "a band; it sees none")
+    "the observation is of the tracer 'continuum'; it sees none of the "
+    "components")
 CUBE_SEES_NONE = (
-    "the observation is a spectral cube, which sees the components that "
-    "emit lines; it sees none")
+    "the observation is of the tracer 'lines'; it sees none of the "
+    "components")
 
 
 @pytest.mark.parametrize('kind, component, message', [

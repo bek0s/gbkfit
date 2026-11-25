@@ -15,8 +15,8 @@ from gbkfit.lensing import (
     Lens, LensedPlane, LensedScene, LensSheet, LensSIE, SourceGrid,
     TracePlan, Tracer, plane_layout)
 from gbkfit.model import (
-    AdditiveScenePlan, DepthAxis, Extras, Reference, Scene, SceneEvaluation,
-    SceneState, View, galaxy_parser)
+    AdditiveScenePlan, ContinuumTracer, DepthAxis, Extras, Reference, Scene,
+    SceneEvaluation, SceneState, View, galaxy_parser)
 
 
 ORIGIN = (150.0, 2.0)
@@ -211,7 +211,7 @@ def disk(name, redshift, light='exponential'):
         name=name, redshift=redshift, components=[dict(
             type='thin_disk', loose=False, tilted=False,
             rnodes=[0, 0.5, 1, 1.5, 2, 2.5, 3],
-            rptraits=dict(type=light), emission=dict(type='band'))]))
+            rptraits=dict(type=light), light=dict(type='continuum'))]))
 
 
 GALAXIES = [disk('front', 0.3), disk('arc', 1.5, 'gauss')]
@@ -234,7 +234,7 @@ def scene_of(indices, behind):
         [{name: f'{galaxy.name()}_{name}' for name in galaxy.pdescs()}
          for galaxy in galaxies],
         [galaxy.name() for galaxy in galaxies],
-        [(0,)] * len(galaxies), View(spectral=False), behind=behind)
+        [(0,)] * len(galaxies), View(False, ContinuumTracer()), behind=behind)
 
 
 def plan_scene(scene, driver, grid):
@@ -389,10 +389,10 @@ def test_observations_plan_planes_on_their_depth_axis():
             type='thick_disk', loose=False, tilted=False,
             rnodes=[0, 1, 2, 3], rptraits=dict(type='exponential'),
             rhtraits=dict(type='sech2', zmax=1),
-            emission=dict(type='band'))]))
+            light=dict(type='continuum'))]))
     thick = Scene(
         [galaxy], [{name: f'arc_{name}' for name in galaxy.pdescs()}],
-        ['arc'], [(0,)], View(spectral=False))
+        ['arc'], [(0,)], View(False, ContinuumTracer()))
     (axis,) = depth_axes(thick, Depth(extent=3.2, step=0.02), IMAGE)
     assert (axis.size, axis.step) == (160, 0.02)
     assert depth_axes(scene_of([1], False), Depth(), IMAGE) == ()

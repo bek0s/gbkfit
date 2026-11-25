@@ -509,7 +509,7 @@ def test_each_type_of_component_is_given_with_its_parts(client):
         ('rnodes', None), ('rptraits', 'rhtraits'), ('vptraits', 'vhtraits')]
     # (a type without traits takes none)
     assert [part['option'] for part in types['point']['parts']] \
-        == ['emission']
+        == ['light']
     assert types['point']['traits'] == {}
     assert types['point']['directions'] == []
 
@@ -542,7 +542,7 @@ def test_the_parameters_of_a_galaxy_are_described(client):
         rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
     info = client.post('/api/v1/parameters', json=dict(
         project='study', galaxy=dict(components=[disk]))).json()
     names = [p['name'] for p in info['parameters']]
@@ -556,7 +556,7 @@ def test_the_parameters_of_a_galaxy_are_described(client):
     assert info['problems'] == []
     # (a galaxy of a band, seen in an image; one with problems)
     band = dict(
-        disk, emission=dict(type='band'), vptraits=None, dptraits=None)
+        disk, light=dict(type='continuum'), vptraits=None, dptraits=None)
     assert client.post('/api/v1/parameters', json=dict(
         project='study', galaxy=dict(components=[band]))).json()['parameters']
     # A thick disk, which needs a line of sight with a depth axis
@@ -582,7 +582,7 @@ def test_a_problem_in_a_part_of_a_galaxy_keeps_the_parameters_of_the_others(
         rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
     galaxy = dict(
         components=[dict(disk, name='gas'), dict(disk, name='stars')],
         distance=dict(type='parameter'),
@@ -1349,10 +1349,10 @@ RENDERED = dict(components=[
          rptraits=dict(type='exponential'),
          vptraits=dict(type='arctan', direction='tan'),
          dptraits=dict(type='uniform'),
-         emission=dict(type='lines')),
+         light=dict(type='lines')),
     dict(type='thin_disk', name='stars', rnodes=[0, 2, 4, 6, 8],
          rptraits=dict(type='exponential'),
-         emission=dict(type='band'))])
+         light=dict(type='continuum'))])
 
 
 def test_a_render_takes_keys_that_select_elements(client):
@@ -1397,7 +1397,7 @@ def test_a_galaxy_is_rendered_as_it_is_built(client):
 
 def test_a_galaxy_of_a_named_line_is_rendered(client):
     # (its cube at the rest of the line, given as text)
-    gas = dict(RENDERED['components'][0], emission=dict(
+    gas = dict(RENDERED['components'][0], light=dict(
         type='lines', lines='hi21'))
     _, maps = render(
         client, dict(components=[gas]), properties=dict(gas_vpt_vt=200),
@@ -1678,7 +1678,7 @@ def test_the_cube_of_a_galaxy_is_rendered_and_viewed(client):
     for line in (None, 'hi21'):
         gas = dict(RENDERED['components'][0])
         if line:
-            gas['emission'] = dict(type='lines', lines=line)
+            gas['light'] = dict(type='lines', lines=line)
         info = client.post('/api/v1/views/galaxy-cube', json=dict(
             project='study', galaxy=dict(components=[gas], redshift=0.002),
             properties=dict(gas_vpt_vt=200, gas_posa=0), size=32)).json()

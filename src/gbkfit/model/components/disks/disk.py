@@ -23,7 +23,8 @@ from ..base import (
     Component, ComponentLinks, ComponentPart, ComponentPlan, FrameParams,
     SceneTarget)
 from ..nodes import Nodes, as_nodes
-from ..roles import Emission, Opacity, View
+from ..roles import Light, Opacity
+from ..tracers import View
 from . import _build, _nodal, _profiles, _stage
 from .clouds import Clouds
 from ..parts import KinematicTraits, density_traits, kinematic_traits
@@ -162,7 +163,7 @@ class Disk(Component, abc.ABC):
             equilibrium: traits.DispersionEquilibrium | None,
             pressure_support: traits.PressureSupport | None,
             fluid: str | Sequence[str] | None,
-            emission: Emission | None,
+            light: Light | None,
             opacity: Opacity | None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
@@ -175,7 +176,7 @@ class Disk(Component, abc.ABC):
             name: str | None
     ):
         # (the options are checked by the constructor of the subclass)
-        super().__init__(name, emission, opacity)
+        super().__init__(name, light, opacity)
         thick = self.has_height()
         rptraits, rhtraits, height = density_traits(
             rptraits, rhtraits, thick)
@@ -188,10 +189,10 @@ class Disk(Component, abc.ABC):
         self._rnodes = rnodes = as_nodes(rnodes)
         self._disk = _build.make_disk(
             rptraits, rhtraits, height, kinematics, pressure_support, fluid,
-            emission, opacity, zptraits, sptraits, thick=thick, loose=loose,
+            light, opacity, zptraits, sptraits, thick=thick, loose=loose,
             tilted=tilted, rnodes=rnodes, rstep=rstep, interp=interp,
             clouds=clouds)
-        self._light_pdescs = light_pdescs(self._disk.pdescs(), emission)
+        self._light_pdescs = light_pdescs(self._disk.pdescs(), light)
 
     def kinematics(self) -> KinematicTraits | None:
         """Return its kinematic traits, if it moves."""
@@ -339,7 +340,7 @@ class Disk(Component, abc.ABC):
             label: str
     ) -> _stage.DiskStage | None:
         return _stage.plan_disk_stage(
-            self._disk, self.emission(), driver, sky_origin, links, label)
+            self._disk, self.light(), driver, sky_origin, links, label)
 
     def plan(
             self,
@@ -349,7 +350,7 @@ class Disk(Component, abc.ABC):
             redshift: float
     ) -> ComponentPlan:
         return _build.disk_plan(
-            self._disk, self.emission(), target.driver, target.spectral,
+            self._disk, self.light(), target.driver, target.spectral,
             target.dtype, target.view, emits, opacity_ratios,
             target.data_unit, redshift)
 
@@ -391,7 +392,7 @@ class ThinDisk(Disk):
         molecular gas), and whose surface density holds the disk up in
         the equilibrium 'sheet' (by default, the mass disks that follow
         the disk).
-    emission : Emission, optional
+    light : Light, optional
         The light it emits.
     sptraits : SPTrait or Sequence of SPTrait, optional
         Its selection polar traits: the parts of the disk that are kept
@@ -429,12 +430,12 @@ class ThinDisk(Disk):
     config_start = dict(
         rnodes=dict(max=16, sep=2), rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform'), emission=dict(type='lines'))
+        dptraits=dict(type='uniform'), light=dict(type='lines'))
 
     parts = (
         ComponentPart('rnodes'), ComponentPart('rptraits'),
         ComponentPart('vptraits'), ComponentPart('dptraits'),
-        ComponentPart('emission'), ComponentPart('sptraits'),
+        ComponentPart('light'), ComponentPart('sptraits'),
         ComponentPart('pressure_support'), ComponentPart('rhtraits'))
 
     @staticmethod
@@ -464,7 +465,7 @@ class ThinDisk(Disk):
             dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None = None,
             pressure_support: traits.PressureSupport | None = None,
             fluid: str | Sequence[str] | None = None,
-            emission: Emission | None = None,
+            light: Light | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             loose: bool = False,
             tilted: bool = False,
@@ -476,7 +477,7 @@ class ThinDisk(Disk):
         check_options(ThinDisk.__init__, locals())
         super().__init__(
             rptraits, rhtraits, vptraits, dptraits, None, None, None,
-            pressure_support, fluid, emission, None, None, sptraits, loose,
+            pressure_support, fluid, light, None, None, sptraits, loose,
             tilted, rnodes, rstep, interp, None, name)
 
     @staticmethod
@@ -523,7 +524,7 @@ class ThickDisk(Disk):
         with this dispersion alone, or with dispersion traits too.
     pressure_support, fluid : optional
         As those of ThinDisk.
-    emission : Emission, optional
+    light : Light, optional
         The light it emits.
     opacity : Opacity, optional
         What it removes from the light behind it.
@@ -572,7 +573,7 @@ class ThickDisk(Disk):
         ComponentPart('rnodes'), ComponentPart('rptraits', 'rhtraits'),
         ComponentPart('vptraits', 'vhtraits'),
         ComponentPart('dptraits', 'dhtraits'), ComponentPart('equilibrium'),
-        ComponentPart('emission'), ComponentPart('zptraits'),
+        ComponentPart('light'), ComponentPart('zptraits'),
         ComponentPart('sptraits'), ComponentPart('opacity'),
         ComponentPart('clouds'), ComponentPart('pressure_support'))
 
@@ -597,7 +598,7 @@ class ThickDisk(Disk):
             equilibrium: traits.DispersionEquilibrium | None = None,
             pressure_support: traits.PressureSupport | None = None,
             fluid: str | Sequence[str] | None = None,
-            emission: Emission | None = None,
+            light: Light | None = None,
             opacity: Opacity | None = None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
@@ -612,7 +613,7 @@ class ThickDisk(Disk):
         check_options(ThickDisk.__init__, locals())
         super().__init__(
             rptraits, rhtraits, vptraits, dptraits, vhtraits, dhtraits,
-            equilibrium, pressure_support, fluid, emission, opacity,
+            equilibrium, pressure_support, fluid, light, opacity,
             zptraits, sptraits, loose, tilted, rnodes, rstep, interp,
             clouds, name)
 

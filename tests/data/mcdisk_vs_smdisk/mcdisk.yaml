@@ -1,4 +1,4 @@
-version: 23
+version: 24
 driver: {type: host}
 galaxies:
 - components:
@@ -11,7 +11,7 @@ galaxies:
     rhtraits: {type: sech2, zmax: 8}
     vptraits: {type: arctan, direction: tan}
     dptraits: {type: uniform}
-    emission: {type: lines}
+    light: {type: lines}
 observations:
 - type: pixel_spectra
   size: [48, 48]

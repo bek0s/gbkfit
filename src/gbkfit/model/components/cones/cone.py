@@ -18,7 +18,8 @@ from ..base import (
     Component, ComponentPart, ComponentPlan, FrameParams, SceneTarget)
 from ..nodes import Nodes, as_nodes
 from ..parts import KinematicTraits, density_traits, kinematic_traits
-from ..roles import Emission, Opacity, View
+from ..roles import Light, Opacity
+from ..tracers import View
 from . import _build, _nodal
 
 
@@ -56,7 +57,7 @@ class Cone(Component):
     vhtraits, dhtraits : optional
         Its velocity and dispersion height traits, one for each polar
         trait (see parts.KinematicTraits).
-    emission : Emission, optional
+    light : Light, optional
         The light it emits.
     opacity : DustOpacity, optional
         The dust that removes the light behind it.
@@ -96,12 +97,12 @@ class Cone(Component):
         rnodes=dict(max=6, sep=1), rptraits=dict(type='uniform'),
         rhtraits=dict(type='gauss', zmax=2),
         vptraits=dict(type='uniform', direction='out'),
-        dptraits=dict(type='uniform'), emission=dict(type='lines'))
+        dptraits=dict(type='uniform'), light=dict(type='lines'))
 
     parts = (
         ComponentPart('rnodes'), ComponentPart('rptraits', 'rhtraits'),
         ComponentPart('vptraits', 'vhtraits'),
-        ComponentPart('dptraits', 'dhtraits'), ComponentPart('emission'),
+        ComponentPart('dptraits', 'dhtraits'), ComponentPart('light'),
         ComponentPart('sptraits'), ComponentPart('opacity'))
 
     @staticmethod
@@ -126,7 +127,7 @@ class Cone(Component):
             traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
             dhtraits:
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
-            emission: Emission | None = None,
+            light: Light | None = None,
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             sides: Annotated[Literal[_nodal.SIDES], Choices(
@@ -138,17 +139,17 @@ class Cone(Component):
             name: str | None = None
     ):
         check_options(Cone.__init__, locals())
-        super().__init__(name, emission, opacity)
+        super().__init__(name, light, opacity)
         rptraits, rhtraits, _ = density_traits(rptraits, rhtraits, True)
         self._kinematics = kinematics = kinematic_traits(
             vptraits, dptraits, vhtraits, dhtraits)
         # In the form it was given in, for its configuration (see dump)
         self._rnodes = rnodes = as_nodes(rnodes)
         self._cone = _build.make_cone(
-            _nodal.SmoothCone, rptraits, rhtraits, kinematics, emission,
+            _nodal.SmoothCone, rptraits, rhtraits, kinematics, light,
             opacity, sptraits, sides, rnodes=rnodes, rstep=rstep,
             interp=interp)
-        self._light_pdescs = light_pdescs(self._cone.pdescs(), emission)
+        self._light_pdescs = light_pdescs(self._cone.pdescs(), light)
 
     def kinematics(self) -> KinematicTraits | None:
         """Return its kinematic traits, if it moves."""
@@ -206,6 +207,6 @@ class Cone(Component):
             redshift: float
     ) -> ComponentPlan:
         return _build.cone_plan(
-            self._cone, self.emission(), target.driver, target.spectral,
+            self._cone, self.light(), target.driver, target.spectral,
             target.dtype, target.view, emits, opacity_ratios,
             target.data_unit, redshift)

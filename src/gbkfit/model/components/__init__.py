@@ -7,6 +7,7 @@ from .particles import *
 from .parts import *
 from .points import *
 from .roles import *
+from .tracers import *
 
 from . import cones, disks, spheroids, traits
 from ._nodal import TraitTable

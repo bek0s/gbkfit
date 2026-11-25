@@ -20,7 +20,7 @@ DISK = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 11, 2)),
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
-    dptraits=dict(type='uniform'), emission=dict(type='lines'))])
+    dptraits=dict(type='uniform'), light=dict(type='lines'))])
 DISK_VALUES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=3, vpt_rt=2,
     vpt_vt=150, dpt_a=20)
@@ -28,7 +28,7 @@ SLOW = dict(components=[dict(
     type='thick_disk', loose=False, tilted=False, rnodes=list(range(0, 41, 2)),
     rptraits=dict(type='exponential'), rhtraits=dict(type='sech2', zmax=6),
     vptraits=dict(type='arctan', direction='tan'),
-    dptraits=dict(type='uniform'), emission=dict(type='lines'),
+    dptraits=dict(type='uniform'), light=dict(type='lines'),
     clouds=dict(cflux=1e-6))])
 SLOW_VALUES = dict(
     xpos=0, ypos=0, posa=0, incl=45, vsys=0, rpt_a=1, rpt_s=8, rht_s=1,

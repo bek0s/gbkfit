@@ -17,8 +17,8 @@ from gbkfit.config import TypedSerializable, check_name
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
-from .roles import (
-    Emission, Opacity, View)
+from .roles import Light, Opacity
+from .tracers import View
 
 if TYPE_CHECKING:
     from gbkfit.instrument import PSF
@@ -148,8 +148,8 @@ class SceneTarget:
     evaluates, and of their components (see Scene.target): the driver of
     the evaluation, the grid of its x and y axes (spatial) and its
     spectral axis (one axis), the floating type, what the observation
-    sees of the light (see View: its band, or its lines and continuum),
-    the unit of the data of the observation, which the light
+    sees of the light (see View: its tracer, on a spectral axis or in an
+    image), the unit of the data of the observation, which the light
     takes (None without data; see Component.plan), the dispersion
     (km/s) by which the instrument smooths the spectra of the model (None
     for an image; see LineResolution), and whether the grid is the source
@@ -202,7 +202,7 @@ class ComponentPart(NamedTuple):
 class Component(TypedSerializable, abc.ABC):
     """
     A component of a galaxy: a shape (the subclass) with roles, the light
-    it emits (emission) and what it removes from the light behind it
+    it emits (light) and what it removes from the light behind it
     (opacity). It needs at least one.
 
     Parameters
@@ -210,7 +210,7 @@ class Component(TypedSerializable, abc.ABC):
     name : str, optional
         Its name, which prefixes its parameters in its galaxy (required
         when its galaxy has several components).
-    emission : Emission, optional
+    light : Light, optional
         The light it emits.
     opacity : Opacity, optional
         What it removes from the light behind it.
@@ -219,7 +219,7 @@ class Component(TypedSerializable, abc.ABC):
     ------
     ValueError
         If the name is not valid (see check_name), or it has neither
-        emission nor opacity.
+        light nor opacity.
     """
 
     # (the titles of the options of its types, those that several share)
@@ -228,27 +228,35 @@ class Component(TypedSerializable, abc.ABC):
         rhtraits='Density heights', vptraits='Velocity',
         vhtraits='Velocity heights', dptraits='Dispersion',
         dhtraits='Dispersion heights', zptraits='Warps', sptraits='Selections',
-        emission='Light', opacity='Opacity', rstep='Ring width',
+        light='Light', opacity='Opacity', rstep='Ring width',
         interp='Interpolation')
-    config_start = dict(emission=dict(type='band'))
+    config_start = dict(light=dict(type='continuum'))
 
     # Its parts, in the order people read them (e.g. its density, then its
     # velocity): the options that it is made of; its other options are its
     # settings (e.g. how its parameters are interpolated)
-    parts: ClassVar[tuple[ComponentPart, ...]] = (ComponentPart('emission'),)
+    parts: ClassVar[tuple[ComponentPart, ...]] = (ComponentPart('light'),)
 
     def __init__(
             self,
             name: str | None,
-            emission: Emission | None,
+            light: Light | None,
             opacity: Opacity | None
     ):
         check_name(name)
-        if emission is None and opacity is None:
+        if light is None and opacity is None:
+            raise ValueError("a component needs light or opacity")
+        # (one density cannot be both: its light in a unit, and the optical
+        # depth of its dust, of none)
+        if light is not None and opacity is not None \
+                and opacity.dims_others():
             raise ValueError(
-                "a component needs emission, opacity or both")
+                "a component with light cannot be dust: its density would "
+                "be both its light and the optical depth of the dust; make "
+                "the dust a component of its own (its geometry can be tied "
+                "to that of this one)")
         self._name = name
-        self._emission = emission
+        self._light = light
         self._opacity = opacity
 
     def name(self) -> str | None:
@@ -259,9 +267,9 @@ class Component(TypedSerializable, abc.ABC):
     def frame_params(self) -> FrameParams:
         """Return its parameters that place it in a frame."""
 
-    def emission(self) -> Emission | None:
+    def light(self) -> Light | None:
         """Return the light it emits, if any."""
-        return self._emission
+        return self._light
 
     def opacity(self) -> Opacity | None:
         """Return what it removes from the light behind it, if anything."""
@@ -287,10 +295,10 @@ class Component(TypedSerializable, abc.ABC):
     @abc.abstractmethod
     def moves(self) -> bool:
         """
-        Check whether it has velocities that a spectral axis sees (its
-        kinematics, or the systemic velocity of a point of lines): a
-        spectral view of the continuum sees the light in bands of the
-        components that move (see Emission.seen_in).
+        Check whether it moves: whether it has kinematics, which a
+        spectral axis sees (its lines need them; the tracer losvd sees the
+        velocities of the continuum of the components that move, see
+        tracers).
         """
 
     @abc.abstractmethod
@@ -303,7 +311,7 @@ class Component(TypedSerializable, abc.ABC):
         Return the option of its configuration that makes each of its
         parameters (see pdescs), by name, as a path of option names and
         list indices: e.g. ('vptraits', 1) for those of its
-        second velocity polar trait, ('emission', 'lines', 2) for the flux
+        second velocity polar trait, ('light', 'lines', 2) for the flux
         ratio of its third line, and () for those of the component itself
         (e.g. its centre). For those who show the parameters with the
         options that make them (e.g. Studio). Here, the ratios of its lines
@@ -311,13 +319,13 @@ class Component(TypedSerializable, abc.ABC):
         """
         owners: dict[str, tuple[str | int, ...]] = dict.fromkeys(
             self.pdescs(), ())
-        emission = self.emission()
-        if emission is not None:
-            light = emission.light()
-            for index, name in enumerate(light.names()[1:], 1):
+        light = self.light()
+        if light is not None:
+            spectrum = light.spectrum()
+            for index, name in enumerate(spectrum.names()[1:], 1):
                 if f'{name}_ratio' in owners:
                     owners[f'{name}_ratio'] = (
-                        'emission', light.option, index)
+                        'light', spectrum.option, index)
         return owners
 
     def constants(self) -> dict[str, Any]:
@@ -462,9 +470,9 @@ class Component(TypedSerializable, abc.ABC):
             outputs, the floating type, the emission lines to evaluate
             (all if None), the band of an image, if known, and the unit of
             the data of the observation, which its light is turned into
-            from the unit of its emission, if it has one (see
+            from the unit of its light, if it has one (see
             _units.LineFactors and BandFactors; None without data: its
-            light stays in the unit of its emission). A plan that does not
+            light stays in the unit of its light). A plan that does not
             emit takes no unit.
         emits : bool
             Whether its light is evaluated (an observation sees it), or

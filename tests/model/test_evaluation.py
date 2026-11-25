@@ -25,7 +25,7 @@ def line_disk(vptraits, **options):
         rnodes=list(range(0, 12)),
         rptraits=dict(type='exponential'),
         vptraits=vptraits, dptraits=dict(type='uniform'),
-        emission=dict(type='lines')) | options])
+        light=dict(type='lines')) | options])
 
 
 def nodewise_relative_case(driver):
@@ -76,7 +76,7 @@ plan = group_plan([dict(
         rhtraits=dict(type='sech2', zmax=8),
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))]))])
+        light=dict(type='lines'))]))])
 params = gbkfit.params.ParamSpace.from_properties(plan.group().pdescs(), dict(
     vsys=0, xpos=0, ypos=0, posa=30, incl=60, rpt_a=1, rpt_s=4, rht_s=1,
     vpt_rt=2, vpt_vt=150, dpt_a=20))
@@ -113,7 +113,7 @@ FLAT_OBSERVATIONS = dict(
             type='thin_disk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
             rptraits=dict(type='exponential'),
-            emission=dict(type='band'))]),
+            light=dict(type='continuum'))]),
         'pixel_brightness', (32, 32), 'brightness',
         dict(xpos=0, ypos=0, posa=30, incl=45, rpt_a=1, rpt_s=4)))
 
@@ -151,7 +151,7 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
     (dict(type='pixel_brightness', size=[8, 8]), 'lines'),
     (dict(
         type='pixel_spectra', size=[8, 8],
-        spectral=dict(size=8, convention='relativistic')), 'band')])
+        spectral=dict(size=8, convention='relativistic')), 'continuum')])
 def test_incompatible_observations_are_rejected_before_evaluation(
         observable, emission):
     # An image sees the components that emit in a band, and the others
@@ -160,7 +160,7 @@ def test_incompatible_observations_are_rejected_before_evaluation(
     component = dict(
         type='thin_disk', loose=False, tilted=False, rnodes=[0, 1, 2],
         rptraits=dict(type='exponential'),
-        emission=dict(type=emission))
+        light=dict(type=emission))
     if emission == 'lines':
         component |= dict(vptraits=dict(type='arctan', direction='tan'),
                           dptraits=dict(type='uniform'))
@@ -213,7 +213,7 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
                 rnodes=list(range(0, 30)),
                 rptraits=dict(type='exponential'),
                 rhtraits=dict(type='sech2', zmax=8),
-                emission=dict(type='band'))]))])
+                light=dict(type='continuum'))]))])
         params = gbkfit.params.ParamSpace.from_properties(
             plan.group().pdescs(), dict(
                 xpos=0, ypos=0, posa=0, incl=30, rpt_a=1, rpt_s=6, rht_s=1))

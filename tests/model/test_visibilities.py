@@ -26,7 +26,7 @@ DISK = dict(components=[dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))])
+    light=dict(type='lines'))])
 
 DISK_PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
@@ -108,7 +108,8 @@ def test_a_point_source_is_its_flux_at_its_phase(driver):
     # p)), per km/s of the channel of 0 km/s (without a unit of the data),
     # of the part of its line (of dispersion 5 km/s) in it
     point = dict(components=[dict(
-        type='point', emission=dict(type='lines'))])
+        type='point', light=dict(type='lines'),
+        kinematics=dict(type='gauss'))])
     result = visibilities(driver, point, dict(
         xpos=4.5, ypos=-3.5, flux=2, vsys=0, disp=5))
     channel = list(VELOCITIES).index(0)

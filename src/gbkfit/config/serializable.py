@@ -100,7 +100,7 @@ class Serializable(abc.ABC):
         PSF of an Instrument; see parse_options_for_callable). A class
         overrides it only for options in other forms (e.g. the tables of
         a PSF that varies) or loaded with what its caller gives (e.g. the
-        catalogue of lines of an emission), and then calls it. The
+        catalogue of lines of a light), and then calls it. The
         configuration is not changed.
 
         Parameters

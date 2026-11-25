@@ -26,7 +26,7 @@ from .._units import mass_per_unit
 from ..base import (
     ComponentLinks, ComponentStage, ComponentState, Frame, GalaxyMass,
     SkyPlacements)
-from ..roles import Emission
+from ..roles import Light
 from ._nodal import NodalDisk, DiskPlan
 from ._profiles import (
     NodalDiskDensity, density_waves, dispersion, jeans_dispersions,
@@ -178,14 +178,14 @@ class _DiskRings:
 
 def plan_disk_stage(
         disk: NodalDisk,
-        emission: Emission | None,
+        light: Light | None,
         driver: Driver,
         sky_origin: tuple[float, float] | None,
         links: ComponentLinks,
         label: str
 ) -> 'DiskStage | None':
     """
-    Plan the part of a disk of the given emission in the stage of its
+    Plan the part of a disk of the given light in the stage of its
     galaxy (see Component.plan_stage), of its links to the mass, if it
     takes anything from the galaxy (the circular velocity of the mass, an
     equilibrium, the pressure support of its tangential traits, density
@@ -200,7 +200,7 @@ def plan_disk_stage(
         return None
     return DiskStage(
         disk, label, driver, sky_origin, links,
-        mass_per_unit(emission) if links.followed else None)
+        mass_per_unit(light) if links.followed else None)
 
 
 class DiskStage(ComponentStage):

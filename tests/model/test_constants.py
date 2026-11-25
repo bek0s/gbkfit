@@ -30,7 +30,7 @@ def disk(vptraits, density=None, **options):
         loose=False, tilted=False, rnodes=RNODES,
         **density,
         vptraits=vptraits, dptraits=dict(type='uniform'),
-        emission=dict(type='lines')) | options
+        light=dict(type='lines')) | options
 
 
 def spectral_cube(components):

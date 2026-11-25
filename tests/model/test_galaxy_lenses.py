@@ -41,12 +41,12 @@ def disk(name, **options):
     return dict(
         type='thin_disk', name=name, loose=False, tilted=False,
         rnodes=[0, 0.5, 1, 1.5, 2, 3], rptraits=dict(type='exponential'),
-        emission=dict(type='band')) | options
+        light=dict(type='continuum')) | options
 
 
 # A gas disk that the mass moves: it places the mass on the sky
 GAS = disk(
-    'gas', emission=dict(type='lines'), vptraits=dict(type='mass'),
+    'gas', light=dict(type='lines'), vptraits=dict(type='mass'),
     dptraits=dict(type='uniform'))
 
 GAS_PARAMS = dict(
@@ -158,7 +158,7 @@ def test_the_mass_of_a_halo_lenses_as_the_nfw_lens(driver, components):
 # its mass, and an NFW halo
 BULGE = dict(
     type='spheroid', name='bulge', profile=dict(type='sersic'),
-    shape=dict(type='flattened'), rmax=4, emission=dict(type='band'))
+    shape=dict(type='flattened'), rmax=4, light=dict(type='continuum'))
 
 STARS = disk('stars')
 
@@ -404,7 +404,7 @@ WARPED = dict(
     rhtraits=dict(type='sech2', zmax=2),
     zptraits=[dict(type='nw_uniform', zmax=2),
               dict(type='nw_harmonic', order=1, zmax=2)],
-    emission=dict(type='band'))
+    light=dict(type='continuum'))
 
 # (linear in the radius, as the interpolations of the disk give them at
 # any radius)
@@ -476,7 +476,7 @@ def test_a_warped_disk_samples_no_profiles_unless_it_places_a_mass():
     # is lit, see DiskStage._lit)
     moved = WARPED | dict(
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
     galaxy = galaxy_parser.load(dict(
         name='deflector', redshift=LENS_Z, components=[moved],
         mass=[HALO], distance=dict(type='cosmological')))
@@ -543,7 +543,7 @@ def test_distortions_of_order_two_place_no_mass():
         ObservationGroup([galaxy, ARC], image('alma'), lens, seen=[['arc']])
     moved = bowl | dict(
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
     galaxy = galaxy_parser.load(dict(
         name='deflector', redshift=LENS_Z, components=[moved],
         mass=[HALO], distance=dict(type='cosmological')))

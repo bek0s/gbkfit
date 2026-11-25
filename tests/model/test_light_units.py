@@ -13,7 +13,7 @@ from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
-    ObservationGroup, ObservationPixelSpectra)
+    ObservationGroup, ObservationPixelBrightness, ObservationPixelSpectra)
 from gbkfit.params import ParamSpace
 
 
@@ -39,7 +39,7 @@ def disk(unit=None, lines=('hi21',), thick=False):
         rnodes=list(range(0, 121, 20)), **density,
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=emission)
+        light=emission)
 
 
 def model(
@@ -142,24 +142,35 @@ def test_a_line_without_a_name_has_no_unit_with_a_redshift(driver):
     # redshift, the rest of the axis may be that of the line as emitted or
     # as observed (its dimming then off by 1 + z or more), which named
     # lines do not leave open
-    unnamed = disk() | dict(emission=dict(type='lines', unit='K km/s'))
+    unnamed = disk() | dict(light=dict(type='lines', unit='K km/s'))
     with pytest.raises(ValueError, match="a line without a name"):
         model(driver, [unnamed], 'K', redshift=0.02)
     # (a named line is fine; at this redshift it is off the axis)
     model(driver, [disk('K km/s')], 'K', redshift=0.02)
 
 
-def test_light_in_bands_with_a_unit_needs_the_redshift():
+def test_a_continuum_with_a_unit_needs_the_redshift_where_seen(driver):
     # Images see it dimmed by the redshift: that of the galaxy, which it
-    # must give when the component has no systemic velocity
+    # must give when the component has no systemic velocity; only the
+    # observations that see it need it (not e.g. a cube of the gas)
     stars = dict(
-        type='thin_disk', rnodes=list(range(0, 121, 20)),
+        type='thin_disk', name='stars', rnodes=list(range(0, 121, 20)),
         rptraits=dict(type='exponential'),
-        emission=dict(type='band', unit='Jy/arcsec2'))
+        light=dict(type='continuum', unit='Jy/arcsec2'))
+    gas = dict(
+        stars, name='gas', light=dict(type='lines'),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'))
+    galaxy = galaxy_parser.load(dict(components=[stars, gas]))
+    image = ObservationPixelBrightness(size=(8, 8))
     with pytest.raises(ValueError, match="give the galaxy its redshift"):
-        galaxy_parser.load(dict(components=[stars]))
+        ObservationGroup([galaxy], [image]).plan(driver)
+    cube = ObservationPixelSpectra(
+        size=(8, 8), spectral=SpectralAxis(size=4, convention='radio'))
+    ObservationGroup([galaxy], [cube]).plan(driver)
     galaxy = galaxy_parser.load(dict(components=[stars], redshift=0))
     assert galaxy.dump()['redshift'] == 0
+    ObservationGroup([galaxy], [image]).plan(driver)
 
 
 def test_a_model_without_data_is_in_its_unit(driver):

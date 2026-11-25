@@ -684,7 +684,7 @@ class SurfaceComponent(DiskSurface):
     than their spacing (e.g. tiny blobs) can be missed.
 
     upsilon is the mass per unit of the density of the component: without
-    a unit of its emission, in Msun/kpc^2 per unit; with one, of HI (its
+    a unit of its light, in Msun/kpc^2 per unit; with one, of HI (its
     first line hi21), the mass of gas per mass of HI, of which the density
     gives the exact mass (1.33 with helium; see _units.mass_per_unit);
     with another unit, in Msun/pc^2 per unit (e.g. alpha_CO in Msun/pc^2

@@ -27,7 +27,7 @@ class LineOpacity(Opacity):
     observations that see the component use (see Scene.evaluation); the
     component must be a thick disk that emits lines.
 
-    With a unit of its emission (see LineEmission), S is the brightness
+    With a unit of its light (see LineLight), S is the brightness
     (radiation) temperature of the source function, J(T_ex) =
     (h nu / k) / (exp(h nu / k T_ex) - 1), in K, whatever the unit of the
     data, in the rest frame of the gas (nu its rest frequency): the
@@ -53,7 +53,7 @@ class LineOpacity(Opacity):
     ----------
     coefficients : RPTrait, Sequence of RPTrait, or Mapping of str to them
         The coefficient of each line: density polar traits, which add up
-        (so it can vary in the disk). For an emission of one line without
+        (so it can vary in the disk). For a light of one line without
         a name, its traits (parameters 'op_*', 'op2_*', ...); for named
         lines, a mapping of each line to its traits (parameters
         'op_{line}_*', 'op2_{line}_*', ...). Every line needs one (0 for

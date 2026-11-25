@@ -185,21 +185,20 @@ def check_one_line(scenes: 'SeenScenes') -> None:
     """
     Raise ValueError if the moments of the spectra of what an observation
     sees would mix several lines: the components whose light it sees
-    draw more than one (e.g. Ha and [NII] of one component, or of two; or
-    stars and a line of gas). Moments cannot tell the lines of a spectrum
-    apart, whatever the spectral axis covers, so that an observation of
-    moments names the line of its data (its option lines), whose moments
-    its data are.
+    draw more than one (e.g. Ha and [NII] of one component, or of two).
+    Moments cannot tell the lines of a spectrum apart, whatever the
+    spectral axis covers, so that an observation of moments names the line
+    of its data (in its tracer), whose moments its data are.
     """
     lines = set()
     for _, _, component in scenes.components():
-        lines.update(component.emission().spectral_lines(scenes.view()))
+        lines.update(scenes.view().rows(component.light()))
     if len(lines) > 1:
         named = sorted(str(line) for line in lines if line is not None)
         raise ValueError(
             f"the moments of a spectrum mix its lines, and the observation "
-            f"sees several: {named}; name the line of its data with its "
-            f"option lines (e.g. lines: [{named[0]!r}])")
+            f"sees several: {named}; name the line of its data in its "
+            f"tracer (e.g. tracer: {{type: lines, lines: [{named[0]}]}})")
 
 
 def model_data(maps: DeviceMomentMaps, regions: bool = False) -> ModelData:

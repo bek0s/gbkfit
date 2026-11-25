@@ -36,7 +36,7 @@ __all__ = [
 ]
 
 
-# The light of a spheroid, as its motion takes it (see Spheroid.light):
+# The light of a spheroid, as its motion takes it (see Spheroid.light_terms):
 # the terms of its profile, their function and its table, if any
 SpheroidLight = tuple[
     np.ndarray, tuple[float, float], tuple[np.ndarray, np.ndarray] | None]
@@ -101,8 +101,8 @@ class SpheroidMotion(abc.ABC):
     ) -> object:
         """
         Return the groundwork of its state in an evaluation (see state):
-        what the light of its spheroid (see Spheroid.light) and the mass of
-        its galaxy, if any, alone set of it; none by default.
+        what the light of its spheroid (see Spheroid.light_terms) and the
+        mass of its galaxy, if any, alone set of it; none by default.
         """
         return None
 

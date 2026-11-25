@@ -1,14 +1,25 @@
 """
-Tests for the bands of images: components that emit in bands, the band
-of an image, and dust that dims an image at the rest wavelength of its
-band.
+Tests for the bands: components of a continuum in bands, the band of the
+tracer of an observation, and dust that dims an image at the rest
+wavelength of its band. GBKFIT knows no bands: the user declares them.
 """
 
 import numpy as np
 import pytest
 from modelutils import config_group_plan, group_plan
 
-from gbkfit.model import LineCatalogue
+from gbkfit.model import LineCatalogue, lines_from
+
+
+# The bands that the tests declare (those of SDSS g, r and i)
+BANDS = {'g': '4686 Angstrom', 'r': '6166 Angstrom', 'i': '7480 Angstrom'}
+
+
+@pytest.fixture(autouse=True)
+def declared_bands():
+    """The bands of the tests, declared for the components they make."""
+    with lines_from(LineCatalogue(bands=BANDS)):
+        yield
 
 
 DISK = dict(loose=False, tilted=False, rnodes=list(range(0, 12)))
@@ -16,19 +27,19 @@ DISK = dict(loose=False, tilted=False, rnodes=list(range(0, 12)))
 STARS = dict(
     DISK, type='thin_disk', name='stars',
     rptraits=dict(type='exponential'),
-    emission=dict(type='band', bands=['sdss_g', 'sdss_r']))
+    light=dict(type='continuum', bands=['g', 'r']))
 
 NUCLEUS = dict(
     type='point', name='nucleus',
-    emission=dict(type='band', bands=['sdss_g', 'sdss_r']))
+    light=dict(type='continuum', bands=['g', 'r']))
 
 PROPERTIES = dict(
     stars=dict(
         stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0,
-        stars_rpt_a=1, stars_rpt_s=4, stars_sdss_r_ratio=0.5),
+        stars_rpt_a=1, stars_rpt_s=4, stars_r_ratio=0.5),
     nucleus=dict(
         nucleus_xpos=0.5, nucleus_ypos=0.5, nucleus_flux=1,
-        nucleus_sdss_r_ratio=0.5))
+        nucleus_r_ratio=0.5))
 
 
 def image_case(driver, components, band, depth=None, redshift=0):
@@ -40,20 +51,18 @@ def image_case(driver, components, band, depth=None, redshift=0):
         driver=dict(type=driver.type()),
         observation=dict(type='pixel_brightness', size=[24, 24]),
         galaxy=dict(components=components, redshift=redshift),
-        **({} if band is None else dict(band=band)),
+        **({} if band is None
+           else dict(tracer=dict(type='continuum', band=band))),
         **({} if depth is None else dict(depth=depth)))
 
 
-def test_the_catalogue_has_bands_and_those_of_the_user():
+def test_the_catalogue_has_the_bands_of_the_user_only():
     catalogue = LineCatalogue(bands={'mine': '5000 Angstrom'})
-    assert catalogue.band('sdss_r').wavelength().to_value('um') \
-        == pytest.approx(0.6166)
-    assert catalogue.band('twomass_ks').wavelength().to_value('um') \
-        == pytest.approx(2.159)
     assert catalogue.band('mine').wavelength().to_value('um') \
         == pytest.approx(0.5)
-    with pytest.raises(ValueError, match="there is no band 'sdss_y'"):
-        catalogue.band('sdss_y')
+    # (GBKFIT knows no bands of surveys)
+    with pytest.raises(ValueError, match="there is no band 'sdss_r'"):
+        catalogue.band('sdss_r')
 
 
 @pytest.mark.parametrize('emitter', ['stars', 'nucleus'])
@@ -65,31 +74,31 @@ def test_light_in_each_band(driver, evaluate_cases, emitter):
         evaluate_cases(
             [image_case(driver, [component], band)],
             PROPERTIES[emitter])[0][0]['brightness'].data
-        for band in ('sdss_g', 'sdss_r')]
+        for band in ('g', 'r')]
     assert images[0].sum() > 0
     np.testing.assert_allclose(images[1], 0.5 * images[0], rtol=1e-6)
 
 
 @pytest.mark.parametrize('band, message', [
-    (None, "the image that sees it needs a band"),
-    ('sdss_i', "it sees none")])
+    (None, "the tracer of the observation has no band"),
+    ('i', "it sees none")])
 def test_images_see_components_in_their_band(driver, band, message):
     with pytest.raises(ValueError, match=message):
         group_plan([image_case(driver, [STARS], band)])
 
 
-def test_only_images_have_a_band(driver):
+def test_a_spectral_observation_has_no_tracer_of_a_continuum(driver):
     case = dict(
         driver=dict(type=driver.type()),
         observation=dict(
             type='pixel_spectra', size=[8, 8],
             spectral=dict(size=10, convention='relativistic')),
         galaxy=dict(components=[dict(
-            STARS, emission=dict(type='lines'),
+            STARS, light=dict(type='lines'),
             vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform'))]),
-        band='sdss_r')
-    with pytest.raises(ValueError, match="only images have a band"):
+        tracer=dict(type='continuum', band='r'))
+    with pytest.raises(ValueError, match="takes the tracers"):
         group_plan([case])
 
 
@@ -112,7 +121,7 @@ def test_dust_dims_an_image_at_the_rest_wavelength_of_its_band(
 
     def evaluate(opacity):
         case = image_case(
-            driver, [STARS, dust], 'sdss_r', depth, redshift)
+            driver, [STARS, dust], 'r', depth, redshift)
         data, extra = evaluate_cases(
             [case], properties | dict(dust_rpt_a=opacity))
         tau = extra.get('odata', component='dust').data.sum(axis=0)
@@ -128,16 +137,16 @@ def test_dust_dims_an_image_at_the_rest_wavelength_of_its_band(
 
 def test_configurations_name_bands():
     config = dict(
-        bands=dict(mine='5000 Angstrom'),
+        bands=dict(g='4686 Angstrom', mine='5000 Angstrom'),
         galaxies=[dict(components=[dict(
-            STARS, emission=dict(type='band', bands=['sdss_g', 'mine']))])],
+            STARS, light=dict(type='continuum', bands=['g', 'mine']))])],
         observations=[dict(
             type='pixel_brightness',
             size=[8, 8],
-            band='mine')])
+            tracer=dict(type='continuum', band='mine'))])
     plan = config_group_plan(config)
     observation, = plan.group().observations()
-    assert observation.band().name() == 'mine'
+    assert observation.tracer().band().name() == 'mine'
     component, = plan.group().galaxies()[0].components()
-    assert component.emission().bands().names() == ('sdss_g', 'mine')
+    assert component.light().bands().names() == ('g', 'mine')
     assert 'stars_mine_ratio' in plan.group().pdescs()

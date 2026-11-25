@@ -32,7 +32,7 @@ from ._galaxy_stage import GalaxyState
 from .components._units import DataUnit
 from .components.base import (
     ComponentState, DepthAxis, FrameParams, SceneTarget)
-from .components.roles import View
+from .components.tracers import LosvdTracer, View
 from .extras import Extras
 
 if TYPE_CHECKING:
@@ -130,13 +130,12 @@ class Scene:
     Galaxies drawn together on one grid (e.g. those an observation sees;
     see gbkfit.observation): the galaxies, the indices of the components
     of each whose light is drawn (its emitters; the opacity of all
-    components applies), what it sees of their light (see View: a band,
-    or a spectral axis with its lines and continuum), the order of the
-    galaxies along the
-    line of sight, front to back (in units: galaxies or groups of them;
-    those it leaves out after them, in their order), and the unit of the
-    data, which the
-    light of the emitters takes (see Component.plan; None without data).
+    components applies), what it sees of their light (see View: its
+    tracer, on a spectral axis or in an image), the order of the galaxies
+    along the line of sight, front to back (in units: galaxies or groups of
+    them; those it leaves out after them, in their order), and the unit of
+    the data, which the light of the emitters takes (see Component.plan;
+    None without data).
     The parameters of each galaxy have the names of the mapping of the
     galaxy among those of its group of galaxies (e.g. ObservationGroup),
     and its extra outputs its label as the id 'galaxy' (those of a group
@@ -239,7 +238,7 @@ class Scene:
           behind (its light, or that of the others behind it, is then
           dimmed by the dust in front of it, in their order; and the light
           from behind, by all of it, see ScenePlan.transmission);
-        - otherwise on a depth axis if one is thick in the emission it is
+        - otherwise on a depth axis if one is thick in the light it is
           seen in (see Component.thick) or has opacity;
         - otherwise on the plane of the sky.
         """
@@ -309,11 +308,11 @@ class Scene:
         """
         Return the components whose light is drawn and whose stars move on
         orbits whose weights are solved (see Component.orbit_weights), in
-        a spectral view of their stars (its lines name them; an image sees
+        a view of the velocities of stars (the tracer losvd; an image sees
         their light, as that of any component), each as the index of its
         galaxy (in the scene) and its own index.
         """
-        if not self._view.continuum:
+        if not isinstance(self._view.tracer, LosvdTracer):
             return ()
         return tuple(
             (g, i)
@@ -721,8 +720,8 @@ def _behind_wavelengths(
     band of an image, None if not known.
     """
     if not view.spectral:
-        return (None if view.band is None
-                else view.band.wavelength().to_value(astropy.units.um),)
+        return (None if view.band() is None
+                else view.band().wavelength().to_value(astropy.units.um),)
     step = spectral.coords.step[0]
     size = spectral.size[0] * subchannels
     velocities = spectral.zero()[0] - step / 2 \

@@ -204,7 +204,7 @@ def test_the_geometry_of_a_model_is_found(driver):
         rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))])
+        light=dict(type='lines'))])
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
         observation=dict(

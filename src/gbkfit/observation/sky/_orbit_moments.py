@@ -64,8 +64,8 @@ def check_orbits(
         raise ValueError(
             "moments of regions that see stars on orbits whose weights "
             "are solved (e.g. of a spheroid of Schwarzschild kinematics) "
-            "see only them, of one component: give the observation that "
-            "component or the lines of its stars only")
+            "see only them, of one component: choose that component for "
+            "the observation (the section seen of its setup)")
     if moments.regions().grid() is None:
         raise ValueError(
             "moments of stars on orbits whose weights are solved are of "

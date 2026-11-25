@@ -43,7 +43,7 @@ def face_on_disk(driver, evaluate_cases, key, trait):
         galaxy=dict(components=[dict(
             type='thin_disk', loose=False, tilted=False,
             rnodes=list(range(0, 10)), **density,
-            **kinematics, emission=dict(type='lines'))]))
+            **kinematics, light=dict(type='lines'))]))
     properties = dict(
         vsys=0, xpos=0, ypos=0, posa=0, incl=0, vpt_vt=0,
         rpt_a=1, dpt_a=10) | {f'{prefix}_{n}': VALUES[n] for n in names}
@@ -72,7 +72,7 @@ def map_component(ptraits):
         rptraits=ptraits,
         vptraits=dict(type='uniform', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines')))
+        light=dict(type='lines')))
 
 
 def test_map_is_its_cells():

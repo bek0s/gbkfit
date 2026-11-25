@@ -32,7 +32,7 @@ GALAXY = dict(components=dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines')))
+    light=dict(type='lines')))
 
 # The standard deviation of the prior of the scales, and their solve
 SIGMA = 0.5

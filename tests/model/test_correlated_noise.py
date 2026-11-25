@@ -28,7 +28,7 @@ GALAXY = dict(components=dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines')))
+    light=dict(type='lines')))
 
 
 def objective(driver, data, likelihood):

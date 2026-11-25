@@ -37,7 +37,7 @@ def _disk(**options: Any) -> dict[str, Any]:
     return dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
         rptraits=dict(type='exponential'),
-        **_ROTATION, emission=_LINES) | options
+        **_ROTATION, light=_LINES) | options
 
 
 def _cube(
@@ -258,7 +258,7 @@ _CONE = dict(
     rptraits=dict(type='uniform'), rhtraits=dict(type='gauss', zmax=1),
     vptraits=dict(type='uniform', direction='out'),
     dptraits=dict(type='uniform'),
-    emission=_HALPHA_NII)
+    light=_HALPHA_NII)
 
 _CONE_TRUTH = dict(
     xpos=0.27, ypos=-0.38, posa=40, incl=55, vsys=10, wall=30, rpt_a=0.3,
@@ -270,7 +270,7 @@ _DISK_CONE_LINES = dict(
         "(a ratio each), in a cube of a spectral axis of velocities of "
         "Halpha, with a solved flux scale for each spectrum.",
     galaxies=[dict(components=[
-        _disk(name='disk', emission=_HALPHA_NII), _CONE])],
+        _disk(name='disk', light=_HALPHA_NII), _CONE])],
     observations=[_cube(
         [24, 24, 40], [0.6, 0.6, 50],
         spectral=dict(rval=450, rest='6562.8 Angstrom')) | dict(
@@ -310,24 +310,26 @@ def _write_particles(folder: pathlib.Path) -> None:
         **{key: value.astype(np.float32) for key, value in columns.items()})
 
 
-_BAND = dict(type='band')
+_BAND = dict(type='continuum')
 
 _POINTS_PARTICLES_BAND = dict(
     name='points_particles_band',
     doc="An image of a point (a nucleus) and of the particles of a table "
         "(the stars of a disk), which emit in a band.",
     galaxies=[dict(components=[
-        dict(type='point', name='nucleus', emission=_BAND),
+        dict(type='point', name='nucleus', light=_BAND),
         dict(type='particles', name='stars', file='particles.npz',
-             emission=_BAND)])],
+             light=_BAND)])],
     observations=[_image([32, 32], [0.5, 0.5])],
     truth=dict(
         nucleus_xpos=0.27, nucleus_ypos=-0.38, nucleus_flux=2,
-        stars_xpos=0.27, stars_ypos=-0.38, stars_posa=40, stars_incl=55),
+        stars_xpos=0.27, stars_ypos=-0.38, stars_posa=40, stars_incl=55,
+        stars_vsys=0),
     trial=dict(
         nucleus_xpos=0.21, nucleus_ypos=-0.38,
         nucleus_flux=_free(1.6, 0, 10), stars_xpos=0.27, stars_ypos=-0.38,
-        stars_posa=_free(45, 0, 90), stars_incl=_free(50, 10, 80)),
+        stars_posa=_free(45, 0, 90), stars_incl=_free(50, 10, 80),
+        stars_vsys=0),
     noises=[dict(type='gauss', rms=0.02)],
     prepare=_write_particles)
 
@@ -344,11 +346,13 @@ _DUST_EXTINCTION_BAND = dict(
         "in uJy/arcsec2, dimmed by a thick disk of dust of the extinction "
         "law of Cardelli et al.",
     galaxies=[dict(redshift=0.25, components=[
-        _thick_disk('stars', emission=dict(
-            type='band', bands=['sdss_r'], unit='MJy/sr')),
+        _thick_disk('stars', light=dict(
+            type='continuum', bands=['sdss_r'], unit='MJy/sr')),
         _thick_disk('dust', opacity=dict(
             type='dust', law=dict(type='ccm')))])],
-    observations=[_image([32, 32], [0.5, 0.5], band='sdss_r')],
+    observations=[_image(
+        [32, 32], [0.5, 0.5], tracer=dict(type='continuum', band='sdss_r'))],
+    sections=dict(bands=dict(sdss_r='6166 Angstrom')),
     # (the mock data are in the unit of the stars, but read as data in
     # uJy/arcsec2: 1 MJy/sr emitted at z = 0.25 is 12.03 uJy/arcsec2 of the
     # data, hence rpt_a near 1 / 12.03 at the trial values)
@@ -379,7 +383,7 @@ def _write_image(folder: pathlib.Path) -> None:
     galaxy = dict(components=[dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
         rptraits=dict(type='exponential'),
-        emission=dict(type='band'))])
+        light=dict(type='continuum'))])
     observation = dict(
         type='pixel_brightness',
         size=[40, 40], step=0.4, rval=_SKY)

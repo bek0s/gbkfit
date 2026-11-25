@@ -22,7 +22,7 @@ def _thin_disk(**options: Any) -> dict[str, Any]:
         rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines')) | options
+        light=dict(type='lines')) | options
 
 
 def _named(prefix: str, properties: dict[str, Any]) -> dict[str, Any]:
@@ -75,7 +75,7 @@ _MOMENTS = _sky(
 # A flattened Sersic spheroid of stars, of Jeans kinematics, whose mass
 # (with that of an NFW halo) holds it up
 _STARS = dict(
-    type='jeans_spheroid', name='stars', rmax=8, emission=dict(type='band'),
+    type='jeans_spheroid', name='stars', rmax=8, light=dict(type='continuum'),
     profile=dict(type='sersic'), shape=dict(type='flattened'))
 
 _STARS_TRUTH = dict(
@@ -104,7 +104,7 @@ def _mge_stars(kind: str, **options: Any) -> list[dict[str, Any]]:
     return [dict(
         components=[dict(
             type=kind, name='stars', rmax=20,
-            emission=dict(type='band'), profile=dict(type='mge', ngauss=2),
+            light=dict(type='continuum'), profile=dict(type='mge', ngauss=2),
             **options)],
         mass=[dict(type='traced_spheroid', name='lum', component='stars'),
               dict(type='point', name='bh')],
@@ -143,7 +143,7 @@ def _band_disk() -> dict[str, Any]:
         type='thin_disk', loose=False, tilted=False,
         rnodes=[round(0.1 * i, 1) for i in range(13)],
         rptraits=dict(type='exponential'),
-        emission=dict(type='band'))
+        light=dict(type='continuum'))
 
 
 # --- Files written by prepare --------------------------------------------
@@ -289,7 +289,7 @@ _CLUMPY_DISK = dict(
     rhtraits=[dict(type='sech2', zmax=4)] * 2,
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines', lines=['halpha', 'nii6583']))
+    light=dict(type='lines', lines=['halpha', 'nii6583']))
 
 _CLUMPY_TRUTH = dict(
     xpos=0.03, ypos=-0.04, posa=40, incl=55, vsys=10, rpt_a=1, rpt_s=0.4,
@@ -341,7 +341,7 @@ CASES: list[dict[str, Any]] = [
             "velocities) of a galaxy at z = 0.03 that emits Halpha and "
             "[NII] 6583.",
         galaxies=[dict(redshift=0.03, components=[_thin_disk(
-            emission=dict(type='lines', lines=['halpha', 'nii6583']))])],
+            light=dict(type='lines', lines=['halpha', 'nii6583']))])],
         observations=[_sky(
             dict(
                 type='pixel_spectra', size=[20, 20], step=[0.5, 0.5],
@@ -457,7 +457,7 @@ CASES: list[dict[str, Any]] = [
                 method='moments',
                 spectral=dict(size=101, step=10, convention='log')),
             depth=dict(step=0.5),
-            lines=[], continuum=True, instrument=dict(psf=_PSF))],
+            tracer=dict(type='losvd'), instrument=dict(psf=_PSF))],
         truth=_STARS_TRUTH, trial=_STARS_TRIAL,
         noises=[_gauss(0.0002)],
         likelihoods=[dict(type='gauss', missing_residual=3)],
@@ -483,7 +483,7 @@ CASES: list[dict[str, Any]] = [
                 orders=[1, 2, 3, 4], method='gauss_hermite',
                 spectral=dict(size=101, step=10, convention='log')),
             depth=dict(step=0.5),
-            lines=[], continuum=True, instrument=dict(psf=_PSF))],
+            tracer=dict(type='losvd'), instrument=dict(psf=_PSF))],
         truth=_MGE_STARS_TRUTH | dict(stars_beta_z=0.0, stars_kappa=0.5),
         trial=_MGE_STARS_TRUTH | dict(
             stars_posa=dict(value=42, min=0, max=90),

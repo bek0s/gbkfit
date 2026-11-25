@@ -20,7 +20,7 @@ THICK_DENSITY = dict(
 
 THICK_DISK = dict(DISK, type='thick_disk', **THICK_DENSITY)
 
-BAND = dict(type='band')
+BAND = dict(type='continuum')
 LINES = dict(type='lines')
 DUST = dict(type='dust')
 
@@ -41,7 +41,7 @@ def spectral_cube_case(driver, with_opacity):
         THICK_DISK, name='gas',
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=LINES)]
+        light=LINES)]
     if with_opacity:
         components.append(dict(
             THICK_DISK, name='dust', opacity=DUST))
@@ -113,7 +113,7 @@ def face_on_optical_depth(
         opacity=DUST)
     if disk_type == 'clouds':
         dust['clouds'] = dict(cflux=1e-4)
-    stars = dict(THICK_DISK, name='stars', emission=BAND)
+    stars = dict(THICK_DISK, name='stars', light=BAND)
     case = dict(
         driver=dict(type=driver.type()),
         observation=dict(type='pixel_brightness', size=[24, 24]),
@@ -172,7 +172,7 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
         disk, name='gas',
         vptraits=dict(type='nw_uniform', direction='rad'),
         dptraits=dict(type='uniform'),
-        emission=LINES)
+        light=LINES)
     properties = dict(
         gas_vsys=0, gas_xpos=0, gas_ypos=0, gas_posa=0, gas_incl=60,
         gas_rpt_a=1, gas_rpt_s=4, gas_rht_s=1,
@@ -216,7 +216,7 @@ def image_and_optical_depth(driver, evaluate_cases, opacity, depth_step):
         observation=dict(type='pixel_brightness', size=[32, 32]),
         depth=dict(extent=24.0, step=depth_step),
         galaxy=dict(components=[
-            dict(THICK_DISK, name='stars', emission=BAND),
+            dict(THICK_DISK, name='stars', light=BAND),
             dict(THICK_DISK, name='dust', opacity=DUST)]))
     properties = dict(
         stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
@@ -253,7 +253,7 @@ THIN_GAS = dict(
     THIN_DISK, name='gas',
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=LINES)
+    light=LINES)
 
 THIN_GAS_PROPERTIES = dict(
     gas_vsys=0, gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60,
@@ -272,7 +272,7 @@ def test_a_depth_axis_sees_a_thin_disk_as_the_sky_does(
     # thin disk is seen on the plane of the sky, which gives what a depth
     # axis would
     component = THIN_GAS if key == 'spectra' else dict(
-        THIN_DISK, name='gas', emission=BAND)
+        THIN_DISK, name='gas', light=BAND)
     properties = {
         name: value for name, value in THIN_GAS_PROPERTIES.items()
         if key == 'spectra' or not name.startswith(('gas_v', 'gas_d'))}
@@ -307,7 +307,7 @@ FACE_ON_DUST = dict(
 def test_dust_dims_a_thin_disk_in_front_of_its_plane(driver, evaluate_cases):
     # The light of a face-on thin disk in the middle of the dust crosses
     # half of it
-    stars = dict(THIN_DISK, name='stars', emission=BAND)
+    stars = dict(THIN_DISK, name='stars', light=BAND)
     properties = dict(
         stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0,
         stars_rpt_a=1, stars_rpt_s=4)
@@ -333,7 +333,7 @@ def test_dust_dims_a_point_in_front_of_its_depth(
     # centre of its galaxy (in the middle of the dust), or at a depth in
     # front of the dust, in it, or behind it: it crosses that fraction of
     # the optical depth of its line of sight
-    nucleus = dict(type='point', name='nucleus', emission=BAND)
+    nucleus = dict(type='point', name='nucleus', light=BAND)
     properties = dict(nucleus_xpos=0.5, nucleus_ypos=0.5, nucleus_flux=1)
     if depth is not None:
         nucleus['depth'] = True
@@ -368,7 +368,7 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
     emission = dict(type='lines', lines=['halpha', 'nii6583'])
     if emitter == 'disk':
         gas = dict(
-            THIN_DISK, name='gas', emission=emission,
+            THIN_DISK, name='gas', light=emission,
             vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform'))
         properties = dict(
@@ -376,7 +376,9 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
             gas_rpt_a=1, gas_rpt_s=4, gas_vpt_rt=2, gas_vpt_vt=150,
             gas_dpt_a=20)
     else:
-        gas = dict(type='point', name='gas', emission=emission)
+        gas = dict(
+            type='point', name='gas', light=emission,
+            kinematics=dict(type='gauss'))
         properties = dict(
             gas_xpos=0.5, gas_ypos=0.5, gas_flux=1, gas_vsys=0, gas_disp=20)
     properties['gas_nii6583_ratio'] = 1
@@ -397,7 +399,8 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
                 size=81, step=25, rval=500, rest='6564.61 Angstrom')),
         depth=dict(extent=40 * 0.25, step=0.25),
         galaxy=dict(components=[gas] + dusts),
-        **({} if lines is None else dict(lines=lines)))
+        **({} if lines is None
+           else dict(tracer=dict(type='lines', lines=lines))))
     data, extra = evaluate_cases([case], properties)
     taus = [
         extra.get('odata', component=f'dust{i}').data.sum(axis=0)
@@ -450,7 +453,7 @@ def dusty_galaxy(emission, dusts=1, **options):
     A galaxy of a disk of the given emission and of disks of dust of the
     law of Cardelli et al. (ccm), each of its own vsys.
     """
-    gas = dict(THIN_GAS, emission=emission)
+    gas = dict(THIN_GAS, light=emission)
     dust = [dict(THICK_DISK, name=f'dust{i}', opacity=dict(
         type='dust', law=dict(type='ccm')),
         vptraits=dict(type='arctan', direction='tan'),
@@ -467,12 +470,12 @@ def test_dust_reads_its_law_in_its_frame():
     # the dust), the law at its rest wavelength when they move together
     from gbkfit.grid import doppler
     from gbkfit.model._opacity import opacity_cubes
-    from gbkfit.model.components.lines import catalogue_in_use
-    band = catalogue_in_use().band('sdss_r')
-    galaxy = dusty_galaxy(dict(type='band'), redshift=0.1)
+    band = gbkfit.model.Band('r', '6166 Angstrom')
+    galaxy = dusty_galaxy(dict(type='continuum'), redshift=0.1)
     law = galaxy.components()[1].opacity().law()
     cubes = opacity_cubes(
-        [galaxy], [[0]], gbkfit.model.View(spectral=False, band=band),
+        [galaxy], [[0]],
+        gbkfit.model.View(False, gbkfit.model.ContinuumTracer(band)),
         np.float64)[0]
     for vsys in (0, 10000):
         cubes.model.update([dict(dust0_vsys=vsys, gas_vsys=-3000)])
@@ -481,7 +484,8 @@ def test_dust_reads_its_law_in_its_frame():
             rtol=1e-12)
     galaxy = dusty_galaxy(dict(type='lines', lines=['halpha']))
     cubes = opacity_cubes(
-        [galaxy], [[0]], gbkfit.model.View(spectral=True, lines=('halpha',)),
+        [galaxy], [[0]],
+        gbkfit.model.View(True, gbkfit.model.LinesTracer(['halpha'])),
         np.float64)[0]
     rest = 0.656461
     for gas, dust in ((3000, 3000), (3000, -2000)):
@@ -496,10 +500,10 @@ def test_dust_of_each_systemic_velocity_is_a_kind():
     from gbkfit.model._opacity import opacity_cubes
     lines = dict(type='lines', lines=['halpha', 'nii6583'])
     cubes = opacity_cubes(
-        [dusty_galaxy(lines, dusts=2)], [[0]], gbkfit.model.View(spectral=True),
-        np.float64)[0]
+        [dusty_galaxy(lines, dusts=2)], [[0]],
+        gbkfit.model.View(True, gbkfit.model.LinesTracer()), np.float64)[0]
     assert cubes.ncubes == 2
     with pytest.raises(ValueError, match="each systemic velocity"):
         opacity_cubes(
             [dusty_galaxy(lines, dusts=5)], [[0]],
-            gbkfit.model.View(spectral=True), np.float64)
+            gbkfit.model.View(True, gbkfit.model.LinesTracer()), np.float64)

@@ -9,8 +9,8 @@ def split_case(case):
     from a case of the tests: a dict with a driver, a galaxy, an
     observation (its options, with the primary beam, psf and lsf of its
     instrument among them), an optional name, which names the galaxy, the
-    optional depth axis, lines or band of the observation, and the unit
-    of the light of its model. The observation of a named galaxy sees it
+    optional depth axis and tracer of the observation, and the unit of
+    the light of its model. The observation of a named galaxy sees it
     alone (see seen_of).
     """
     case = dict(case)
@@ -19,7 +19,7 @@ def split_case(case):
     observation['instrument'] = {
         k: observation.pop(k) for k in ('primary_beam', 'psf', 'lsf')
         if k in observation}
-    for key in ('depth', 'lines', 'continuum', 'band', 'unit'):
+    for key in ('depth', 'tracer', 'unit'):
         if key in case:
             observation[key] = case.pop(key)
     galaxy = dict(case.pop('galaxy'))

@@ -21,8 +21,8 @@ from .base import (
     NativeGrid, SceneTarget)
 from ..geometries import geometry_pdesc
 from .lines import LinePlacement
-from .roles import (
-    Emission, View, emission_parser)
+from .roles import Light, light_parser
+from .tracers import View
 
 
 __all__ = [
@@ -173,7 +173,7 @@ class ParticlesPlan(ComponentPlan):
 
     def line_values(self, params: ParamValues) -> np.ndarray:
         if self._lines is None:
-            return np.array([[0.0, 0.0, self._fluxes(params)[0]]])
+            return np.array([[0.0, 0.0, float(np.sum(self._fluxes(params)))]])
         rows = np.zeros((len(self._lines), 3))
         rows[:, :2] = self._lines(params['vsys'])
         rows[:, 2] = self._fluxes(params)
@@ -341,15 +341,17 @@ class Particles(Component):
     Monte Carlo disk).
 
     The table has the columns x, y, z (arcsec), vx, vy, vz (km/s) and
-    flux (in the unit of its emission; of its first line, or of its
+    flux (in the unit of its light; of its first line, or of its
     band), and optionally sigma (km/s, the dispersion of the lines of
     each particle; 0 without). They are in the frame of the galaxy, z
     along its spin axis, seen as a disk of that frame is (see the disks):
     at the centre (xpos, ypos), the position angle posa (of the +x axis
     of the frame) and the inclination incl, with the velocity along the
     line of sight vsys + vy sin(incl) + vz cos(incl). Its parameters:
-    xpos, ypos, posa, incl, and with emission lines vsys, and the flux
-    ratios of its lines (see Lines).
+    xpos, ypos, posa, incl, vsys, and the flux ratios of its lines or
+    bands (see Lines and Bands). They always move: a spectral axis sees
+    their lines, or with the tracer losvd, the velocities of their
+    continuum (e.g. the stars of a simulation).
 
     (The positions are in arcsec, as those of every component: the
     distance of a galaxy reaches its components only through its mass
@@ -365,7 +367,7 @@ class Particles(Component):
     ----------
     particles : Mapping of str to ndarray
         The table of the particles: its columns, by name.
-    emission : Emission
+    light : Light
         The light it emits.
     name : str, optional
         Its name (see Component).
@@ -392,7 +394,7 @@ class Particles(Component):
     def from_file(
             cls,
             file: FilePath,
-            emission: Emission,
+            light: Light,
             name: str | None = None
     ) -> 'Particles':
         """
@@ -403,7 +405,7 @@ class Particles(Component):
         file : str
             The table of the particles: a FITS table, an ECSV file or a
             numpy file (npz) of its columns.
-        emission, name
+        light, name
             As those of Particles.
 
         Returns
@@ -417,7 +419,7 @@ class Particles(Component):
             If the file cannot be read, or the particles are not valid.
         """
         check_options(Particles.from_file, locals())
-        particles = cls(read_particles(file), emission, name)
+        particles = cls(read_particles(file), light, name)
         particles._file = file
         return particles
 
@@ -431,31 +433,29 @@ class Particles(Component):
             dict(type=self.type())
             | dump_name(self)
             | dict(file=self._file,
-                   emission=emission_parser.dump(self.emission())))
+                   light=light_parser.dump(self.light())))
 
     def __init__(
             self,
             particles: Mapping[str, np.ndarray],
-            emission: Emission,
+            light: Light,
             name: str | None = None
     ):
         check_options(Particles.__init__, locals())
-        super().__init__(name, emission, None)
+        super().__init__(name, light, None)
         # (the file of those made from a file: their configuration; see
         # from_file and dump)
         self._file: str | None = None
         self._particles = _columns(particles)
-        names = ('xpos', 'ypos', 'posa', 'incl')
-        if emission.needs_velocities():
-            names += ('vsys',)
-        light = emission.light()
+        names = ('xpos', 'ypos', 'posa', 'incl', 'vsys')
+        spectrum = light.spectrum()
         pdescs = {
             name: geometry_pdesc(name) for name in names}
-        if repeated := sorted(set(light.pdescs()) & set(pdescs)):
+        if repeated := sorted(set(spectrum.pdescs()) & set(pdescs)):
             raise ValueError(
                 f"the parameters of the flux ratios have the names of other "
                 f"parameters: {repeated}; rename the lines or bands")
-        self._pdescs = pdescs | light.pdescs()
+        self._pdescs = pdescs | spectrum.pdescs()
 
     def file(self) -> str | None:
         """Return the file of its table, if made from a file."""
@@ -465,12 +465,11 @@ class Particles(Component):
         return False
 
     def moves(self) -> bool:
-        # (particles of lines place their velocities in channels)
-        return self.emission().needs_velocities()
+        # (every particle moves at its velocity)
+        return True
 
     def frame_params(self) -> FrameParams:
-        vsys = 'vsys' if self.emission().needs_velocities() else None
-        return FrameParams('xpos', 'ypos', vsys, 'posa', 'incl')
+        return FrameParams('xpos', 'ypos', 'vsys', 'posa', 'incl')
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return self._pdescs
@@ -489,8 +488,8 @@ class Particles(Component):
     ) -> ParticlesPlan:
         # (it always emits: it has no opacity, so that a plan of it that
         # does not emit, which would take no unit of the data, is not made)
-        setup = self.emission().setup(
-            target.view, target.spectral, target.data_unit, redshift)
+        setup = target.view.setup(
+            self.light(), target.spectral, target.data_unit, redshift)
         return ParticlesPlan(
             target.driver, target.dtype, self._particles, opacity_ratios,
             setup.fluxes, setup.lines)

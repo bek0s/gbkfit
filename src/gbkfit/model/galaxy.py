@@ -55,7 +55,7 @@ component_parser = TypedParser(Component, [
 class Galaxy(Serializable):
     """
     A galaxy: its components, and its mass at a distance. Its components
-    are what observations see: each emits light (its emission), removes
+    are what observations see: each emits light (its light), removes
     light (its opacity) or both. Its mass pulls: its components with the
     velocity trait 'mass' rotate in its gravity (see
     traits.VPTraitMass), which takes its disks as concentric and flat
@@ -163,8 +163,6 @@ class Galaxy(Serializable):
             raise ValueError(
                 f"a cosmological distance needs the galaxy to have a "
                 f"redshift above 0; it has {redshift}")
-        if redshift is None:
-            _check_redshift_not_needed(components)
         self._name = name
 
     def name(self) -> str | None:
@@ -359,6 +357,14 @@ class Galaxy(Serializable):
         """Return its redshift (0 if not given)."""
         return 0.0 if self._redshift is None else self._redshift
 
+    def redshift_given(self) -> bool:
+        """
+        Check whether its redshift is given (see redshift: 0 if not), which
+        the light of a continuum with a unit needs, when seen without a
+        systemic velocity of its own (see tracers).
+        """
+        return self._redshift is not None
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name (see the class)."""
         return self._params.pdescs
@@ -535,22 +541,3 @@ def _or_host(driver: Driver | None) -> Driver:
     # (imported here: the host driver needs its native module)
     from gbkfit.driver.drivers.host import DriverHost
     return DriverHost()
-
-
-def _check_redshift_not_needed(components: Sequence[Component]) -> None:
-    """
-    Raise ValueError if a component of a galaxy without a redshift emits
-    in bands with a unit and has no systemic velocity: the redshift by
-    which images see its light dimmed is then not known (see
-    _units.BandFactors).
-    """
-    for i, component in enumerate(components):
-        emission = component.emission()
-        if emission is not None and emission.unit() is not None \
-                and component.frame_params().vsys is None:
-            label = component.name() or f'component{i}'
-            raise ValueError(
-                f"the light of component {label!r} is in a unit, as the "
-                f"galaxy emits it, which images see dimmed by its redshift: "
-                f"give the galaxy its redshift (the option redshift; 0 for "
-                f"none)")

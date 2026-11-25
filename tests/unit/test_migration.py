@@ -526,6 +526,7 @@ def test_shared_geometries_without_params_are_migrated_by_hand():
         migration.Change(
             path, "kinematics: {type: traits, ...} -> its options on the "
                   "component"),
+        migration.Change(path + ['light'], "emission -> light"),
         migration.Change(['version'], f"3 -> {VERSION}")]
 
 
@@ -533,8 +534,11 @@ def test_own_geometries_are_migrated_to_their_components():
     disk = copy.deepcopy(DISK) | dict(name='gas', geometry='own', tilted=True)
     config = dict(galaxies=[dict(components=[disk])])
     migration.migrate(config, 3)
-    assert disk == FLAT_DISK | dict(
-        type='thin_disk', name='gas', tilted=True)
+    # (and its emission its light, of version 24)
+    flat = {
+        ('light' if key == 'emission' else key): value
+        for key, value in FLAT_DISK.items()}
+    assert disk == flat | dict(type='thin_disk', name='gas', tilted=True)
 
 
 @pytest.mark.parametrize('old, new', [
@@ -633,7 +637,7 @@ def test_a_thin_disk_loses_the_options_of_a_thick_disk_that_are_none():
     assert not any(c.message.startswith('by hand') for c in changes)
     from gbkfit.model import galaxy_parser
     galaxy_parser.load(config['galaxies'][0] | dict(components=[
-        disk | dict(rnodes=[0, 1, 2], emission=dict(type='lines'))]))
+        disk | dict(rnodes=[0, 1, 2], light=dict(type='lines'))]))
 
 
 def test_the_options_of_a_thick_disk_on_a_thin_one_are_changed_by_hand():
@@ -809,7 +813,7 @@ def test_components_are_flat():
     # (in the order of the options they replace)
     assert list(thick) == [
         'type', 'name', 'rptraits', 'rhtraits', 'vptraits', 'dptraits',
-        'equilibrium', 'emission']
+        'equilibrium', 'light']
     assert thick['rhtraits'] == dict(type='sech2', zmax=8)
     # (and its equilibrium its option equilibrium: see
     # test_the_vertical_balance_is_stated_once)
@@ -875,7 +879,7 @@ def test_the_vertical_balance_is_stated_once():
     for disk in disks[:1]:
         galaxy_parser.load(dict(
             components=[disk | dict(
-                rnodes=[0, 1, 2], emission=dict(type='lines'))],
+                rnodes=[0, 1, 2], light=dict(type='lines'))],
             mass=[dict(type='point', name='bh')],
             distance=dict(type='parameter')))
 
@@ -935,7 +939,8 @@ def test_flat_components_keep_their_comments(tmp_path):
     text = path.read_text()
     assert 'type: thin_disk  # the gas' in text
     assert 'rptraits:\n' in text and 'density' not in text
-    assert 'emission:  # its light' in text
+    # (and the comment of a renamed option, emission -> light)
+    assert 'light:' in text and '# its light' in text
 
 
 def test_trait_parameters_are_named_after_their_kind():
@@ -1608,7 +1613,7 @@ def _group_of(observations):
         ObservationGroup, ObservationPixelBrightness)
     galaxy = galaxy_parser.load(dict(components=[dict(
         type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
-        emission=dict(type='band'))]))
+        light=dict(type='continuum'))]))
     return ObservationGroup(galaxy, [
         ObservationPixelBrightness(
             size=(8, 8), name=observation.get('name'))
@@ -1812,7 +1817,7 @@ def test_the_line_of_sight_leaves_for_the_depth_of_the_observation(
     group_of_config = setup._config._load_observation_group
     group_of_config(config | dict(galaxies=[dict(components=[dict(
         type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
-        emission=dict(type='band'))])]))
+        light=dict(type='continuum'))])]))
 
 
 def test_a_migrated_line_of_sight_keeps_the_comments(tmp_path):
@@ -1916,7 +1921,7 @@ def test_the_light_of_stars_is_light_in_bands_and_the_continuum(tmp_path):
             dict(type='pixel_spectra', name='both',
                  lines=['halpha', 'stars']),
             dict(type='pixel_spectra', name='gas', lines=['halpha'])])
-    changes = migration.migrate(config, 12)
+    changes = rewritten(config, 12, 13)
     bulge, gas = config['galaxies'][0]['components']
     assert bulge['emission'] == dict(type='band', bands=['sdss_r'])
     assert gas['emission'] == dict(type='lines', lines=['halpha'])
@@ -1945,7 +1950,7 @@ def test_the_dispersion_equilibrium_is_an_option_of_the_disk():
         dptraits=dict(type='equilibrium', gravity='sheet', name='eq'))
     changes = migration.migrate(
         dict(version=13, galaxies=dict(components=[beside, alone])))
-    assert list(beside) == ['type', 'dptraits', 'equilibrium', 'emission']
+    assert list(beside) == ['type', 'dptraits', 'equilibrium', 'light']
     assert beside['dptraits'] == [dict(type='uniform')]
     assert beside['equilibrium'] == dict(gravity='galaxy', direction='ver')
     assert alone == dict(type='thick_disk', equilibrium=dict(gravity='sheet'))
@@ -2526,3 +2531,65 @@ def test_a_point_lsf_piece_is_taken_out_by_hand(tmp_path):
     changes = migration.migrate_project(study.path)
     [change] = changes['lsfs/point.yaml']
     assert change.message.startswith("by hand: a point is no LSF")
+
+
+def test_the_light_options_of_observations_become_their_tracer():
+    # Version 24: an observation says what its data trace (tracer): lines
+    # of named lines, losvd of the continuum, continuum of a band
+    config = dict(
+        bands=dict(mine='5000 Angstrom'),
+        observations=[
+            dict(type='pixel_moments', lines=['halpha']),
+            dict(type='region_moments', lines=[], continuum=True),
+            dict(type='pixel_brightness', band='mine'),
+            dict(type='pixel_spectra'),
+            dict(type='pixel_spectra', continuum=True)],
+        galaxies=[dict(components=[dict(
+            type='thin_disk', name='disk', emission=dict(type='lines'))])])
+    changes = rewritten(config, 23, 24)
+    tracers = [o.get('tracer') for o in config['observations']]
+    assert tracers == [
+        dict(type='lines', lines=['halpha']), dict(type='losvd'),
+        dict(type='continuum', band='mine'), None, dict(type='losvd')]
+    assert not any(
+        key in o for o in config['observations']
+        for key in ('lines', 'continuum', 'band'))
+    # (one that saw the lines too sees them by hand, in an observation of
+    # their own)
+    [by_hand] = [c for c in changes if c.message.startswith('by hand')]
+    assert by_hand.path == ['observations', 4, 'tracer']
+
+
+def test_the_emission_of_a_component_is_its_light():
+    # Version 24: emission is light, its type band continuum; a point of
+    # lines moves (kinematics); light and dust in one component is by hand
+    config = dict(galaxies=[dict(components=[
+        dict(type='thin_disk', name='gas', emission=dict(type='lines')),
+        dict(type='spheroid', name='bulge', emission=dict(type='band')),
+        dict(type='point', name='agn', emission=dict(type='lines')),
+        dict(type='point', name='core', emission=dict(type='band')),
+        dict(type='thick_disk', name='dusty', emission=dict(type='band'),
+             opacity=dict(type='dust'))])])
+    changes = rewritten(config, 23, 24)
+    gas, bulge, agn, core, dusty = config['galaxies'][0]['components']
+    assert gas['light'] == dict(type='lines') and 'emission' not in gas
+    assert bulge['light'] == dict(type='continuum')
+    assert agn['kinematics'] == dict(type='gauss')
+    assert 'kinematics' not in core
+    [by_hand] = [c for c in changes if c.message.startswith('by hand')]
+    assert by_hand.path == ['galaxies', 0, 'components', 4, 'opacity']
+
+
+def test_the_bands_that_gbkfit_knew_are_declared():
+    # Version 24: GBKFIT knows no bands: those it knew that a configuration
+    # names are declared in its section bands, with their wavelengths
+    config = dict(
+        galaxies=[dict(components=[dict(
+            type='thin_disk', name='stars',
+            emission=dict(type='band', bands=['sdss_r', 'mine']))])],
+        bands=dict(mine='5000 Angstrom'),
+        observations=[dict(type='pixel_brightness', band='twomass_ks')])
+    rewritten(config, 23, 24)
+    assert config['bands'] == {
+        'mine': '5000 Angstrom', 'sdss_r': '6166 Angstrom',
+        'twomass_ks': '2.159 um'}

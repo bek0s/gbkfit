@@ -150,7 +150,7 @@ def orbit_library(
     """
     Return the orbits of the stars of a spheroid of Schwarzschild
     kinematics in one evaluation (see OrbitLibraryState), of the light of
-    the spheroid (see Spheroid.light) and its rmax (arcsec), in the
+    the spheroid (see Spheroid.light_terms) and its rmax (arcsec), in the
     gravity of its galaxy: norbits orbits, integrated for turns periods,
     of the starts of the seed (see SchwarzschildMotion).
 

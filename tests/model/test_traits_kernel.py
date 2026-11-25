@@ -149,7 +149,7 @@ def case_and_properties(driver, kind, dust, config):
     disk_traits, disk_values = traits_and_values(
         LINE_DISK_TRAITS, None if dust else kind, config)
     components = [
-        thick_disk('disk', disk_traits, emission=dict(type='lines'))]
+        thick_disk('disk', disk_traits, light=dict(type='lines'))]
     properties = prefixed('disk', GEOMETRY | dict(vsys=0) | disk_values)
     if dust:
         dust_traits, dust_values = traits_and_values(
@@ -224,7 +224,7 @@ def test_traits_are_axisymmetric_as_they_declare(kind, config):
     from gbkfit.model import component_parser
     disk_traits, params = traits_and_values(LINE_DISK_TRAITS, kind, config)
     component = component_parser.load(
-        thick_disk('disk', disk_traits, emission=dict(type='lines')))
+        thick_disk('disk', disk_traits, light=dict(type='lines')))
     params |= GEOMETRY | dict(vsys=0)
     for name, pdesc in component.pdescs().items():
         if name.startswith(f'{kind}_'):

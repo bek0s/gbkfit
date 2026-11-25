@@ -87,7 +87,7 @@ TRAIT_PARSERS = {
     for name in dir(traits) if name.endswith('_parser')}
 
 OTHER_PARSERS = dict(
-    emission=gbkfit.model.emission_parser,
+    light=gbkfit.model.light_parser,
     opacity=gbkfit.model.opacity_parser,
     psf=gbkfit.instrument.psf_parser,
     lsf=gbkfit.instrument.lsf_parser,
@@ -205,12 +205,12 @@ def test_observation_dump_has_every_option(observable_type):
     from gbkfit.observation import observation_parser
     observable, instrument, oversampling = OBSERVABLES[observable_type]
     info = dict(type=observable_type) | observable | dict(
-        name='obs', lines=['ha'],
+        name='obs', tracer=dict(type='lines', lines=['ha']),
         depth=DEPTH,
         instrument=instrument,
         oversampling=oversampling, dtype='float64')
     dumped = json.loads(json.dumps(roundtrip(observation_parser, info)))
-    for key in ('name', 'lines', 'depth',
+    for key in ('name', 'tracer', 'depth',
                 'oversampling', 'dtype'):
         assert dumped[key] == info[key], key
     for key, value in observable.items():

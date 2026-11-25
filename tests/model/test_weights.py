@@ -34,7 +34,7 @@ def config(driver, observable, weights, component=None):
         rptraits=dict(type='exponential'),
         vptraits=dict(type='uniform', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
     return dict(
         driver=dict(type=driver.type()),
         galaxies=[dict(components=[gas])],
@@ -176,7 +176,8 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
     (dict(
         type='pixel_spectra', size=[24, 24],
         spectral=dict(size=21, convention='relativistic')),
-     dict(type='point', name='gas', emission=dict(type='lines')),
+     dict(type='point', name='gas', light=dict(type='lines'),
+          kinematics=dict(type='gauss')),
      "pixel weights need the plane of a disk")])
 def test_weights_are_checked(driver, observable, component, message):
     weights = dict(

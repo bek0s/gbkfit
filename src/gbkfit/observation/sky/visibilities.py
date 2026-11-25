@@ -4,7 +4,7 @@ of the cube of the model at the baselines of each channel.
 """
 
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from typing import Annotated, Any, Literal, TypeAlias
 
 import astropy.units
@@ -19,7 +19,7 @@ from gbkfit.grid import (
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import (
-    Band, DataUnit, Extras, LightUnit, SceneState)
+    DataUnit, Extras, LightUnit, LinesTracer, SceneState, Tracer)
 from gbkfit.params import ParamValues
 from ..depth import Depth
 from ..noise import Noise
@@ -84,7 +84,7 @@ class ObservationVisibilities(ObservationSky):
     reach the baselines up to u_max: their step must be well below the
     Nyquist step of the longest baseline, 1 / (2 u_max) (at it, those of an
     exponential disk err by 25% at u_max / 2); 1 / (5 u_max) by default,
-    as galario's. The field (fov) must cover the emission times the
+    as galario's. The field (fov) must cover the light times the
     primary beam. At its first evaluation, the model is evaluated at half
     its step too, and a warning says if its visibilities change by more
     than 1% of the largest (its flux), or if more than 0.1% of its flux is
@@ -145,6 +145,7 @@ class ObservationVisibilities(ObservationSky):
     dataset_class = DatasetVisibilities
 
     spectral_view = True
+    tracer_types = (LinesTracer,)
     orbit_stars = None
 
     # The axes of the cube of the model: x, y and the spectral axis
@@ -214,9 +215,7 @@ class ObservationVisibilities(ObservationSky):
             eps: Annotated[float, Gt(0)] | None = None,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            lines: Sequence[str] | None = None,
-            continuum: bool = False,
-            band: str | Band | None = None,
+            tracer: Tracer | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
@@ -259,9 +258,8 @@ class ObservationVisibilities(ObservationSky):
         self._transform = transform
         self._eps = eps
         super().__init__(
-            grid, source_grid, instrument, lines, continuum, band,
-            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
-            dtype, fft_dtype, name, unit)
+            grid, source_grid, instrument, tracer, pixel_weights, flux_scale,
+            offsets, noise, oversampling, depth, dtype, fft_dtype, name, unit)
 
     def fov(self) -> tuple[float, float]:
         """Return the field of the cube on the sky (arcsec)."""

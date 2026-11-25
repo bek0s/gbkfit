@@ -33,7 +33,7 @@ GAS = dict(
     vptraits=dict(type='mass'),
     dptraits=[dict(type='uniform')], equilibrium=EQUILIBRIUM,
     pressure_support=dict(type='jeans'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 MASS = [
     dict(type='point', name='bh'),
     dict(type='halo', name='halo', profile=dict(type='nfw'))]
@@ -48,7 +48,7 @@ DISK = dict(
     rptraits=dict(type='exponential'),
     vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'),
-    emission=dict(type='lines'))
+    light=dict(type='lines'))
 DISK_PARAMS = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, rpt_a=1, rpt_s=4, vpt_rt=3,
     vpt_vt=200, dpt_a=20)
@@ -245,7 +245,7 @@ CONE = dict(
     type='cone', rnodes=list(range(0, 21, 2)),
     rptraits=dict(type='exponential'), rhtraits=dict(type='gauss', zmax=4),
     vptraits=dict(type='uniform', direction='out'),
-    dptraits=dict(type='uniform'), emission=dict(type='lines'))
+    dptraits=dict(type='uniform'), light=dict(type='lines'))
 CONE_PARAMS = dict(
     xpos=0, ypos=0, posa=30, incl=60, wall=35, vsys=0, rpt_a=1, rpt_s=4,
     rht_s=1, vpt_vo=150, dpt_a=12)
@@ -271,7 +271,7 @@ def test_functions_of_a_cone():
 # A spheroid of starlight, of the Sersic profile
 SPHEROID = dict(
     type='spheroid', rmax=30, profile=dict(type='sersic'),
-    emission=dict(type='band'))
+    light=dict(type='continuum'))
 SPHEROID_PARAMS = dict(xpos=0, ypos=0, ie=2.5, re=4, n=2)
 
 
@@ -301,7 +301,7 @@ def test_functions_of_a_spheroid_of_traits():
     assert np.isnan(bound['rotation'](31.0))
     # Without kinematics, its density alone
     galaxy = galaxy_parser.load(dict(components=[copy.deepcopy(
-        SPHEROID) | dict(emission=dict(type='band'))]))
+        SPHEROID) | dict(light=dict(type='continuum'))]))
     functions = galaxy.plan_functions()
     assert functions.names() == ('redshift_at', 'density')
     np.testing.assert_allclose(

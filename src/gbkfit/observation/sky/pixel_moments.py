@@ -3,7 +3,7 @@ The observation of moments of the spectra on a grid of pixels: moment
 maps.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -15,7 +15,7 @@ from gbkfit.grid import (
     Rota, Rpix, Rval, Size, SpectralAxis, Step, grid_options)
 from gbkfit.instrument import Instrument
 from gbkfit.lensing import SourceGrid
-from gbkfit.model import Band, DataUnit, LightUnit
+from gbkfit.model import DataUnit, LightUnit, LinesTracer, LosvdTracer, Tracer
 from gbkfit.moments import (
     FluxFloor, Method, MomentOrders, MomentsPlan, check_moment_items,
     check_moment_orders, moment_item, split_moments)
@@ -110,6 +110,7 @@ class ObservationPixelMoments(ObservationSky):
     dataset_class = DatasetPixelMoments
 
     spectral_view = True
+    tracer_types = (LinesTracer, LosvdTracer)
     orbit_stars = None
 
     # Moment maps have no spectral axis
@@ -174,9 +175,7 @@ class ObservationPixelMoments(ObservationSky):
             median_size: MedianSize | None = None,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            lines: Sequence[str] | None = None,
-            continuum: bool = False,
-            band: str | Band | None = None,
+            tracer: Tracer | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
@@ -199,9 +198,9 @@ class ObservationPixelMoments(ObservationSky):
         self._flux_floor = flux_floor
         self._method = method
         super().__init__(
-            self._make_grid(**options), source_grid, instrument, lines,
-            continuum, band, pixel_weights, flux_scale, offsets, noise,
-            oversampling, depth, dtype, fft_dtype, name, unit)
+            self._make_grid(**options), source_grid, instrument, tracer,
+            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
+            dtype, fft_dtype, name, unit)
 
     def _measured_pixels(self) -> np.ndarray:
         return unmasked_pixels(self._dataset, self._grid.size[1::-1])

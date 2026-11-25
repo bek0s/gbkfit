@@ -23,7 +23,7 @@ def disk(dptraits, thick=False):
         tilted=False, rnodes=list(range(0, 21, 2)), **density,
         vptraits=dict(type='uniform', direction='tan'),
         dptraits=dptraits,
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
 
 
 # (off the centre of a pixel, where the azimuth is undefined)
@@ -117,7 +117,7 @@ def test_a_cone_has_isotropic_dispersion_only():
         rhtraits=dict(type='gauss', zmax=1.5),
         vptraits=dict(type='uniform', direction='out'),
         dptraits=DIRECTIONS,
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
     with pytest.raises(
             ValueError, match=r"takes dispersion traits along \['iso'\]"):
         galaxy_parser.load(dict(components=[cone]))

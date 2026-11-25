@@ -34,10 +34,10 @@ from .. import traits
 from .._common import Interp, RNodes, RStep, dump_name
 from .._needs import Need
 from .._native import (
-    NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
+    NativeComponentPlan, NativePlan, ParamBuffer, light_setup,
     evaluate_native, light_pdescs)
 from .._nodal import evaluate_native_traits
-from .._units import mass_per_unit
+from .._units import density_unit, mass_per_unit
 from ..base import (
     Component, ComponentLinks, ComponentPart, ComponentState, FieldsLayout,
     FrameParams, NativeGrid, SceneTarget)
@@ -45,7 +45,8 @@ from ...geometries import geometry_pdesc
 from ..nodes import Nodes, as_nodes
 from ..parts import kinematic_traits
 from ..roles import (
-    BandEmission, Emission, View, emission_parser)
+    DustOpacity, Light, Opacity, light_parser, opacity_parser)
+from ..tracers import View
 from ._jeans import JeansMotion
 from ._motion import TRAIT_KINDS, SpheroidLight, SpheroidMotion, TraitsMotion
 from ._profiles import (
@@ -135,7 +136,7 @@ class LightProfile(TypedSerializable, abc.ABC):
         Return its terms at the values of its parameters, laid out in a
         shape of the axis ratio q (1 for a sphere; ignored by a profile
         that does not take a shape): the amplitude (the density, in the
-        unit of the emission per arcsec), the scale (arcsec) and the axis
+        unit of the light per arcsec), the scale (arcsec) and the axis
         ratio of each, an array of shape (nterms, 3); NaN for a term of a
         scale or an axis ratio that is not greater than zero.
         """
@@ -148,7 +149,7 @@ class LightProfile(TypedSerializable, abc.ABC):
         """
         Return the terms of its projection on the sky at the inclination
         incl (degrees; see terms): the amplitude (the surface density, in
-        the unit of the emission), the scale and the projected axis ratio
+        the unit of the light), the scale and the projected axis ratio
         q' of each, q'^2 = cos^2(incl) + q^2 sin^2(incl), of the function
         exp(-c u^p) (without the table).
         """
@@ -490,10 +491,12 @@ class Spheroid(Component, abc.ABC):
     own axis ratios, see LightMGE), and the motion of its stars, if they
     move (its kinematics, see SpheroidMotion; with a systemic velocity
     vsys). Its axis is the spin axis of a disk of its posa and incl; a
-    sphere without kinematics has none (no posa or incl). It emits in
-    bands, seen by images, and with kinematics, by the spectral
-    observations of the continuum (see View: the velocities of its
-    stars).
+    sphere without kinematics has none (no posa or incl). Its light is a
+    continuum (its stars: seen in images, and with kinematics, by the
+    tracer losvd, the velocities of the stars), or with kinematics,
+    emission lines (e.g. a halo of gas, or planetary nebulae of the stars
+    of the Jeans equations; not of stars on orbits, which are recorded
+    for the tracer losvd only).
 
     The stars of a spheroid of traits or of the Jeans equations move, at
     each point, with a Gaussian distribution of velocities, of a mean and
@@ -534,8 +537,9 @@ class Spheroid(Component, abc.ABC):
         How far it is drawn on a grid with a depth axis: the radius
         (arcsec) of the sphere around its centre that holds its light
         there, which sets the depth axis (see Component.bounding_radius).
-    emission : Emission
-        The light it emits, in bands (BandEmission).
+    light : Light
+        The light it emits: a continuum (ContinuumLight), or with
+        kinematics, emission lines (LineLight).
     shape : SpheroidShape, optional
         Its shape (see mass.shapes): a sphere (the default), or flattened
         of the axis ratio q (a parameter), with the face-on projection of
@@ -546,7 +550,7 @@ class Spheroid(Component, abc.ABC):
     Raises
     ------
     ValueError
-        If rmax is not a finite number greater than zero, the emission is
+        If rmax is not a finite number greater than zero, the light is
         not in bands, or the profile has its own axis ratios and a shape
         is given.
     """
@@ -554,11 +558,11 @@ class Spheroid(Component, abc.ABC):
     config_titles = dict(
         profile='Profile', shape='Shape', rmax='Largest radius')
     config_start = dict(
-        profile=dict(type='sersic'), rmax=10, emission=dict(type='band'))
+        profile=dict(type='sersic'), rmax=10, light=dict(type='continuum'))
 
     parts = (
         ComponentPart('profile'), ComponentPart('shape'),
-        ComponentPart('emission'))
+        ComponentPart('light'))
 
     def dump(self) -> dict[str, Any]:
         info = dict(type=self.type()) | dump_name(self) | dict(
@@ -567,7 +571,10 @@ class Spheroid(Component, abc.ABC):
         if self._profile.takes_shape():
             info.update(shape=spheroid_shape_parser.dump(self._shape))
         info.update(self._motion_options())
-        info.update(emission=emission_parser.dump(self.emission()))
+        if self.light() is not None:
+            info.update(light=light_parser.dump(self.light()))
+        if self.opacity() is not None:
+            info.update(opacity=opacity_parser.dump(self.opacity()))
         return info
 
     def _motion_options(self) -> dict[str, Any]:
@@ -581,24 +588,34 @@ class Spheroid(Component, abc.ABC):
             self,
             profile: LightProfile,
             rmax: RMax,
-            emission: Emission,
+            light: Light | None,
             shape: SpheroidShape | None,
             motion: SpheroidMotion | None,
-            name: str | None
+            name: str | None,
+            opacity: DustOpacity | None = None
     ):
         """
         motion is how its stars move, if they do, of its rmax: that of its
         type, which the constructor of the subclass makes, once it has
-        checked the options (rmax among them).
+        checked the options (rmax among them); opacity its dust, if it is
+        dust (see TraitSpheroid).
         """
-        if not isinstance(emission, BandEmission):
-            raise ValueError(
-                "a spheroid emits in bands (emission type: band)")
+        if light is not None and light.needs_velocities():
+            if motion is None:
+                raise ValueError(
+                    "a spheroid of emission lines needs kinematics: give "
+                    "it velocity and dispersion traits (vptraits and "
+                    "dptraits), or make it a jeans_spheroid")
+            if motion.orbit_weights() is not None:
+                raise ValueError(
+                    "the stars on orbits of a spheroid are recorded with "
+                    "the velocities of their continuum (the tracer losvd): "
+                    "its light is a continuum (light: {type: continuum})")
         if not profile.takes_shape() and shape is not None:
             raise ValueError(
                 f"the light profile '{profile.type()}' has the axis ratios "
                 f"of its terms: it takes no shape")
-        super().__init__(name, emission, None)
+        super().__init__(name, light, opacity)
         if shape is None and profile.takes_shape():
             shape = ShapeSphere()
         self._profile = profile
@@ -612,14 +629,15 @@ class Spheroid(Component, abc.ABC):
             if name in ('xpos', 'ypos')
             or (name in ('posa', 'incl') and axis)
             or (name == 'vsys' and motion is not None)}
-        # (the amplitudes of the profile in the unit of its light)
-        light = pdescs_with_units(
+        # (the amplitudes of the profile in the unit of its light, or of
+        # the optical depth of its dust)
+        amplitudes = pdescs_with_units(
             profile.pdescs(),
-            dict.fromkeys(profile.amplitudes(), emission.unit()))
-        own = self._geometry_pdescs | light \
+            dict.fromkeys(profile.amplitudes(), density_unit(light)))
+        own = self._geometry_pdescs | amplitudes \
             | (shape.pdescs() if shape is not None else {}) \
             | (self._motion.pdescs() if self._motion is not None else {})
-        self._pdescs = own | light_pdescs(own, emission)
+        self._pdescs = own | light_pdescs(own, light)
 
     def profile(self) -> LightProfile:
         """Return its light profile."""
@@ -648,17 +666,17 @@ class Spheroid(Component, abc.ABC):
 
     def light_params(self) -> tuple[str, ...]:
         """
-        Return the names of its parameters that its light reads (see
-        light): those of its profile and its shape.
+        Return the names of its parameters that the terms of its light
+        read (see light_terms): those of its profile and its shape.
         """
         shape = {} if self._shape is None else self._shape.pdescs()
         return (*self._profile.pdescs(), *shape)
 
-    def light(self, params: ParamValues) -> SpheroidLight:
+    def light_terms(self, params: ParamValues) -> SpheroidLight:
         """
-        Return its light at the values of its parameters, as its motion
-        takes it (see _jeans.light): the terms of its profile, their
-        function and its table.
+        Return the terms of its light at the values of its parameters, as
+        its motion takes them (see _jeans.light): the terms of its profile,
+        their function and its table.
         """
         profile = self._profile
         return (profile.terms(params, self.axis_ratio(params)),
@@ -670,7 +688,7 @@ class Spheroid(Component, abc.ABC):
     ) -> np.ndarray:
         """
         Return its surface density (its projection on the sky, in the unit
-        of its emission, itself per area of the sky) at the values of its
+        of its light, itself per area of the sky) at the values of its
         parameters, at the points (x, y) of the sky from its centre
         (arcsec, as xpos and ypos): the sum of the terms of its projection
         (see
@@ -764,7 +782,7 @@ class Spheroid(Component, abc.ABC):
         # the gravity)
         if not links.followed and not self.needs(links):
             return None
-        return SpheroidStage(self, mass_per_unit(self.emission()))
+        return SpheroidStage(self, mass_per_unit(self.light()))
 
     def plan(
             self,
@@ -774,12 +792,12 @@ class Spheroid(Component, abc.ABC):
             redshift: float
     ) -> NativeComponentPlan:
         driver, spectral, dtype = target.driver, target.spectral, target.dtype
-        emission = emission_setup(
-            self.emission(), target.view, spectral, emits,
+        setup = light_setup(
+            self.light(), target.view, spectral, emits,
             target.data_unit, redshift)
         return NativeComponentPlan(
-            driver, SpheroidPlan(self, driver, emission.nlines, dtype),
-            emission, opacity_ratios)
+            driver, SpheroidPlan(self, driver, setup.nlines, dtype),
+            setup, opacity_ratios)
 
 
 class TraitSpheroid(Spheroid):
@@ -789,12 +807,16 @@ class TraitSpheroid(Spheroid):
     thick disk whose spin axis is the axis of the spheroid (see
     TraitsMotion), on radial nodes of the distance from the axis. Its
     stars take neither the mass of their galaxy nor its gravity. See
-    Spheroid for the options it shares.
+    Spheroid for the options it shares. It can be dust instead of light
+    (opacity): its density is then the optical depth of the dust at V
+    (see DustOpacity; e.g. a dusty halo).
 
     Parameters
     ----------
-    profile, rmax, emission, shape, name :
-        As those of Spheroid.
+    profile, rmax, light, shape, name :
+        As those of Spheroid; light is optional, for dust.
+    opacity : DustOpacity, optional
+        Its dust, if it is dust (without light).
     vptraits : VPTrait or Sequence of VPTrait, optional
         The velocity polar traits (parameters 'vpt_*'), around the axis
         ('tan'). A spheroid with vptraits and dptraits moves.
@@ -824,13 +846,14 @@ class TraitSpheroid(Spheroid):
         rmax, or nodes are given without traits.
     """
 
-    config_titles = dict(rnodes='Nodes')
-    config_start = dict(emission=dict(type='band'))
+    config_titles = dict(rnodes='Nodes', opacity='Opacity')
+    config_start = dict(light=dict(type='continuum'))
 
     parts = (
         ComponentPart('profile'), ComponentPart('shape'),
         ComponentPart('vptraits', 'vhtraits'),
-        ComponentPart('dptraits', 'dhtraits'), ComponentPart('emission'))
+        ComponentPart('dptraits', 'dhtraits'), ComponentPart('light'),
+        ComponentPart('opacity'))
 
     @staticmethod
     def type() -> str:
@@ -844,7 +867,7 @@ class TraitSpheroid(Spheroid):
             self,
             profile: LightProfile,
             rmax: RMax,
-            emission: Emission,
+            light: Light | None = None,
             shape: SpheroidShape | None = None,
             vptraits: traits.VPTrait | Sequence[traits.VPTrait] | None = None,
             dptraits: traits.DPTrait | Sequence[traits.DPTrait] | None = None,
@@ -855,9 +878,12 @@ class TraitSpheroid(Spheroid):
             rnodes: Nodes | RNodes | None = None,
             rstep: RStep | None = None,
             interp: Interp = 'linear',
+            opacity: Opacity | None = None,
             name: str | None = None
     ):
         check_options(TraitSpheroid.__init__, locals())
+        if opacity is not None and not isinstance(opacity, DustOpacity):
+            raise ValueError("the opacity of a spheroid is dust (type: dust)")
         kinematics = kinematic_traits(vptraits, dptraits, vhtraits, dhtraits)
         # (the nodes in the form they were given in, for its configuration)
         nodes = None if rnodes is None else as_nodes(rnodes)
@@ -869,7 +895,7 @@ class TraitSpheroid(Spheroid):
             raise ValueError(
                 "rnodes, rstep and interp are the nodes of the traits of a "
                 "spheroid: give it vptraits and dptraits")
-        super().__init__(profile, rmax, emission, shape, motion, name)
+        super().__init__(profile, rmax, light, shape, motion, name, opacity)
         self._kinematics = kinematics
         self._traits_motion = motion
         self._rnodes = nodes
@@ -923,7 +949,7 @@ class JeansSpheroid(Spheroid):
 
     Parameters
     ----------
-    profile, rmax, emission, shape, name :
+    profile, rmax, light, shape, name :
         As those of Spheroid.
 
     Raises
@@ -944,13 +970,13 @@ class JeansSpheroid(Spheroid):
             self,
             profile: LightProfile,
             rmax: RMax,
-            emission: Emission,
+            light: Light,
             shape: SpheroidShape | None = None,
             name: str | None = None
     ):
         check_options(JeansSpheroid.__init__, locals())
         super().__init__(
-            profile, rmax, emission, shape, JeansMotion(float(rmax)), name)
+            profile, rmax, light, shape, JeansMotion(float(rmax)), name)
 
     def profile_families(self) -> dict[str, tuple[float, float]]:
         return spheroid_families(self, True)
@@ -968,7 +994,7 @@ class OrbitSpheroid(Spheroid):
 
     Parameters
     ----------
-    profile, rmax, emission, shape, name :
+    profile, rmax, light, shape, name :
         As those of Spheroid.
     norbits : int, optional
         The number of the orbits (each with its twin).
@@ -999,7 +1025,7 @@ class OrbitSpheroid(Spheroid):
             self,
             profile: LightProfile,
             rmax: RMax,
-            emission: Emission,
+            light: Light,
             shape: SpheroidShape | None = None,
             norbits: Annotated[int, Gt(0)] = 3000,
             turns: Annotated[FiniteFloat, Gt(0)] = 100,
@@ -1008,7 +1034,7 @@ class OrbitSpheroid(Spheroid):
     ):
         check_options(OrbitSpheroid.__init__, locals())
         motion = SchwarzschildMotion(norbits, float(turns), seed, float(rmax))
-        super().__init__(profile, rmax, emission, shape, motion, name)
+        super().__init__(profile, rmax, light, shape, motion, name)
         self._orbits = motion
 
     def _motion_options(self) -> dict[str, Any]:

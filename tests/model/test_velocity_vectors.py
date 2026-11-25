@@ -33,7 +33,7 @@ def disk(density, **options):
     return dict(
         type='thick_disk' if 'rhtraits' in density else 'thin_disk',
         loose=False, tilted=False, rnodes=list(range(0, 9)),
-        **density, emission=LINES, vptraits=SPEEDS, dptraits=UNIFORM) | options
+        **density, light=LINES, vptraits=SPEEDS, dptraits=UNIFORM) | options
 
 
 # The components that move, and the values of their parameters
@@ -59,7 +59,7 @@ COMPONENTS = dict(
         dict(rpt_a=1, rpt_s=3, rht_s=1, dpt_a=10) | SPEED_VALUES),
     cone=(
         dict(
-            type='cone', rnodes=[0, 1, 6], emission=LINES,
+            type='cone', rnodes=[0, 1, 6], light=LINES,
             rptraits=UNIFORM, rhtraits=dict(type='gauss', zmax=1.5),
             vptraits=[
                 dict(type='uniform', direction='tan'),
@@ -69,7 +69,7 @@ COMPONENTS = dict(
     spheroid=(
         dict(
             type='spheroid', profile=dict(type='sersic'), rmax=6,
-            emission=dict(type='band'),
+            light=dict(type='continuum'),
             vptraits=dict(type='uniform', direction='tan'), dptraits=UNIFORM,
             rnodes=[0, 6]),
         dict(ie=1, re=2, n=1, vpt_vt=100, dpt_a=10)))
@@ -179,7 +179,7 @@ def test_a_radial_flow_points_away_from_the_centre(driver, evaluate_cases):
     # the offset on the sky, outwards (audit 2026-10-31 #86)
     component = dict(
         type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
-        rptraits=dict(type='exponential'), emission=LINES,
+        rptraits=dict(type='exponential'), light=LINES,
         vptraits=dict(type='uniform', direction='rad'),
         dptraits=UNIFORM)
     _, extra = evaluate_cases([dict(

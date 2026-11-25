@@ -27,9 +27,9 @@ __all__ = [
     'Bands',
     'Line',
     'LineCatalogue',
-    'Light',
     'LinePlacement',
     'Lines',
+    'Spectrum',
     'band_parser',
     'line_parser',
     'lines_from'
@@ -59,22 +59,6 @@ _CATALOGUE_LINES = {
     'co21': '230.538 GHz',
     'co32': '345.7959899 GHz',
     'cii158': '1900.5369 GHz'}
-
-# The bands of the catalogue (see LineCatalogue): the effective wavelength
-# of the filters of SDSS, 2MASS and of the IRAC channels 1 and 2 of
-# Spitzer
-_CATALOGUE_BANDS = {
-    'sdss_u': '3551 Angstrom',
-    'sdss_g': '4686 Angstrom',
-    'sdss_r': '6166 Angstrom',
-    'sdss_i': '7480 Angstrom',
-    'sdss_z': '8932 Angstrom',
-    'twomass_j': '1.235 um',
-    'twomass_h': '1.662 um',
-    'twomass_ks': '2.159 um',
-    'irac1': '3.550 um',
-    'irac2': '4.493 um'}
-
 
 class Line(Serializable):
     """
@@ -175,15 +159,15 @@ band_parser = BasicParser(Band)
 
 class LineCatalogue:
     """
-    The emission lines and the bands that configurations name: those of
-    GBKFIT, and those of the user, which add to or replace them. The lines
-    of GBKFIT are the brightest optical lines (oii3726, oii3729, hbeta,
-    oiii4959, oiii5007, nii6548, halpha, nii6583, sii6716, sii6731), the
-    near-infrared hydrogen lines paalpha and brgamma, and the radio and
-    (sub)millimetre lines hi21, co10, co21, co32 and cii158; their rest
-    wavelengths are in vacuum. Its bands are those of SDSS (sdss_u, sdss_g,
-    sdss_r, sdss_i, sdss_z), of 2MASS (twomass_j, twomass_h, twomass_ks)
-    and the IRAC channels 1 and 2 of Spitzer (irac1, irac2).
+    The emission lines and the bands that configurations name. The lines
+    are those of GBKFIT, and those of the user, which add to or replace
+    them. The lines of GBKFIT are the brightest optical lines (oii3726,
+    oii3729, hbeta, oiii4959, oiii5007, nii6548, halpha, nii6583, sii6716,
+    sii6731), the near-infrared hydrogen lines paalpha and brgamma, and the
+    radio and (sub)millimetre lines hi21, co10, co21, co32 and cii158; their
+    rest wavelengths are in vacuum. The bands are the user's only: a band
+    is of a filter of a survey or an instrument, which GBKFIT does not
+    know.
 
     Parameters
     ----------
@@ -216,8 +200,7 @@ class LineCatalogue:
             for name, rest in (_CATALOGUE_LINES | dict(lines or {})).items()}
         self._bands = {
             name: Band(name, wavelength)
-            for name, wavelength in (
-                _CATALOGUE_BANDS | dict(bands or {})).items()}
+            for name, wavelength in dict(bands or {}).items()}
 
     def names(self) -> tuple[str, ...]:
         """Return the names of its lines."""
@@ -244,8 +227,9 @@ class LineCatalogue:
         """
         if name not in self._bands:
             raise ValueError(
-                f"there is no band {name!r} in the catalogue; its bands: "
-                f"{list(self._bands)}")
+                f"there is no band {name!r}: declare it, with its effective "
+                f"wavelength, in the section bands (e.g. bands: {{{name}: "
+                f"6166 Angstrom}}); declared: {list(self._bands)}")
         return self._bands[name]
 
     def line(self, name: str) -> Line:
@@ -294,10 +278,10 @@ def lines_from(catalogue: LineCatalogue) -> Generator[None]:
 
     Examples
     --------
-    >>> from gbkfit.model import LineCatalogue, emission_parser, lines_from
+    >>> from gbkfit.model import LineCatalogue, light_parser, lines_from
     >>> catalogue = LineCatalogue({'mgii2796': '2796.35 Angstrom'})
     >>> with lines_from(catalogue):
-    ...     emission = emission_parser.load(
+    ...     light = light_parser.load(
     ...         dict(type='lines', lines=['mgii2796']))
     """
     token = _in_use.set(catalogue)
@@ -316,12 +300,13 @@ def catalogue_in_use() -> LineCatalogue:
     return LineCatalogue() if catalogue is None else catalogue
 
 
-class Light(Protocol):
+class Spectrum(Protocol):
     """
-    The light of an emission (see Emission.light): its emission lines
-    (Lines) or its bands (Bands), by name, with the parameters of the flux
-    ratios of all but the first ('{name}_ratio'), and the option of the
-    emission that gives them (option: 'lines' or 'bands').
+    The spectrum of the light of a component (see Light.spectrum): its
+    emission lines (Lines) or its bands (Bands), by name, with the
+    parameters of the flux ratios of all but the first ('{name}_ratio'),
+    and the option of the light that gives them (option: 'lines' or
+    'bands').
     """
 
     option: ClassVar[str]
@@ -644,7 +629,7 @@ class Bands:
         if band is None:
             raise ValueError(
                 f"a component emits in the bands {list(self.names())}; the "
-                f"image that sees it needs a band")
+                f"tracer of an observation that sees it needs a band")
         return band.name() in self.names()
 
     def ratio_name(self, band: Band | None) -> str | None:

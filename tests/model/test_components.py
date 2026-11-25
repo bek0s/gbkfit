@@ -11,7 +11,7 @@ import pytest
 from gbkfit.config import ConfigError, strict_mode
 from gbkfit.grid import Coords, Grid
 from gbkfit.model import (
-    SceneTarget, View, component_parser,
+    ContinuumTracer, LinesTracer, SceneTarget, View, component_parser,
     galaxy_parser)
 from gbkfit.model.components._nodal import HEIGHT_KINDS, TRAIT_OPTIONS
 from gbkfit.model._opacity import opacity_cubes
@@ -30,26 +30,26 @@ THIN = dict(rptraits=EXPONENTIAL)
 THICK = dict(rptraits=EXPONENTIAL, rhtraits=SECH2)
 KINEMATICS = dict(vptraits=ARCTAN, dptraits=UNIFORM)
 
-BAND = dict(type='band')
+BAND = dict(type='continuum')
 LINES = dict(type='lines')
 DUST = dict(type='dust')
 
 # Each kind of disk component, with its required options
 COMPONENTS = dict(
-    band_smdisk_thin=dict(type='thin_disk', **THIN, emission=BAND),
-    band_smdisk_thick=dict(type='thick_disk', **THICK, emission=BAND),
+    band_smdisk_thin=dict(type='thin_disk', **THIN, light=BAND),
+    band_smdisk_thick=dict(type='thick_disk', **THICK, light=BAND),
     band_mcdisk=dict(
         type='thick_disk', clouds=dict(cflux=1e-3), **THICK,
-        emission=BAND),
+        light=BAND),
     lines_smdisk_thin=dict(
         type='thin_disk', **THIN, **KINEMATICS,
-        emission=LINES),
+        light=LINES),
     lines_smdisk_thick=dict(
         type='thick_disk', **THICK, **KINEMATICS,
-        emission=LINES),
+        light=LINES),
     lines_mcdisk=dict(
         type='thick_disk', clouds=dict(cflux=1e-3), **THICK,
-        **KINEMATICS, emission=LINES),
+        **KINEMATICS, light=LINES),
     dust_smdisk=dict(type='thick_disk', **THICK, opacity=DUST),
     dust_mcdisk=dict(
         type='thick_disk', clouds=dict(cflux=1e-3), **THICK,
@@ -74,7 +74,7 @@ THICK_COMPONENTS = [
 # Each kind of component that emits lines
 LINE_COMPONENTS = [
     name for name, component in COMPONENTS.items()
-    if component.get('emission') == LINES]
+    if component.get('light') == LINES]
 
 
 def updated(info, options):
@@ -129,7 +129,7 @@ def test_the_parts_of_a_type_of_component_are_options_of_it(cls):
     assert {
         (part.option, part.heights) for part in cls.parts
         if part.heights} <= pairs
-    assert 'emission' in [part.option for part in cls.parts]
+    assert 'light' in [part.option for part in cls.parts]
 
 
 @pytest.mark.parametrize('name', COMPONENTS)
@@ -220,8 +220,9 @@ def test_a_disk_is_thin_or_thick_by_its_type(name):
     galaxy = galaxy_parser.load(dict(components=[component_info(name)]))
     thick = COMPONENTS[name]['type'] == 'thick_disk'
     for spectral in (False, True):
+        tracer = LinesTracer() if spectral else ContinuumTracer()
         assert galaxy.components()[0].needs_depth(
-            View(spectral=spectral)) == thick
+            View(spectral, tracer)) == thick
 
 
 @pytest.mark.parametrize('rhtraits, message', [
@@ -268,16 +269,24 @@ def test_a_disk_that_emits_lines_needs_kinematics(name):
 
 
 @pytest.mark.parametrize('name', COMPONENTS)
-def test_a_component_needs_emission_or_opacity(name):
-    message = component_error(name, emission=..., opacity=...)
-    assert "a component needs emission, opacity or both" in message
+def test_a_component_needs_light_or_opacity(name):
+    message = component_error(name, light=..., opacity=...)
+    assert "a component needs light or opacity" in message
 
 
-def test_a_point_needs_emission():
+@pytest.mark.parametrize('name', ['dust_smdisk', 'dust_mcdisk'])
+def test_a_component_with_light_is_not_dust(name):
+    # (one density cannot be its light in a unit and the optical depth of
+    # its dust: the dust is a component of its own)
+    message = component_error(name, light=dict(type='continuum'))
+    assert "a component with light cannot be dust" in message
+
+
+def test_a_point_needs_light():
     # A point has no depth, so it has no opacity
     message = load_error(dict(type='point'))
     assert message == (
-        "components[0] [point]: missing required options: 'emission'")
+        "components[0] [point]: missing required options: 'light'")
 
 
 @pytest.mark.parametrize('name', COMPONENTS)
@@ -303,9 +312,10 @@ def test_thick_disk_with_several_velocity_traits(name):
     spatial = grid.spatial()
     plan = galaxy.plan(
         SceneTarget(
-            DriverHost(), spatial, grid.spectral(), np.float32, View(spectral=True),
-            None, None), (0,),
-        opacity_cubes([galaxy], [(0,)], View(spectral=True), np.float32)[0],
+            DriverHost(), spatial, grid.spectral(), np.float32,
+            View(True, LinesTracer()), None, None), (0,),
+        opacity_cubes(
+            [galaxy], [(0,)], View(True, LinesTracer()), np.float32)[0],
         Depth(extent='legacy').axis(spatial, 0))
     plan.evaluate(params, {}, dict(scube=scube), None)
     assert scube.sum() > 0

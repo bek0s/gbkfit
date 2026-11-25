@@ -9,7 +9,7 @@ import astropy.units
 import numpy as np
 import scipy.special
 
-from gbkfit.config import check_options
+from gbkfit.config import TypedParser, TypedSerializable, check_options
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from ._common import (
@@ -19,24 +19,63 @@ from .base import (
     NativeGrid, SceneTarget)
 from ..geometries import geometry_pdesc
 from .lines import Bands, LinePlacement, Lines
-from .roles import (
-    Emission, View, emission_parser)
+from .roles import Light, light_parser
+from .tracers import View
 
 
 __all__ = [
-    'Point'
+    'GaussKinematics',
+    'Point',
+    'PointKinematics',
+    'point_kinematics_parser'
 ]
 
 
+class PointKinematics(TypedSerializable):
+    """
+    The kinematics of a point component: the distribution of the
+    velocities of its light along the line of sight, which a spectral
+    axis sees (its lines, or with the tracer losvd, the velocities of its
+    stars; see tracers).
+    """
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type())
+
+
+class GaussKinematics(PointKinematics):
+    """
+    A Gaussian distribution of velocities, of the systemic velocity of the
+    point (vsys) and the dispersion disp: e.g. the stars of a nuclear star
+    cluster, or the broad lines of an active nucleus.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'gauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
+    def __init__(self):
+        check_options(GaussKinematics.__init__, locals())
+
+
+point_kinematics_parser = TypedParser(PointKinematics, [
+    GaussKinematics], family='point_kinematics')
+
+
 def point_pdescs(
-        spectral: bool,
+        moves: bool,
         depth: bool,
         flux_unit: astropy.units.UnitBase | None
 ) -> dict[str, ParamScalarDesc]:
     """
     Return the parameters of a point component: its position (xpos, ypos,
     and depth if it has one) and flux (of the given unit, if known), and
-    for spectral ones its systemic velocity and dispersion.
+    for one that moves (has kinematics) its systemic velocity and
+    dispersion.
     """
     others = dict(
         depth=ParamScalarDesc(
@@ -49,35 +88,36 @@ def point_pdescs(
             unit=flux_unit, default=1),
         disp=ParamScalarDesc(
             title='Velocity dispersion',
-            desc="the velocity dispersion of its lines", min=0,
+            desc="the dispersion of its velocities along the line of "
+                 "sight", min=0,
             unit='km/s', default=20))
     names = ('xpos', 'ypos') + (('depth',) if depth else ()) + ('flux',) \
-        + (('vsys', 'disp') if spectral else ())
+        + (('vsys', 'disp') if moves else ())
     return {
         name: others[name] if name in others else geometry_pdesc(name)
         for name in names}
 
 
 def _light_pdescs(
-        light: Lines | Bands,
-        spectral: bool,
+        spectrum: Lines | Bands,
+        moves: bool,
         depth: bool,
         unit: astropy.units.UnitBase | None
 ) -> dict[str, ParamScalarDesc]:
     """
-    Return the parameters of a point with the given lines (a spectral
-    point) or bands, and the unit of its light (if any): its flux is in
-    that unit (a density per solid angle) times arcsec^2. Raise
+    Return the parameters of a point with the given lines or bands, that
+    moves or not (has kinematics), and the unit of its light (if any): its
+    flux is in that unit (a density per solid angle) times arcsec^2. Raise
     ConfigError if the flux ratios of its lines or bands have the names
     of its other parameters.
     """
     flux_unit = None if unit is None else unit * astropy.units.arcsec ** 2
-    pdescs = point_pdescs(spectral, depth, flux_unit)
-    if repeated := sorted(set(light.pdescs()) & set(pdescs)):
+    pdescs = point_pdescs(moves, depth, flux_unit)
+    if repeated := sorted(set(spectrum.pdescs()) & set(pdescs)):
         raise ValueError(
             f"the parameters of the flux ratios have the names of other "
             f"parameters: {repeated}; rename the lines or bands")
-    return pdescs | light.pdescs()
+    return pdescs | spectrum.pdescs()
 
 
 
@@ -170,7 +210,7 @@ class PointPlan(ComponentPlan):
 
     def line_values(self, params: ParamValues) -> np.ndarray:
         if self._lines is None:
-            return np.array([[0.0, 0.0, self._fluxes(params)[0]]])
+            return np.array([[0.0, 0.0, float(np.sum(self._fluxes(params)))]])
         self._rows[:, :2] = self._lines(systemic_velocity(params))
         self._rows[:, 2] = self._fluxes(params)
         return self._rows
@@ -261,7 +301,7 @@ class PointPlan(ComponentPlan):
                 transmission = np.exp(-self._opacity_ratios @ _optical_depths(
                     columns, depth, grid))
             if image is not None:
-                weight *= self._fluxes(params)[0]
+                weight *= float(np.sum(self._fluxes(params)))
                 if transmission is not None:
                     weight *= transmission[0]
                 pixel = image.reshape(-1, *image.shape[-2:])[0, y, x:x + 1]
@@ -280,15 +320,19 @@ class Point(Component):
     """
     An unresolved component (e.g. a nucleus): its flux at a point. It is
     drawn on the pixels around the point (see PointPlan). Its parameters:
-    xpos, ypos, depth (if it has one) and flux, and with emission lines
-    vsys and disp (the dispersion of its lines) and the flux ratios of its
-    lines (see Lines). Seen along a line of sight with a depth axis, the
-    opacity of its galaxy in front of it dims it.
+    xpos, ypos, depth (if it has one) and flux, the flux ratios of its
+    lines or bands (see Lines and Bands), and with kinematics vsys and
+    disp (see GaussKinematics), which emission lines need. Seen along a
+    line of sight with a depth axis, the opacity of its galaxy in front of
+    it dims it.
 
     Parameters
     ----------
-    emission : Emission
+    light : Light
         The light it emits.
+    kinematics : PointKinematics, optional
+        How its light moves: its distribution of velocities along the line
+        of sight; none by default (it does not move).
     depth : bool, optional
         Whether its position along the line of sight is a parameter,
         'depth' (arcsec, away from the viewer, from the plane of the sky
@@ -300,10 +344,10 @@ class Point(Component):
     Raises
     ------
     ValueError
-        If the lines are not valid.
+        If the lines are not valid, or it has lines and no kinematics.
     """
 
-    config_titles = dict(depth='Depth a parameter')
+    config_titles = dict(kinematics='Kinematics', depth='Depth a parameter')
 
     @staticmethod
     def type() -> str:
@@ -317,21 +361,28 @@ class Point(Component):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | dict(emission=emission_parser.dump(self.emission()),
-                   depth=self._depth))
+            | dict(light=light_parser.dump(self.light()))
+            | ({} if self._kinematics is None else dict(
+                kinematics=point_kinematics_parser.dump(self._kinematics)))
+            | dict(depth=self._depth))
 
     def __init__(
             self,
-            emission: Emission,
+            light: Light,
+            kinematics: PointKinematics | None = None,
             depth: bool = False,
             name: str | None = None
     ):
         check_options(Point.__init__, locals())
-        super().__init__(name, emission, None)
+        super().__init__(name, light, None)
+        if light.needs_velocities() and kinematics is None:
+            raise ValueError(
+                "a point of emission lines needs kinematics: give it "
+                "kinematics (e.g. kinematics: {type: gauss})")
+        self._kinematics = kinematics
         self._depth = depth
         self._pdescs = _light_pdescs(
-            emission.light(), emission.needs_velocities(), depth,
-            emission.unit())
+            light.spectrum(), kinematics is not None, depth, light.unit())
 
     def depth(self) -> bool:
         """Check whether its depth along the line of sight is a parameter."""
@@ -340,9 +391,12 @@ class Point(Component):
     def needs_depth(self, view: View) -> bool:
         return False
 
+    def kinematics(self) -> PointKinematics | None:
+        """Return its kinematics, if any."""
+        return self._kinematics
+
     def moves(self) -> bool:
-        # (a point of lines has their systemic velocity and dispersion)
-        return self.emission().needs_velocities()
+        return self._kinematics is not None
 
     def frame_params(self) -> FrameParams:
         vsys = 'vsys' if 'vsys' in self._pdescs else None
@@ -369,8 +423,8 @@ class Point(Component):
                 "of the components the observation sees")
         # (it always emits: it has no opacity, so that a plan of it that
         # does not emit, which would take no unit of the data, is not made)
-        setup = self.emission().setup(
-            target.view, target.spectral, target.data_unit, redshift)
+        setup = target.view.setup(
+            self.light(), target.spectral, target.data_unit, redshift)
         return PointPlan(
             target.driver, target.dtype, self._depth, opacity_ratios,
             setup.fluxes, setup.lines)

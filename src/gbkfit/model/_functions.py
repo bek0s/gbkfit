@@ -55,6 +55,10 @@ _RADIAL_FAMILIES = dict(
 # The families of functions of the mass of the galaxy
 _MASS_FAMILIES = ('vcirc', 'vnewton', 'mass', 'slope')
 
+# The families of functions of radii that take a second argument, by the
+# name of the argument (e.g. speed_disk(R, direction))
+_SECOND_ARGUMENTS = dict(speed='direction', orientation='which')
+
 
 class GalaxyFunctions:
     """
@@ -185,6 +189,15 @@ class GalaxyFunctions:
                 and (not own or _RADIAL_FAMILIES[family][2]):
             return family
         return None
+
+    @staticmethod
+    def second_argument(name: str) -> str | None:
+        """
+        Return the name of the second argument of the function of radii of
+        a name (e.g. 'direction' of speed_disk(R, direction)), or None if
+        it takes the radii only.
+        """
+        return _SECOND_ARGUMENTS.get(GalaxyFunctions.family(name))
 
     @staticmethod
     def of_mass(name: str) -> bool:

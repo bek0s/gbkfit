@@ -18,7 +18,7 @@ def test_mixture_blobs_are_tables_of_their_galaxy():
         dptraits=[
             dict(type='uniform'),
             dict(type='mixture_ggauss', nblobs=2)],
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
     galaxy = galaxy_parser.load(dict(components=[disk]))
     (blobs, columns), (dblobs, dcolumns) = param_tables(galaxy.pdescs())
     assert columns == {name: f'rpt2_{name}' for name in 'rtasqp'}

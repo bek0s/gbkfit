@@ -30,7 +30,7 @@ def line_flux(driver, evaluate_cases, dispersion):
             rptraits=dict(type='exponential'),
             vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform'),
-            emission=dict(type='lines'))]))
+            light=dict(type='lines'))]))
     # A systemic velocity between two channel centres
     properties = dict(
         vsys=3, xpos=0, ypos=0, posa=30, incl=45,
@@ -77,7 +77,7 @@ def lines_config(lines, catalogue=None):
             rptraits=dict(type='exponential'),
             vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform'),
-            emission=dict(type='lines', lines=lines))])],
+            light=dict(type='lines', lines=lines))])],
         observations=[dict(
             type='pixel_spectra',
             size=[8, 8],
@@ -93,7 +93,7 @@ def test_configurations_name_lines_of_the_catalogue():
         ['halpha', 'mine', dict(name='other', rest='5000 Angstrom')],
         dict(mine='4000 Angstrom')))
     component, = plan.group().galaxies()[0].components()
-    lines = component.emission().lines().lines()
+    lines = component.light().lines().lines()
     assert [line.name() for line in lines] == ['halpha', 'mine', 'other']
     assert [line.rest().to_value('Angstrom') for line in lines] \
         == pytest.approx([6564.61, 4000, 5000])
@@ -105,7 +105,7 @@ def test_configurations_name_known_lines():
         config_group_plan(lines_config(['halpha', 'oi6300']))
     message = located_message(error.value)
     assert "there is no line 'oi6300' in the catalogue" in message
-    assert "emission.lines[1]" in message
+    assert "light.lines[1]" in message
 
 
 @pytest.mark.parametrize('medium, offset', [('air', 0), ('vacuum', 82.7)])
@@ -213,7 +213,7 @@ def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
                 rptraits=dict(type='uniform'),
                 vptraits=dict(type='arctan', direction='tan'),
                 dptraits=dict(type='uniform'),
-                emission=dict(type='lines', lines=['hi21']))]))
+                light=dict(type='lines', lines=['hi21']))]))
         properties = dict(
             vsys=vsys, xpos=0, ypos=0, posa=0, incl=45,
             rpt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
@@ -252,7 +252,7 @@ def test_the_lsf_is_in_km_s_of_the_light(driver, evaluate_cases):
                 rptraits=dict(type='uniform'),
                 vptraits=dict(type='arctan', direction='tan'),
                 dptraits=dict(type='uniform'),
-                emission=dict(type='lines', lines=['halpha']))]))
+                light=dict(type='lines', lines=['halpha']))]))
         properties = dict(
             vsys=0, xpos=0, ypos=0, posa=0, incl=45,
             rpt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)

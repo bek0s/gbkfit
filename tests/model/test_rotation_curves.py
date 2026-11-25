@@ -60,7 +60,7 @@ def thin_disk(trait, rnodes, **options):
         type='thin_disk', rnodes=rnodes, **options,
         rptraits=dict(type='exponential'),
         vptraits=trait, dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))
+        light=dict(type='lines'))
 
 
 @pytest.mark.parametrize('trait', list(CURVES))

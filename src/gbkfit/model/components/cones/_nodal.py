@@ -96,7 +96,7 @@ class NodalCone(NodalComponent):
     def plan(self, driver: Driver, nlines: int, dtype: np.dtype) -> NativePlan:
         """
         Plan the evaluation of the cone on the given driver and dtype,
-        which owns the memory it needs. nlines is the number of emission
+        which owns the memory it needs. nlines is the number of light
         lines it adds to spectral cubes (0 without them).
         """
         pass

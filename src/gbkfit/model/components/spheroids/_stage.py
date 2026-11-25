@@ -26,7 +26,7 @@ class SpheroidStage(ComponentStage):
     where it is (see Placed: its centre, and its axis, if it has one), its
     density, which the mass of the galaxy follows (see
     mass.TracedSpheroid), of the given mass surface density of one unit
-    of its light (Msun/kpc^2; see _units.mass_per_unit), if its emission
+    of its light (Msun/kpc^2; see _units.mass_per_unit), if its light
     has a unit; and its state, that of the motion of its kinematics, if
     any (see SpheroidMotion.state; e.g. the tables of its Jeans
     kinematics), of its groundwork (see SpheroidMotion.groundwork). Its
@@ -100,7 +100,7 @@ class SpheroidStage(ComponentStage):
         motion = spheroid.motion()
         if motion is None:
             return None
-        return motion.groundwork(spheroid.light(values), mass)
+        return motion.groundwork(spheroid.light_terms(values), mass)
 
     def state(
             self,

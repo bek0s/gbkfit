@@ -31,7 +31,7 @@ def _disk(
     return dict(type='thin_disk', name=name) | rings | dict(
         rptraits=dict(type='exponential'),
         vptraits=vptraits, dptraits=dptraits or dict(type='uniform'),
-        emission=dict(type='lines')) | options
+        light=dict(type='lines')) | options
 
 
 def _thick(disk: dict[str, Any], **options: Any) -> dict[str, Any]:
@@ -379,7 +379,7 @@ _PARAMS_FEATURES = dict(
         components=[
             _warped('cold'), _warped('warm'),
             dict(type='point', name='nucleus',
-                 emission=dict(type='lines'))])],
+                 light=dict(type='lines'), kinematics=dict(type='gauss'))])],
     observations=[_cube([24, 24, 30])],
     truth=dict(
         cold_xpos=0.3, cold_ypos=-0.4, cold_vsys=10,

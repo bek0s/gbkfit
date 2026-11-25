@@ -83,7 +83,7 @@ def moments_group(names=('maps',), data=True):
     galaxy = galaxy_parser.load(dict(components=[dict(
         type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
         vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform'), emission=dict(type='lines'))]))
+        dptraits=dict(type='uniform'), light=dict(type='lines'))]))
     dataset = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
     maps = ObservationPixelMoments.paired(
@@ -213,7 +213,7 @@ def image_group(*names, data=(True,)):
     from gbkfit.model import galaxy_parser
     galaxy = galaxy_parser.load(dict(components=[dict(
         type='thin_disk', rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
-        emission=dict(type='band'))]))
+        light=dict(type='continuum'))]))
     dataset = brightness('Jy')
     names = names or (None,) * len(data)
     observations = [
@@ -318,7 +318,7 @@ def test_likelihoods_have_parameters_of_names_of_their_own():
     assert set(Likelihoods(image_group('a'), likelihood).pdescs()) == {'a_s'}
     galaxy = galaxy_parser.load(dict(components=[dict(
         type='thin_disk', name='disk', rnodes=[0, 1, 2],
-        rptraits=dict(type='exponential'), emission=dict(type='band'))]))
+        rptraits=dict(type='exponential'), light=dict(type='continuum'))]))
     dataset = brightness()
     group = ObservationGroup(galaxy, ObservationPixelBrightness.paired(
         dataset, name='disk'))
@@ -557,7 +557,7 @@ def band_disk(name, **options):
     return dict(
         type='thin_disk', name=name, loose=False, tilted=False,
         rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
-        emission=dict(type='band')) | options
+        light=dict(type='continuum')) | options
 
 
 def seen_group(seen, names=('a', 'b'), observation=None):

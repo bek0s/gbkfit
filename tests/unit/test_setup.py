@@ -15,7 +15,7 @@ from gbkfit.objective import Objective
 GALAXY = dict(components=[dict(
     type='thin_disk', loose=False, tilted=False, rnodes=dict(max=4, sep=1),
     rptraits=dict(type='exponential'),
-    emission=dict(type='band'))])
+    light=dict(type='continuum'))])
 
 PARAMS = dict(properties=dict(
     xpos=0, ypos=0, posa=30, incl=50, rpt_a=1,
@@ -384,7 +384,7 @@ MASSIVE = dict(
         type='thin_disk', loose=False, tilted=False, rnodes=dict(max=4, sep=1),
         rptraits=dict(type='exponential'),
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-        emission=dict(type='lines'))],
+        light=dict(type='lines'))],
     mass=[dict(type='halo', name='halo', profile=dict(
         type='pseudo_isothermal', parameterisation='density_radius'))],
     distance=dict(type='parameter'))
@@ -528,7 +528,7 @@ def test_a_configuration_is_described_without_devices(tmp_path):
     assert description.problems == ()
     assert set(description.params.pdescs()) >= {'xpos', 'rpt_s'}
     stars = dict(
-        type='pixel_spectra', lines=[], continuum=True,
+        type='pixel_spectra', tracer=dict(type='losvd'),
         size=[8, 8], spectral=dict(
         size=11, convention='relativistic'))
     described = gbkfit.describe(config | dict(observations=[stars]))

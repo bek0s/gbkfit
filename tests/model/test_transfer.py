@@ -9,7 +9,8 @@ from modelutils import observation_group
 
 from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, Grid
-from gbkfit.model import Extras, SceneTarget, View, galaxy_parser
+from gbkfit.model import (
+    ContinuumTracer, Extras, LinesTracer, SceneTarget, View, galaxy_parser)
 from gbkfit.observation import DepthGroup
 
 
@@ -36,7 +37,7 @@ def disk(kind='smooth', thick=True):
         **density,
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'),
-        emission=dict(type='lines')) | clouds
+        light=dict(type='lines')) | clouds
 
 
 def native_grid(size):
@@ -54,7 +55,7 @@ def component_plan(driver, component):
     return galaxy.components()[0].plan(
         SceneTarget(
             driver, None, SPECTRAL, np.dtype(np.float32),
-            View(spectral=True), None, None),
+            View(True, LinesTracer()), None, None),
         True, None, 0.0)
 
 
@@ -124,7 +125,9 @@ def test_a_thin_disk_is_a_layer_where_its_plane_crosses(driver):
 
 def test_a_point_is_a_layer_at_its_depth(driver):
     params = dict(xpos=0.25, ypos=0.5, depth=2, flux=3, vsys=50, disp=-10)
-    point = dict(type='point', emission=dict(type='lines'), depth=True)
+    point = dict(
+        type='point', light=dict(type='lines'),
+        kinematics=dict(type='gauss'), depth=True)
     grid = native_grid((6, 6, 8))
     (j, v, s, position), _ = evaluate_fields(driver, point, params, grid)
     on = j != 0
@@ -146,19 +149,21 @@ THIN = dict(rptraits=dict(type='exponential'))
 GAS = dict(
     type='thick_disk', name='gas', loose=False, tilted=False,
     rnodes=dict(max=10, sep=1), **THICK, **KINEMATICS,
-    emission=LINES)
+    light=LINES)
 THIN_GAS = {key: value for key, value in GAS.items() if key != 'rhtraits'} \
     | dict(type='thin_disk', **THIN)
 DUST = dict(
     type='thick_disk', name='dust', loose=False, tilted=False,
     rnodes=dict(max=10, sep=1), **THICK, opacity=dict(type='dust'))
-NUCLEUS = dict(type='point', name='nucleus', emission=LINES, depth=True)
+NUCLEUS = dict(
+    type='point', name='nucleus', light=LINES, kinematics=dict(type='gauss'),
+    depth=True)
 OUTFLOW = dict(
     type='cone', name='outflow', rnodes=[0, 1, 3, 6],
     rptraits=dict(type='uniform'), rhtraits=dict(type='gauss', zmax=1),
     vptraits=dict(type='uniform', direction='out'),
     dptraits=dict(type='uniform'),
-    emission=LINES)
+    light=LINES)
 
 PROPERTIES = dict(
     gas_vsys=0, gas_xpos=0.5, gas_ypos=-1, gas_posa=30, gas_incl=60,
@@ -235,7 +240,7 @@ def test_transfer_dims_each_line_by_its_law(
         driver, evaluate_cases, force_evaluation):
     # Two laws and two lines: a cube of opacity for each law, and the
     # light of each line dimmed by its ratios
-    gas = GAS | dict(emission=dict(type='lines', lines=['halpha', 'nii6583']))
+    gas = GAS | dict(light=dict(type='lines', lines=['halpha', 'nii6583']))
     dusts = [
         DUST | dict(name=f'dust{i}', opacity=dict(type='dust', law=law))
         for i, law in enumerate(LAWS)]
@@ -254,7 +259,7 @@ def test_transfer_dims_each_line_by_its_law(
 
 def test_transfer_gives_what_a_depth_axis_gives_for_an_image(
         driver, evaluate_cases, force_evaluation):
-    stars = GAS | dict(name='stars', emission=dict(type='band'))
+    stars = GAS | dict(name='stars', light=dict(type='continuum'))
     del stars['vptraits'], stars['dptraits']
     properties = PROPERTIES | dict(
         stars_xpos=0.5, stars_ypos=-1, stars_posa=30, stars_incl=60,
@@ -367,7 +372,7 @@ def test_named_lines_take_a_coefficient_each(driver, evaluate_cases):
         halpha=dict(type='uniform'),
         nii6583=[dict(type='uniform'), dict(type='exponential')])
     galaxy = galaxy_parser.load(dict(components=[line_opacity(
-        GAS | dict(emission=emission), coefficients)]))
+        GAS | dict(light=emission), coefficients)]))
     assert {'gas_op_halpha_a', 'gas_op_nii6583_a', 'gas_op2_nii6583_a',
             'gas_op2_nii6583_s'} <= set(galaxy.pdescs())
     dumped = galaxy_parser.dump(galaxy)
@@ -387,14 +392,14 @@ def test_a_uniform_coefficient_is_not_discouraged(caplog):
     (line_opacity(GAS, dict(halpha=dict(type='uniform'))),
      "one line without a name"),
     (line_opacity(
-        GAS | dict(emission=dict(type='lines', lines=['halpha', 'nii6583'])),
+        GAS | dict(light=dict(type='lines', lines=['halpha', 'nii6583'])),
         dict(halpha=dict(type='uniform'))),
      "needs the coefficients of every line"),
     (line_opacity(THIN_GAS, dict(type='uniform')),
      r"options of a thick disk \(type: thick_disk\), which a thin disk "
      r"does not take: 'opacity'"),
     (line_opacity(
-        GAS | dict(emission=dict(type='band')), dict(type='uniform')),
+        GAS | dict(light=dict(type='continuum')), dict(type='uniform')),
      "needs emission lines")])
 def test_line_opacity_errors(driver, component, message):
     from modelutils import group_plan
@@ -502,9 +507,8 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
     # dust at z = 0.5 of a law whose ratio is 3 - 2.5 (wavelength - 0.2):
     # in front of the stars, the dust dims them at the wavelength of the
     # band in its own rest frame; behind them, not at all
-    from gbkfit.model import LineCatalogue
     stars = dict(
-        THIN_GAS, name='stars', emission=dict(type='band'), vptraits=None,
+        THIN_GAS, name='stars', light=dict(type='continuum'), vptraits=None,
         dptraits=None)
     dust = DUST | dict(opacity=dict(type='dust', law=dict(
         type='table', wavelengths=[0.2, 1.0], ratios=[3.0, 1.0])))
@@ -519,13 +523,15 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
         dust_rpt_s=4, dust_rht_s=1))
     order = ['front', 'back'] if dust_in_front else ['back', 'front']
     image = dict(
-        kind=dict(type='pixel_brightness', size=[24, 24]), band='sdss_r')
+        kind=dict(type='pixel_brightness', size=[24, 24]),
+        tracer=dict(type='continuum', band=dict(
+            name='r', wavelength='6166 Angstrom')))
     clear, _ = galaxies_model(driver, galaxies[:1], properties, **image)
     model, extra = galaxies_model(
         driver, galaxies, properties, order, **image)
     tau = extra.get('odata', galaxy='front', component='dust').data.sum(
         axis=0)
-    wavelength = LineCatalogue().band('sdss_r').wavelength().to_value('um')
+    wavelength = 0.6166
     ratio = 3 - 2.5 * (wavelength / 1.5 - 0.2)
     expected = clear * np.exp(-ratio * tau) if dust_in_front else clear
     assert tau.max() > 0.1
@@ -848,7 +854,7 @@ def evaluate_galaxies(driver, planned, properties):
 
 
 # Galaxies of stars whose light is in a band, and of dust, face-on
-STARS = dict(THIN_GAS, name='stars', emission=dict(type='band')) | dict(
+STARS = dict(THIN_GAS, name='stars', light=dict(type='continuum')) | dict(
     vptraits=None, dptraits=None)
 FACE_ON = dict(
     stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0, stars_rpt_a=1,
@@ -871,9 +877,9 @@ def test_the_transmission_of_a_scene_dims_the_light_behind_it(driver, law):
     # grey dust at the ratio of the law at the band in the rest frame of
     # the dust, exp(-tau(lambda / (1 + z)))
     from gbkfit.grid import make_grid
-    from gbkfit.model import LineCatalogue
-    band = LineCatalogue().band('sdss_r')
-    view = View(spectral=False, band=band)
+    from gbkfit.model import Band
+    band = Band('r', '6166 Angstrom')
+    view = View(False, ContinuumTracer(band))
     grid = make_grid((24, 24))
     front = dict(name='front', components=[STARS, dust_of(law)], redshift=0.5)
     back = dict(name='back', components=[STARS], redshift=1.0)
@@ -910,7 +916,7 @@ def test_the_transmission_of_a_cube_is_at_each_channel(driver):
         (24, 24, 31), step=(1, 1, 10), spectral_axis=2,
         rest=f'{rest} um', medium='vacuum', convention='optical')
     law = dict(type='table', wavelengths=[0.6560, 0.6570], ratios=[3.0, 0.5])
-    gas = GAS | dict(emission=dict(type='lines', lines=['halpha']))
+    gas = GAS | dict(light=dict(type='lines', lines=['halpha']))
     properties = galaxy_properties('front', PROPERTIES | FACE_ON)
 
     def transmission(dust_law):
@@ -918,7 +924,7 @@ def test_the_transmission_of_a_cube_is_at_each_channel(driver):
             name='front', components=[gas, dust_of(dust_law)],
             redshift=0.3)]
         return evaluate_galaxies(driver, plan_galaxies(
-            driver, galaxies, [(0,)], View(spectral=True), grid, True),
+            driver, galaxies, [(0,)], View(True, LinesTracer()), grid, True),
             properties)[1]
     grey = transmission(None)
     dimmed = transmission(law)
@@ -950,8 +956,9 @@ def test_the_transmission_of_line_opacity_is_at_each_subchannel(driver):
             (24, 24, nchannels), step=(1, 1, step), spectral_axis=2,
             convention='relativistic')
         return evaluate_galaxies(driver, plan_galaxies(
-            driver, galaxies, [(0,)] * len(galaxies), View(spectral=True),
-            grid, behind, subchannels), properties)
+            driver, galaxies, [(0,)] * len(galaxies),
+            View(True, LinesTracer()), grid, behind, subchannels),
+            properties)
     thin, _ = model([front], 31, 10, subchannels=4)
     properties |= dict(front_gas_op_a=3 / thin.max())
     both, _ = model([front, back], 31, 10, subchannels=4)
@@ -975,7 +982,7 @@ def test_light_from_behind_needs_the_column_of_the_opacity(
     galaxy = galaxy_parser.load(dict(components=components))
     scene = Scene(
         [galaxy], [{}], ['galaxy'], [(0,)],
-        View(spectral=False), behind=behind)
+        View(False, ContinuumTracer()), behind=behind)
     assert scene.evaluation().value == evaluation
     assert scene.behind() is behind and not scene.line_opacity()
 
@@ -985,7 +992,7 @@ def test_a_scene_without_light_from_behind_has_no_transmission(driver):
     galaxies = [dict(name='front', components=[STARS, DUST])]
     for behind in (False, True):
         _, transmission = evaluate_galaxies(driver, plan_galaxies(
-            driver, galaxies, [(0,)], View(spectral=False),
+            driver, galaxies, [(0,)], View(False, ContinuumTracer()),
             make_grid((24, 24)), behind), galaxy_properties('front', FACE_ON))
         assert (transmission is None) is not behind
 
@@ -997,6 +1004,7 @@ def test_light_from_behind_needs_a_known_wavelength():
     galaxy = galaxy_parser.load(dict(components=[
         STARS, dust_of(dict(type='ccm'))], redshift=0.5))
     scene = Scene(
-        [galaxy], [{}], ['galaxy'], [()], View(spectral=False), behind=True)
+        [galaxy], [{}], ['galaxy'], [()], View(False, ContinuumTracer()),
+        behind=True)
     with pytest.raises(ValueError, match="an image needs its band"):
         TransferScenePlan.check(scene)

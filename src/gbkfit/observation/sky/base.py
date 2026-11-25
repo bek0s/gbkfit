@@ -14,7 +14,7 @@ import astropy.units
 import numpy as np
 
 import gbkfit.units
-from gbkfit.config import Choices, check_name, config_path, make_typed_desc
+from gbkfit.config import Choices, config_path, make_typed_desc
 from gbkfit.dataset import Dataset, DatasetGrid
 from gbkfit.driver import Driver
 from gbkfit.grid import (
@@ -24,8 +24,7 @@ from gbkfit.instrument import Instrument, instrument_parser
 from gbkfit.io import Beam
 from gbkfit.lensing import SourceGrid
 from gbkfit.model import (
-    Band, DataUnit, LightUnit, Reference, View, band_parser)
-from gbkfit.model.components.lines import catalogue_in_use
+    DataUnit, LightUnit, Reference, Tracer, View, tracer_parser)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .._scene import SeenScenes, make_scenes
 from ..depth import Depth, check_scene
@@ -149,7 +148,7 @@ class ObservationSky(Observation, abc.ABC):
     datasets.
 
     Its model is in the unit of its data, if it is paired with data (see
-    data_unit): the light of the components whose emission has a unit is
+    data_unit): the light of the components whose light has a unit is
     turned into it (see Component.plan), and that of the others is in it.
     Without data, the model is in its unit, if given, or else in the unit
     of the components it sees, which must then have one (or none).
@@ -196,20 +195,12 @@ class ObservationSky(Observation, abc.ABC):
         are laid out (see SourceGrid); SourceGrid() by default (automatic).
     instrument : Instrument, optional
         The telescope and the instrument; a perfect one by default.
-    lines : Sequence of str, optional
-        The names of the emission lines it sees (e.g. the line of the
-        data); all by default.
-    continuum : bool, optional
-        Whether a spectral observation sees the velocities of the
-        continuum light of the components that emit in bands and move
-        (e.g. the kinematics of their stars), besides their lines; not by
-        default. Not of images.
-    band : str or Band, optional
-        The band of an image, or the name of a band of the catalogue in
-        use (that of GBKFIT, or of a configuration, see lines_from): it
-        sees the components that emit in every band or in it (see
-        BandEmission), and dust of an extinction law dims them at its
-        rest wavelength (see Galaxy).
+    tracer : Tracer, optional
+        What its data trace of the light of the components (see Tracer):
+        emission lines (e.g. the line of the data), a continuum in a band,
+        or the velocities of the stars weighted by their light in a band;
+        each kind takes some (see tracer_types), the first by default (of
+        all the lines, or of the continuum without a band).
     pixel_weights : Weights, optional
         The weights of the pixels of its data (e.g. less weight near the
         minor axis of a disk); none by default.
@@ -280,7 +271,8 @@ class ObservationSky(Observation, abc.ABC):
     Raises
     ------
     ValueError
-        If a name is invalid, a band is given to a kind that is not an image, it has a flux scale or
+        If a name is invalid, its tracer is not one of its kind, it has a
+        flux scale or
         offsets but no name, its flux scale is not one of its kind, the
         offsets are not position and velocity, true or false, the
         oversampling is not one integer of at least 1 for each axis, an
@@ -295,8 +287,11 @@ class ObservationSky(Observation, abc.ABC):
     spectral_axis: ClassVar[int | None]
 
     # Whether it sees a spectral axis (a spectral cube and what is made of
-    # one), or a band (an image); see view
+    # one), or an image; see view
     spectral_view: ClassVar[bool]
+
+    # The tracers it takes (see Tracer), the first by default
+    tracer_types: ClassVar[tuple[type[Tracer], ...]]
 
     # What it sees of the stars on orbits whose weights are solved (see
     # Component.orbit_weights and _check_scenes): their light ('light', of
@@ -312,8 +307,8 @@ class ObservationSky(Observation, abc.ABC):
         rval='Reference position', rota='Rotation',
         spectral='Spectral axis', smooth_weights='Smooth weights',
         median_size='Median filter', source_grid='Source-plane grid',
-        instrument='Instrument', lines='Lines',
-        continuum='Continuum', band='Band', pixel_weights='Pixel weights',
+        instrument='Instrument', tracer='Tracer',
+        pixel_weights='Pixel weights',
         flux_scale='Flux scale', offsets='Offsets',
         oversampling='Oversampling', depth='Depth', dtype='Precision',
         fft_dtype='FFT precision', unit='Unit')
@@ -355,10 +350,10 @@ class ObservationSky(Observation, abc.ABC):
         kwargs = dict(prefix=prefix, dump_path=dump_path, overwrite=overwrite)
         options = self._sky_options
         name = dict(name=self._name) if self._name is not None else {}
-        lines = {} if self._lines is None else dict(lines=list(self._lines))
-        continuum = dict(continuum=True) if self._continuum else {}
-        band = {} if self._band is None else dict(
-            band=band_parser.dump(self._band))
+        # (only a tracer other than that of the kind by default)
+        tracer = tracer_parser.dump(self._tracer)
+        tracer = {} if tracer == self.tracer_types[0]().dump() \
+            else dict(tracer=tracer)
         pixel_weights = {} if options.pixel_weights is None else dict(
             pixel_weights=options.pixel_weights.dump())
         flux_scale = {} if self._flux_scale is None else dict(
@@ -374,8 +369,8 @@ class ObservationSky(Observation, abc.ABC):
         dtype = {} if self._given_dtype is None else dict(
             dtype=self._given_dtype)
         return dict(type=self.type()) | name \
-            | self._dump_kind(prefix, dump_path, overwrite) | lines \
-            | continuum | band | pixel_weights \
+            | self._dump_kind(prefix, dump_path, overwrite) | tracer \
+            | pixel_weights \
             | flux_scale | offsets | unit | noise | dtype | dict(
                 depth=options.depth.dump(),
                 source_grid=options.source_grid.dump(),
@@ -535,9 +530,7 @@ class ObservationSky(Observation, abc.ABC):
             grid: Grid,
             source_grid: SourceGrid | None,
             instrument: Instrument | None,
-            lines: Sequence[str] | None,
-            continuum: bool,
-            band: str | Band | None,
+            tracer: Tracer | None,
             pixel_weights: Weights | None,
             flux_scale: str | None,
             offsets: Mapping[str, bool] | None,
@@ -557,31 +550,22 @@ class ObservationSky(Observation, abc.ABC):
         flux_scale_kinds).
         """
         self._grid = grid
-        if isinstance(band, str):
-            with config_path('band'):
-                band = catalogue_in_use().band(band)
-        if lines is not None:
-            lines = tuple(lines)
-            for line in lines:
-                check_name(line)
+        if tracer is None:
+            tracer = self.tracer_types[0]()
+        elif not isinstance(tracer, self.tracer_types):
+            with config_path('tracer'):
+                raise ValueError(
+                    f"{self.type()} takes the tracers "
+                    f"{[t.type() for t in self.tracer_types]}; "
+                    f"{tracer.type()!r} is not one of them")
         check_flux_scale(flux_scale, self, name)
         offsets = check_offsets(offsets, name)
-        if band is not None and self.spectral_view:
-            raise ValueError(
-                "only images have a band; the lines of spectral cubes are "
-                "their option lines")
-        if continuum and not self.spectral_view:
-            raise ValueError(
-                "an image sees the light in its band; the continuum is of "
-                "spectral observations")
         if instrument is None:
             instrument = Instrument()
         # (one value per axis, of at least 1, as its kind's annotation
         # gives it)
         oversampling = tuple(oversampling)
-        self._lines = lines
-        self._continuum = continuum
-        self._band = band
+        self._tracer = tracer
         self._flux_scale = flux_scale
         self._offsets = offsets
         super().__init__(
@@ -638,7 +622,7 @@ class ObservationSky(Observation, abc.ABC):
             else gbkfit.units.format_unit(self._light.unit)
         return self._kind_options() | dict(
             source_grid=options.source_grid, instrument=options.instrument,
-            lines=self._lines, continuum=self._continuum, band=self._band,
+            tracer=self._tracer,
             pixel_weights=options.pixel_weights,
             flux_scale=self._flux_scale, offsets=self._offsets,
             noise=self._noise, oversampling=options.oversampling,
@@ -873,25 +857,16 @@ class ObservationSky(Observation, abc.ABC):
         """Return its depth axis, for what it sees that needs one."""
         return self._sky_options.depth
 
-    def lines(self) -> tuple[str, ...] | None:
-        """Return the names of the emission lines it sees, if given."""
-        return self._lines
-
-    def continuum(self) -> bool:
-        """Check whether it sees the continuum (see the class)."""
-        return self._continuum
+    def tracer(self) -> Tracer:
+        """Return what its data trace of the light (see Tracer)."""
+        return self._tracer
 
     def view(self) -> View:
         """
         Return what it sees of the light of the components (see View): its
-        band, or its spectral axis with its lines and continuum.
+        tracer, on its spectral axis or in its image.
         """
-        return View(
-            self.spectral_view, self._band, self._lines, self._continuum)
-
-    def band(self) -> Band | None:
-        """Return its band (of an image), if given."""
-        return self._band
+        return View(self.spectral_view, self._tracer)
 
     def pixel_weights(self) -> Weights | None:
         """Return the weights of the pixels of its data, if any."""

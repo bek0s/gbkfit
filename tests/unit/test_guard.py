@@ -1,7 +1,7 @@
 """
 A guard of the design: code outside the package of the components, or of
 the mass, asks them what it needs (e.g. Component.needs,
-Emission.seen_in) and never tests their concrete types, which would make
+Light.seen_in) and never tests their concrete types, which would make
 it edited for each new type (see interface-audit, 2026-11-16).
 """
 
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import gbkfit
 from gbkfit.model.galaxy import component_parser
-from gbkfit.model.components.roles import emission_parser
+from gbkfit.model.components.roles import light_parser
 from gbkfit.model.mass import mass_component_parser
 
 
@@ -29,7 +29,7 @@ def _concrete_types() -> dict[str, Path]:
     """Return the owner of each concrete type, by its class name."""
     owners = {}
     for parser, owner in (
-            (component_parser, 'components'), (emission_parser, 'components'),
+            (component_parser, 'components'), (light_parser, 'components'),
             (mass_component_parser, 'mass')):
         for cls in parser.registered_classes().values():
             for klass in cls.__mro__:
@@ -37,7 +37,7 @@ def _concrete_types() -> dict[str, Path]:
                     owners.setdefault(klass.__name__, _OWNERS[owner])
     # (the abstract bases that every member of a family is, e.g.
     # Component, are no concrete types)
-    for name in ('Component', 'Emission', 'MassComponent',
+    for name in ('Component', 'Light', 'MassComponent',
                  'TypedSerializable', 'Serializable'):
         owners.pop(name, None)
     return owners

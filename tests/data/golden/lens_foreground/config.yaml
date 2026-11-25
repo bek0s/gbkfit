@@ -1,6 +1,6 @@
 # lens_foreground: The image of a source disk behind a lens of two pieces: an elliptical power law with a multipole of order 4, and an external shear; the source drawn on a grid of a given step and extent.
 # (written by make_golden.py; do not edit)
-version: 23
+version: 24
 driver: {type: host}
 galaxies:
 - redshift: 1.5
@@ -10,7 +10,7 @@ galaxies:
     tilted: false
     rnodes: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
     rptraits: {type: exponential}
-    emission: {type: band}
+    light: {type: continuum}
 lenses:
 - name: lens
   redshift: 0.5

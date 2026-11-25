@@ -98,15 +98,13 @@ def make_scenes(
     """
     Return the scenes of an observation of the galaxies it sees (see
     SeenScenes): a scene of the galaxies of each of their planes (see
-    Scene and SeenPlane), of what it sees (see View: its band, or its
-    spectral axis with its lines and continuum; see ObservationSky.view),
-    and of the unit of its data, if any (see ObservationSky.data_unit).
-    It sees the light of the components of each galaxy that the group
-    chose for it (see SeenGalaxies), or of all those whose emission the
-    view sees (see Emission.seen_in). A spectral view of the continuum
-    sees the velocities of the light in bands of the components that move
-    (e.g. the kinematics of stars). The opacity of every component of the
-    galaxies applies.
+    Scene and SeenPlane), of what it sees (see View: its tracer, on a
+    spectral axis or in an image; see ObservationSky.view), and of the
+    unit of its data, if any (see ObservationSky.data_unit). It sees the
+    light of the components of each galaxy that the group chose for it
+    (see SeenGalaxies), or of all those whose light its tracer traces
+    (see Tracer.sees). The opacity of every component of the galaxies
+    applies.
 
     It draws the planes whose galaxies emit what it sees, and those in
     front of them with opacity, which dims their light: every plane but
@@ -115,9 +113,14 @@ def make_scenes(
     Raises
     ------
     ValueError
-        If a chosen component does not emit what it sees, it sees nothing, a line is not one of the components it
-        sees, it sees none of the light of galaxies behind a lens (nor of
-        any behind them) and no other plane behind a lens, it sees several
+        If a chosen component does not emit what it sees, a component of
+        what it sees would be seen only in part (see Tracer.sees), it
+        sees nothing, its tracer cannot see what it sees (see
+        Tracer.check; e.g. a line that none of the components it sees
+        has), it sees a continuum with a unit of a galaxy whose redshift
+        is not known (see _check_redshifts), it sees none of the light of
+        galaxies behind a lens (nor of any behind them) and no other plane
+        behind a lens, it sees several
         galaxies with opacity in a plane (which radiative transfer marches
         one after the other, see Scene.evaluation) that the order of the
         galaxies along the line of sight does not all place (see
@@ -127,15 +130,21 @@ def make_scenes(
         light has one (see check_data_unit).
     """
     galaxies = seen.galaxies
-    kind = "an image, which sees the components that emit in a band" \
-        if not view.spectral else \
-        "a spectral cube, which sees the components that emit lines" + (
-            " and the continuum of those that emit in bands and move"
-            if view.continuum else "")
+    tracer = view.tracer
+    kind = f"of the tracer {tracer.type()!r}"
     emitters = _select_emitters(seen, view, kind)
     if not any(emitters):
-        raise ValueError(f"the observation is {kind}; it sees none")
-    _check_lines(galaxies, emitters, view.lines)
+        # (why, if its tracer can say it: e.g. a line no component has)
+        tracer.check([
+            component.light() for galaxy in galaxies
+            for component in galaxy.components()
+            if component.light() is not None])
+        raise ValueError(
+            f"the observation is {kind}; it sees none of the components")
+    tracer.check([
+        galaxy.components()[i].light()
+        for galaxy, indices in zip(galaxies, emitters) for i in indices])
+    _check_redshifts(galaxies, emitters, view)
     if data_unit is None:
         _check_one_unit(galaxies, emitters)
     # (here, before any plan: the copies of an observation with other
@@ -145,7 +154,7 @@ def make_scenes(
         for i in galaxy_emitters:
             component = galaxy.components()[i]
             try:
-                check_data_unit(component.emission().unit(), data_unit)
+                check_data_unit(component.light().unit(), data_unit)
             except ValueError as e:
                 raise ValueError(
                     f"component {_label(galaxy, i)}: {e}") from e
@@ -219,20 +228,28 @@ def _select_emitters(
     """
     Return the indices of the components of each galaxy seen whose light
     is seen: those that the group chose (see SeenGalaxies), or all those
-    whose emission the view sees (see Emission.seen_in), in their order.
-    kind describes the observation in messages.
+    whose light the tracer of the view traces (see Tracer.sees), in their
+    order. kind describes the observation in messages.
     """
-    def sees(cmp: Component) -> bool:
-        return cmp.emission() is not None \
-            and cmp.emission().seen_in(view, cmp.moves())
+    def sees(galaxy: Galaxy, i: int) -> bool:
+        cmp = galaxy.components()[i]
+        if cmp.light() is None:
+            return False
+        try:
+            return view.sees(cmp.light(), cmp.moves())
+        except ValueError as e:
+            raise ValueError(
+                f"the observation is {kind}; component "
+                f"{_label(galaxy, i)}: {e}") from e
     selected = []
     for galaxy, chosen in zip(seen.galaxies, seen.components):
         if chosen is None:
             selected.append([
-                i for i, cmp in enumerate(galaxy.components()) if sees(cmp)])
+                i for i in range(len(galaxy.components()))
+                if sees(galaxy, i)])
             continue
         for i in chosen:
-            if not sees(galaxy.components()[i]):
+            if not sees(galaxy, i):
                 raise ValueError(
                     f"the setup chose component {_label(galaxy, i)} for "
                     f"the observation, which is {kind}: it does not see it")
@@ -240,25 +257,33 @@ def _select_emitters(
     return selected
 
 
-def _check_lines(
+def _check_redshifts(
         galaxies: Sequence[Galaxy],
         emitters: Sequence[Sequence[int]],
-        names: tuple[str, ...] | None
+        view: View
 ) -> None:
     """
-    Raise ValueError unless each of the names of lines (None for all) is
-    a line of one of the components seen.
+    Raise ValueError if the tracer of the view sees the continuum of a
+    component dimmed by the redshift of its galaxy (see
+    Tracer.dims_by_redshift; its light in a unit, as the galaxy emits it),
+    and neither the galaxy gives its redshift nor the component has a
+    systemic velocity: the redshift is then not known (see
+    _units.BandFactors).
     """
-    if names is None:
+    if not view.tracer.dims_by_redshift():
         return
-    known = set()
     for galaxy, indices in zip(galaxies, emitters):
+        if galaxy.redshift_given():
+            continue
         for i in indices:
-            known |= set(galaxy.components()[i].emission().line_names())
-    if unknown := [name for name in names if name not in known]:
-        raise ValueError(
-            f"no component has the lines {unknown}; the lines of the "
-            f"components are {sorted(known)}")
+            component = galaxy.components()[i]
+            if component.light().unit() is not None \
+                    and component.frame_params().vsys is None:
+                raise ValueError(
+                    f"the light of component {_label(galaxy, i)} is in a "
+                    f"unit, as the galaxy emits it, which the observation "
+                    f"sees dimmed by its redshift: give the galaxy its "
+                    f"redshift (the option redshift; 0 for none)")
 
 
 def _check_one_unit(
@@ -273,7 +298,7 @@ def _check_one_unit(
     units = {
         gbkfit.units.format_unit(unit): _label(galaxy, i)
         for galaxy, indices in zip(galaxies, emitters) for i in indices
-        if (unit := galaxy.components()[i].emission().unit()) is not None}
+        if (unit := galaxy.components()[i].light().unit()) is not None}
     if len(units) > 1:
         raise ValueError(
             f"without data of light (no data, or only velocity moments), "
