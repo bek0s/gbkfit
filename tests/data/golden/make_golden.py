@@ -328,9 +328,11 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
         data.append(_compacted(_rebased(dataset_parser.dump(
             mocked.dataset(), f'{prefix}{labels[i]}_', overwrite=True),
             prefix), folder) | data_options[i])
+    # (what the observations see after them, as their datasets)
+    seen = {key: value for key, value in sections.items() if key == 'seen'}
     config = dict(version=FORMAT_VERSION, driver=dict(type='host')) \
-        | sections | dict(
-        observations=observations,
+        | {key: value for key, value in sections.items() if key not in seen} \
+        | dict(observations=observations) | seen | dict(
         datasets=data,
         likelihoods=likelihoods_section(
             _rebased(likelihoods, prefix), observations, labels),

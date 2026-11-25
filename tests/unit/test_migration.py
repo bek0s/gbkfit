@@ -2418,3 +2418,67 @@ def test_the_datasets_of_observation_pieces_pair_them_in_their_setups(
         study)
     assert config['datasets'] == [hi, study.piece('datasets', 'rc')]
     assert sources['datasets'] == ['datasets/hi.yaml', 'datasets/rc.yaml']
+
+
+def test_what_an_observation_sees_moves_into_the_section_seen():
+    # Version 22: the options galaxies and components of the observations
+    # are the section seen of their setup, after them, one item for each
+    # observation (null for everything); components alone of one galaxy
+    # seen are qualified by its name when there are several galaxies
+    config = dict(
+        galaxies=[dict(name='ngc1'), dict(name='ngc2')],
+        observations=[
+            dict(type='pixel_moments', galaxies=['ngc1'],
+                 components=['disk']),
+            dict(type='pixel_moments', components=['ngc1.disk', 'ngc2.gas']),
+            dict(type='pixel_moments', galaxies=['ngc2']),
+            dict(type='pixel_moments', lines=['ha'])],
+        datasets=[None, None, None, None])
+    changes = rewritten(config, 21, 22)
+    assert list(config) == ['galaxies', 'observations', 'seen', 'datasets']
+    assert config['observations'] == [
+        dict(type='pixel_moments'), dict(type='pixel_moments'),
+        dict(type='pixel_moments'), dict(type='pixel_moments', lines=['ha'])]
+    assert config['seen'] == [
+        ['ngc1.disk'], ['ngc1.disk', 'ngc2.gas'], ['ngc2'], None]
+    assert changes == [migration.Change(['seen'], (
+        "what each observation sees of the galaxies, in their order, from "
+        "their options galaxies and components"))]
+    # (of one galaxy, the components stay alone; a setup whose
+    # observations see everything has no section seen)
+    config = dict(
+        galaxies=dict(components=[]),
+        observations=dict(type='pixel_brightness', components=['bulge']))
+    rewritten(config, 21, 22)
+    assert config['seen'] == [['bulge']]
+    config = dict(observations=[dict(type='pixel_brightness')])
+    assert rewritten(config, 21, 22) == []
+    assert 'seen' not in config
+
+
+def test_what_observation_pieces_see_moves_into_their_setups(tmp_path):
+    # Of a project: the observation pieces lose the options, which go to
+    # the section seen of each setup that names them
+    study = project.create(str(tmp_path / 'study'))
+    folder = tmp_path / 'study'
+    yaml.dump(dict(format=project.FORMAT, version=21),
+              folder / project.MARKER)
+    yaml.dump(dict(type='pixel_brightness', size=[8, 8], galaxies=['a']),
+              folder / 'observations' / 'image.yaml')
+    yaml.dump(dict(type='pixel_brightness', size=[8, 8]),
+              folder / 'observations' / 'all.yaml')
+    yaml.dump(dict(name='a', components=[]), folder / 'galaxies' / 'a.yaml')
+    yaml.dump(dict(name='b', components=[]), folder / 'galaxies' / 'b.yaml')
+    setups = folder / 'setups'
+    yaml.dump(dict(galaxies=['a', 'b'], observations=['image', 'all']),
+              setups / 'joint.yaml')
+    changes = migration.migrate_project(study.path)
+    assert study.piece('observations', 'image') == dict(
+        type='pixel_brightness', size=[8, 8])
+    assert changes['observations/image.yaml'] == [migration.Change(
+        ['galaxies'], (
+            "removed (was ['a']): -> the section seen of the setups that "
+            "name the piece"))]
+    assert yaml.load(setups / 'joint.yaml') == dict(
+        galaxies=['a', 'b'], observations=['image', 'all'],
+        seen=[['a'], None])

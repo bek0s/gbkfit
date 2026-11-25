@@ -479,8 +479,6 @@ class ObservationSlitlessSpectra(ObservationSky):
             resampled: bool = False,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            galaxies: Sequence[str] | None = None,
-            components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
             continuum: bool = False,
             band: str | Band | None = None,
@@ -517,10 +515,9 @@ class ObservationSlitlessSpectra(ObservationSky):
         self._sky_sampling = sky_sampling
         self._resampled = resampled
         super().__init__(
-            self._make_grid(**grid), source_grid, instrument, galaxies,
-            components, lines, continuum, band, pixel_weights, flux_scale,
-            offsets, noise, oversampling, depth, dtype, fft_dtype, name,
-            unit)
+            self._make_grid(**grid), source_grid, instrument, lines, continuum,
+            band, pixel_weights, flux_scale, offsets, noise, oversampling,
+            depth, dtype, fft_dtype, name, unit)
 
     def spectral(self) -> SpectralAxis:
         """Return the spectral axis of the model."""

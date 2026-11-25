@@ -69,7 +69,8 @@ class ObservationProfile(Observation):
     chi-square of the data and their errors deprojected at incl (e.g. the
     fits of SPARC of Li et al. 2018).
 
-    It sees one galaxy. Its model is evaluated in float64, from the state
+    It sees one galaxy, whole (of several, the one that its group
+    chooses for it; see ObservationGroup: seen). Its model is evaluated in float64, from the state
     of the galaxy that is evaluated once for all the observations of the
     galaxy (see GalaxyState), with the profiles of the disks sampled on
     its driver, and copied to its driver.
@@ -93,7 +94,7 @@ class ObservationProfile(Observation):
         The inclination (degrees) at which its rotation velocities were
         deprojected: its parameter '{name}_incl' is then the inclination
         of the galaxy (degrees), and its name is required.
-    galaxies, noise, name
+    noise, name
         See Observation.
 
     Raises
@@ -101,8 +102,7 @@ class ObservationProfile(Observation):
     ValueError
         If its functions or its radii are not given, an item is not a
         function of radii, the radii or the distance are invalid (see
-        check_profile_radii), a slope has a radius of 0, it sees more than
-        one galaxy, the inclination is not above 0 and at most 90, or it
+        check_profile_radii), a slope has a radius of 0, the inclination is not above 0 and at most 90, or it
         has no name or no rotation velocities, or see Observation.
     """
 
@@ -149,8 +149,6 @@ class ObservationProfile(Observation):
             The options.
         """
         info = {} if self._name is None else dict(name=self._name)
-        if self._galaxies is not None:
-            info['galaxies'] = list(self._galaxies)
         if self._inclination is not None:
             info['inclination'] = self._inclination
         if self._noise is not None:
@@ -198,7 +196,6 @@ class ObservationProfile(Observation):
             Annotated[float, Gt(0), Unit('Mpc')] | None = None,
             inclination:
             Annotated[float, Gt(0), Le(90), Unit('deg')] | None = None,
-            galaxies: Sequence[str] | None = None,
             noise: Noise | None = None,
             name: str | None = None
     ):
@@ -220,9 +217,6 @@ class ObservationProfile(Observation):
         if any(radii == 0) and any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys):
             raise ValueError("slopes need radii above 0")
-        if galaxies is not None and len(galaxies) > 1:
-            raise ValueError(
-                f"a profile is of one galaxy; it sees {list(galaxies)}")
         if inclination is not None:
             if name is None:
                 raise ValueError(
@@ -240,7 +234,7 @@ class ObservationProfile(Observation):
             else float(inclination)
         # (slopes have no values where the galaxy has no density)
         super().__init__(
-            keys, galaxies, noise, name,
+            keys, noise, name,
             model_can_have_missing_values=any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys))
 
@@ -312,8 +306,8 @@ class ObservationProfile(Observation):
             functions=self.keys(), radii=self._radii,
             assumed_distance=None if distance is None
             else float(distance.to_value(u.Mpc)),
-            inclination=self._inclination, galaxies=self._galaxies,
-            noise=self._noise, name=self._name)
+            inclination=self._inclination, noise=self._noise,
+            name=self._name)
 
     def same_plan(self, other: Observation, seen: SeenGalaxies) -> bool:
         """
@@ -347,8 +341,8 @@ class ObservationProfile(Observation):
 
     def check(self, seen: SeenGalaxies) -> None:
         """
-        Check that the galaxy it sees has its functions, those of a
-        component at radii in angles, in their range (see
+        Check that it sees one galaxy, whole, which has its functions,
+        those of a component at radii in angles, in their range (see
         Galaxy.function_radius_range and Observation.check), and a
         distance for those of radii in kpc at radii in angles (or lengths
         measured at a distance).
@@ -356,12 +350,20 @@ class ObservationProfile(Observation):
         Raises
         ------
         ValueError
-            If the galaxy does not have a function, a function of a
-            component is at radii of physical lengths or out of its range,
-            or one of
+            If it sees several galaxies, or some components of one, the
+            galaxy does not have a function, a function of a component is
+            at radii of physical lengths or out of its range, or one of
             radii in kpc is at radii in angles and the galaxy has no
             distance.
         """
+        if len(seen.galaxies) > 1:
+            raise ValueError(
+                f"a profile is of one galaxy; it sees {list(seen.labels)}: "
+                f"choose one (the section seen of its setup)")
+        if seen.components[0] is not None:
+            raise ValueError(
+                "a profile is of a whole galaxy: choose the galaxy, not its "
+                "components (the section seen of its setup)")
         galaxy, label = seen.galaxies[0], seen.labels[0]
         names = galaxy.function_names()
         if missing := [k for k in self.keys() if k not in names]:

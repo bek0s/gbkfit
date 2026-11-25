@@ -172,7 +172,6 @@ def two_galaxies(kind, depth_order):
     info['galaxies'] = [
         dict(name='a', components=[component]),
         dict(name='b', components=with_dust(kind))]
-    info['observations'][0]['galaxies'] = ['a', 'b']
     if depth_order is not None:
         info['depth_order'] = depth_order
     return info
@@ -210,13 +209,12 @@ def test_observations_reject_components_of_other_kinds(
 
 @pytest.mark.parametrize('kind', OBSERVATIONS)
 def test_opacity_cannot_be_selected(kind):
-    # The opacity of every component applies: an observation selects the
-    # components whose light it sees
-    info = config(kind, with_dust(kind))
-    info['observations'][0]['components'] = ['dust']
+    # The opacity of every component applies: an observation sees the
+    # light of the components its setup chooses
+    info = config(kind, with_dust(kind)) | dict(seen=[['dust']])
     message = load_error(info)
-    assert "the component 'dust' is selected, but the observation is" \
-        in message
+    assert "the setup chose component 'dust' for the observation, which " \
+        "is" in message
 
 
 @pytest.mark.parametrize('kind', OBSERVATIONS)

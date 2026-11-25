@@ -168,11 +168,11 @@ def test_the_dust_of_a_lens_galaxy_dims_the_light_behind_it(driver):
         images = [
             ObservationPixelBrightness(
                 size=(SIZE, SIZE), step=STEP, dtype='float64', band='sdss_r',
-                galaxies=galaxies, name=name)
-            for name, galaxies in (
-                ('dimmed', ['deflector', 'arc']), ('clear', ['arc']))]
+                name=name)
+            for name in ('dimmed', 'clear')]
         group = ObservationGroup(
-            [deflector, arc], images, lenses, depth_order=order)
+            [deflector, arc], images, lenses, depth_order=order,
+            seen=[None, ['arc']])
         dimmed, clear = evaluate(
             group, params | disk_params('arc_disk', rpt_s=sigma)
             | (LENS_PARAMS if lenses else {}), driver)
@@ -355,9 +355,9 @@ def test_dust_in_front_of_lensed_light_beyond_its_law_is_refused(driver):
         cube = observation_parser.load(dict(
             type='pixel_spectra', size=[24, 24], step=[0.5, 0.5],
             spectral=dict(size=20, step=30,
-                          rest=f'{867 * (1 + SOURCE_REDSHIFT)} um'),
-            galaxies=galaxies))
-        group = ObservationGroup([deflector, arc], cube, [sis()])
+                          rest=f'{867 * (1 + SOURCE_REDSHIFT)} um')))
+        group = ObservationGroup(
+            [deflector, arc], cube, [sis()], seen=[galaxies])
         values = ParamSpace.from_properties(
             group.pdescs(), params).evaluate()
         if 'deflector' in galaxies:

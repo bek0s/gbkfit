@@ -175,8 +175,6 @@ class ObservationPixelMoments(ObservationSky):
             median_size: MedianSize | None = None,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            galaxies: Sequence[str] | None = None,
-            components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
             continuum: bool = False,
             band: str | Band | None = None,
@@ -202,10 +200,9 @@ class ObservationPixelMoments(ObservationSky):
         self._flux_floor = flux_floor
         self._method = method
         super().__init__(
-            self._make_grid(**options), source_grid, instrument, galaxies,
-            components, lines, continuum, band, pixel_weights, flux_scale,
-            offsets, noise, oversampling, depth, dtype, fft_dtype, name,
-            unit)
+            self._make_grid(**options), source_grid, instrument, lines,
+            continuum, band, pixel_weights, flux_scale, offsets, noise,
+            oversampling, depth, dtype, fft_dtype, name, unit)
 
     def _measured_pixels(self) -> np.ndarray:
         return unmasked_pixels(self._dataset, self._grid.size[1::-1])

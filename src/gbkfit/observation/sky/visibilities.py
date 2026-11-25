@@ -213,8 +213,6 @@ class ObservationVisibilities(ObservationSky):
             eps: Annotated[float, Gt(0)] | None = None,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            galaxies: Sequence[str] | None = None,
-            components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
             continuum: bool = False,
             band: str | Band | None = None,
@@ -260,9 +258,9 @@ class ObservationVisibilities(ObservationSky):
         self._transform = transform
         self._eps = eps
         super().__init__(
-            grid, source_grid, instrument, galaxies, components, lines,
-            continuum, band, pixel_weights, flux_scale, offsets, noise,
-            oversampling, depth, dtype, fft_dtype, name, unit)
+            grid, source_grid, instrument, lines, continuum, band,
+            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
+            dtype, fft_dtype, name, unit)
 
     def fov(self) -> tuple[float, float]:
         """Return the field of the cube on the sky (arcsec)."""

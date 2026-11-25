@@ -163,8 +163,6 @@ class ObservationRegionMoments(ObservationRegions):
             method: Method = 'moments',
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            galaxies: Sequence[str] | None = None,
-            components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
             continuum: bool = False,
             band: str | Band | None = None,
@@ -194,9 +192,9 @@ class ObservationRegionMoments(ObservationRegions):
                 "take no valid pixels of each channel (those of the spectra "
                 "of regions)")
         super().__init__(
-            grid, source_grid, instrument, galaxies, components, lines,
-            continuum, band, pixel_weights, flux_scale, offsets, noise,
-            oversampling, depth, dtype, fft_dtype, name, unit)
+            grid, source_grid, instrument, lines, continuum, band,
+            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
+            dtype, fft_dtype, name, unit)
 
     def orders(self) -> tuple[int, ...]:
         """Return the orders of the moments, sorted."""

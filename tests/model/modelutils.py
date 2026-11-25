@@ -10,7 +10,8 @@ def split_case(case):
     observation (its options, with the primary beam, psf and lsf of its
     instrument among them), an optional name, which names the galaxy, the
     optional depth axis, lines or band of the observation, and the unit
-    of the light of its model.
+    of the light of its model. The observation of a named galaxy sees it
+    alone (see seen_of).
     """
     case = dict(case)
     driver = case.pop('driver')
@@ -25,10 +26,17 @@ def split_case(case):
     name = case.pop('name', None)
     if name is not None:
         galaxy['name'] = name
-        observation['galaxies'] = [name]
     if case:
         raise ValueError(f"unknown case keys: {list(case)}")
     return galaxy, observation, driver
+
+
+def seen_of(case):
+    """
+    What the observation of a case of the tests sees (see split_case and
+    ObservationGroup: seen): its galaxy alone, if named; else everything.
+    """
+    return None if case.get('name') is None else [case['name']]
 
 
 def observation_group(cases):
@@ -38,7 +46,8 @@ def observation_group(cases):
     galaxies, observations, _ = zip(*[split_case(case) for case in cases])
     return ObservationGroup(
         galaxy_parser.load(list(galaxies)),
-        observation_parser.load(list(observations)))
+        observation_parser.load(list(observations)),
+        seen=[seen_of(case) for case in cases])
 
 
 def group_plan(cases):

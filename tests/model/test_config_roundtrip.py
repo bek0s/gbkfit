@@ -205,12 +205,12 @@ def test_observation_dump_has_every_option(observable_type):
     from gbkfit.observation import observation_parser
     observable, instrument, oversampling = OBSERVABLES[observable_type]
     info = dict(type=observable_type) | observable | dict(
-        name='obs', galaxies=['galaxy'], components=['gas'], lines=['ha'],
+        name='obs', lines=['ha'],
         depth=DEPTH,
         instrument=instrument,
         oversampling=oversampling, dtype='float64')
     dumped = json.loads(json.dumps(roundtrip(observation_parser, info)))
-    for key in ('name', 'galaxies', 'components', 'lines', 'depth',
+    for key in ('name', 'lines', 'depth',
                 'oversampling', 'dtype'):
         assert dumped[key] == info[key], key
     for key, value in observable.items():

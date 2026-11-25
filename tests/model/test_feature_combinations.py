@@ -111,11 +111,11 @@ def test_feature_combinations(driver, name, lens):
             f'{6562.8 * (1 + SOURCE_REDSHIFT)} Angstrom'
     observation = observation_parser.load(info | dict(
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
-        components=['gas'], oversampling=OVERSAMPLING[name],
+        oversampling=OVERSAMPLING[name],
         # Moments are of one line (they would mix the lines of a spectrum)
         lines=['ha'] if moments else None))
     group = ObservationGroup(
-        [galaxy_parser.load(galaxy)], [observation], lenses)
+        [galaxy_parser.load(galaxy)], [observation], lenses, seen=[['gas']])
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES)
     extra = Extras()

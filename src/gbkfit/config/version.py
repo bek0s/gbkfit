@@ -29,6 +29,7 @@ __all__ = [
 # after the piece too), 20, of 2026-11-21 on (the footprint of a dataset
 # is one, not one for each map of moments), and 21, of 2026-11-24 on (the
 # dataset leaves the observation: the section datasets of a setup pairs
-# observations with data by name); gbkfit.migration rewrites the older
-# ones
-FORMAT_VERSION = 21
+# observations with data by name), and 22, of 2026-11-25 on (what an
+# observation sees of the galaxies leaves it: the section seen of a
+# setup); gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 22

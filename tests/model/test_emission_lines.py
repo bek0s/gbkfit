@@ -200,8 +200,12 @@ def test_invalid_lines(lines, message):
         galaxy_parser.load(info)
 
 
-def evaluate_observation(driver, galaxy, observable, properties, **options):
-    """The model of an observation with options (e.g. its lines)."""
+def evaluate_observation(
+        driver, galaxy, observable, properties, seen=None, **options):
+    """
+    The model of an observation with options (e.g. its lines), which sees
+    what seen says (see ObservationGroup; everything by default).
+    """
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     _, observation, _ = split_case(dict(
@@ -209,7 +213,8 @@ def evaluate_observation(driver, galaxy, observable, properties, **options):
     observation = observation_parser.load(
         copy.deepcopy(observation | options))
     group = ObservationGroup(
-        [galaxy_parser.load(copy.deepcopy(galaxy))], [observation])
+        [galaxy_parser.load(copy.deepcopy(galaxy))], [observation],
+        seen=[seen])
     plan = group.plan(driver)
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), properties)
@@ -306,7 +311,7 @@ def test_a_component_must_have_a_selected_line(driver):
     evaluate_observation(
         driver, galaxy, scube('6562.8 Angstrom'),
         properties | dict(gas_nii6583_ratio=0.3),
-        lines=['ha'], components=['gas'])
+        seen=['gas'], lines=['ha'])
 
 
 def test_line_selection_round_trip():

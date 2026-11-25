@@ -37,10 +37,9 @@ def galaxy(name, redshift=None, components=None):
     return galaxy_parser.load(info)
 
 
-def image(galaxies=None, **options):
-    """An image of the galaxies of the given names."""
-    return ObservationPixelBrightness(
-        size=(16, 16), step=0.1, galaxies=galaxies, **options)
+def image(**options):
+    """An image (of what its group says it sees)."""
+    return ObservationPixelBrightness(size=(16, 16), step=0.1, **options)
 
 
 def lens(name='lens', redshift=0.3):
@@ -57,8 +56,7 @@ def lensed_group(observations=None, **options):
     """
     return ObservationGroup(
         [galaxy('deflector', 0.3), galaxy('arc', 2.0)],
-        observations or [image(['deflector', 'arc'], name='hst')],
-        [lens()], **options)
+        observations or [image(name='hst')], [lens()], **options)
 
 
 def test_the_parameters_of_a_lens_are_prefixed_by_its_name():
@@ -82,7 +80,7 @@ def test_names_are_unique_among_galaxies_observations_and_lenses(
     with pytest.raises(ValueError, match=message):
         ObservationGroup(
             [galaxy(galaxy_name, 0.3), galaxy('arc', 2.0)],
-            image([galaxy_name, 'arc'], name=observation_name),
+            image(name=observation_name),
             [lens(lens_name)])
 
 
@@ -90,7 +88,7 @@ def test_lenses_need_the_redshifts_of_the_galaxies():
     with pytest.raises(ValueError, match="needs a redshift above 0"):
         ObservationGroup(
             [galaxy('deflector'), galaxy('arc', 2.0)],
-            image(['deflector', 'arc']), [lens()])
+            image(), [lens()])
 
 
 def test_an_observation_sees_the_image_plane_and_those_behind_lenses():
@@ -99,7 +97,7 @@ def test_an_observation_sees_the_image_plane_and_those_behind_lenses():
     group = ObservationGroup(
         [galaxy('arc', 2.0), galaxy('deflector', 0.3),
          galaxy('near', 0.1)],
-        image(['arc', 'deflector', 'near']), [lens()])
+        image(), [lens()])
     seen = group.seen_by(0)
     tracer = group.tracer()
     assert [plane.redshift for plane in tracer.planes()] == [0.1, 0.3, 2.0]
@@ -115,7 +113,7 @@ def test_an_observation_sees_the_image_plane_and_those_behind_lenses():
 
 def test_without_lenses_an_observation_sees_one_plane():
     group = ObservationGroup(
-        [galaxy('a'), galaxy('b')], image(['a', 'b']),
+        [galaxy('a'), galaxy('b')], image(),
         depth_order=['b', 'a'])
     seen = group.seen_by(0)
     assert group.tracer() is None
@@ -129,7 +127,7 @@ def test_the_depth_order_orders_the_galaxies_of_a_plane():
     # Two galaxies at the redshift of the lens that pass through each other
     group = ObservationGroup(
         [galaxy('a', 0.3), galaxy('b', 0.3001), galaxy('arc', 2.0)],
-        image(['a', 'b', 'arc']), [lens()],
+        image(), [lens()],
         depth_order=[DepthGroup('pair', ('b', 'a'))])
     image_plane = group.seen_by(0).planes[0]
     assert image_plane.galaxies == (0, 1)
@@ -145,10 +143,9 @@ def test_profiles_are_never_lensed():
         distance=dict(type='parameter')))
     group = ObservationGroup(
         [galaxy('deflector', 0.3), arc],
-        [image(['deflector', 'arc'], name='hst'),
-         ObservationProfile(
-             ['vcirc'], [1, 2] * u.arcsec, galaxies=['arc'], name='rc')],
-        [lens()])
+        [image(name='hst'),
+         ObservationProfile(['vcirc'], [1, 2] * u.arcsec, name='rc')],
+        [lens()], seen=[None, ['arc']])
     seen = group.seen_by(1)
     assert [plane.traced for plane in seen.planes] == [None]
     assert not any(name.startswith('lens_')
@@ -159,15 +156,15 @@ def test_a_lens_that_bends_nothing_seen_is_warned_of(caplog):
     with caplog.at_level(logging.WARNING):
         ObservationGroup(
             [galaxy('near', 0.1), galaxy('deflector', 0.3)],
-            image(['near', 'deflector']), [lens()])
+            image(), [lens()])
     assert "bends the light of no galaxy that an observation sees" \
         in caplog.text
 
 
 def test_an_observation_of_the_deflector_alone_reads_no_lens():
-    group = lensed_group([
-        image(['deflector', 'arc'], name='hst'),
-        image(['deflector'], name='ground')])
+    group = lensed_group(
+        [image(name='hst'), image(name='ground')],
+        seen=[None, ['deflector']])
     assert not any(name.startswith('lens_')
                    for name in group.model_params(1))
     assert not group.seen_by(1).lensed()
@@ -176,20 +173,23 @@ def test_an_observation_of_the_deflector_alone_reads_no_lens():
 def test_pixel_weights_of_a_lensed_disk_are_refused():
     weights = Weights('arc.disk', WeightAzimuthPower(2))
     with pytest.raises(ValueError, match="whose light no lens bends"):
-        lensed_group([image(
-            ['deflector', 'arc'], name='hst', pixel_weights=weights)])
+        lensed_group([image(name='hst', pixel_weights=weights)])
     # (those of the disk of the deflector are in the plane of the image)
     lensed_group([image(
-        ['deflector', 'arc'], name='hst',
+        name='hst',
         pixel_weights=Weights('deflector.disk', WeightAzimuthPower(2)))])
 
 
 def test_galaxies_behind_a_lens_whose_light_is_not_seen_are_refused():
-    # (an observation that sees none of the light behind the lens draws
-    # the image plane alone, of the galaxies there)
+    # (an image that sees none of the light behind the lens, an arc of
+    # lines, draws the image plane alone, of the galaxies there)
     with pytest.raises(ValueError, match="sees none of the light of"):
-        lensed_group([image(
-            ['deflector', 'arc'], name='hst', components=['deflector.disk'])])
+        ObservationGroup(
+            [galaxy('deflector', 0.3), galaxy('arc', 2.0, components=[disk(
+                emission=dict(type='lines'),
+                vptraits=dict(type='arctan', direction='tan'),
+                dptraits=dict(type='uniform'))])],
+            [image(name='hst')], [lens()])
 
 
 def lensed_config(**observation):
@@ -203,8 +203,8 @@ def lensed_config(**observation):
             name='lens', redshift=0.3, source_redshift=2.0,
             pieces=dict(type='sie'))],
         observations=[dict(
-            type='pixel_brightness', name='hst', size=[16, 16], step=0.1,
-            galaxies=['deflector', 'arc']) | observation],
+            type='pixel_brightness', name='hst', size=[16, 16], step=0.1)
+            | observation],
         params=dict(properties=dict(
             lens_sie_theta_e=dict(value=0.5, min=0.1, max=1), lens_sie_q=1,
             lens_sie_posa=0, lens_sie_xpos=0, lens_sie_ypos=0,
@@ -261,16 +261,17 @@ def mass_lens(*pieces, redshift=0.3, galaxy='deflector'):
         source_redshift=2.0 if pieces else None)
 
 
-def mass_group(galaxy=None, lens=None, observations=None):
+def mass_group(galaxy=None, lens=None, observations=None, seen=None):
     """
     A group of the deflector (or the given galaxy) in front of an arc at
-    z = 2, and an image of the arc alone.
+    z = 2, and an image of the arc alone (or the given observations, which
+    see what seen says).
     """
     return ObservationGroup(
         [galaxy or deflector(), galaxy_parser.load(dict(
             name='arc', redshift=2.0, components=[disk()]))],
-        observations or [image(['arc'], name='alma')],
-        [lens or mass_lens()])
+        observations or [image(name='alma')], [lens or mass_lens()],
+        seen=seen if observations else [['arc']])
 
 
 def test_pieces_are_named_after_their_types():
@@ -289,8 +290,9 @@ def test_the_mass_of_a_galaxy_bends_what_does_not_see_it():
     # The image of the arc alone is bent by the mass of the deflector: its
     # model takes the mass on the sky of the deflector, not its parameters
     galaxy = deflector(components=[GAS, disk('stars')])
-    group = mass_group(galaxy, mass_lens(LensShear()), [
-        image(['arc'], name='alma'), image(['deflector'], name='ground')])
+    group = mass_group(
+        galaxy, mass_lens(LensShear()),
+        [image(name='alma'), image(name='ground')], [['arc'], ['deflector']])
     assert group.lensing_galaxies() == (0,)
     assert group.bending_masses(0) == (0,)
     assert group.bending_masses(1) == ()
@@ -326,8 +328,9 @@ def test_a_piece_of_the_mass_of_a_galaxy_is_checked(lens, message):
 def test_two_lenses_of_the_mass_of_one_galaxy_are_refused():
     with pytest.raises(ValueError, match="would bend light twice"):
         ObservationGroup(
-            [deflector(), galaxy('arc', 2.0)], image(['arc']),
-            [mass_lens(), Lens('other', 0.3, LensGalaxyMass('deflector'))])
+            [deflector(), galaxy('arc', 2.0)], image(),
+            [mass_lens(), Lens('other', 0.3, LensGalaxyMass('deflector'))],
+            seen=[['arc']])
 
 
 @pytest.mark.parametrize('options, message', [
@@ -364,7 +367,7 @@ def test_the_mass_of_a_lens_has_a_place_on_the_sky():
     seen = ObservationGroup(
         [alone, galaxy_parser.load(dict(
             name='arc', redshift=2.0, components=[disk()]))],
-        [image(['arc'], name='alma')])
+        [image(name='alma')], seen=[['arc']])
     assert not any('mass_xpos' in name for name in seen.pdescs())
 
 

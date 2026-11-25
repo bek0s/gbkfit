@@ -401,8 +401,8 @@ class Lines:
         if not selected:
             raise ValueError(
                 f"a component of the lines {list(self.names())} has none of "
-                f"the selected lines {list(names)}; leave it out with the "
-                f"components of the observation")
+                f"the selected lines {list(names)}; leave it out of what the "
+                f"observation sees (the section seen of its setup)")
         return selected
 
     def ratio_name(self, index: int) -> str | None:

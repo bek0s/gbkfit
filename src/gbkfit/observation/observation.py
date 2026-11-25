@@ -68,10 +68,11 @@ class SeenPlane(NamedTuple):
 
 class SeenGalaxies(NamedTuple):
     """
-    The galaxies an observation sees (see ObservationGroup): the
-    galaxies, the mapping of the parameters of each to those of the
-    observation group, their labels (the id 'galaxy' of their extra
-    outputs), their planes, near to far (see SeenPlane), the RA and Dec
+    The galaxies an observation sees (see ObservationGroup and its
+    option seen): the galaxies, the components of each that it sees, by
+    their indices (None for all whose light it sees), the mapping of the
+    parameters of each to those of the observation group, their labels
+    (the id 'galaxy' of their extra outputs), their planes, near to far (see SeenPlane), the RA and Dec
     (degrees) of the origin of the frame of their parameters (that of the
     first observation on the sky; None without one), their cosmology (see
     ObservationGroup), the paths of the light of the planes of the group
@@ -81,6 +82,7 @@ class SeenGalaxies(NamedTuple):
     the rays of its pixels meet the lenses moved as the galaxies.
     """
     galaxies: tuple[Galaxy, ...]
+    components: tuple[tuple[int, ...] | None, ...]
     mappings: tuple[dict[str, str], ...]
     labels: tuple[str, ...]
     planes: tuple[SeenPlane, ...]
@@ -147,9 +149,6 @@ class Observation(TypedSerializable, abc.ABC):
     ----------
     keys : Sequence of str
         The names of its data items (e.g. 'spectra').
-    galaxies : Sequence of str, optional
-        The names of the galaxies it sees (see ObservationGroup); by
-        default, all of them.
     noise : Noise, optional
         The noise of its mock data (see draw_mocks), added to what its
         instrument records (e.g. a cube, of which moments are measured).
@@ -171,13 +170,13 @@ class Observation(TypedSerializable, abc.ABC):
     Raises
     ------
     ValueError
-        If a name is invalid, or there are no galaxies or they repeat.
+        If the name is invalid.
     """
 
     # The class of the datasets of its kind, which it is paired with
     dataset_class: ClassVar[type[Dataset]]
 
-    config_titles = dict(galaxies='Galaxies', noise='Noise', name='Name')
+    config_titles = dict(noise='Noise', name='Name')
 
     @classmethod
     def load(
@@ -218,23 +217,13 @@ class Observation(TypedSerializable, abc.ABC):
     def __init__(
             self,
             keys: Sequence[str],
-            galaxies: Sequence[str] | None = None,
             noise: Noise | None = None,
             name: str | None = None,
             model_can_have_missing_values: bool = False
     ):
         keys = tuple(keys)
         check_name(name)
-        if galaxies is not None:
-            galaxies = tuple(galaxies)
-            if not galaxies:
-                raise ValueError("an observation sees at least one galaxy")
-            if len(set(galaxies)) != len(galaxies):
-                raise ValueError(f"the galaxies repeat: {list(galaxies)}")
-            for galaxy in galaxies:
-                check_name(galaxy)
         self._keys = keys
-        self._galaxies = galaxies
         # (its data, once it is paired with them: see _pair)
         self._dataset: Dataset | None = None
         self._noise = noise
@@ -427,10 +416,6 @@ class Observation(TypedSerializable, abc.ABC):
     def name(self) -> str | None:
         """Return its name, if any."""
         return self._name
-
-    def galaxies(self) -> tuple[str, ...] | None:
-        """Return the names of the galaxies it sees, if given."""
-        return self._galaxies
 
     def dataset(self) -> Dataset | None:
         """Return the data it is paired with, if any (see with_dataset)."""

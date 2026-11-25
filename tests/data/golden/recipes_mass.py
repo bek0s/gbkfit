@@ -330,19 +330,19 @@ _TWO_GALAXIES = dict(
     doc="Two named galaxies (their parameters prefixed by their names): "
         "a cube of both through radiative transfer, the dust of the one "
         "in front (section depth_order) dimming the one behind; and "
-        "moment maps of the one behind alone (option galaxies).",
+        "moment maps of the one behind alone (section seen).",
     galaxies=[
         dict(name='front', components=[_c6_gas(), _C6_DUST]),
         dict(name='back', components=[_c6_gas()])],
     observations=[
-        _cube([20, 20, 30], galaxies=['front', 'back']),
-        _moments(size=20, galaxies=['back'])],
+        _cube([20, 20, 30]),
+        _moments(size=20)],
     truth=_c6_properties(_GEOMETRY_TRUTH, vpt_vt=150),
     trial=_c6_properties(
         _GEOMETRY_TRIAL, vpt_vt=dict(value=130, min=50, max=300)),
     noises=[dict(type='gauss', rms=5e-4), dict(type='gauss', rms=0.002)],
     likelihoods=[None, _MOMENTS_LIKELIHOOD],
-    sections=dict(depth_order=['front', 'back']))
+    sections=dict(depth_order=['front', 'back'], seen=[None, ['back']]))
 
 
 # --- C7: the features of the parameters ----------------------------------

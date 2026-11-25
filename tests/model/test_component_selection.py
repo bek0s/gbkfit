@@ -1,6 +1,7 @@
 """
-Tests for the components an observation sees: e.g. the tracer of the
-line of each observation of a galaxy of several tracers.
+Tests for the components an observation sees (see ObservationGroup:
+seen): e.g. the tracer of the line of each observation of a galaxy of
+several tracers.
 """
 
 import copy
@@ -43,16 +44,18 @@ SCUBE = dict(
     spectral=dict(size=51, step=10, convention='relativistic'))
 
 
-def observation(components=None, **options):
-    info = dict(SCUBE)
-    if components is not None:
-        info['components'] = components
-    return observation_parser.load(copy.deepcopy(info | options))
+def observation(**options):
+    return observation_parser.load(copy.deepcopy(SCUBE | options))
 
 
-def evaluate(driver, galaxy, observations, properties):
+def evaluate(driver, galaxy, observations, properties, seen=None):
+    """
+    Return the models of observations of a galaxy, which see what seen
+    says (everything by default).
+    """
     group = ObservationGroup(
-        [galaxy_parser.load(copy.deepcopy(galaxy))], observations)
+        [galaxy_parser.load(copy.deepcopy(galaxy))], observations,
+        seen=seen)
     params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), properties)
     return [data['spectra'].data.copy()
@@ -62,7 +65,8 @@ def evaluate(driver, galaxy, observations, properties):
 def test_an_observation_sees_its_components(driver):
     # The model of one component of a galaxy is that of a galaxy of that
     # component alone
-    [ha] = evaluate(driver, GALAXY, [observation(['ha'])], PROPERTIES)
+    [ha] = evaluate(
+        driver, GALAXY, [observation()], PROPERTIES, seen=[['ha']])
     alone = dict(GALAXY, components=[disk('ha')])
     [expected] = evaluate(driver, alone, [observation()], {
         k: v for k, v in PROPERTIES.items() if not k.startswith('co_')})
@@ -71,9 +75,8 @@ def test_an_observation_sees_its_components(driver):
 
 def test_observations_of_different_components_add_up(driver):
     ha, co, both = evaluate(driver, GALAXY, [
-        observation(['ha'], name='muse'),
-        observation(['co'], name='alma'),
-        observation(name='all')], PROPERTIES)
+        observation(name='muse'), observation(name='alma'),
+        observation(name='all')], PROPERTIES, seen=[['ha'], ['co'], None])
     np.testing.assert_allclose(ha + co, both, rtol=1e-5, atol=1e-7)
     assert ha.sum() > 0 and co.sum() > 0
 
@@ -90,29 +93,22 @@ def test_components_with_opacity_always_absorb(driver):
         ha_rht_s=1, co_rht_s=0.5, dust_rpt_a=0.3, dust_rpt_s=4, dust_rht_s=0.5) | {
         f'dust_{key}': f'ha_{key}' for key in GEOMETRY if key != 'vsys'}
     ha, co, both = evaluate(driver, galaxy, [
-        observation(['ha'], name='muse'),
-        observation(['co'], name='alma'),
-        observation(name='all')], properties)
+        observation(name='muse'), observation(name='alma'),
+        observation(name='all')], properties, seen=[['ha'], ['co'], None])
     np.testing.assert_allclose(
         ha + co, both, rtol=1e-4, atol=1e-6 * both.max())
     clear = evaluate(
-        driver, dict(components=emitters),
-        [observation(['ha'])],
-        {k: v for k, v in properties.items() if not k.startswith('dust')})
+        driver, dict(components=emitters), [observation()],
+        {k: v for k, v in properties.items() if not k.startswith('dust')},
+        seen=[['ha']])
     assert ha.sum() < 0.99 * clear[0].sum()
 
 
 @pytest.mark.parametrize('components, message', [
-    (['ha', 'hi'], "no components named \\['hi'\\]"),
+    (['ha', 'hi'], "no galaxies or components \\['hi'\\]"),
     (['ha', 'ha'], "repeat"),
     ([], "at least one")])
 def test_invalid_selections(driver, components, message):
-    with pytest.raises(Exception, match=message):
-        evaluate(driver, GALAXY, [observation(components)], PROPERTIES)
-
-
-def test_selection_round_trip():
-    dumped = observation_parser.dump(observation(['co']))
-    assert dumped['components'] == ['co']
-    assert 'components' not in observation_parser.dump(observation())
-    assert observation_parser.load(dumped).components() == ('co',)
+    with pytest.raises(ValueError, match=message):
+        evaluate(
+            driver, GALAXY, [observation()], PROPERTIES, seen=[components])

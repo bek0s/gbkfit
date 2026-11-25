@@ -10,16 +10,14 @@ from collections.abc import Sequence
 from typing import NamedTuple
 
 import gbkfit.units
-from gbkfit.config import check_name
 from gbkfit.model import (
     Component, DataUnit, DepthUnit, Galaxy, Scene, SceneEvaluation, View,
-    check_data_unit, named_components)
+    check_data_unit)
 from .observation import SeenGalaxies, SeenPlane
 
 
 __all__ = [
     'SeenScenes',
-    'check_component_names',
     'make_scenes'
 ]
 
@@ -94,7 +92,6 @@ class SeenScenes(NamedTuple):
 
 def make_scenes(
         seen: SeenGalaxies,
-        components: Sequence[str] | None,
         view: View,
         data_unit: DataUnit | None = None
 ) -> SeenScenes:
@@ -104,12 +101,12 @@ def make_scenes(
     Scene and SeenPlane), of what it sees (see View: its band, or its
     spectral axis with its lines and continuum; see ObservationSky.view),
     and of the unit of its data, if any (see ObservationSky.data_unit).
-    The names of the components it sees (all those whose emission the
-    view sees, if None; see Emission.seen_in) are qualified by the names
-    of their galaxies ('galaxy.component') when it sees several (see
-    named_components). A spectral view of the continuum sees the
-    velocities of the light in bands of the components that move (e.g.
-    the kinematics of stars).
+    It sees the light of the components of each galaxy that the group
+    chose for it (see SeenGalaxies), or of all those whose emission the
+    view sees (see Emission.seen_in). A spectral view of the continuum
+    sees the velocities of the light in bands of the components that move
+    (e.g. the kinematics of stars). The opacity of every component of the
+    galaxies applies.
 
     It draws the planes whose galaxies emit what it sees, and those in
     front of them with opacity, which dims their light: every plane but
@@ -118,8 +115,7 @@ def make_scenes(
     Raises
     ------
     ValueError
-        If a name is unknown or repeats, a component does not emit what it
-        sees, it sees nothing, a line is not one of the components it
+        If a chosen component does not emit what it sees, it sees nothing, a line is not one of the components it
         sees, it sees none of the light of galaxies behind a lens (nor of
         any behind them) and no other plane behind a lens, it sees several
         galaxies with opacity in a plane (which radiative transfer marches
@@ -136,7 +132,7 @@ def make_scenes(
         "a spectral cube, which sees the components that emit lines" + (
             " and the continuum of those that emit in bands and move"
             if view.continuum else "")
-    emitters = _select_emitters(galaxies, components, view, kind)
+    emitters = _select_emitters(seen, view, kind)
     if not any(emitters):
         raise ValueError(f"the observation is {kind}; it sees none")
     _check_lines(galaxies, emitters, view.lines)
@@ -169,8 +165,8 @@ def make_scenes(
     if left and all(plane.traced is None for plane in drawn_planes):
         raise ValueError(
             f"the observation sees none of the light of the galaxies {left} "
-            f"behind a lens, nor any behind them: leave them out of its "
-            f"galaxies")
+            f"behind a lens, nor any behind them: leave them out of what it "
+            f"sees (the section seen of its setup)")
     scenes = []
     for plane, behind in reversed(drawn):
         plane_galaxies = [galaxies[g] for g in plane.galaxies]
@@ -218,39 +214,30 @@ def _label(galaxy: Galaxy, index: int) -> str:
 
 
 def _select_emitters(
-        galaxies: Sequence[Galaxy],
-        names: Sequence[str] | None,
-        view: View,
-        kind: str
+        seen: SeenGalaxies, view: View, kind: str
 ) -> list[list[int]]:
     """
-    Return the indices of the components of each galaxy whose light is
-    seen: those of the given names (qualified when there are several
-    galaxies), or all those whose emission the view sees (see
-    Emission.seen_in), in their order. kind describes the observation in
-    messages.
+    Return the indices of the components of each galaxy seen whose light
+    is seen: those that the group chose (see SeenGalaxies), or all those
+    whose emission the view sees (see Emission.seen_in), in their order.
+    kind describes the observation in messages.
     """
-    def seen(cmp: Component) -> bool:
+    def sees(cmp: Component) -> bool:
         return cmp.emission() is not None \
             and cmp.emission().seen_in(view, cmp.moves())
-    if names is None:
-        return [
-            [i for i, cmp in enumerate(galaxy.components()) if seen(cmp)]
-            for galaxy in galaxies]
-    if not names:
-        raise ValueError("at least one component must be selected")
-    if len(set(names)) != len(names):
-        raise ValueError(f"the selected components repeat names: {names}")
-    known = named_components(galaxies, names)
-    selected = [[] for _ in galaxies]
-    for name in names:
-        g, i = known[name]
-        if not seen(galaxies[g].components()[i]):
-            raise ValueError(
-                f"the component {name!r} is selected, but the observation "
-                f"is {kind}: it does not see it")
-        selected[g].append(i)
-    return [sorted(indices) for indices in selected]
+    selected = []
+    for galaxy, chosen in zip(seen.galaxies, seen.components):
+        if chosen is None:
+            selected.append([
+                i for i, cmp in enumerate(galaxy.components()) if sees(cmp)])
+            continue
+        for i in chosen:
+            if not sees(galaxy.components()[i]):
+                raise ValueError(
+                    f"the setup chose component {_label(galaxy, i)} for "
+                    f"the observation, which is {kind}: it does not see it")
+        selected.append(list(chosen))
+    return selected
 
 
 def _check_lines(
@@ -295,18 +282,3 @@ def _check_one_unit(
             f"{', '.join(f'{u!r} ({c})' for u, c in units.items())}; give "
             f"the observation data of light in a unit, or see these "
             f"components in separate observations")
-
-
-def check_component_names(names: Sequence[str]) -> None:
-    """
-    Raise ValueError unless each name is the name of a component, or that
-    of a galaxy and of one of its components ('galaxy.component').
-    """
-    for name in names:
-        parts = name.split('.') if isinstance(name, str) else [name]
-        if len(parts) > 2:
-            raise ValueError(
-                f"a component is named 'component' or 'galaxy.component'; "
-                f"{name!r} is not")
-        for part in parts:
-            check_name(part)

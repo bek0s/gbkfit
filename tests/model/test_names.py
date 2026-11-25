@@ -89,24 +89,26 @@ def galaxy(name=None, components=None):
         | (dict(name=name) if name is not None else {})
 
 
-def observation(galaxies=None, name=None):
-    return dict(
-        type='pixel_brightness',
-        size=[8, 8]) \
-        | (dict(galaxies=galaxies) if galaxies is not None else {}) \
+def observation(name=None):
+    return dict(type='pixel_brightness', size=[8, 8]) \
         | (dict(name=name) if name is not None else {})
 
 
-def group(galaxies, observations):
+def group(galaxies, observations, seen=None):
+    """
+    A group of galaxies and observations, which see what seen says (see
+    ObservationGroup; everything by default).
+    """
     from gbkfit.observation import ObservationGroup, observation_parser
     return ObservationGroup(
-        galaxy_parser.load(galaxies), observation_parser.load(observations))
+        galaxy_parser.load(galaxies), observation_parser.load(observations),
+        seen=seen)
 
 
 def test_galaxy_names_prefix_the_parameters():
     group_ = group(
-        [galaxy('hi'), galaxy('halpha')],
-        [observation(['hi']), observation(['halpha'])])
+        [galaxy('hi'), galaxy('halpha')], [observation(), observation()],
+        [['hi'], ['halpha']])
     assert {'hi_xpos', 'halpha_xpos'} <= set(group_.pdescs())
     assert set(group_.constants()) == {
         'hi_redshift', 'hi_rnodes', 'hi_subrnodes', 'halpha_redshift',
@@ -120,26 +122,27 @@ def test_observations_of_one_galaxy_share_its_parameters():
     assert not any(name.startswith('galaxy') for name in group_.pdescs())
 
 
-def test_an_observation_sees_every_galaxy_unless_it_names_some():
+def test_an_observation_sees_every_galaxy_unless_its_group_chooses():
     group_ = group(
-        [galaxy('hi'), galaxy('ha')], [observation(), observation(['ha'])])
+        [galaxy('hi'), galaxy('ha')], [observation(), observation()],
+        [None, ['ha']])
     assert group_.seen_galaxies(0) == (0, 1)
     assert group_.seen_galaxies(1) == (1,)
 
 
-@pytest.mark.parametrize('galaxies, observations, message', [
-    ([galaxy('hi'), galaxy()], [observation(['hi'])],
+@pytest.mark.parametrize('galaxies, observations, seen, message', [
+    ([galaxy('hi'), galaxy()], [observation()], None,
      "the galaxies need names when there are several"),
-    ([galaxy('hi'), galaxy('hi')], [observation(['hi'])],
+    ([galaxy('hi'), galaxy('hi')], [observation()], None,
      "the names of the galaxies must be unique"),
-    ([galaxy('hi')], [observation(['ha'])],
-     r"observation 0 refers to unknown galaxies \['ha'\]"),
-    ([galaxy('hi')], [observation(['hi'], name='hi')],
+    ([galaxy('hi')], [observation()], [['ha']],
+     r"there are no galaxies or components \['ha'\]"),
+    ([galaxy('hi')], [observation(name='hi')], None,
      "the galaxies and the observations must have different names")])
 def test_invalid_galaxy_and_observation_names_are_rejected(
-        galaxies, observations, message):
+        galaxies, observations, seen, message):
     with pytest.raises(Exception, match=message):
-        group(galaxies, observations)
+        group(galaxies, observations, seen)
 
 
 # The properties of a thin disk
@@ -176,7 +179,7 @@ def test_galaxy_names_prefix_the_extra_outputs():
     components = [disk(THIN, name='disk')]
     group_ = group(
         [galaxy('north', components), galaxy('south', components)],
-        [observation(['north', 'south'], name='hi')])
+        [observation(name='hi')])
     extra = extra_outputs(group_, ['north_disk_', 'south_disk_'])
     assert {('bdata', 'hi', 'north', 'disk'),
             ('bdata', 'hi', 'south', 'disk')} <= extra

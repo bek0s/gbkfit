@@ -27,7 +27,7 @@ from gbkfit.model import (
     Band, DataUnit, LightUnit, Reference, View, band_parser)
 from gbkfit.model.components.lines import catalogue_in_use
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from .._scene import SeenScenes, check_component_names, make_scenes
+from .._scene import SeenScenes, make_scenes
 from ..depth import Depth, check_scene
 from ..noise import Noise, noise_parser
 from ..observation import Observation, SeenGalaxies, SkyFrame
@@ -196,14 +196,6 @@ class ObservationSky(Observation, abc.ABC):
         are laid out (see SourceGrid); SourceGrid() by default (automatic).
     instrument : Instrument, optional
         The telescope and the instrument; a perfect one by default.
-    galaxies : Sequence of str, optional
-        The names of the galaxies it sees; required only when there are
-        several (see ObservationGroup).
-    components : Sequence of str, optional
-        The names of the components whose light it sees ('galaxy.component'
-        when it sees several galaxies), which emit what it sees: in a band
-        for an image, lines for a spectral cube; all of those by default.
-        The opacity of every component applies.
     lines : Sequence of str, optional
         The names of the emission lines it sees (e.g. the line of the
         data); all by default.
@@ -288,8 +280,7 @@ class ObservationSky(Observation, abc.ABC):
     Raises
     ------
     ValueError
-        If a name is invalid, there are no galaxies or they repeat, a band
-        is given to a kind that is not an image, it has a flux scale or
+        If a name is invalid, a band is given to a kind that is not an image, it has a flux scale or
         offsets but no name, its flux scale is not one of its kind, the
         offsets are not position and velocity, true or false, the
         oversampling is not one integer of at least 1 for each axis, an
@@ -321,7 +312,7 @@ class ObservationSky(Observation, abc.ABC):
         rval='Reference position', rota='Rotation',
         spectral='Spectral axis', smooth_weights='Smooth weights',
         median_size='Median filter', source_grid='Source-plane grid',
-        instrument='Instrument', components='Components', lines='Lines',
+        instrument='Instrument', lines='Lines',
         continuum='Continuum', band='Band', pixel_weights='Pixel weights',
         flux_scale='Flux scale', offsets='Offsets',
         oversampling='Oversampling', depth='Depth', dtype='Precision',
@@ -364,10 +355,6 @@ class ObservationSky(Observation, abc.ABC):
         kwargs = dict(prefix=prefix, dump_path=dump_path, overwrite=overwrite)
         options = self._sky_options
         name = dict(name=self._name) if self._name is not None else {}
-        galaxies = {} if self._galaxies is None else dict(
-            galaxies=list(self._galaxies))
-        components = {} if self._components is None else dict(
-            components=list(self._components))
         lines = {} if self._lines is None else dict(lines=list(self._lines))
         continuum = dict(continuum=True) if self._continuum else {}
         band = {} if self._band is None else dict(
@@ -387,8 +374,8 @@ class ObservationSky(Observation, abc.ABC):
         dtype = {} if self._given_dtype is None else dict(
             dtype=self._given_dtype)
         return dict(type=self.type()) | name \
-            | self._dump_kind(prefix, dump_path, overwrite) | galaxies \
-            | components | lines | continuum | band | pixel_weights \
+            | self._dump_kind(prefix, dump_path, overwrite) | lines \
+            | continuum | band | pixel_weights \
             | flux_scale | offsets | unit | noise | dtype | dict(
                 depth=options.depth.dump(),
                 source_grid=options.source_grid.dump(),
@@ -548,8 +535,6 @@ class ObservationSky(Observation, abc.ABC):
             grid: Grid,
             source_grid: SourceGrid | None,
             instrument: Instrument | None,
-            galaxies: Sequence[str] | None,
-            components: Sequence[str] | None,
             lines: Sequence[str] | None,
             continuum: bool,
             band: str | Band | None,
@@ -575,9 +560,6 @@ class ObservationSky(Observation, abc.ABC):
         if isinstance(band, str):
             with config_path('band'):
                 band = catalogue_in_use().band(band)
-        if components is not None:
-            components = tuple(components)
-            check_component_names(components)
         if lines is not None:
             lines = tuple(lines)
             for line in lines:
@@ -597,14 +579,13 @@ class ObservationSky(Observation, abc.ABC):
         # (one value per axis, of at least 1, as its kind's annotation
         # gives it)
         oversampling = tuple(oversampling)
-        self._components = components
         self._lines = lines
         self._continuum = continuum
         self._band = band
         self._flux_scale = flux_scale
         self._offsets = offsets
         super().__init__(
-            self.keys(), galaxies, noise, name,
+            self.keys(), noise, name,
             self.model_can_have_missing_values())
         # (as given, for copies of other data and dumps: by default, the
         # data choose it, see _pair)
@@ -657,7 +638,6 @@ class ObservationSky(Observation, abc.ABC):
             else gbkfit.units.format_unit(self._light.unit)
         return self._kind_options() | dict(
             source_grid=options.source_grid, instrument=options.instrument,
-            galaxies=self._galaxies, components=self._components,
             lines=self._lines, continuum=self._continuum, band=self._band,
             pixel_weights=options.pixel_weights,
             flux_scale=self._flux_scale, offsets=self._offsets,
@@ -893,10 +873,6 @@ class ObservationSky(Observation, abc.ABC):
         """Return its depth axis, for what it sees that needs one."""
         return self._sky_options.depth
 
-    def components(self) -> tuple[str, ...] | None:
-        """Return the names of the components it sees, if given."""
-        return self._components
-
     def lines(self) -> tuple[str, ...] | None:
         """Return the names of the emission lines it sees, if given."""
         return self._lines
@@ -1090,8 +1066,7 @@ class ObservationSky(Observation, abc.ABC):
         """
         Return the scenes of the galaxies it sees (see make_scenes).
         """
-        return make_scenes(
-            seen, self._components, self.view(), self.data_unit())
+        return make_scenes(seen, self.view(), self.data_unit())
 
     def check(self, seen: SeenGalaxies) -> None:
         scenes = self._scenes(seen)

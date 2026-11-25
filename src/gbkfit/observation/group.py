@@ -43,7 +43,8 @@ class _Member(NamedTuple):
     (see ObservationGroup): its label (the id 'observation' of its extra
     outputs; see ObservationGroup.observation_label), the indices of the
     galaxies it sees, and those galaxies as it sees them (see
-    ObservationGroup.seen_by), with how it moves them into its frame.
+    ObservationGroup.seen_by: with the components it sees of each), with
+    how it moves them into its frame.
     """
     observation: Observation
     label: str
@@ -56,10 +57,10 @@ class ObservationGroup:
     Galaxies, the lenses in front of them and the observations of them,
     evaluated together.
 
-    Each observation names the galaxies it sees, which it may leave out
-    when there is one galaxy; the light of several galaxies adds up, or
-    through radiative transfer, is dimmed by the opacity of the galaxies
-    in front (see depth_order). The parameters and constants of the
+    Each observation sees every galaxy, or those and the components of
+    them that the group chooses for it (see seen); the light of several
+    galaxies adds up, or through radiative transfer, is dimmed by the
+    opacity of the galaxies in front (see depth_order). The parameters and constants of the
     galaxies are prefixed by their names when they have names (which they
     need when there are several; e.g. 'north_').
 
@@ -129,13 +130,26 @@ class ObservationGroup:
         The cosmology of the galaxies, that of their setup (see
         Galaxy.plan_stage); Planck18 by default (see
         gbkfit.cosmology.DEFAULT).
+    seen : Sequence, optional
+        What each observation sees, one item for each, in their order:
+        None for everything (every galaxy, and of each, the components
+        whose light it sees, e.g. in its band), or names, one or a
+        sequence of them: of galaxies, which it sees whole, and of
+        components ('galaxy.component', or the name of the component
+        alone when there is one galaxy), whose galaxies it sees with the
+        light of those components alone (e.g. a map of the moments of
+        one component of a decomposition of the spectra). The opacity of
+        every component of the galaxies it sees applies. None by default
+        (each observation sees everything).
 
     Raises
     ------
     ValueError
         If there are no galaxies or no observations, several galaxies
         without names, names repeat (of the galaxies, the lenses and the
-        observations), an observation names unknown galaxies, depth_order
+        observations), seen has not one item for each observation, or an
+        item of it has no names, repeats them, names unknown galaxies or
+        components, or a galaxy and one of its components, depth_order
         names unknown galaxies or repeats them, has a group of fewer than two
         galaxies, or of the name of a galaxy or an observation, every
         observation of a galaxy has offsets of position or of velocity,
@@ -150,7 +164,8 @@ class ObservationGroup:
             observations: Observation | Sequence[Observation],
             lenses: Lens | Sequence[Lens] = (),
             depth_order: Sequence[str | DepthGroup] | None = None,
-            cosmology: Cosmology | None = None
+            cosmology: Cosmology | None = None,
+            seen: Sequence[str | Sequence[str] | None] | None = None
     ):
         self._galaxies = iterutils.tuplify(galaxies)
         observations = iterutils.tuplify(observations)
@@ -228,18 +243,27 @@ class ObservationGroup:
         frames = [observation.sky_frame() for observation in observations]
         first = first_on_sky(frames)
         self._sky_origin = None if first is None else frames[first].origin
-        seen = []
-        for i, observation in enumerate(observations):
-            with config_path('observations', i):
-                seen.append(tuple(self._seen(i, observation)))
+        if seen is None:
+            seen = [None] * len(observations)
+        elif len(seen) != len(observations):
+            with config_path('seen'):
+                raise ValueError(
+                    f"seen has {len(seen)} items for {len(observations)} "
+                    f"observations: give one for each observation, in "
+                    f"their order (null for one that sees everything)")
+        chosen = []
+        for i, names in enumerate(seen):
+            with config_path('seen', i):
+                chosen.append(self._seen(names))
+        seen = [galaxies for galaxies, _ in chosen]
         self._members = tuple(
             _Member(
                 observation, label, indices, self._galaxies_seen(
-                    indices, frame is not None, frame_shift(
+                    indices, components, frame is not None, frame_shift(
                         self._galaxies, self._mappings, indices, frame,
                         alignment)))
-            for observation, label, indices, frame, alignment in zip(
-                observations, labels, seen, frames, alignments(frames)))
+            for observation, label, (indices, components), frame, alignment
+            in zip(observations, labels, chosen, frames, alignments(frames)))
         check_offsets(self._galaxies, frames, seen)
         warn_frames(self._galaxies, frames, seen)
         _warn_unused_masses(self._galaxies, observations, seen, self._lensing)
@@ -361,34 +385,90 @@ class ObservationGroup:
             with config_path('observations', i):
                 member.observation.check(member.galaxies)
 
-    def _seen(self, i: int, observation: Observation) -> list[int]:
+    def _seen(
+            self, names: str | Sequence[str] | None
+    ) -> tuple[tuple[int, ...], tuple[tuple[int, ...] | None, ...]]:
         """
-        Return the indices of the galaxies that observation i sees: those
-        it names, or else all of them (an observation sees what is in its
-        field; it names galaxies to see fewer).
+        Return what an observation sees of the galaxies, of an item of the
+        option seen: the indices of the galaxies, and of each, those of
+        the components it sees (None for all those whose light it sees).
+        Everything if None (an observation sees what is in its field).
+
+        Raises
+        ------
+        ValueError
+            If there are no names, or they repeat, are unknown, or name a
+            galaxy and one of its components.
         """
-        names = observation.galaxies()
         if names is None:
-            return list(range(len(self._galaxies)))
-        known = [galaxy.name() for galaxy in self._galaxies]
+            everything = range(len(self._galaxies))
+            return tuple(everything), tuple(None for _ in everything)
+        names = [names] if isinstance(names, str) else list(names)
+        if not names:
+            raise ValueError(
+                "an observation sees at least one galaxy or component; "
+                "null for everything")
+        if repeated := sorted({n for n in names if names.count(n) > 1}):
+            raise ValueError(f"the names repeat: {repeated}")
+        known = self._seen_names()
         if unknown := [name for name in names if name not in known]:
             raise ValueError(
-                f"observation {i} refers to unknown galaxies {unknown}; the "
-                f"galaxies are {known}")
-        return sorted(known.index(name) for name in names)
+                f"there are no galaxies or components {unknown}; their "
+                f"names: {list(known)}")
+        chosen: dict[int, set[int] | None] = {}
+        for name in names:
+            g, i = known[name]
+            if g in chosen and (i is None or chosen[g] is None):
+                raise ValueError(
+                    f"galaxy {self._galaxy_label(g)} is named whole and by "
+                    f"its components: name the galaxy, or its components")
+            if i is None:
+                chosen[g] = None
+            else:
+                chosen.setdefault(g, set()).add(i)
+        galaxies = tuple(sorted(chosen))
+        return galaxies, tuple(
+            None if chosen[g] is None else tuple(sorted(chosen[g]))
+            for g in galaxies)
+
+    def _seen_names(self) -> dict[str, tuple[int, int | None]]:
+        """
+        Return the galaxies and the components that the option seen can
+        name, each as the index of its galaxy and its own (None for a
+        galaxy), by name: the galaxies by their names, and their named
+        components as 'galaxy.component', or of one galaxy, by their names
+        alone too.
+        """
+        known = {}
+        for g, galaxy in enumerate(self._galaxies):
+            if galaxy.name() is not None:
+                known[galaxy.name()] = (g, None)
+            for i, component in enumerate(galaxy.components()):
+                if component.name() is None:
+                    continue
+                if galaxy.name() is not None:
+                    known[f'{galaxy.name()}.{component.name()}'] = (g, i)
+                if len(self._galaxies) == 1:
+                    known.setdefault(component.name(), (g, i))
+        return known
 
     def _galaxies_seen(
-            self, seen: tuple[int, ...], on_sky: bool, shift: FrameShift
+            self,
+            seen: tuple[int, ...],
+            components: tuple[tuple[int, ...] | None, ...],
+            on_sky: bool,
+            shift: FrameShift
     ) -> SeenGalaxies:
         """
         Return the galaxies of the given indices as an observation that
-        sees them sees them (see seen_by), on the sky or not, which it
-        moves into its frame by the given shift: in their planes (see
+        sees them sees them (see seen_by), with the components of each
+        that it sees (None for all), on the sky or not, which it moves
+        into its frame by the given shift: in their planes (see
         SeenPlane), each in the depth order of those of them in it (a
         group of which it sees one galaxy is that galaxy).
         """
         return SeenGalaxies(
-            tuple(self._galaxies[j] for j in seen),
+            tuple(self._galaxies[j] for j in seen), components,
             tuple(self._mappings[j] for j in seen),
             tuple(self._galaxy_labels[j] for j in seen),
             self._seen_planes(seen, on_sky), self._sky_origin,

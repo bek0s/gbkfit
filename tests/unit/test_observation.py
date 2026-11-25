@@ -550,3 +550,72 @@ def test_a_wrong_oversampling_is_a_problem_of_its_option():
         ObservationPixelSpectra(
             size=4, spectral=SpectralAxis(size=5, step=10, convention='radio'),
             oversampling=[2, 2])
+
+
+def band_disk(name, **options):
+    """A thin disk that emits in a band, of a name."""
+    return dict(
+        type='thin_disk', name=name, loose=False, tilted=False,
+        rnodes=[0, 1, 2], rptraits=dict(type='exponential'),
+        emission=dict(type='band')) | options
+
+
+def seen_group(seen, names=('a', 'b'), observation=None):
+    """
+    A group of galaxies of the given names, each of a disk and a bulge
+    (thin disks in a band), and an image of them (or the given
+    observation), which sees what seen says.
+    """
+    from gbkfit.model import galaxy_parser
+    galaxies = [
+        galaxy_parser.load(dict(
+            name=name, components=[band_disk('disk'), band_disk('bulge')]))
+        for name in names]
+    return ObservationGroup(
+        galaxies, [observation or ObservationPixelBrightness(size=(8, 8))],
+        seen=[seen])
+
+
+def test_an_observation_sees_what_its_group_chooses():
+    # Everything by default; or galaxies (whole) and components (alone of
+    # their galaxies), in the order of the galaxies
+    assert seen_group(None).seen_by(0).components == (None, None)
+    seen = seen_group(['b', 'a.bulge']).seen_by(0)
+    assert seen.labels == ('a', 'b')
+    assert seen.components == ((1,), None)
+    assert seen_group(['b']).seen_galaxies(0) == (1,)
+    # (of one galaxy, the components alone too, or qualified)
+    assert seen_group('bulge', ['a']).seen_by(0).components == ((1,),)
+    assert seen_group(['a.disk'], ['a']).seen_by(0).components == ((0,),)
+
+
+@pytest.mark.parametrize('seen, message', [
+    ([], "at least one galaxy or component"),
+    (['a', 'a'], r"the names repeat: \['a'\]"),
+    (['c'], r"there are no galaxies or components \['c'\]"),
+    # (of several galaxies, components are 'galaxy.component')
+    (['disk'], r"there are no galaxies or components \['disk'\]"),
+    (['a', 'a.disk'], "named whole and by its components")])
+def test_what_an_observation_sees_is_checked(seen, message):
+    with pytest.raises(ValueError, match=message):
+        seen_group(seen)
+
+
+def test_a_component_chosen_must_emit_what_the_observation_sees():
+    # (an image sees light in bands; a cube of lines without the continuum
+    # does not see them)
+    cube = observation_parser.load(dict(
+        type='pixel_spectra', size=[4, 4],
+        spectral=dict(size=5, step=10, convention='radio')))
+    with pytest.raises(ValueError, match="does not see it"):
+        seen_group(['a.disk'], observation=cube)
+
+
+def test_a_profile_is_of_one_whole_galaxy():
+    from gbkfit.observation import ObservationProfile
+    profile = ObservationProfile(['density_disk'], [1, 2] * u.arcsec)
+    with pytest.raises(ValueError, match="a profile is of one galaxy"):
+        seen_group(None, observation=profile)
+    with pytest.raises(ValueError, match="a profile is of a whole galaxy"):
+        seen_group(['a.disk'], observation=profile)
+    seen_group(['a'], observation=profile)

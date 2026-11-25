@@ -1,6 +1,6 @@
-# two_galaxies: Two named galaxies (their parameters prefixed by their names): a cube of both through radiative transfer, the dust of the one in front (section depth_order) dimming the one behind; and moment maps of the one behind alone (option galaxies).
+# two_galaxies: Two named galaxies (their parameters prefixed by their names): a cube of both through radiative transfer, the dust of the one in front (section depth_order) dimming the one behind; and moment maps of the one behind alone (section seen).
 # (written by make_golden.py; do not edit)
-version: 21
+version: 22
 driver: {type: host}
 galaxies:
 - name: front
@@ -41,7 +41,6 @@ observations:
   type: pixel_spectra
   smooth_weights: false
   median_size: null
-  galaxies: [front, back]
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   source_grid: {step: auto, extent: auto}
@@ -57,7 +56,6 @@ observations:
   flux_floor: 1.0e-06
   method: moments
   median_size: null
-  galaxies: [back]
   dtype: float64
   depth: {extent: galaxy, step: null, slab: null, subchannels: 1}
   source_grid: {step: auto, extent: auto}
@@ -67,6 +65,9 @@ observations:
     lsf: {type: gauss, sigma: 20.0 km s-1}
   oversampling: [1, 1]
   fft_dtype: float64
+seen:
+- null
+- [back]
 datasets:
 - type: pixel_spectra
   step: [1, 1]

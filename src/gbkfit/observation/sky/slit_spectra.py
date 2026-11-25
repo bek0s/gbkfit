@@ -171,8 +171,6 @@ class ObservationSlitSpectra(ObservationSky):
             smooth_weights: bool = False,
             source_grid: SourceGrid | None = None,
             instrument: Instrument | None = None,
-            galaxies: Sequence[str] | None = None,
-            components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
             continuum: bool = False,
             band: str | Band | None = None,
@@ -207,9 +205,9 @@ class ObservationSlitSpectra(ObservationSky):
         self._slit_width = slit_width
         self._smooth_weights = smooth_weights
         super().__init__(
-            grid, source_grid, instrument, galaxies, components, lines,
-            continuum, band, pixel_weights, flux_scale, offsets, noise,
-            oversampling, depth, dtype, fft_dtype, name, unit)
+            grid, source_grid, instrument, lines, continuum, band,
+            pixel_weights, flux_scale, offsets, noise, oversampling, depth,
+            dtype, fft_dtype, name, unit)
 
     def slit_pa(self) -> float:
         """Return the position angle of the slit (see the class)."""

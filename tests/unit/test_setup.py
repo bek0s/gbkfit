@@ -448,8 +448,9 @@ def test_a_setup_in_python_places_its_galaxies_as_its_configuration():
             GALAXY | dict(name='b'),
             GALAXY | dict(name='c', driver='cpu2')],
         observations=[
-            observation(name='o1', galaxies=['m', 'a', 'b'], driver='cpu1'),
-            observation(name='o2', galaxies=['b', 'c'], driver='cpu2')])
+            observation(name='o1', driver='cpu1'),
+            observation(name='o2', driver='cpu2')],
+        seen=[['m', 'a', 'b'], ['b', 'c']])
     group = _config._load_observation_group(config)
     properties = dict.fromkeys(group.pdescs(), 1.0)
     names = {id(cpu1): 'cpu1', id(cpu2): 'cpu2'}
@@ -553,6 +554,42 @@ def test_describe_checks_the_rules_of_a_fit():
         params=params, fitter=dict(type='scipy.least_squares')))
     errors = [p for p in description.problems if p.severity == 'error']
     assert len(errors) == 1 and "needs option 'value'" in errors[0].message
+
+
+def two_galaxies(**sections):
+    """
+    The configuration of two galaxies of GALAXY (a and b) and two
+    observations of them, with no parameters given, and sections.
+    """
+    return dict(
+        version=VERSION,
+        galaxies=[GALAXY | dict(name='a'), GALAXY | dict(name='b')],
+        observations=[observation(), observation()],
+        params=dict(properties={})) | sections
+
+
+def test_the_section_seen_says_what_each_observation_sees():
+    # (one item for each observation, in their order: null for everything,
+    # or names of galaxies, one or a list of them)
+    group = _config._load_observation_group(two_galaxies(seen=[None, 'b']))
+    assert group.seen_galaxies(0) == (0, 1)
+    assert group.seen_galaxies(1) == (1,)
+    group = _config._load_observation_group(two_galaxies())
+    assert group.seen_galaxies(1) == (0, 1)
+
+
+@pytest.mark.parametrize('seen, path, message', [
+    ('b', ['seen'], "a list of one item for each observation"),
+    ([3, None], ['seen', 0], "null (everything), or a name or a list"),
+    ([None], ['seen'], "seen has 1 items for 2 observations"),
+    ([None, ['c']], ['seen', 1], "there are no galaxies or components")])
+def test_the_section_seen_is_checked_at_its_path(seen, path, message):
+    description = gbkfit.describe(two_galaxies(seen=seen))
+    [error] = [
+        p for p in description.problems
+        if p.severity == 'error' and p.path[:1] == ['seen']]
+    assert error.path == path
+    assert message in error.message
 
 
 @pytest.mark.parametrize('properties, path, message', [

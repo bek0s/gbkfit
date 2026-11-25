@@ -96,6 +96,13 @@ _SECTIONS = dict(
     observations=_Section(
         gbkfit.observation.Observation, "The observations of the galaxies.",
         True, True, dict(driver=str)),
+    seen=_Section(
+        Sequence[str | Sequence[str] | None],
+        "What each observation sees, one item for each, in their order: "
+        "null for everything, or names of galaxies, which it sees whole, "
+        "and of components ('galaxy.component', or the component alone "
+        "when there is one galaxy), which it sees alone of their galaxies; "
+        "without it, every observation sees everything."),
     datasets=_Section(
         Dataset | None,
         "The data of the observations, one for each, in their order (null "
@@ -862,8 +869,10 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     Return the galaxies, lenses and observations of a configuration, as an
     ObservationGroup, the observations paired with their data (its section
     'datasets', see _load_datasets; Observation.load), with the order of
-    the galaxies along the line of sight of its section 'depth_order' and
-    the cosmology of its section 'cosmology'. The galaxies and
+    the galaxies along the line of sight of its section 'depth_order', the
+    cosmology of its section 'cosmology', and what each observation sees
+    of the galaxies of its section 'seen' (see _load_seen). The galaxies
+    and
     observations name lines and bands of the catalogue of GBKFIT and of
     the sections 'lines' and 'bands' of the configuration (see
     LineCatalogue and lines_from). Their option driver places them on a
@@ -889,8 +898,39 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     if cfg.get('cosmology') is not None:
         with config_path('cosmology'):
             cosmology = cosmology_parser.load(cfg['cosmology'])
+    seen = _load_seen(cfg)
     return gbkfit.observation.ObservationGroup(
-        galaxies, observations, lenses, depth_order, cosmology)
+        galaxies, observations, lenses, depth_order, cosmology, seen)
+
+
+def _load_seen(cfg: dict[str, Any]) -> list[Any] | None:
+    """
+    Return what each observation of a configuration sees of its galaxies:
+    its section 'seen' (see ObservationGroup), if any.
+
+    Raises
+    ------
+    ConfigError
+        If the section is not a list, or an item is not null, a name or a
+        list of names.
+    """
+    if (info := cfg.get('seen')) is None:
+        return None
+    with config_path('seen'):
+        if not iterutils.is_sequence(info):
+            raise ConfigError(
+                "the section is a list of one item for each observation, "
+                "in their order")
+        for i, item in enumerate(info):
+            names = [item] if isinstance(item, str) else item
+            if item is not None and not (
+                    iterutils.is_sequence(names)
+                    and all(isinstance(name, str) for name in names)):
+                with config_path(i):
+                    raise ConfigError(
+                        "an item is null (everything), or a name or a list "
+                        "of names of galaxies and components")
+    return list(info)
 
 
 def _load_datasets(

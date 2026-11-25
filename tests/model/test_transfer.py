@@ -475,9 +475,7 @@ def galaxies_model(
     kind = kind or dict(
         type='pixel_spectra', size=[24, 24], step=[1, 1],
         spectral=dict(size=31, step=10, convention='relativistic'))
-    observation = kind | dict(
-        depth=dict(extent=120),
-        galaxies=[galaxy['name'] for galaxy in galaxies]) | observation
+    observation = kind | dict(depth=dict(extent=120)) | observation
     if depth_order is None:
         depth_order = [galaxy['name'] for galaxy in galaxies]
     group = ObservationGroup(

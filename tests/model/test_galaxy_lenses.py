@@ -81,11 +81,10 @@ ARC_PARAMS = dict(
     arc_disk_incl=40, arc_disk_rpt_a=1, arc_disk_rpt_s=0.15)
 
 
-def image(name, galaxies):
-    """An image of the galaxies of the given names, float64."""
+def image(name):
+    """An image, float64 (of what its group says it sees)."""
     return ObservationPixelBrightness(
-        size=(SIZE, SIZE), step=STEP, galaxies=galaxies, name=name,
-        dtype='float64')
+        size=(SIZE, SIZE), step=STEP, name=name, dtype='float64')
 
 
 def prefixed(prefix, values):
@@ -126,8 +125,8 @@ def test_the_mass_of_a_halo_lenses_as_the_nfw_lens(driver, components):
     # the centre of the mass: of a galaxy of a gas disk that the mass
     # moves, or of the mass alone (a dark lens)
     group = ObservationGroup(
-        [deflector(components), ARC], image('alma', ['arc']),
-        Lens('lens', LENS_Z, LensGalaxyMass('deflector')))
+        [deflector(components), ARC], image('alma'),
+        Lens('lens', LENS_Z, LensGalaxyMass('deflector')), seen=[['arc']])
     own = GAS_PARAMS if components else {}
     values = values_of(group, prefixed('deflector', own | HALO_PARAMS)
                        | ARC_PARAMS)
@@ -142,8 +141,9 @@ def test_the_mass_of_a_halo_lenses_as_the_nfw_lens(driver, components):
     halo = {k: v for k, v in HALO_PARAMS.items()
             if k not in ('mass_xpos', 'mass_ypos')}
     nfw = ObservationGroup(
-        [deflector(), ARC], image('alma', ['arc']),
-        Lens('lens', LENS_Z, LensNFW(), source_redshift=SOURCE_Z))
+        [deflector(), ARC], image('alma'),
+        Lens('lens', LENS_Z, LensNFW(), source_redshift=SOURCE_Z),
+        seen=[['arc']])
     [expected], _ = evaluate(nfw, values_of(nfw, prefixed(
         'deflector', GAS_PARAMS | halo) | ARC_PARAMS | dict(
         lens_nfw_kappa_s=math.pi * K * RHO_S * R_S * d_l * d_ls / d_s,
@@ -205,7 +205,7 @@ def galaxy_group():
         source_redshift=2.0)
     return ObservationGroup(
         [deflector([STARS, BULGE], GALAXY_MASS), ARC],
-        [image('hst', ['deflector', 'arc']), image('alma', ['arc'])], lens)
+        [image('hst'), image('alma')], lens, seen=[None, ['arc']])
 
 
 def galaxy_values(group):
@@ -325,8 +325,8 @@ def test_steps_that_move_no_mass_render_no_lensed_observation(monkeypatch):
     monkeypatch.setattr(mass_deflections, 'unit_deflection', counted)
     group = ObservationGroup(
         [deflector([GAS_DISK, STARS_DISK], KINEMATIC_MASS),
-         ARC], image('alma', ['arc']),
-        Lens('lens', LENS_Z, LensGalaxyMass('deflector')))
+         ARC], image('alma'),
+        Lens('lens', LENS_Z, LensGalaxyMass('deflector')), seen=[['arc']])
     values = values_of(
         group, prefixed('deflector', KINEMATIC_PARAMS) | ARC_PARAMS)
     plan = group.plan(DriverHost(), reference=values)
@@ -540,14 +540,15 @@ def test_distortions_of_order_two_place_no_mass():
         mass=[dict(type='traced_disk', name='gas', component='gas')],
         distance=dict(type='cosmological')))
     with pytest.raises(ValueError, match="not ellipses on the sky"):
-        ObservationGroup([galaxy, ARC], image('alma', ['arc']), lens)
+        ObservationGroup([galaxy, ARC], image('alma'), lens, seen=[['arc']])
     moved = bowl | dict(
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
         emission=dict(type='lines'))
     galaxy = galaxy_parser.load(dict(
         name='deflector', redshift=LENS_Z, components=[moved],
         mass=[HALO], distance=dict(type='cosmological')))
-    group = ObservationGroup([galaxy, ARC], image('alma', ['arc']), lens)
+    group = ObservationGroup(
+        [galaxy, ARC], image('alma'), lens, seen=[['arc']])
     values = values_of(group, prefixed('deflector', prefixed(
         'gas', WARPED_PARAMS | dict(vsys=0, dpt_a=10))
         | HALO_PARAMS) | ARC_PARAMS)
