@@ -12,7 +12,10 @@
 // the last one in place (its properties, in the names of the fit), where
 // the edits of the screen go. Its section datasets pairs its observations
 // with data by position: at the place of each, a dataset of the project by
-// name, one in place, or null (none); no section, no data at all.
+// name, one in place, or null (none); no section, no data at all. Its
+// section seen says what each observation sees, by position too: names of
+// galaxies and of components ('galaxy.component', or the component alone
+// of one galaxy), or null (everything); no section, everything for all.
 import { isObject, type Options } from '../galaxy/options';
 
 export type { Options };
@@ -116,7 +119,24 @@ export function withItemName(setup: Options, section: Section, index: number, na
     next = withOwnProperty(withOwnProperty(next, key, undefined), renamed, own[key]);
   }
   if (Array.isArray(next.depth_order) && old !== null) next = { ...next, depth_order: next.depth_order.map((n) => (n === old ? name : n)) };
+  if (section === 'galaxies') next = withSeenRenamed(next, old, name);
   return next;
+}
+
+// The setup with what its observations see of a galaxy renamed: its name,
+// and the galaxy of its components ('galaxy.component'); a galaxy named
+// from none (the one of the fit, as a second comes) qualifies the names
+// of its components, and one that loses its name (the only one left)
+// takes its own off them (the galaxy whole is then everything)
+function withSeenRenamed(setup: Options, old: string | null, name: string | null): Options {
+  const rename = (entry: string): string | null => {
+    const [galaxy, component] = entry.includes('.') ? entry.split('.', 2) : [null, entry];
+    if (old === null) return name !== null && galaxy === null ? `${name}.${component}` : entry;
+    if (galaxy === old) return name === null ? component : `${name}.${component}`;
+    return entry !== old ? entry : name;
+  };
+  const renamed = (names: string[]) => names.map(rename).filter((entry) => entry !== null);
+  return withSeens(setup, seensOf(setup).map((names) => (names && renamed(names).length ? renamed(names) : null)));
 }
 
 // A name for an item of a piece in the fit: the last part of its name, as
@@ -164,18 +184,56 @@ export function withDataset(setup: Options, index: number, dataset: string | nul
   return withDatasets(setup, datasets);
 }
 
-// The setup with an observation of a piece added, without data
+// The section seen: what each observation sees, by position (names, or
+// null: everything; a list, or none: no section)
+function seensOf(setup: Options): (string[] | null)[] {
+  const value = setup.seen;
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => (typeof item === 'string' ? [item] : Array.isArray(item) ? item.map(String) : null));
+}
+
+// What the observation at an index sees (null: everything)
+export function seenOf(setup: Options, index: number): string[] | null {
+  return seensOf(setup)[index] ?? null;
+}
+
+// The setup with its section seen: none if every observation sees
+// everything
+function withSeens(setup: Options, seens: (string[] | null)[]): Options {
+  const { seen: _old, ...rest } = setup;
+  return seens.some((names) => names !== null) ? { ...rest, seen: seens } : rest;
+}
+
+// What every observation sees, at its place (null: everything), for a
+// number of them
+function seensFor(setup: Options, count: number): (string[] | null)[] {
+  const seens = seensOf(setup);
+  return Array.from({ length: count }, (_, i) => seens[i] ?? null);
+}
+
+// The setup with what the observation at an index sees (names of
+// galaxies and components; none or null: everything)
+export function withSeen(setup: Options, index: number, names: string[] | null): Options {
+  const seens = seensFor(setup, itemsOf(setup, 'observations').length);
+  seens[index] = names && names.length ? names : null;
+  return withSeens(setup, seens);
+}
+
+// The setup with an observation of a piece added, without data, seeing
+// everything
 export function withObservation(setup: Options, piece: string, valued: Set<string>): Options {
   const items = itemsOf(setup, 'observations');
   const next = withItems(setup, 'observations', [...items, { name: null, piece, options: null }], valued);
-  return withDatasets(next, datasetsFor(setup, items.length + 1));
+  return withSeens(withDatasets(next, datasetsFor(setup, items.length + 1)), seensFor(setup, items.length + 1));
 }
 
 // The setup without the observation at an index, and without its data
+// and what it sees
 export function withoutObservation(setup: Options, index: number, valued: Set<string>): Options {
   const items = itemsOf(setup, 'observations');
   const next = withItems(setup, 'observations', items.filter((_, i) => i !== index), valued);
-  return withDatasets(next, datasetsFor(setup, items.length).filter((_, i) => i !== index));
+  const kept = <T,>(list: T[]) => list.filter((_, i) => i !== index);
+  return withSeens(withDatasets(next, kept(datasetsFor(setup, items.length))), kept(seensFor(setup, items.length)));
 }
 
 // What gives a parameter its properties, for people: the fit's own layer

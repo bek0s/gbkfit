@@ -16,14 +16,14 @@ import { joinPath } from '../../components/FilePicker';
 import { ProblemField, ProblemsProvider, type Problem as FieldProblem } from '../../components/Problems';
 import { SchemaForm, type Defs } from '../../components/SchemaForm';
 import { Dock, DockSection } from '../../components/ui/dock';
-import { Choice, NumberField, Segments } from '../../components/ui/inputs';
+import { Choice, Choices, NumberField, Segments } from '../../components/ui/inputs';
 import { DropMenu } from '../../components/ui/overlays';
 import { useStudio } from '../../studio';
 import { isObject } from '../galaxy/options';
 import { typesOf } from '../galaxy/schema';
 import type { SetupDraft } from './FitScreen';
 import { plain } from './Start';
-import { datasetOf, itemsOf, nameFor, ownProperties, sourceOf, withDataset, withItemName, withItems, withObservation, withoutObservation, withOwnProperty, type Item, type Options, type Section } from './recipe';
+import { datasetOf, itemsOf, nameFor, ownProperties, seenOf, sourceOf, withDataset, withItemName, withItems, withObservation, withoutObservation, withOwnProperty, withSeen, type Item, type Options, type Section } from './recipe';
 
 // A parameter of the setup, as the server describes it (see SetupInfo)
 export interface SetupParam {
@@ -199,12 +199,14 @@ function NameField({ value, label, onChange }: { value: string; label: string; o
 }
 
 // The observations of the fit: each its piece, paired with its data (a
-// dataset of the project, or none: a model alone) and with the noise of
-// its mock data; and their likelihood (one for all)
+// dataset of the project, or none: a model alone), what it sees of the
+// galaxies, and the noise of its mock data; and their likelihood (one for
+// all)
 function Observations({ project, setup, draft, all, datasets, valued, defs, onChange }: { project: string; setup: Options; draft: SetupDraft; all: string[]; datasets: string[]; valued: Set<string>; defs: Defs | undefined; onChange: (items: Item[]) => void }) {
   const { go } = useStudio();
   const items = itemsOf(setup, 'observations');
-  const seen = useQueries({
+  const seeable = useSeeable(project, setup);
+  const pieces = useQueries({
     queries: items.map((item) => {
       const path = joinPath(project, `observations/${item.piece ?? ''}.yaml`);
       return { queryKey: keys.piece(path), enabled: item.piece !== null, queryFn: () => data(api.GET('/api/v1/pieces/{path}', { params: { path: { path } } })) };
@@ -215,7 +217,7 @@ function Observations({ project, setup, draft, all, datasets, valued, defs, onCh
   return (
     <div className="fx-placed-list">
       {items.map((item, i) => {
-        const options = item.options ?? (isObject(seen[i]?.data) ? (seen[i].data as Options) : null);
+        const options = item.options ?? (isObject(pieces[i]?.data) ? (pieces[i].data as Options) : null);
         const dataset = datasetOf(setup, i);
         const noise = options?.noise;
         return (
@@ -240,6 +242,8 @@ function Observations({ project, setup, draft, all, datasets, valued, defs, onCh
             <div className="fx-seen-lines">
               <span className="ob-label">Data</span>
               <DataChoice index={i} dataset={dataset} datasets={datasets} onChange={(name) => draft.edit((s) => withDataset(s, i, name))} />
+              <span className="ob-label">Sees</span>
+              <SeenChoice index={i} names={seenOf(setup, i)} choices={seeable} onChange={(names) => draft.edit((s) => withSeen(s, i, names))} />
               <span className="ob-label">Noise</span>
               <span className="fx-small" title="The noise of its mock data (its option noise)">
                 {typeof noise === 'string' ? noise : isObject(noise) ? `${String(noise.type)}, its own` : dataset !== null ? 'Gaussian, of the errors of its data' : <span className="fx-faint">none</span>}
@@ -264,6 +268,43 @@ function Observations({ project, setup, draft, all, datasets, valued, defs, onCh
         )}
       </div>
     </div>
+  );
+}
+
+// What the observations of a fit can see, by name: of one galaxy, its
+// named components; of several, the galaxies (whole) and their named
+// components ('galaxy.component')
+function useSeeable(project: string, setup: Options): string[] {
+  const galaxies = itemsOf(setup, 'galaxies');
+  const pieces = useQueries({
+    queries: galaxies.map((item) => {
+      const path = joinPath(project, `galaxies/${item.piece ?? ''}.yaml`);
+      return { queryKey: keys.piece(path), enabled: item.piece !== null, queryFn: () => data(api.GET('/api/v1/pieces/{path}', { params: { path: { path } } })) };
+    }),
+  });
+  return galaxies.flatMap((item, g) => {
+    const options = item.options ?? (isObject(pieces[g]?.data) ? (pieces[g].data as Options) : null);
+    const listed = options?.components;
+    const components = (Array.isArray(listed) ? listed : isObject(listed) ? [listed] : []).flatMap((c) => (isObject(c) && typeof c.name === 'string' ? [c.name] : []));
+    const name = item.name ?? (typeof options?.name === 'string' ? options.name : null);
+    if (galaxies.length === 1) return components;
+    return name === null ? [] : [name, ...components.map((c) => `${name}.${c}`)];
+  });
+}
+
+// What an observation of the fit sees: everything, or galaxies (whole) and
+// components (alone of their galaxies), toggled in a menu; marked by the
+// problems of the section seen at its place (and of the section as a
+// whole, e.g. of a length not that of the observations)
+function SeenChoice({ index, names, choices, onChange }: { index: number; names: string[] | null; choices: string[]; onChange: (names: string[] | null) => void }) {
+  return (
+    <ProblemField path={['seen', index]} catches={['seen']} label={`What observation ${index + 1} sees`}>
+      <span className="fx-placed">
+        <span className="fx-placed-piece">
+          <Choices label="What the observation sees of the galaxies" items={choices} value={names ?? []} all="everything" onChange={(next) => onChange(next.length ? next : null)} />
+        </span>
+      </span>
+    </ProblemField>
   );
 }
 

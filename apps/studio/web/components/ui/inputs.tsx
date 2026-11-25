@@ -2,9 +2,11 @@
 // a number field whose value is its text (blank: none), clamped to its
 // range as it is left; a quantity as its text, of a number and a unit; a
 // choice of a few (segments) or of a list (a field whose list drops as the
-// menus do); and a check.
-import { Autocomplete, Checkbox, defaultOptionsFilter, NumberInput, SegmentedControl, Select, TextInput, type ComboboxItem, type ComboboxItemGroup, type OptionsFilter } from '@mantine/core';
+// menus do), or of several of a list (a field of the same look); and a
+// check.
+import { Autocomplete, Checkbox, Combobox, defaultOptionsFilter, Input, NumberInput, SegmentedControl, Select, TextInput, type ComboboxItem, type ComboboxItemGroup, type OptionsFilter } from '@mantine/core';
 import { useRef, useState } from 'react';
+import { DropMenu } from './overlays';
 
 // The most choices of a list it shows without a search: a longer one is
 // searched, as it is typed into
@@ -16,6 +18,28 @@ const SEARCHED = 10;
 // (see overlays); searched, if long (see SEARCHED). A click on the field
 // opens its list (and leaves it open as the field is searched, to place
 // the caret); one on its chevron opens or closes it.
+// Several of a list of choices, or all of them (none chosen), as a field
+// of the look of Choice whose menu toggles each (those chosen marked);
+// those chosen that the list has not stay, to be taken out
+export function Choices({ items, value, onChange, label, all }: { items: string[]; value: string[]; onChange: (value: string[]) => void; label: string; all: string }) {
+  const toggled = (item: string) => (value.includes(item) ? value.filter((v) => v !== item) : [...value, item]);
+  const text = value.length ? value.join(', ') : all;
+  return (
+    <DropMenu
+      label={label}
+      entries={[
+        { label: all.charAt(0).toUpperCase() + all.slice(1), current: value.length === 0, onClick: () => onChange([]) },
+        ...[...new Set([...items, ...value])].map((item) => ({ label: item, current: value.includes(item), onClick: () => onChange(toggled(item)) })),
+      ]}
+      target={
+        <Input component="button" type="button" size="xs" pointer className="ui-choice ui-choices" title={text} aria-label={label} rightSection={<Combobox.Chevron size="xs" />} rightSectionPointerEvents="none">
+          <span data-default={value.length ? undefined : true}>{text}</span>
+        </Input>
+      }
+    />
+  );
+}
+
 export function Choice({
   items,
   value,

@@ -159,17 +159,17 @@ function textOf(value: unknown): string {
 // ---------------------------------------------------------------------------
 // What it sees
 
-export function SeesBlock({ ctx, options, member, galaxies, onChange }: { ctx: RowsContext; options: Options; member: Schema; galaxies: string[]; onChange: (options: Options) => void }) {
+export function SeesBlock({ ctx, options, member, onChange }: { ctx: RowsContext; options: Options; member: Schema; onChange: (options: Options) => void }) {
   const catalogue = (useLines().data ?? []) as { name: string }[];
   const properties = propertiesOf(member);
   const keys = SEES_KEYS.filter((key) => key in properties);
-  const choices: Record<string, string[] | undefined> = { galaxies, lines: catalogue.map((l) => l.name) };
-  const nones: Record<string, string> = { galaxies: 'all of the setup', components: 'all that emit', lines: 'all' };
+  const choices: Record<string, string[] | undefined> = { lines: catalogue.map((l) => l.name) };
+  const nones: Record<string, string> = { lines: 'all' };
   const given = givenCount(options, keys);
   return (
     <section className="sh-block" id="ob-sees">
       <h3 className="sh-head">
-        Sees <span className="sh-say">{given ? `${given} set` : 'all of the setup'}</span>
+        Sees <span className="sh-say">{given ? `${given} set` : 'all'}</span>
       </h3>
       <div className="sh-rows">
         {keys.map((key) => (

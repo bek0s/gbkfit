@@ -13,7 +13,7 @@ import { firstSentence } from '../galaxy/schema';
 // model is matched to the data a fit pairs it with; and how accurately
 // and fast it is made. The others of its kind (e.g. its pixels, its
 // channels, its regions, its UV coverage) are its sampling.
-export const SEES_KEYS = ['galaxies', 'components', 'lines', 'continuum', 'band'];
+export const SEES_KEYS = ['lines', 'continuum', 'band'];
 export const MATCHING_KEYS = ['unit', 'offsets', 'flux_scale', 'pixel_weights', 'smooth_weights', 'median_size', 'name'];
 export const ACCURACY_KEYS = ['oversampling', 'depth', 'source_grid', 'dtype', 'fft_dtype'];
 const GROUPED = new Set(['type', 'instrument', 'noise', ...SEES_KEYS, ...MATCHING_KEYS, ...ACCURACY_KEYS]);

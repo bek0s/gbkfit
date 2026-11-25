@@ -1788,3 +1788,6 @@ button.sh-num:hover, button.sh-num[aria-expanded="true"] { border-color: var(--m
 .ds-header-file { font: var(--text-data-small); color: var(--faint); }
 .ds-header-cards { flex: 1; min-height: 0; margin: 0; padding: 10px 12px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: var(--fg2); font: var(--text-data-small); white-space: pre; }
 .copy-config { min-width: 104px; }
+/* (a choice of several: a button of the look of a Choice field) */
+.ui-choices .mantine-Input-input { width: 100%; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-choices [data-default] { color: var(--faint); }
