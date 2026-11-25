@@ -213,8 +213,10 @@ export function ParamRow({
 
 // A number, typed: a click (or Tab) selects it, to type another over it;
 // set as it is typed once it is a valid one (not before: e.g. not 0 on
-// the way to 0.5), cleared once typed away, if it can be; shown as it is
-// (to 6 digits), not rounded as in a summary (see useScrub for the drag);
+// the way to 0.5), cleared once typed away, if it can be; Enter keeps
+// it, Escape puts back the value it had as it took the focus (both leave
+// it); shown to 6 digits, small and large ones with an exponent (see
+// significant), not rounded as in a summary (see useScrub for the drag);
 // what is done as it is left, if given
 export function NumberInput({
   value,
@@ -234,6 +236,8 @@ export function NumberInput({
   valid?: (value: number) => boolean;
 }) {
   const [typing, setTyping] = useState<string | null>(null);
+  // (the value as it took the focus, which Escape puts back)
+  const before = useRef<number | undefined>(undefined);
   return (
     <input
       className="sh-num"
@@ -241,7 +245,10 @@ export function NumberInput({
       inputMode="decimal"
       value={typing ?? (value === undefined ? '' : significant(value, 6))}
       placeholder={placeholder}
-      onFocus={(event) => event.currentTarget.select()}
+      onFocus={(event) => {
+        before.current = value;
+        event.currentTarget.select();
+      }}
       onChange={(event) => {
         setTyping(event.target.value);
         const text = event.target.value.trim();
@@ -253,7 +260,14 @@ export function NumberInput({
         setTyping(null);
         onDone?.();
       }}
-      onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && typing !== null) {
+          setTyping(null);
+          if (before.current === undefined) onClear?.();
+          else if (before.current !== value) onChange(before.current);
+        }
+        if (event.key === 'Enter' || event.key === 'Escape') event.currentTarget.blur();
+      }}
     />
   );
 }
@@ -290,9 +304,12 @@ export function useScrub(value: number | undefined, span: [number, number], onCh
   };
 }
 
-// An end of a span: its number, typed in place
+// An end of a span: its number, typed in place, set as it is left (or
+// entered); Escape leaves it as it was
 function End({ value, title, onChange }: { value: number; title: string; onChange: (value: number | undefined) => void }) {
   const [typing, setTyping] = useState<string | null>(null);
+  // (left by Escape: what is typed is not set)
+  const discard = useRef(false);
   return (
     <input
       className="sh-end"
@@ -301,10 +318,14 @@ function End({ value, title, onChange }: { value: number; title: string; onChang
       value={typing ?? fmt(value)}
       onChange={(event) => setTyping(event.target.value)}
       onBlur={() => {
-        if (typing !== null && typing.trim() !== '' && Number.isFinite(Number(typing))) onChange(Number(typing));
+        if (!discard.current && typing !== null && typing.trim() !== '' && Number.isFinite(Number(typing))) onChange(Number(typing));
+        discard.current = false;
         setTyping(null);
       }}
-      onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') discard.current = true;
+        if (event.key === 'Enter' || event.key === 'Escape') event.currentTarget.blur();
+      }}
     />
   );
 }
