@@ -185,7 +185,7 @@ export function shortName(param: Param, options: Options, siblings: Param[]): st
     const name = componentNameAt(options, index);
     if (name !== null && rest.startsWith(`${name}_`)) rest = rest.slice(name.length + 1);
     // (of a line, its ratio: 'nii6583 ratio')
-    if (param.owner[2] === 'emission') return rest.replace(/_ratio$/, ' ratio');
+    if (param.owner[2] === 'light') return rest.replace(/_ratio$/, ' ratio');
     // (of a trait, its prefix: of its kind and place, or its kind and
     // name; that of all the parameters of the trait, up to an underscore,
     // if it has several, else its kind, its place and its name)

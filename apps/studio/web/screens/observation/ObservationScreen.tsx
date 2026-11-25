@@ -136,7 +136,7 @@ export function ObservationScreen({ name }: { name: string }) {
                         onHide={hide}
                       />
                     )}
-                    <SeesBlock ctx={ctx} options={options} member={member} onChange={set} />
+                    <SeesBlock ctx={ctx} options={options} member={member} onChange={set} titleOf={title} />
                     <NoiseBlock ctx={ctx} options={options} member={member} shared={noisePiece} onChange={set} titleOf={title} />
                     <MoreBlock ctx={ctx} options={options} member={member} onChange={set} />
                   </>

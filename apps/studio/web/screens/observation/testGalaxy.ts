@@ -55,7 +55,7 @@ export function testGalaxy(knobs: TestKnobs, centre: [number, number], vsys: num
         rptraits: { type: 'exponential' },
         vptraits: { type: 'arctan', direction: 'tan' },
         dptraits: { type: 'uniform' },
-        emission: { type: lines ? 'lines' : 'band' },
+        light: { type: lines ? 'lines' : 'continuum' },
       },
     ],
   };

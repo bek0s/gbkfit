@@ -17,7 +17,7 @@ import { FoldScope } from '../../components/ui/fold';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
 import { Row } from '../../components/ui/rows';
 import { typesOf } from '../galaxy/schema';
-import { ACCURACY_KEYS, CHANNEL_KEYS, formsOf, givenCount, hasOption, kindsOf, MATCHING_KEYS, noiseOf, objectAt, observationMember, PLACE_KEYS, retypedObservation, samplingKeys, SEES_KEYS, short, withKey, withPath } from './model';
+import { ACCURACY_KEYS, CHANNEL_KEYS, formsOf, givenCount, hasOption, kindsOf, MATCHING_KEYS, noiseOf, objectAt, observationMember, PLACE_KEYS, retypedObservation, samplingKeys, short, withKey, withPath } from './model';
 import { OptionRow, OptionRows, type RowsContext } from './OptionRows';
 
 // ---------------------------------------------------------------------------
@@ -157,24 +157,65 @@ function textOf(value: unknown): string {
 }
 
 // ---------------------------------------------------------------------------
-// What it sees
+// What its data trace of the light of the components: its tracer (lines, a
+// continuum in a band, or the velocities of stars), by default that of its
+// kind, and the options of its type (the lines of the catalogue to choose
+// from; none: all of them)
 
-export function SeesBlock({ ctx, options, member, onChange }: { ctx: RowsContext; options: Options; member: Schema; onChange: (options: Options) => void }) {
+export function SeesBlock({ ctx, options, member, onChange, titleOf }: { ctx: RowsContext; options: Options; member: Schema; onChange: (options: Options) => void; titleOf: (family: string, type: unknown) => string }) {
   const catalogue = (useLines().data ?? []) as { name: string }[];
-  const properties = propertiesOf(member);
-  const keys = SEES_KEYS.filter((key) => key in properties);
-  const choices: Record<string, string[] | undefined> = { lines: catalogue.map((l) => l.name) };
-  const nones: Record<string, string> = { lines: 'all' };
-  const given = givenCount(options, keys);
+  const value = options.tracer;
+  const set = (next: unknown) => onChange(withKey(options, 'tracer', next));
+  const types = typesOf(ctx.defs, 'tracer');
+  const own = value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Options) : null;
+  const form = own ? formsOf(ctx.defs, 'tracer', own).form : undefined;
+  if (!hasOption(member, 'tracer')) return null;
+  const properties = form ? propertiesOf(form) : {};
   return (
     <section className="sh-block" id="ob-sees">
-      <h3 className="sh-head">
-        Sees <span className="sh-say">{given ? `${given} set` : 'all'}</span>
-      </h3>
+      <h3 className="sh-head">Traces</h3>
       <div className="sh-rows">
-        {keys.map((key) => (
-          <OptionRow key={key} ctx={ctx} name={key} node={properties[key]} value={options[key]} path={[key]} choices={choices[key]} none={nones[key]} onChange={(value) => onChange(withKey(options, key, value))} />
-        ))}
+        <ProblemField path={['tracer']} label="Tracer">
+          <Row
+            title="Tracer"
+            sub="what the data trace"
+            wideBox
+            box={
+              <DropMenu
+                label="What its data trace of the light"
+                width={280}
+                entries={[
+                  { label: 'By default (of its kind)', current: value == null, onClick: () => set(undefined) },
+                  ...types.map((t) => ({ label: t.label, current: own?.type === t.value, onClick: () => set({ type: t.value }) })),
+                ]}
+                target={
+                  <button type="button" className="sh-num gm-choice">
+                    <span data-default={value == null || undefined}>{own ? titleOf('tracer', own.type) : 'by default'}</span>
+                  </button>
+                }
+              />
+            }
+          />
+        </ProblemField>
+        {own &&
+          Object.keys(properties)
+            .filter((key) => key !== 'type')
+            .map((key) => (
+              <OptionRow
+                key={key}
+                ctx={ctx}
+                name={key}
+                node={properties[key]}
+                value={own[key]}
+                path={['tracer', key]}
+                choices={key === 'lines' ? catalogue.map((l) => l.name) : undefined}
+                none={key === 'lines' ? 'all' : 'none'}
+                onChange={(next) => {
+                  const { [key]: _, ...rest } = own;
+                  set(next === undefined ? rest : { ...rest, [key]: next });
+                }}
+              />
+            ))}
       </div>
     </section>
   );

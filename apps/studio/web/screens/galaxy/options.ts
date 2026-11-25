@@ -2,7 +2,7 @@
 // the screen reads and changes them: by paths of keys and indices (e.g.
 // ['components', 0, 'vptraits', 1]), each change a copy.
 // Several options of the library are one item or a list of them (e.g.
-// components, ptraits, the lines of an emission): read as lists, and
+// components, ptraits, the lines of a light): read as lists, and
 // written back as one item when one is left.
 import type { Options } from '../../components/SchemaForm';
 
@@ -88,7 +88,7 @@ export function startsWith(path: Path, start: Path): boolean {
   return start.length <= path.length && start.every((key, i) => path[i] === key);
 }
 
-// The lines of an emission as a list: names (of the catalogue), or lines
+// The lines of a light as a list: names (of the catalogue), or lines
 // of options ({name, rest})
 export function lineList(value: unknown): unknown[] {
   if (value === undefined || value === null) return [];
@@ -101,7 +101,7 @@ export function lineName(line: unknown): string {
 }
 
 // An item of a part in a few words (e.g. the light of a component): its
-// type, and of an emission of lines, its lines; none if it has none
+// type, and of a light of lines, its lines; none if it has none
 export function itemText(value: unknown): string {
   if (!isObject(value)) return 'none';
   const lines = value.type === 'lines' ? lineList(value.lines).map(lineName) : [];
@@ -118,7 +118,7 @@ export function withOpacitiesInStep(options: Options): Options {
   const next = componentsOf(options).map((c) => {
     const opacity = c.opacity;
     if (!isObject(opacity) || opacity.type !== 'line') return c;
-    const names = lineList(isObject(c.emission) ? c.emission.lines : undefined).map(lineName);
+    const names = lineList(isObject(c.light) ? c.light.lines : undefined).map(lineName);
     const given = opacity.coefficients;
     const byLine = isObject(given) && !('type' in given);
     const single = byLine ? Object.values(given)[0] : given;

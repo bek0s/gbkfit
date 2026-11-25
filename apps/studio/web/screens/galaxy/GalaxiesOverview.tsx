@@ -1,7 +1,7 @@
 // The galaxies of the project at a glance, the screen of the section
 // before any galaxy is opened: one row each (see BlockRow), with its
 // components (their kinds, in their colours of its screen; their names on
-// hover), the light they give (their emission, as its screen says it),
+// hover), the light they give (their light, as its screen says it),
 // its mass (its gravity and how many parts; the parts on hover), its
 // distance and redshift, how many parameters it has, and when its file
 // last changed; a sign before its name says the worst of its problems,
@@ -167,9 +167,9 @@ function GalaxyRow({
 }
 
 // The light of the components, as the screen of a galaxy says it (e.g.
-// 'lines hi21', 'band'): each emission once (none: they give none)
+// 'lines hi21', 'continuum'): each light once (none: they give none)
 function lightOf(components: Options[]): string | null {
-  const texts = components.flatMap((component) => asList(component.emission).map(itemText));
+  const texts = components.flatMap((component) => asList(component.light).map(itemText));
   return [...new Set(texts)].join(' · ') || null;
 }
 

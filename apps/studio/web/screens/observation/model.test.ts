@@ -13,8 +13,8 @@ test('the test galaxy is placed where it is asked to be', () => {
   const { options, properties } = testGalaxy({ inclination: 60, angle: 40, size: 50, rotation: 150 }, [1083, -741], 428, true);
   expect(properties).toMatchObject({ disk_xpos: 1083, disk_ypos: -741, disk_vsys: 428, disk_incl: 60, disk_posa: 40, disk_rpt_s: 50, disk_vpt_vt: 150 });
   const [disk] = options.components as Record<string, unknown>[];
-  expect(disk.emission).toEqual({ type: 'lines' });
-  expect(testGalaxy({ inclination: 0, angle: 0, size: 1, rotation: 0 }, [0, 0], 0, false).options.components).toMatchObject([{ emission: { type: 'band' } }]);
+  expect(disk.light).toEqual({ type: 'lines' });
+  expect(testGalaxy({ inclination: 0, angle: 0, size: 1, rotation: 0 }, [0, 0], 0, false).options.components).toMatchObject([{ light: { type: 'continuum' } }]);
 });
 
 test('another kind keeps the options it has too', () => {

@@ -43,7 +43,7 @@ test('the rings of every form', () => {
 
 test('the coefficients of self-absorption follow the lines', () => {
   const galaxy = {
-    components: [{ name: 'd', emission: { type: 'lines', lines: ['halpha', 'nii6583'] }, opacity: { type: 'line', coefficients: { type: 'uniform' } } }],
+    components: [{ name: 'd', light: { type: 'lines', lines: ['halpha', 'nii6583'] }, opacity: { type: 'line', coefficients: { type: 'uniform' } } }],
   };
   const next = withOpacitiesInStep(galaxy);
   expect(getAt(next, ['components', 0, 'opacity', 'coefficients'])).toEqual({ halpha: { type: 'uniform' }, nii6583: { type: 'uniform' } });

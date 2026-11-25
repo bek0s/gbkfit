@@ -63,7 +63,7 @@ test('short names drop the prefixes of their owners', () => {
     param('disk_vpt2_vt', ['components', 0, 'vptraits', 1]),
     param('disk_vpt_fast_vt', ['components', 0, 'vptraits', 2]),
     param('disk_posa', ['components', 0]),
-    param('disk_nii6583_ratio', ['components', 0, 'emission', 'lines', 1]),
+    param('disk_nii6583_ratio', ['components', 0, 'light', 'lines', 1]),
     param('mass_halo_log_m', ['mass', 0]),
   ];
   expect(params.map((p) => shortName(p, options, params))).toEqual(['rt', 'vt', 'vt', 'posa', 'nii6583 ratio', 'log_m']);

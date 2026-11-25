@@ -660,7 +660,7 @@ function glanceOf(ctx: Ctx, component: Options, parts: PartInfo[]): ReactNode {
             </span>
           )}
           {isObject(height) && ` × ${titled(defs, part.heights!.family!, String(height.type)).label.toLowerCase()}`}
-          {part.family === 'emission' && item.type === 'lines' && lineList(item.lines).length > 0 && ` ${lineList(item.lines).map(lineName).join(', ')}`}
+          {part.family === 'light' && item.type === 'lines' && lineList(item.lines).length > 0 && ` ${lineList(item.lines).map(lineName).join(', ')}`}
         </span>
       );
     });
@@ -668,7 +668,7 @@ function glanceOf(ctx: Ctx, component: Options, parts: PartInfo[]): ReactNode {
       <span key={part.option}>
         {words.length > 0 && ' · '}
         {/* (the light says what it is: e.g. "emission lines") */}
-        {part.family !== 'emission' && <span className="gm-pw">{part.title.toLowerCase()} </span>}
+        {part.family !== 'light' && <span className="gm-pw">{part.title.toLowerCase()} </span>}
         {text}
       </span>,
     );
@@ -702,7 +702,7 @@ const EXTENT_OPTIONS = ['rmax'];
 const MOTION_OPTIONS = ['norbits', 'turns', 'seed'];
 // The parts of the light of a component, and of its physics (single
 // settings of how it holds itself up and what it is made of)
-const LIGHT_PARTS = ['emission', 'opacity'];
+const LIGHT_PARTS = ['light', 'opacity'];
 const PHYSICS_PARTS = ['pressure_support', 'clouds', 'rhtraits', 'equilibrium'];
 // The parameters of a component that place it (see its frame): its
 // centre, systemic velocity, orientation and the wall of a cone
@@ -917,7 +917,7 @@ function ComponentBody({ ctx, index, component, parts, rings }: { ctx: Ctx; inde
           </AddPart>,
         );
       }
-    } else if (part.family === 'emission' || section === 'geometry') {
+    } else if (part.family === 'light' || section === 'geometry') {
       // (the light, and the profile and shape of a spheroid)
       const removable = part.optional && has(part);
       groups[section].push(
@@ -1466,12 +1466,12 @@ function OneItem({ ctx, part, path, rings, onRemove }: { ctx: Ctx; part: PartInf
 }
 
 // The title of the row of the type of an item: of a trait, its profile;
-// of another (e.g. a selection, an emission), its type
+// of another (e.g. a selection, a light), its type
 function typeTitle(family: string): string {
   return /^[rvdz]pt$/.test(family) ? 'Profile' : 'Type';
 }
 
-// An item's rows: its type, its direction, the lines of an emission of
+// An item's rows: its type, its direction, the lines of a light of
 // lines, a row each; its other options behind "options", and what removes
 // it, as it is pointed at; its parameters a row each under them
 function ItemLine({ ctx, part, path, item, rings, onRemove }: { ctx: Ctx; part: PartInfo; path: Path; item: Options; rings: number[] | null; onRemove?: () => void }) {
@@ -1480,7 +1480,7 @@ function ItemLine({ ctx, part, path, item, rings, onRemove }: { ctx: Ctx; part: 
   const [more, setMore] = useState(false);
   const member = memberOf(defs, family, item.type);
   const properties = (member?.properties ?? {}) as Record<string, Schema>;
-  const lines = family === 'emission' && item.type === 'lines';
+  const lines = family === 'light' && item.type === 'lines';
   const without = new Set(['type', ...(part.directions ? ['direction'] : []), ...(lines ? ['lines'] : [])]);
   const rest = restOf(defs, member, without);
   const given = Object.keys(item).filter((key) => !without.has(key)).length;
@@ -1516,7 +1516,7 @@ function ItemLine({ ctx, part, path, item, rings, onRemove }: { ctx: Ctx; part: 
           }
         />
       )}
-      {lines && <Row title="Lines" wide box={<LinesLine emission={item} onChange={(next) => set(path, next)} />} />}
+      {lines && <Row title="Lines" wide box={<LinesLine light={item} onChange={(next) => set(path, next)} />} />}
       {rest && defs && more && (
         <div className="gm-more-form">
           <SchemaForm
@@ -1880,16 +1880,16 @@ function RadiiText({ radii, onCommit }: { radii: number[]; onCommit: (radii: num
   );
 }
 
-// The lines of an emission of lines, in its row: by default one line at
+// The lines of a light of lines, in its row: by default one line at
 // the velocity of the spectral axis, whatever it is; else lines of the
 // catalogue (or of the configuration, kept as they are), the first the one
 // whose flux the density gives, the others of a ratio of flux to it
-function LinesLine({ emission, onChange }: { emission: Options; onChange: (emission: Options) => void }) {
+function LinesLine({ light, onChange }: { light: Options; onChange: (light: Options) => void }) {
   const catalogue = (useLines().data ?? []) as { name: string; rest: string }[];
-  const lines = lineList(emission.lines);
+  const lines = lineList(light.lines);
   const rests = new Map(catalogue.map((l) => [l.name, l.rest]));
   const set = (next: unknown[]) => {
-    const copy = { ...emission };
+    const copy = { ...light };
     if (next.length === 0) delete copy.lines;
     else copy.lines = next.length === 1 ? next[0] : next;
     onChange(copy);
